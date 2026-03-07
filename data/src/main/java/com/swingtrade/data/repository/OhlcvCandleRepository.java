@@ -1,0 +1,120 @@
+package com.swingtrade.data.repository;
+
+import com.swingtrade.data.entity.OhlcvCandleEntity;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Repository interface for OhlcvCandleEntity operations.
+ * Optimized for time-series queries on TimescaleDB hypertable.
+ */
+@Repository
+public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, Long> {
+
+    /**
+     * Finds the most recent candle for a stock.
+     *
+     * @param symbol the stock symbol
+     * @return optional containing the most recent candle
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol ORDER BY c.date DESC, c.createdAt DESC LIMIT 1")
+    Optional<OhlcvCandleEntity> findLatestBySymbol(@Param("symbol") String symbol);
+
+    /**
+     * Finds all candles for a stock within a date range, ordered by date descending.
+     *
+     * @param symbol the stock symbol
+     * @param startDate the start date (inclusive)
+     * @param endDate the end date (inclusive)
+     * @param pageable pagination
+     * @return list of candles
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol AND c.date BETWEEN :startDate AND :endDate ORDER BY c.date DESC")
+    List<OhlcvCandleEntity> findBySymbolAndDateRange(
+        @Param("symbol") String symbol,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate,
+        Pageable pageable
+    );
+
+    /**
+     * Finds the last N candles for a stock.
+     *
+     * @param symbol the stock symbol
+     * @param count the number of candles to retrieve
+     * @return list of candles
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol ORDER BY c.date DESC")
+    List<OhlcvCandleEntity> findTopBySymbolOrderByDateDesc(
+        @Param("symbol") String symbol,
+        Pageable pageable
+    );
+
+    /**
+     * Finds all unique symbols that have candle data.
+     *
+     * @return list of unique symbols
+     */
+    @Query("SELECT DISTINCT c.symbol FROM OhlcvCandleEntity c ORDER BY c.symbol")
+    List<String> findAllDistinctSymbols();
+
+    /**
+     * Checks if a candle exists for a stock on a specific date.
+     *
+     * @param symbol the stock symbol
+     * @param date the date
+     * @return true if the candle exists
+     */
+    @Query("SELECT COUNT(c) > 0 FROM OhlcvCandleEntity c WHERE c.symbol = :symbol AND c.date = :date")
+    boolean existsBySymbolAndDate(
+        @Param("symbol") String symbol,
+        @Param("date") LocalDate date
+    );
+
+    /**
+     * Finds the earliest candle for a stock.
+     *
+     * @param symbol the stock symbol
+     * @return optional containing the earliest candle
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol ORDER BY c.date ASC LIMIT 1")
+    Optional<OhlcvCandleEntity> findEarliestBySymbol(@Param("symbol") String symbol);
+
+    /**
+     * Counts the number of candles for a stock.
+     *
+     * @param symbol the stock symbol
+     * @return the count
+     */
+    @Query("SELECT COUNT(c) FROM OhlcvCandleEntity c WHERE c.symbol = :symbol")
+    long countBySymbol(@Param("symbol") String symbol);
+
+    /**
+     * Deletes all candles for a stock.
+     *
+     * @param symbol the stock symbol
+     */
+    void deleteBySymbol(String symbol);
+
+    /**
+     * Finds candles by date range across all symbols.
+     *
+     * @param startDate the start date (inclusive)
+     * @param endDate the end date (inclusive)
+     * @param pageable pagination
+     * @return list of candles
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.date BETWEEN :startDate AND :endDate ORDER BY c.date DESC, c.symbol ASC")
+    List<OhlcvCandleEntity> findByDateRange(
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate,
+        Pageable pageable
+    );
+}

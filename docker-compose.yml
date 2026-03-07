@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with TimescaleDB extension
+  postgres:
+    image: timescale/timescaledb:latest
+    container_name: swing_trade_postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: swingtrade_db
+      POSTGRES_USER: ${POSTGRES_USER:-swingtrade_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swingtrade_password}
+    ports:
+      - "5432:5432"
+    networks:
+      - swingtrade-network
+
+  # Redis for caching
+  redis:
+    image: redis:alpine
+    container_name: swing_trade_redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - swingtrade-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  swingtrade-network:
+    driver: bridge
