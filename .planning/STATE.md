@@ -1,242 +1,94 @@
----
-gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: planning
-last_updated: "2026-03-21T20:23:58.762Z"
-progress:
-  total_phases: 9
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 1
----
-
 # STATE.md - Current Project State
 
-**Document Version:** 1.0
+**Document Version:** 2.0
 **Created:** 2026-03-07
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-22 (Re-initialized after planning doc refresh)
 
 ---
 
 ## Current State Summary
 
-**Project:** SwingTrade - Brownfield Swing Trading System
-**Status:** Ready to plan
-**Date:** 2026-03-07
+**Project:** SwingTrade - Automated Swing Trading System
+**Status:** Paper trading active, Phase 4 pending verification
+**Milestone:** v1.0 (Features) complete, v1.1–v2.1 phases planned
+**Last Major Update:** 2026-03-20 (paper trading launched)
 
 ### System Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | **Build System** | ✅ Operational | Maven multi-module build succeeds |
-| **Database** | ✅ Configured | PostgreSQL + TimescaleDB with Flyway migrations |
-| **Data Ingestion** | ✅ Scheduled | Auto-ingests EOD data at 16:30 IST |
-| **Signal Engine** | ✅ Scheduled | Auto-generates signals at 17:00 IST |
-| **Paper Trading** | ✅ Operational | Order placement and position tracking works |
-| **LLM Integration** | ✅ Operational | vLLM sentiment analysis functional |
-| **REST API** | ✅ Operational | Endpoints serve requests correctly |
-| **Test Coverage (Core)** | ❌ Missing | No unit tests for domain models |
-| **Test Coverage (Strategy)** | ❌ Missing | No unit tests for strategy module |
-| **Test Coverage (Data)** | ⚠️ Partial | Basic service tests exist |
-| **Test Coverage (Broker)** | ⚠️ Partial | Engine tests exist |
-| **Test Coverage (API)** | ⚠️ Partial | Service and controller tests exist |
-| **Test Coverage (LLM)** | ⚠️ Partial | Module test exists |
-| **Integration Tests** | ❌ Missing | No TestContainers or WireMock tests |
-| **Code Coverage** | ⚠️ Incomplete | JaCoCo configured but below targets |
+| **Database** | ✅ Operational | PostgreSQL + TimescaleDB with Flyway V1–V4 |
+| **Data Ingestion** | ✅ Scheduled | Auto-ingests at 16:30 IST (weekday) |
+| **Signal Engine** | ✅ Scheduled | Auto-generates at 17:00 IST (weekday) |
+| **Paper Trading** | ✅ Running | Order execution, position tracking, P&L working |
+| **LLM Module** | ⚠️ Partial | Exists but integration completeness TBD |
+| **REST API** | ✅ Operational | 15+ endpoints serving requests |
+| **Telegram Alerts** | ✅ Working | Trade events notified |
+| **Risk Controls** | ✅ Enforced | 5 position limit, 20% size cap, daily loss circuit |
+| **Test Coverage** | ❌ Low | ~35% overall, Phases 1-3 need 80%+ |
 
 ---
 
-## Work-in-Progress Tracking
+## Phase Progress
 
-### Currently Active Work
+### Completed (v1.0)
 
-| Task | Status | Assigned To | Progress | Notes |
-|------|--------|-------------|----------|-------|
-| GSD Project Initialization | ✅ Complete | Agent | 100% | All 5 planning documents created |
-| Phase 1: Core Domain Tests | 🔄 Pending | TBD | 0% | Awaiting developer assignment |
-| Phase 1: Strategy Tests | 🔄 Pending | TBD | 0% | Awaiting developer assignment |
-| Phase 2: TestContainers | 🔄 Pending | TBD | 0% | Depends on Phase 1 completion |
-| Phase 2: WireMock | 🔄 Pending | TBD | 0% | Depends on Phase 1 completion |
-| Phase 3: API Tests | 🔄 Pending | TBD | 0% | Depends on Phase 2 completion |
+| Phase | Name | Status | Date |
+|-------|------|--------|------|
+| 1 | Core Domain | ✅ Complete | 2026-03-20 |
+| 2 | Strategy Engine | ✅ Complete | 2026-03-20 |
+| 3 | Data Pipeline + Paper Trading | ✅ Complete | 2026-03-20 |
 
-### Completed Work (Last Sprint)
+### In Progress
 
-| Task | Completion Date | Notes |
-|------|-----------------|-------|
-| Codebase Analysis | 2026-03-07 | ARCHITECTURE.md, STRUCTURE.md, STACK.md, INTEGRATIONS.md, TESTING.md created |
-| Requirements Specification | 2026-03-07 | PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md created |
+| Phase | Name | Status | Target |
+|-------|------|--------|--------|
+| 4 | LLM Sentiment Layer | ⚠️ Partial | 2026-04-06 |
 
----
+### Deferred
 
-## Key Decisions Made
-
-### Architecture Decisions
-
-| Decision | Rationale | Date Made | Impact |
-|----------|-----------|-----------|--------|
-| **Multi-module Maven Build** | Separation of concerns; modular deployment | 2024-01-01 (project start) | Enables isolated testing per module |
-| **PostgreSQL + TimescaleDB** | Time-series optimization for OHLCV data | 2024-01-01 | Requires Flyway migrations V1-V4 |
-| **TA4J for Technical Analysis** | Java-native, battle-tested indicator library | 2024-01-01 | Strategy module depends on TA4J |
-| **LangChain4j for LLM** | Spring Boot integration; Java-native | 2024-01-01 | vLLM as primary LLM backend |
-| **Redis Caching** | Distributed cache for hot data | 2024-01-01 | Cache keys: stocks, ohlcv, signals, sentiment |
-| **Paper Trading Only** | Reduce risk; focus on strategy validation | 2024-01-01 | No real broker integration required |
-| **Self-Hosted Deployment** | Cost control; data privacy | 2024-01-01 | No cloud provider configuration |
-
-### Testing Decisions
-
-| Decision | Rationale | Date Made | Impact |
-|----------|-----------|-----------|--------|
-| **JUnit 5 + Mockito + AssertJ** | Modern test framework ecosystem | 2026-03-07 | Standardized test writing approach |
-| **TestContainers for DB Tests** | Real database in CI; no test DB maintenance | 2026-03-07 | PostgreSQL container for integration tests |
-| **WireMock for HTTP Testing** | Isolated external API testing | 2026-03-07 | Upstox and vLLM mocking |
-| **Phase-Based Testing** | Incremental test coverage improvement | 2026-03-07 | Clear deliverables per phase |
-| **80% Coverage Target** | Industry standard for production code | 2026-03-07 | JaCoCo thresholds configured |
-| **Domain Models Excluded from Coverage** | POJOs don't need coverage | Existing | Core module coverage target is 100% |
-
-### Infrastructure Decisions
-
-| Decision | Rationale | Date Made | Impact |
-|----------|-----------|-----------|--------|
-| **Docker Compose for Infrastructure** | Simple local development setup | 2024-01-01 | `docker-compose up -d` starts all services |
-| **Spring Boot Layering** | Optimized container images | 2024-01-01 | JAR layers: dependencies, snapshot, app |
-| **Flyway for Schema Migrations** | Version-controlled schema | 2024-01-01 | Migrations: V1, V2, V3, V4 |
-| **Scheduled Jobs** | Automated data ingestion and signal gen | 2024-01-01 | Cron: 16:30 IST (ingest), 17:00 IST (signals) |
+| Phase | Name | Status | Depends On |
+|-------|------|--------|-----------|
+| 5 | Testing Foundation | ⏳ Planned | Phase 4 |
+| 6 | Live Trading | ⏳ Planned | Phase 5 |
+| 7 | Observability | ⏳ Planned | Phase 6 |
 
 ---
 
-## Pending Decisions Required
+## Requirements Status
 
-| Decision | Priority | Due Date | Notes |
-|----------|----------|----------|-------|
-| **CI/CD Platform Selection** | High | Phase 2 | GitHub Actions vs. GitLab CI vs. Jenkins |
-| **Test Execution Strategy** | Medium | Phase 2 | Parallel execution config, test ordering |
-| **Code Quality Gate Tooling** | Medium | Phase 2 | SonarQube vs. Checkstyle vs. custom |
-| **Coverage Exclusions Finalization** | Low | Phase 1 | Confirm excluded packages |
-| **Environment Variable Management** | Medium | Ongoing | .env file vs. Vault vs. K8s secrets |
+- **Completed:** 24 requirements (REQ-001 to REQ-024) ✅
+- **In Progress:** 5 requirements (REQ-025 to REQ-029, Phase 4) ⚠️
+- **Pending:** 12 requirements (REQ-030 to REQ-036, Phases 5-7) ⏳
+- **Total:** 36 requirements mapped to 7 phases
 
 ---
 
-## Known Issues and Technical Debt
+## Key Metrics
 
-| Issue | Severity | Module | Notes |
-|-------|----------|--------|-------|
-| No unit tests for core module | High | core | Domain models untested |
-| No unit tests for strategy module | High | strategy | Critical logic untested |
-| No integration tests with real DB | High | data, broker | TestContainers not set up |
-| No WireMock for external APIs | Medium | data, llm | Upstox/vLLM testing incomplete |
-| Code coverage below 80% | High | all | JaCoCo targets not met |
-| No API endpoint tests | Medium | api | REST controllers untested |
-| Missing documentation | Medium | all | Some classes lack JavaDoc |
-| Environment config not documented | Low | all | application.properties needs comments |
+| Metric | Current | Target | Status |
+|--------|---------|--------|--------|
+| **Code Coverage** | ~35% | 80%+ | ⏳ Phase 5 |
+| **Unit Tests** | ~50 | ~250 | ⏳ Phase 5 |
+| **Integration Tests** | 0 | 30+ | ⏳ Phase 5 |
+| **Paper Trading Duration** | 2 days | 2–3 months | ⏳ Active |
 
 ---
 
-## Current Configuration State
+## Next Actions
 
-### Active Profiles
+1. **Phase 4 Verification** (This Week)
+   - Verify LLM module integration completeness
+   - Check news ingestion, sentiment filtering, weekly digest
 
-| Profile | Status | Location | Description |
-|---------|--------|----------|-------------|
-| **default** | ✅ Active | All modules | Standard Spring Boot config |
-| **coverage** | ✅ Active | Parent POM | JaCoCo coverage reporting |
+2. **Phase 5 Planning** (Next 2 Weeks)
+   - Run `/gsd:plan-phase 5` after Phase 4 verified
+   - Plan unit test implementation
 
-### Environment Variables Required
-
-| Variable | Required | Default | Status |
-|----------|----------|---------|--------|
-| `UPSTOX_CLIENT_ID` | Yes | - | ❌ Not set (required for production) |
-| `UPSTOX_CLIENT_SECRET` | Yes | - | ❌ Not set (required for production) |
-| `UPSTOX_API_KEY` | Yes | - | ❌ Not set (required for production) |
-| `LLM_BASE_URL` | No | http://localhost:8000 | ✅ Set |
-| `LLM_MODEL_NAME` | No | meta-llama/Llama-3.2-3B-Instruct | ✅ Set |
-| `TELEGRAM_BOT_TOKEN` | No | - | ❌ Not set (optional) |
-| `DB_HOST` | No | localhost | ✅ Set |
-| `DB_NAME` | No | swingtrade_db | ✅ Set |
-| `REDIS_HOST` | No | localhost | ✅ Set |
-| `REDIS_PORT` | No | 6379 | ✅ Set |
+3. **Phase 5 Execution** (April)
+   - Execute Phase 5 tests (target 80%+ coverage)
 
 ---
 
-## Accumulated Context
-
-### Roadmap Evolution
-
-- Phase 5.1 inserted after Phase 5: Implementation Fixes (URGENT)
-  - Fixes 4 broken implementations discovered mid-project
-  - Context: https://github.com/anthropics/claude-code/issues
-
----
-
-## Next Immediate Actions
-
-### Priority 1 (This Sprint)
-1. **Phase 1: Core Domain Model Tests** - Create unit tests for Stock, OhlcvCandle, Signal, Position, Trade
-2. **Phase 1: Strategy Tests** - Create unit tests for TechnicalIndicators, DefaultStrategy, BacktestEngine
-3. **Coverage Reporting** - Generate initial JaCoCo report to establish baseline
-
-### Priority 2 (Next Sprint)
-1. **Phase 2: TestContainers Setup** - Configure PostgreSQL and Redis TestContainers
-2. **Phase 2: WireMock Setup** - Configure Upstox and vLLM mocking
-3. **Integration Tests** - Create database and API integration tests
-
-### Priority 3 (Following Sprint)
-1. **Phase 3: API Endpoint Tests** - Complete REST controller testing
-2. **Regression Suite** - Create end-to-end regression tests
-3. **CI/CD Integration** - Configure GitHub Actions pipeline
-
----
-
-## Metrics Snapshot
-
-| Metric | Current | Target | Gap |
-|--------|---------|--------|-----|
-| **Core Module Tests** | 0 | 100+ | 100+ |
-| **Strategy Module Tests** | 0 | 100+ | 100+ |
-| **Integration Tests** | 2 | 20+ | 18+ |
-| **API Tests** | 2 | 30+ | 28+ |
-| **Total Test Count** | ~50 | ~250 | ~200 |
-| **Code Coverage (Core)** | 0% | 100% | 100% |
-| **Code Coverage (Strategy)** | 0% | 85% | 85% |
-| **Code Coverage (Data)** | ~40% | 80% | 40% |
-| **Code Coverage (Broker)** | ~50% | 80% | 30% |
-| **Code Coverage (API)** | ~45% | 75% | 30% |
-| **Code Coverage (LLM)** | ~40% | 75% | 35% |
-| **Overall Coverage** | ~35% | 80% | 45% |
-
----
-
-## File Locations Reference
-
-### Planning Documents (Created)
-- `.planning/PROJECT.md` - Project definition and requirements
-- `.planning/REQUIREMENTS.md` - Detailed requirements with acceptance criteria
-- `.planning/ROADMAP.md` - Implementation phases and timeline
-- `.planning/STATE.md` - Current state tracking (this file)
-- `.planning/config.json` - GSD configuration
-
-### Codebase Analysis (Existing)
-- `.planning/codebase/ARCHITECTURE.md` - System architecture
-- `.planning/codebase/STRUCTURE.md` - Directory layout
-- `.planning/codebase/STACK.md` - Technology stack
-- `.planning/codebase/INTEGRATIONS.md` - External integrations
-- `.planning/codebase/TESTING.md` - Testing patterns
-
-### Test Files (Existing)
-- `api/src/test/java/com/swingtrade/api/SignalServiceTest.java`
-- `api/src/test/java/com/swingtrade/api/SwingTradeControllerTest.java`
-- `broker/src/test/java/com/swingtrade/broker/BrokerModuleIntegrationTest.java`
-- `data/src/test/java/com/swingtrade/data/service/DataIngestionServiceTest.java`
-- `llm/src/test/java/com/swingtrade/llm/LlmModuleTest.java`
-
-### Test Files (To Create)
-- `core/src/test/java/com/swingtrade/domain/*Test.java` (5 files)
-- `strategy/src/test/java/com/swingtrade/strategy/*Test.java` (4 files)
-- `data/src/test/java/com/swingtrade/data/*IntegrationTest.java` (3 files)
-- `broker/src/test/java/com/swingtrade/broker/*IntegrationTest.java` (2 files)
-- `api/src/test/java/com/swingtrade/api/*ControllerTest.java` (3 files)
-- `api/src/test/java/com/swingtrade/api/RegressionTestSuite.java`
-
----
-
-*State snapshot: 2026-03-07*
+*State snapshot: 2026-03-22 (Paper trading active, phases 1-3 complete)*

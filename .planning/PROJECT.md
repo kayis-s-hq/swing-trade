@@ -1,298 +1,220 @@
-# PROJECT.md - GSD Project Definition
+# PROJECT.md - SwingTrade Swing Trading System
 
-**Document Version:** 1.0
+**Document Version:** 2.0
 **Created:** 2026-03-07
-**Last Updated:** 2026-03-08
+**Last Updated:** 2026-03-22 (Re-initialized with full project context)
 
 ---
 
-## Project Overview
+## What This Is
 
-**Project Name:** SwingTrade - Brownfield Swing Trading System
+SwingTrade is a fully automated swing trading system for NSE/BSE Indian equities. Built in Java 21 with Spring Boot 3.x, it uses a multi-factor technical analysis approach (EMA, RSI, Volume, Support/Resistance) enhanced by LLM sentiment analysis to filter signals, paper trades for 2-3 months of validation, then deploys live capital with strict risk controls.
 
-**Project Type:** Brownfield Development
-**Project Description:** An existing multi-module Java/Spring Boot swing trading system built for automated trading of NSE/BSE Indian equities. The system uses a multi-factor technical analysis approach enhanced by LLM sentiment analysis, with a paper trading engine for simulated execution.
-
-**Current Maturity Level:** Feature Complete (v1.0)
-**Primary Risk:** Insufficient test coverage in core and strategy modules
-
----
-
-## Phase Structure (v1.0)
-
-The project is organized into 8 phases: 5 feature development phases followed by 3 testing phases.
-
-| Phase | Name | Status |
-|-------|------|--------|
-| 1 | Core Domain Implementation | ✅ Complete |
-| 2 | Strategy Engine | ✅ Complete |
-| 3 | Data Pipeline | ✅ Complete |
-| 4 | Broker Integration | ✅ Complete |
-| 5 | API Layer | ✅ Complete |
-| 6 | Testing Foundation | ⏳ Deferred |
-| 7 | Integration Test Infrastructure | ⏳ Deferred |
-| 8 | API Endpoint Testing | ⏳ Deferred |
+**Hold period:** 1–4 weeks (pure swing, no intraday, no F&O)
+**Universe:** Nifty 500 filtered to ~250 liquid stocks
+**Paper trading:** Started 2026-03-20, running indefinitely until live validation complete
+**Live trading:** Target ₹50,000 capital after paper validation phase
 
 ---
 
-## Validated Requirements (v1.0 - Features)
+## Core Value
 
-The following requirements have been validated through codebase analysis and are implemented in the current codebase:
+**Execute the 4-factor swing strategy across Nifty 500, validate with 2-3 months paper trading, then deploy live capital.**
 
-| Req ID | Category | Requirement | Status | Module |
-|--------|----------|-------------|--------|--------|
-| **REQ-001** | Domain Model | Stock entity with symbol, exchange, sector, industry | Implemented | core |
-| **REQ-002** | Domain Model | OhlcvCandle with OHLCV data and calculations | Implemented | core |
-| **REQ-003** | Domain Model | Signal with type, confidence, reasoning, risk params | Implemented | core |
-| **REQ-004** | Domain Model | Position with entry, stop loss, target, status | Implemented | core |
-| **REQ-005** | Domain Model | Trade with lifecycle, P&L, duration tracking | Implemented | core |
-| **REQ-006** | Domain Model | SentimentResult with score, confidence, analysis | Implemented | core |
-| **REQ-007** | Strategy | Technical indicators (EMA, SMA, RSI, MACD, ATR) | Implemented | strategy |
-| **REQ-008** | Strategy | Multi-factor signal generation logic | Implemented | strategy |
-| **REQ-009** | Strategy | Scheduled signal generation at 17:00 IST | Implemented | strategy |
-| **REQ-010** | Strategy | Historical backtesting engine | Implemented | strategy |
-| **REQ-011** | Data | Upstox API integration for market data | Implemented | data |
-| **REQ-012** | Data | Data ingestion with validation and gap repair | Implemented | data |
-| **REQ-013** | Data | Repository layer with Spring Data JPA | Implemented | data |
-| **REQ-014** | Data | Flyway migrations with TimescaleDB hypertables | Implemented | data |
-| **REQ-015** | Data | Auto-ingestion scheduling at 16:30 IST | Implemented | data |
-| **REQ-016** | Broker | Paper trading engine with order execution | Implemented | broker |
-| **REQ-017** | Broker | Risk controls (5 position limit, 20% size, daily loss) | Implemented | broker |
-| **REQ-018** | Broker | Telegram notification integration | Implemented | broker |
-| **REQ-019** | Broker | Broker modes (PAPER, DRY_RUN, LIVE) | Implemented | broker |
-| **REQ-020** | API | Trading endpoints (trades, portfolio, positions) | Implemented | api |
-| **REQ-021** | API | Signal endpoints with filtering | Implemented | api |
-| **REQ-022** | API | Position endpoints with close functionality | Implemented | api |
-| **REQ-023** | API | Performance metrics and analytics | Implemented | api |
-| **REQ-024** | API | Scan service with manual trigger | Implemented | api |
+Everything else serves this: if the strategy doesn't work in paper, live trading doesn't happen. If live capital isn't deployed, the system remains a backtest toy, not a production trading system.
 
 ---
 
-## Active Requirements (Pending Work - Testing)
+## Requirements
 
-The following requirements are identified as pending work and are part of the testing phases:
+### Validated (Phases 1–3 Complete)
 
-| Req ID | Category | Requirement | Priority | Phase |
-|--------|----------|-------------|----------|-------|
-| **REQ-101** | Testing | Unit tests for core domain models | High | Phase 6 |
-| **REQ-102** | Testing | Unit tests for strategy module | High | Phase 6 |
-| **REQ-103** | Testing | TestContainers for database integration | Medium | Phase 7 |
-| **REQ-104** | Testing | WireMock for external API mocking | Medium | Phase 7 |
-| **REQ-105** | Testing | API endpoint testing suite | Medium | Phase 8 |
-| **REQ-106** | Testing | 80%+ code coverage with JaCoCo | High | Phase 7 |
-| **REQ-107** | Testing | Automated regression test suite | Low | Phase 8 |
+Core domain models, technical indicators, data pipeline, signal generation, and paper trading engine all implemented and running:
 
----
+- ✓ Domain models (Stock, OhlcvCandle, Signal, Position, Trade, SentimentResult) — Phase 1
+- ✓ Technical indicators (EMA, SMA, RSI, MACD, ATR, VolumeMA) with TA4J — Phase 2
+- ✓ 4-factor signal generation logic — Phase 2
+- ✓ Historical backtesting engine — Phase 2
+- ✓ PostgreSQL + TimescaleDB schema with Flyway migrations — Phase 3
+- ✓ Upstox API integration for OHLCV data ingestion — Phase 3
+- ✓ Scheduled auto-ingestion at 16:30 IST (weekday) — Phase 3
+- ✓ Paper trading engine with order placement and position tracking — Phase 3–4
+- ✓ Risk controls: max 5 positions, 20% capital/position, daily loss circuit breaker — Phase 4
+- ✓ Telegram notifications for trade events — Phase 4
+- ✓ REST API endpoints for signals, positions, portfolio, performance — Phase 5
 
-## Out of Scope
+### Active (Phases 4–7 Pending)
 
-The following items are explicitly out of scope for the current project:
+- [ ] **Phase 4 – LLM Sentiment Layer** (module exists, needs integration verification):
+  - News ingestion from Google News RSS + NSE corporate announcements (last 7 days per stock)
+  - Sentiment analysis pipeline with vLLM (Qwen3-30B-AWQ, OpenAI-compatible)
+  - Signal filtering: NEGATIVE suppressed, NEUTRAL flagged with ⚠️ in Telegram
+  - Weekly sector sentiment digest (Sunday scheduled job)
 
-1. **Real Broker Integration** - System is paper trading only; no live trading with actual money
-2. **User Authentication** - No user login/identity management in REST API
-3. **Mobile Application** - No mobile app development
-4. **Historical Backtesting UI** - Backtest engine exists but no UI for historical analysis
-5. **Machine Learning Models** - Only LLM-based sentiment; no custom ML training
-6. **Cloud Deployment** - Self-hosted deployment only; no AWS/GCP/Azure configuration
-7. **Advanced Order Types** - Only MARKET orders supported; no LIMIT/STOP/SL orders
+- [ ] **Phase 5 – Testing Foundation**:
+  - Unit tests for core domain models (100% coverage)
+  - Unit tests for strategy module (85%+ coverage)
+  - Integration tests with TestContainers (PostgreSQL + TimescaleDB, NO WireMock)
+  - HTTP mocking with MockRestServiceServer for Upstox + vLLM
+  - API endpoint tests with @SpringBootTest + MockMvc
+  - 80%+ code coverage across all modules (JaCoCo)
 
----
+- [ ] **Phase 6 – Live Trading**:
+  - Zerodha Kite Connect Java SDK integration (₹2000/yr license)
+  - BrokerServiceFactory routes to Kite vs paper mode based on config
+  - Kill switch: halts live orders, closes positions, sends Telegram alert
+  - Capital management: ₹50K initial, max 3 concurrent live positions
 
-## Key Technical Decisions
+- [ ] **Phase 7 – Observability + Iteration**:
+  - Grafana dashboards (Spring Actuator + Micrometer metrics)
+  - Monthly strategy review reports (win rate, R:R, drawdown)
+  - Trade outcome labelling for future Qwen3 fine-tuning (6+ months of data)
 
-| Decision | Rationale | Impact |
-|----------|-----------|--------|
-| **Multi-module Maven Build** | Separation of concerns; independent compilation; modular deployment | Enables isolated testing per module |
-| **PostgreSQL + TimescaleDB** | Time-series optimization; SQL compatibility; open source | Hypertables for OHLCV data require migration scripts |
-| **TA4J for Technical Analysis** | Battle-tested library; comprehensive indicator suite; Java-native | Domain-specific technical analysis logic |
-| **LangChain4j for LLM** | Abstraction over LLM providers; Spring Boot integration; Java-native | vLLM as primary LLM backend |
-| **Spring Boot Caching with Redis** | Distributed caching; cache-aside pattern; TTL management | Cache keys: stocks, ohlcv, signals, sentiment |
-| **Flyway for Schema Migrations** | Version-controlled schema; repeatable migrations | Migrations: V1 (core), V2 (hypertables), V3 (stocks), V4 (trades) |
-| **TestContainers for Integration Tests** | Real database in CI; no test DB maintenance required | PostgreSQL container for data module tests |
-| **WireMock for HTTP Testing** | Isolated external API testing; deterministic responses | Upstox API and vLLM mocking |
+### Out of Scope
 
----
-
-## Module Structure
-
-```
-swing-trade/
-├── core/                          # Domain models (no framework dependencies)
-│   ├── src/main/java/
-│   │   └── com/swingtrade/domain/
-│   │       ├── Stock.java         # Stock domain record
-│   │       ├── OhlcvCandle.java   # OHLCV candle record
-│   │       ├── Signal.java        # Trading signal record
-│   │       ├── Position.java      # Position domain record
-│   │       ├── Trade.java         # Trade domain record
-│   │       └── SentimentResult.java # Sentiment analysis result
-│   └── pom.xml                    # Module dependency: none
-│
-├── data/                          # Data ingestion and storage
-│   ├── src/main/java/
-│   │   ├── service/
-│   │   │   ├── DataIngestionService.java    # Market data ingestion
-│   │   │   ├── MarketDataClient.java        # External API abstraction
-│   │   │   └── UpstoxRestClient.java        # Upstox API implementation
-│   │   ├── entity/                  # JPA entities
-│   │   ├── repository/              # Spring Data repositories
-│   │   └── config/                  # Data module configuration
-│   ├── src/main/resources/
-│   │   └── db/migration/            # Flyway migrations
-│   │       ├── V1__swing_trade_schema.sql
-│   │       ├── V2__create_hypertables.sql
-│   │       ├── V3__create_stocks_table.sql
-│   │       └── V4__add_trades_table.sql
-│   └── pom.xml                      # Dependencies: core, Spring Data JPA, PostgreSQL
-│
-├── strategy/                        # Technical analysis and signal generation
-│   ├── src/main/java/
-│   │   ├── SwingTradingStrategy.java   # Main strategy interface
-│   │   ├── SignalEngine.java           # Scheduled signal generation
-│   │   ├── TechnicalIndicators.java    # Indicator calculations
-│   │   └── impl/
-│   │       ├── DefaultStrategy.java    # TA4J-based strategy
-│   │       ├── DefaultIndicatorService.java
-│   │       └── DefaultBacktestEngine.java
-│   └── pom.xml                         # Dependencies: core, data, TA4J
-│
-├── llm/                             # LLM integration and sentiment analysis
-│   ├── src/main/java/
-│   │   ├── client/
-│   │   │   ├── LlmClient.java          # LLM client abstraction
-│   │   │   └── LangChain4jLlmClient.java
-│   │   └── service/
-│   │       ├── SentimentAnalysisService.java
-│   │       └── NewsIngestionService.java
-│   └── pom.xml                         # Dependencies: core, langchain4j
-│
-├── broker/                          # Paper trading engine
-│   ├── src/main/java/
-│   │   ├── engine/
-│   │   │   └── PaperTradingEngine.java   # Core trading logic
-│   │   ├── service/
-│   │   │   ├── BrokerService.java        # Broker abstraction
-│   │   │   └── PaperTradingServiceImpl.java
-│   │   ├── model/
-│   │   │   ├── Order.java                # Order domain model
-│   │   │   ├── OrderType.java            # MARKET, LIMIT, etc.
-│   │   │   ├── TradeDirection.java       # LONG, SHORT
-│   │   │   └── OrderStatus.java          # ACCEPTED, FILLED, etc.
-│   │   ├── risk/                         # Risk controls
-│   │   │   ├── PositionLimitChecker.java
-│   │   │   ├── DailyLossCircuitBreaker.java
-│   │   │   ├── PositionSizeValidator.java
-│   │   │   └── RiskControlsService.java
-│   │   ├── telegram/                     # Telegram notification integration
-│   │   └── config/                       # Broker configuration
-│   │       ├── BrokerMode.java
-│   │       └── factory/
-│   │           └── BrokerServiceFactory.java
-│   └── pom.xml                           # Dependencies: core, strategy, telegram-bot-api
-│
-├── api/                             # REST API layer
-│   ├── src/main/java/
-│   │   ├── app/
-│   │   │   └── SwingTradeApiApplication.java  # Main entry point
-│   │   ├── controller/                  # REST controllers
-│   │   │   ├── TradingController.java
-│   │   │   ├── SignalController.java
-│   │   │   └── PositionController.java
-│   │   ├── service/
-│   │   │   ├── SignalService.java
-│   │   │   ├── PerformanceService.java
-│   │   │   ├── PositionService.java
-│   │   │   └── ScanService.java
-│   │   └── dto/                         # Request/Response DTOs
-│   │       ├── SignalResponse.java
-│   │       ├── PositionResponse.java
-│   │       ├── PerformanceResponse.java
-│   │       ├── ScanResponse.java
-│   │       └── TradeRequest.java
-│   └── pom.xml                          # Dependencies: all modules, Spring Web, Actuator
-│
-├── docker-compose.yml                   # Infrastructure orchestration
-├── pom.xml                              # Root Maven POM (dependency management)
-├── README.md                            # Project documentation
-└── .planning/                           # GSD planning artifacts
-    ├── PROJECT.md                       # This file
-    ├── REQUIREMENTS.md                  # Detailed requirements
-    ├── ROADMAP.md                       # Implementation phases
-    ├── STATE.md                         # Current state tracking
-    └── config.json                      # GSD configuration
-```
+- **Intraday trading** — swing only, 1–4 week holds
+- **Futures & Options** — NSE/BSE equity spot only
+- **LLM-based price prediction** — LLM is a sentiment filter only, not a signal generator
+- **LLM fine-tuning** — deferred until 6+ months of labelled trade data exists (Q3 2026+)
+- **Mobile app** — REST API only, no mobile client
+- **Cloud deployment** — self-hosted on Raspberry Pi 5 + RTX 5090 only
+- **User authentication** — single-user system, no login/identity mgmt
+- **Advanced order types** — MARKET orders only, no LIMIT/STOP/SL orders
+- **Real broker auth in code** — credentials via environment variables only
 
 ---
 
-## Current Project State Summary
+## Context
 
-| Aspect | Status | Notes |
-|--------|--------|-------|
-| **Build System** | ✅ Functional | Maven multi-module; `mvn clean install` succeeds |
-| **Database Schema** | ✅ Complete | 4 Flyway migrations; PostgreSQL + TimescaleDB |
-| **Data Ingestion** | ✅ Scheduled | Auto-ingests at 16:30 IST; manual backfill available |
-| **Signal Engine** | ✅ Scheduled | Auto-generates at 17:00 IST; manual trigger available |
-| **Paper Trading** | ✅ Functional | Order placement, position tracking, P/L calculation |
-| **LLM Integration** | ✅ Functional | vLLM client; sentiment analysis pipeline |
-| **REST API** | ✅ Functional | Endpoints for signals, orders, portfolio |
-| **Risk Controls** | ✅ Enforced | 5 position max, 20% size limit, daily loss circuit |
-| **Telegram** | ✅ Functional | Trade and signal notifications |
-| **Test Coverage (core)** | ❌ Missing | No unit tests for domain models |
-| **Test Coverage (strategy)** | ❌ Missing | No unit tests for strategy/indicators |
-| **Test Coverage (data)** | ⚠️ Partial | DataIngestionServiceTest exists |
-| **Test Coverage (broker)** | ⚠️ Partial | PaperTradingEngineTest exists |
-| **Test Coverage (api)** | ⚠️ Partial | SignalServiceTest, SwingTradeControllerTest |
-| **Test Coverage (llm)** | ⚠️ Partial | LlmModuleTest exists |
-| **Integration Tests** | ❌ Missing | No TestContainers, no WireMock tests |
-| **API Endpoint Tests** | ❌ Missing | No REST endpoint testing |
+### Infrastructure
+
+- **App server:** Raspberry Pi 5 (8GB RAM, NVMe) — runs Spring Boot, PostgreSQL, Redis
+- **LLM inference:** Rented RTX 5090 (32GB VRAM) — serves Qwen3-30B-AWQ via vLLM (OpenAI-compatible endpoint)
+- **Dev machine:** MacBook M1 for development
+- **Pi does NOT inference LLM** — only RTX 5090 does. Pi calls vLLM endpoint via HTTP.
+
+### Technology Stack
+
+| Component | Choice | Rationale |
+|-----------|--------|-----------|
+| **Language** | Java 21 | Type safety, performance, Spring Boot ecosystem |
+| **Framework** | Spring Boot 3.x | Scheduling, dependency injection, REST, Actuator |
+| **Database** | PostgreSQL + TimescaleDB | Time-series OHLCV, hypertables, open source |
+| **Cache** | Redis | Session-like data, indicator cache, signal cache |
+| **Indicators** | TA4J | Java-native, battle-tested, 60+ indicators |
+| **LLM** | LangChain4j + vLLM | Spring Boot integration, OpenAI-compatible API |
+| **Broker (paper)** | Custom engine | Full control, no broker API throttling |
+| **Broker (live)** | Zerodha Kite Connect | ₹2000/yr, India-specific, Java SDK available |
+| **Data source (dev)** | Yahoo Finance | Free, no auth, for backfill only |
+| **Data source (live)** | Upstox v2 REST API | Free tier, live market data |
+| **Alerts** | Telegram Bot API | Real-time, mobile push, easy integration |
+| **Testing** | JUnit 5 + Mockito + TestContainers | Modern, Spring integration, real DB containers |
+| **Build** | Maven multi-module | Clear module boundaries, dependency management |
+| **Monitoring** | Grafana + Micrometer | Spring-native metrics, visual dashboards |
+
+### Strategy Logic
+
+**Entry (ALL 4 must be true):**
+1. Price > EMA20 > EMA50 (uptrend confirmed)
+2. RSI(14) between 50–65 (momentum rising, not overbought)
+3. Volume > 1.5x 20-day average (conviction move)
+4. Price within 3% of 52-week high OR breaking above resistance
+
+**Exit (ANY ONE triggers):**
+1. Stop loss: price < entry − (2 × ATR14 at entry)
+2. Target: price > entry + (2.5 × risk) [1:2.5 R:R]
+3. Time stop: position held > 20 trading days
+4. Trend break: close below EMA20 for 2 consecutive days
+
+**Position sizing:**
+- Risk-based: 1% of capital per trade, sized by ATR stop distance
+- Max concurrent: 5 positions in paper mode, 3 in live mode
+- Max per position: 20% of capital
+
+### User Profile
+
+- **Role:** Staff Security Software Engineer at Qualcomm (10+ years Java/Spring Boot)
+- **Side project:** Building with experienced swing trader (non-technical)
+- **Preferred:** Java over Python for all backend work
+- **Dev constraint:** Works alongside Qualcomm job, part-time availability
+- **Decision style:** Pragmatic, values simplicity over over-engineering
 
 ---
 
-## Next Steps (Immediate)
+## Constraints
 
-**Current State:** Feature development complete (v1.0)
-
-**Recommended Next Actions:**
-
-1. **Option A - Testing First (Original Plan)**
-   - Phase 6: Create unit tests for core domain models and strategy module
-   - Phase 7: Set up TestContainers and WireMock for integration testing
-   - Phase 8: Implement API endpoint testing with proper request/response validation
-
-2. **Option B - Feature Enhancements First**
-   - Add additional trading strategies
-   - Implement more order types (LIMIT, STOP)
-   - Add Zerodha Kite Connect integration for live trading
-   - Build backtesting UI
-
-3. **Option C - Production Readiness**
-   - Add monitoring and alerting
-   - Set up CI/CD pipeline
-   - Dockerize application
-   - Deploy to staging environment
+| Type | What | Why |
+|------|------|-----|
+| **Timeline** | Paper trading: 2–3 months (started 2026-03-20) | Validate strategy before risking capital |
+| **Capital (live)** | ₹50,000 initial | Limited capital, strict risk mgmt (max 3 positions, 1% risk/trade) |
+| **Tech stack** | Java 21 + Spring Boot 3.x only | Expertise, production-grade ecosystem |
+| **Testing** | NO WireMock (use MockRestServiceServer instead) | Lighter footprint, Spring-native, sufficient for this use case |
+| **Database** | PostgreSQL + TimescaleDB (not ClickHouse, not Mongo) | Time-series native, SQL compatibility, hypertables for daily OHLCV |
+| **Broker auth** | Environment variables only (no hardcoded secrets) | Security best practice, CI/CD friendly |
+| **LLM inference** | Pi does NOT do inference (only RTX 5090 via HTTP) | Pi doesn't have GPU, inference must be remote |
+| **Live trading start** | Only after 2–3 months paper validation | Risk management: prove strategy before real capital |
 
 ---
 
-## Milestone Status
+## Key Decisions
 
-### v1.0 - Core Features (Complete)
-**Completion Date:** 2026-03-20
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| **Paper trading first** | Validate strategy logic before risking ₹50K | ✓ Good: running since 2026-03-20, collecting outcome data |
+| **LLM as filter, not signal** | LLM hallucination too risky for price prediction | ✓ Good: news-based sentiment filters suppress NEGATIVE signals, NEUTRAL flagged |
+| **Qwen3-30B (not GPT/Claude)** | Running locally on RTX 5090, cost control, no API keys in code | ✓ Good: fast, cheap, private |
+| **Mockito + TestContainers, NO WireMock** | Simpler setup, sufficient for external API mocking, lighter weight | — Pending: not yet tested at scale |
+| **TA4J (not custom indicators)** | Industry-standard, 60+ built-in indicators, battle-tested | ✓ Good: reliable, reduces custom code |
+| **Zerodha Kite (live broker)** | Only ₹2000/yr, Java SDK available, India-specific | — Pending: live trading phase deferred |
+| **Multi-module Maven** | Clear boundaries, independent testing, modular deployment | ✓ Good: core, data, strategy, llm, broker, api modules decouple well |
+| **Redis caching** | Indicator cache (hot data), signal cache, sentiment cache | ✓ Good: reduces DB load, speeds up repeated indicator calcs |
+| **Flyway migrations** | Version-controlled schema, CI/CD friendly, repeatable | ✓ Good: 4 migrations (V1–V4) deployed successfully |
 
-- [x] Domain models (6 models) - Phase 01 ✅ Complete
-- [x] Technical indicators (5+ indicators)
-- [x] Signal generation (multi-factor)
-- [x] Data pipeline (Upstox integration)
+---
+
+## Module Responsibilities
+
+| Module | Responsibility | Status |
+|--------|-----------------|--------|
+| **core** | Domain models (Stock, OhlcvCandle, Signal, Position, Trade, SentimentResult) | ✅ Complete |
+| **data** | Data ingestion, PostgreSQL + TimescaleDB, Upstox API client, scheduling | ✅ Complete |
+| **strategy** | Technical indicators (TA4J), signal generation, backtesting engine | ✅ Complete |
+| **llm** | LangChain4j client, news ingestion, sentiment analysis, signal filtering | ⚠️ Partial (module exists, integration TBD) |
+| **broker** | Paper/live trading engine, risk controls, order management, Telegram alerts | ✅ Complete (paper mode only) |
+| **api** | REST endpoints, DTOs, service layer, portfolio tracking | ✅ Complete |
+
+---
+
+## Milestones
+
+### v1.0 – Core Features (2026-03-20)
+- [x] Domain models
+- [x] Technical indicators
+- [x] Signal generation
+- [x] Data pipeline (Upstox)
 - [x] Paper trading engine
 - [x] Risk controls
-- [x] REST API (15+ endpoints)
+- [x] REST API
 - [x] Telegram notifications
+- **Status:** ✅ Complete, paper trading active
 
-### v1.1 - Testing Foundation (Deferred)
-- [ ] Unit tests (core + strategy)
-- [ ] Integration tests (TestContainers + WireMock)
+### v1.1 – LLM + Testing (Target: 2026-04-30)
+- [ ] News ingestion pipeline
+- [ ] Sentiment analysis + filtering
+- [ ] Unit tests (80%+ coverage)
+- [ ] Integration tests (TestContainers)
 - [ ] API endpoint tests
-- [ ] 80%+ code coverage
+
+### v2.0 – Live Trading (Target: 2026-05-15)
+- [ ] Zerodha Kite Connect integration
+- [ ] Kill switch + capital management
+- [ ] Live trading deployment
+
+### v2.1 – Observability (Target: 2026-06-30)
+- [ ] Grafana dashboards
+- [ ] Monthly review reports
+- [ ] Trade labelling for future fine-tuning
 
 ---
 
-*Project definition: 2026-03-08 (Reordered - Features Before Testing)*
+*Last updated: 2026-03-22 after re-initialization with full project context*
