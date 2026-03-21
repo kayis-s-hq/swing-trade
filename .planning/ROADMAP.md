@@ -381,10 +381,12 @@ This document outlines the implementation phases for building the SwingTrade swi
 
 ## Phase 4: Broker Integration
 
-**Objective:** Paper trading engine with risk controls.
+**Objective:** Paper trading engine with risk controls and Signal notifications.
 
 **Estimated Duration:** 2-3 days
 **Priority:** Medium
+**Status:** ✅ Complete
+**Completion Date:** 2026-03-22
 
 ---
 
@@ -396,7 +398,7 @@ This document outlines the implementation phases for building the SwingTrade swi
 | 4.2 | PositionLimitChecker | Max 5 concurrent positions | 0.5 day |
 | 4.3 | DailyLossCircuitBreaker | Stop-loss protection | 0.5 day |
 | 4.4 | PositionSizeValidator | 20% capital per position | 0.5 day |
-| 4.5 | Telegram Notifications | Trade/signal alerts | 0.5 day |
+| 4.5 | Signal Notifications | Trade event notifications | 0.5 day |
 
 ---
 
@@ -424,16 +426,29 @@ This document outlines the implementation phases for building the SwingTrade swi
 
 **Status:** ✅ Implemented
 
-#### 4.3 Telegram Integration
+#### 4.3 Signal Notification Integration
 
-**File:** `broker/src/main/java/com/swingtrade/broker/telegram/TelegramNotificationService.java`
+**Files:**
+- `broker/src/main/java/com/swingtrade/broker/telegram/SignalNotificationService.java` - Signal API integration
+- `broker/src/main/java/com/swingtrade/broker/telegram/SignalMessageFormatter.java` - Message formatting
+- `broker/src/main/java/com/swingtrade/broker/telegram/BrokerNotificationIntegration.java` - Integration wiring
 
 **Features:**
-- Trade notifications
-- Signal alerts
-- Position updates
+- Trade open notifications (position entry with full details)
+- Trade close notifications (position exit with P&L)
+- Stop loss hit notifications
+- Target hit notifications
+- Quiet hours support
+- Configuration via application.properties
 
-**Status:** ✅ Implemented
+**Notification Scope:** Trade events only (per project decision)
+- ✅ Trade open/close
+- ✅ Stop loss and target hits
+- ❌ Signal alerts (deferred)
+- ❌ Position updates (deferred)
+- ❌ System status (deferred)
+
+**Status:** ✅ Implemented (2026-03-22)
 
 #### 4.4 Broker Modes
 
@@ -454,7 +469,7 @@ This document outlines the implementation phases for building the SwingTrade swi
 |-----------|--------|-------------|
 | **Paper Trading** | Working | Orders execute correctly |
 | **Risk Controls** | Enforced | Position limits respected |
-| **Telegram** | Working | Notifications sent |
+| **Signal Notifications** | Working | Trade events notified |
 | **Broker Modes** | Switchable | Mode selection works |
 
 ---
@@ -464,7 +479,7 @@ This document outlines the implementation phases for building the SwingTrade swi
 **Phase 4 is complete when:**
 1. Paper trading engine executes orders correctly
 2. Risk controls enforce position limits
-3. Telegram notifications working
+3. Signal notifications working for trade events
 4. Broker modes switchable via configuration
 
 ---
