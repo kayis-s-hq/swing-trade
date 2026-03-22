@@ -107,3 +107,7 @@ progress:
 ---
 
 *State snapshot: 2026-03-22 (Paper trading active, phases 1-3 complete)*
+
+## Roadmap Evolution
+
+- Phase 8 added: Vue Dashboard + Monitoring UI

@@ -352,6 +352,16 @@ Phase 4 has been planned with 3 sequential plans covering all 5 requirements:
 
 After Phase 4 completion, proceed to Phase 5 (Testing Foundation) for 80%+ code coverage.
 
+### Phase 8: Vue Dashboard + Monitoring UI
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 7
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 8 to break down)
+
 ---
 
 *Roadmap: 2026-03-22 (Phase 4 plans finalized: 04-01, 04-02, 04-03 with all requirements mapped)*
