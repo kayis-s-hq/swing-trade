@@ -1,14 +1,14 @@
 # ROADMAP.md - SwingTrade Implementation Phases
 
-**Document Version:** 2.2
+**Document Version:** 2.3
 **Created:** 2026-03-07
-**Last Updated:** 2026-03-22 (Phase 4 plans created)
+**Last Updated:** 2026-03-22 (Phase 4 plans finalized with all requirements)
 
 ---
 
 ## Overview
 
-SwingTrade is a 7-phase project to build a production swing trading system for Indian equities. Phases 1–3 are complete (paper trading active). Phase 4 (LLM) is partially implemented and needs verification. Phases 5–7 are deferred pending Phase 4 completion.
+SwingTrade is a 7-phase project to build a production swing trading system for Indian equities. Phases 1–3 are complete (paper trading active). Phase 4 (LLM) has been planned with 3 plans covering all requirements. Phases 5–7 are deferred pending Phase 4 completion.
 
 **Paper trading started:** 2026-03-20
 **Target live trading:** 2026-05-15 (after Phase 4 + Phase 5 complete)
@@ -130,16 +130,18 @@ Plans to execute: `/gsd:execute-phase 02 --gaps-only`
 
 ### Requirements Mapped
 
-- REQ-025: LangChain4j client ⚠️ Partial
-- REQ-026: News ingestion ⚠️ Partial
-- REQ-027: Sentiment analysis ⚠️ Partial
-- REQ-028: Signal filtering ⚠️ Partial
-- REQ-029: Weekly sector digest ⚠️ Partial
+| Req ID | Description | Plan Coverage |
+|--------|-------------|---------------|
+| REQ-025 | vLLM client (OpenAI-compatible) | Plan 01, Plan 03 |
+| REQ-026 | News ingestion (RSS feeds, 7-day history) | Plan 01, Plan 03 |
+| REQ-027 | Sentiment analysis pipeline | Plan 01, Plan 03 |
+| REQ-028 | Signal filtering (NEGATIVE suppression, NEUTRAL flagging) | Plan 01, Plan 03 |
+| REQ-029 | Weekly sector digest | Plan 02, Plan 03 |
 
 ### Success Criteria
 
 - [ ] vLLM endpoint reachable (RTX 5090 inference)
-- [ ] News fetched for all Nifty 500 stocks (7-day history)
+- [ ] News fetched for Nifty 500 stocks (7-day history)
 - [ ] Sentiment analysis returns POSITIVE/NEUTRAL/NEGATIVE
 - [ ] NEGATIVE signals suppressed from paper portfolio
 - [ ] NEUTRAL signals flagged with ⚠️ in Telegram
@@ -152,43 +154,55 @@ Plans to execute: `/gsd:execute-phase 02 --gaps-only`
 
 #### Plan 01: SignalEngine Sentiment Integration (Wave 1)
 - **Objective:** Integrate sentiment filtering into SignalEngine
-- **Files Modified:** SignalEngine.java, SignalEntity.java, SentimentResultRepository.java
+- **Requirement IDs:** REQ-025, REQ-026, REQ-027, REQ-028
+- **Files Modified:** SignalEngine.java, SignalEntity.java, SentimentResultRepository.java, SentimentAnalysisService.java
+- **Wave:** 1 (no dependencies)
 - **Tasks:**
   1. Add SentimentAnalysisService dependency to SignalEngine
   2. Add sentiment check before signal save in generateSignalsForSymbol
   3. Add warning flag field to SignalEntity
-  4. Add SentimentResultRepository if not exists
-- **Requirement:** REQ-028
+  4. Create SentimentResultEntity and SentimentResultRepository
+  5. Update SentimentAnalysisService to persist results
 
 #### Plan 02: Weekly Sector Digest (Wave 2)
 - **Objective:** Implement weekly sector digest scheduled job
-- **Files Modified:** LlmConfig.java, SentimentAnalysisService.java
+- **Requirement IDs:** REQ-029
+- **Files Modified:** SentimentAnalysisService.java, LlmConfig.java, SwingTradeApiApplication.java
+- **Wave:** 2 (depends on Plan 01)
 - **Tasks:**
-  1. Add sector digest generation method to SentimentAnalysisService
-  2. Add Telegram notification integration
-  3. Add scheduled job to LlmConfig
-  4. Verify Scheduling configuration
-- **Requirement:** REQ-029
+  1. Add generateSectorDigest() method to SentimentAnalysisService
+  2. Add sendSectorDigest() with Telegram integration
+  3. Add @Scheduled annotation to LlmConfig for Sunday 17:00 IST
+  4. Verify @EnableScheduling on main application
+  5. Add configuration for Telegram chat ID
 
 #### Plan 03: Test Infrastructure (Wave 3)
 - **Objective:** Create comprehensive test suite for LLM module
+- **Requirement IDs:** REQ-025, REQ-026, REQ-027, REQ-028, REQ-029
 - **Files Modified:** 5 test classes + test resources
+- **Wave:** 3 (depends on Plans 01 and 02)
 - **Tasks:**
-  1. Create VLLMClientTest with MockServer (REQ-025)
+  1. Create VLLMClientTest with MockRestServiceServer (REQ-025)
   2. Create NewsIngestionServiceTest (REQ-026)
   3. Create SentimentAnalyzerTest (REQ-027)
   4. Create SentimentFilteringTest (REQ-028)
   5. Create SectorDigestTest (REQ-029)
-  6. Create test resources configuration
-- **Requirements:** REQ-025, REQ-026, REQ-027, REQ-028, REQ-029
+  6. Create test resources (application-test.yml, sample-rss.xml)
+
+### Plan Details
+
+| Plan | Objective | Tasks | Files | Wave |
+|------|-----------|-------|-------|------|
+| 04-01 | SignalEngine sentiment integration | 5 | SignalEngine.java, SignalEntity.java, SentimentResultRepository.java, SentimentAnalysisService.java | 1 |
+| 04-02 | Weekly sector digest | 5 | SentimentAnalysisService.java, LlmConfig.java, SwingTradeApiApplication.java | 2 | 4/4 | Complete   | 2026-03-22 | 6 | 5 test classes + test resources | 3 |
 
 ### What Needs to Be Done
 
 Execute Phase 4 plans in order: `/gsd:execute-phase 04`
 
-1. **Plan 01:** SignalEngine integration with sentiment filtering
-2. **Plan 02:** Weekly sector digest scheduled job
-3. **Plan 03:** Comprehensive test infrastructure
+1. **Plan 01:** SignalEngine integration with sentiment filtering (REQ-028)
+2. **Plan 02:** Weekly sector digest scheduled job (REQ-029)
+3. **Plan 03:** Comprehensive test infrastructure (all requirements)
 
 ---
 
@@ -328,11 +342,13 @@ Phase 1: Core Domain ✅
 
 **Phase 4: LLM Sentiment Layer Planning Complete**
 
-Phase 4 has been planned with 3 sequential plans covering all requirements:
+Phase 4 has been planned with 3 sequential plans covering all 5 requirements:
 
-1. **Plan 01:** SignalEngine sentiment filtering integration (REQ-028)
-2. **Plan 02:** Weekly sector digest scheduled job (REQ-029)
-3. **Plan 03:** Comprehensive test infrastructure (REQ-025 to REQ-029)
+| Plan | Objective | Requirements |
+|------|-----------|--------------|
+| 04-01 | SignalEngine sentiment integration | REQ-025, REQ-026, REQ-027, REQ-028 |
+| 04-02 | Weekly sector digest | REQ-029 |
+| 04-03 | Test infrastructure | REQ-025, REQ-026, REQ-027, REQ-028, REQ-029 |
 
 **Execute Phase 4:** `/gsd:execute-phase 04`
 
@@ -340,4 +356,4 @@ After Phase 4 completion, proceed to Phase 5 (Testing Foundation) for 80%+ code 
 
 ---
 
-*Roadmap: 2026-03-22 (Phase 4 plans created: 04-01, 04-02, 04-03)*
+*Roadmap: 2026-03-22 (Phase 4 plans finalized: 04-01, 04-02, 04-03 with all requirements mapped)*
