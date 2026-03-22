@@ -13,10 +13,6 @@ import java.util.UUID;
 
 public interface TradeLabelRepository extends JpaRepository<TradeLabel, UUID> {
 
-    Optional<TradeLabel> findByTradeId(UUID tradeId);
-
-    List<TradeLabel> findByTradeId(UUID tradeId);
-
     List<TradeLabel> findByExitReason(ExitReason reason);
 
     @Query("SELECT new map(er as exitReason, COUNT(tl) as count) " +
