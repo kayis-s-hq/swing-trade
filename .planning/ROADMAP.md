@@ -1,8 +1,8 @@
 # ROADMAP.md - SwingTrade Implementation Phases
 
-**Document Version:** 2.3
+**Document Version:** 2.4
 **Created:** 2026-03-07
-**Last Updated:** 2026-03-22 (Phase 4 plans finalized with all requirements)
+**Last Updated:** 2026-03-22 (Phase 9 plans created)
 
 ---
 
@@ -82,7 +82,7 @@ SwingTrade is a 7-phase project to build a production swing trading system for I
 
 **Objective:** OHLCV data ingestion, paper trading engine, REST API.
 
-**Status:** ✅ Complete (2026-03-20)
+**Status:** ✅ Complete (2026-03-20), ✅ UAT Verified (2026-03-22)
 **Duration:** 2 weeks
 **Priority:** High
 
@@ -192,7 +192,8 @@ SwingTrade is a 7-phase project to build a production swing trading system for I
 | Plan | Objective | Tasks | Files | Wave |
 |------|-----------|-------|-------|------|
 | 04-01 | SignalEngine sentiment integration | 5 | SignalEngine.java, SignalEntity.java, SentimentResultRepository.java, SentimentAnalysisService.java | 1 |
-| 04-02 | Weekly sector digest | 5 | SentimentAnalysisService.java, LlmConfig.java, SwingTradeApiApplication.java | 2 | 4/4 | Complete   | 2026-03-22 | 6 | 5 test classes + test resources | 3 |
+| 04-02 | Weekly sector digest | 5 | SentimentAnalysisService.java, LlmConfig.java, SwingTradeApiApplication.java | 2 |
+| 04-03 | Test infrastructure | 6 | 5 test classes + test resources | 3 |
 
 ### What Needs to Be Done
 
@@ -346,6 +347,107 @@ Execute Phase 5 plans in order: `/gsd:execute-phase 05`
 
 ---
 
+## Phase 8: Vue Dashboard + Monitoring UI
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 7
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 8 to break down)
+
+---
+
+## Phase 9: Replace Telegram with Signal 📋 PLANNED
+
+**Objective:** Replace Telegram notifications with Signal/Signl4 webhook integration for all notification features.
+
+**Status:** 📋 **Planned** (3 plans created)
+**Duration:** 1 week
+**Priority:** High
+**Depends On:** Phase 8
+
+### Requirements Mapped
+
+- **REQ-018:** Telegram → Signal migration (full feature parity)
+  - Signal notifications: BUY/SELL/HOLD signals
+  - Position notifications: entry, update, exit
+  - Trade notifications: open, close, stop loss, target hit
+  - System notifications: daily summaries, error alerts, risk warnings
+  - Command handlers: /stop, /resume, /status, /help
+  - Quiet hours support
+  - Configuration migration (telegram.* → signal.*)
+
+### Success Criteria
+
+- [ ] SignalNotificationService implements all notification methods
+- [ ] SignalMessageFormatter implements all formatting methods
+- [ ] SignalConfig.java created with signal.* properties
+- [ ] application.properties updated with signal configuration
+- [ ] Telegram services marked @Deprecated (backward compatibility)
+- [ ] BrokerNotificationIntegration wired to Signal by default
+- [ ] 80+ unit tests pass (SignalNotificationService, SignalMessageFormatter, SignalConfig, BrokerNotificationIntegration)
+- [ ] signal.enabled=true, telegram.enabled=false as defaults
+
+### Plans
+
+**3 plans** in 3 waves
+
+#### Plan 01: Signal Service Expansion (Wave 1)
+- **Objective:** Expand Signal/Signl4 notification service to full feature parity
+- **Requirement IDs:** REQ-018
+- **Files Modified:** SignalNotificationService.java, SignalMessageFormatter.java, SignalConfig.java, application.properties
+- **Wave:** 1 (no dependencies)
+- **Tasks:**
+  1. Expand SignalNotificationService with all notification methods (signals, positions, trades, commands, summaries, warnings)
+  2. Expand SignalMessageFormatter with all formatting methods
+  3. Create SignalConfig configuration class
+  4. Update application.properties with signal.* configuration
+  5. Wire SignalNotificationService into BrokerNotificationIntegration
+
+#### Plan 02: Telegram Deprecation (Wave 2)
+- **Objective:** Deprecate Telegram notification code, wire Signal as default
+- **Requirement IDs:** REQ-018
+- **Files Modified:** TelegramNotificationService.java, TelegramMessageFormatter.java, TelegramConfig.java, BrokerNotificationIntegration.java, application.properties
+- **Wave:** 2 (depends on Plan 01)
+- **Tasks:**
+  1. Mark TelegramNotificationService as @Deprecated
+  2. Mark TelegramMessageFormatter as @Deprecated
+  3. Mark TelegramConfig as @Deprecated
+  4. Update BrokerNotificationIntegration to use Signal by default
+  5. Update application.properties to enable Signal by default
+
+#### Plan 03: Signal Test Suite (Wave 3)
+- **Objective:** Add comprehensive unit tests for Signal integration
+- **Requirement IDs:** REQ-018
+- **Files Modified:** SignalNotificationServiceTest.java, SignalMessageFormatterTest.java, SignalConfigTest.java, BrokerNotificationIntegrationTest.java
+- **Wave:** 3 (depends on Plans 01 and 02)
+- **Tasks:**
+  1. Create SignalMessageFormatterTest (20+ tests)
+  2. Create SignalNotificationServiceTest (25+ tests)
+  3. Create SignalConfigTest (13+ tests)
+  4. Create BrokerNotificationIntegrationTest (21+ tests)
+  5. Run all notification tests and verify coverage
+
+### Plan Details
+
+| Plan | Objective | Tasks | Files | Wave |
+|------|-----------|-------|-------|------|
+| 09-01 | Signal service expansion | 5 | SignalNotificationService.java, SignalMessageFormatter.java, SignalConfig.java, application.properties | 1 |
+| 09-02 | Telegram deprecation | 5 | TelegramNotificationService.java, TelegramMessageFormatter.java, TelegramConfig.java, BrokerNotificationIntegration.java, application.properties | 2 |
+| 09-03 | Signal test suite | 5 | 4 test classes | 3 |
+
+### What Needs to Be Done
+
+Execute Phase 9 plans in order: `/gsd:execute-phase 09`
+
+1. **Plan 01:** Expand Signal notification service (full feature parity)
+2. **Plan 02:** Deprecate Telegram, wire Signal as default
+3. **Plan 03:** Add 80+ unit tests
+
+---
+
 ## Phase Dependencies
 
 ```
@@ -362,6 +464,10 @@ Phase 1: Core Domain ✅
     │       │       │       │       ├──> Phase 6: Live Trading ⏳
     │       │       │       │       │       │
     │       │       │       │       │       ├──> Phase 7: Observability ⏳
+    │       │       │       │       │       │       │
+    │       │       │       │       │       ├──> Phase 8: Vue Dashboard ⏳
+    │       │       │       │       │       │       │
+    │       │       │       │       │       ├──> Phase 9: Signal Notifications ⏳
 ```
 
 ---
@@ -388,6 +494,8 @@ Phase 1: Core Domain ✅
 | 5 | ⏳ Pending Phase 4 | 2026-04-07 | 2026-04-30 |
 | 6 | ⏳ Pending Phase 5 | 2026-05-01 | 2026-05-15 |
 | 7 | ⏳ Pending Phase 6 | 2026-05-15 | 2026-06-30 |
+| 8 | ⏳ Pending Phase 7 | TBD | TBD |
+| 9 | 📋 **PLANNED** | **TBD** | **TBD** |
 
 ---
 
@@ -407,26 +515,6 @@ Phase 4 has been planned with 3 sequential plans covering all 5 requirements:
 
 After Phase 4 completion, proceed to Phase 5 (Testing Foundation) for 80%+ code coverage.
 
-### Phase 8: Vue Dashboard + Monitoring UI
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 7
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 8 to break down)
-
-### Phase 9: replace telegram with signal
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 8
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 9 to break down)
-
 ---
 
-*Roadmap: 2026-03-22 (Phase 4 plans finalized: 04-01, 04-02, 04-03 with all requirements mapped)*
+*Roadmap: 2026-03-22 (Phase 4 & Phase 9 plans created with all requirements mapped)*
