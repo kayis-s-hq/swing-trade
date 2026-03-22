@@ -1,5 +1,5 @@
 ---
-status: complete
+status: partial
 phase: 05-api-layer
 source: PLAN.md (Phase 05 deliverables)
 started: 2026-03-23T00:00:00Z
@@ -71,20 +71,21 @@ blocked: 8
 
 ## Gaps
 
-- truth: "All Phase 05 API endpoints must be testable via REST calls"
-  status: blocked
-  reason: "Project build fails with missing dependencies"
-  severity: blocker
-  test: "1-8"
-  root_cause: "Missing external dependencies: telegram-spring-boot-starter:0.2.0, kiteconnect:4.2.0, testcontainers:redis:1.19.3 not found in Maven Central"
-  artifacts:
-    - path: "pom.xml"
-      issue: "Dependencies reference non-existent or unavailable libraries"
-    - path: "broker/pom.xml"
-      issue: "testcontainers:redis:1.19.3 is pinned to old version not in Maven Central"
-  missing:
-    - "Fix dependency versions in broker/pom.xml"
-    - "Resolve telegram-spring-boot-starter availability"
-    - "Resolve kiteconnect library availability"
-    - "Update testcontainers:redis to available version"
-  notes: "Code-level issues also found per 05-VERIFICATION.md: service method signatures don't match controller calls, type incompatibilities between services and controllers"
+[Blocked tests do not contribute to gap closure - see Prerequisites section below]
+
+## Prerequisites (Blocking Further Testing)
+
+All API testing is blocked by build failures. Before testing can proceed:
+
+1. **Resolve missing dependencies:**
+   - `telegram-spring-boot-starter:0.2.0` (optional in broker/pom.xml, but project-level build fails)
+   - `kiteconnect:4.2.0` (optional in broker/pom.xml, but project-level build fails)
+   - `testcontainers:redis:1.19.3` (pinned to non-existent version)
+
+2. **Fix compilation errors in LLM module:**
+   - WireMockServer method signatures have changed (count, getAllRequests, countByUri)
+
+3. **After build is fixed, address code-level issues from 05-VERIFICATION.md:**
+   - Service method signature mismatches (controllers call non-existent methods)
+   - Type incompatibilities (services return domain objects, controllers expect DTOs)
+   - Stub implementations (hardcoded values, empty lists)
