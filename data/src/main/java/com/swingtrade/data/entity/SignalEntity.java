@@ -50,8 +50,15 @@ public class SignalEntity {
     @Column(name = "indicators")
     private String indicators;
 
+    @Column(name = "warning_flag", length = 50)
+    private String warningFlag;
+
     @Column(name = "generated_at")
     private LocalDate generatedAt;
+
+    // Warning flag constants
+    public static final String WARNING_NONE = "";
+    public static final String WARNING_NEUTRAL_SENTIMENT = "NEUTRAL_SENTIMENT";
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -63,6 +70,10 @@ public class SignalEntity {
     }
 
     public SignalEntity(Signal signal) {
+        this(signal, WARNING_NONE);
+    }
+
+    public SignalEntity(Signal signal, String warningFlag) {
         this.symbol = signal.symbol();
         this.date = signal.date();
         this.signalType = signal.type().name();
@@ -74,9 +85,14 @@ public class SignalEntity {
         this.riskReward = signal.riskReward();
         this.indicators = signal.indicators();
         this.generatedAt = signal.generatedAt();
+        this.warningFlag = warningFlag;
     }
 
     public static SignalEntity fromDomain(Signal signal) {
+        return fromDomain(signal, WARNING_NONE);
+    }
+
+    public static SignalEntity fromDomain(Signal signal, String warningFlag) {
         SignalEntity entity = new SignalEntity();
         entity.setSymbol(signal.symbol());
         entity.setDate(signal.date());
@@ -89,6 +105,7 @@ public class SignalEntity {
         entity.setRiskReward(signal.riskReward());
         entity.setIndicators(signal.indicators());
         entity.setGeneratedAt(signal.generatedAt());
+        entity.setWarningFlag(warningFlag);
         return entity;
     }
 
@@ -196,6 +213,14 @@ public class SignalEntity {
 
     public void setIndicators(String indicators) {
         this.indicators = indicators;
+    }
+
+    public String getWarningFlag() {
+        return warningFlag;
+    }
+
+    public void setWarningFlag(String warningFlag) {
+        this.warningFlag = warningFlag;
     }
 
     public LocalDate getGeneratedAt() {
