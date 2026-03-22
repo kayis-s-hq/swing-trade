@@ -1,5 +1,7 @@
 package com.swingtrade.llm.service;
 
+import com.swingtrade.data.entity.SentimentResultEntity;
+import com.swingtrade.data.repository.SentimentResultRepository;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.llm.SentimentAnalysisResult;
@@ -41,6 +43,7 @@ public class SentimentAnalysisService {
     private final SentimentAnalyzer sentimentAnalyzer;
     private final NewsIngestionService newsIngestionService;
     private final SentimentCacheService sentimentCacheService;
+    private final SentimentResultRepository sentimentResultRepository;
 
     private final int maxCacheSize;
     private final long cacheExpiryMinutes;
@@ -65,6 +68,7 @@ public class SentimentAnalysisService {
             SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService,
             SentimentCacheService sentimentCacheService,
+            SentimentResultRepository sentimentResultRepository,
             @Value("${llm.sentiment.cache.max-size:100}") int maxCacheSize,
             @Value("${llm.sentiment.cache.expiry-minutes:60}") long cacheExpiryMinutes,
             @Value("${llm.sentiment.cache.enabled:true}") boolean enableCaching,
@@ -74,6 +78,7 @@ public class SentimentAnalysisService {
         this.sentimentAnalyzer = sentimentAnalyzer;
         this.newsIngestionService = newsIngestionService;
         this.sentimentCacheService = sentimentCacheService;
+        this.sentimentResultRepository = sentimentResultRepository;
 
         this.maxCacheSize = maxCacheSize;
         this.cacheExpiryMinutes = cacheExpiryMinutes;
@@ -140,6 +145,16 @@ public class SentimentAnalysisService {
 
             // Build and cache result
             SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult, articles);
+
+            // Persist to database
+            try {
+                SentimentResultEntity entity = SentimentResultEntity.fromDomain(result);
+                sentimentResultRepository.save(entity);
+                logger.debug("Persisted sentiment result for {} on {}", stockSymbol, date);
+            } catch (Exception e) {
+                logger.warn("Failed to persist sentiment result for {}: {}", stockSymbol, e.getMessage());
+                // Don't fail the analysis if persistence fails
+            }
 
             // Cache the result
             if (enableCaching) {
