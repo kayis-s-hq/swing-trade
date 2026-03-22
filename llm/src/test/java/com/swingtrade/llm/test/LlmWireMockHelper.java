@@ -233,8 +233,13 @@ public class LlmWireMockHelper {
      * @return true if chat completions was called at least once
      */
     public boolean verifyChatCompletionsCalled() {
-        return wireMockServer.count(WireMock.postRequestedFor(
-                WireMock.urlEqualTo("/v1/chat/completions"))) >= 1;
+        try {
+            WireMock.verify(WireMock.postRequestedFor(
+                    WireMock.urlEqualTo("/v1/chat/completions")));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -244,7 +249,7 @@ public class LlmWireMockHelper {
      */
     public java.util.List<com.github.tomakehurst.wiremock.verification.LoggedRequest>
     getAllChatCompletionsRequests() {
-        return wireMockServer.getAllRequests(
+        return wireMockServer.findAll(
                 WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/chat/completions")));
     }
 

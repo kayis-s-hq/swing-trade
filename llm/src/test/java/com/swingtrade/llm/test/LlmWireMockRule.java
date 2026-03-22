@@ -102,6 +102,8 @@ public class LlmWireMockRule implements BeforeAllCallback, AfterAllCallback {
      * @return number of interactions
      */
     public int getInteractionCount(String endpoint) {
-        return wireMockServer.countByUri(endpoint);
+        return wireMockServer.findAll(com.github.tomakehurst.wiremock.client.WireMock
+                .anyRequestedFor(com.github.tomakehurst.wiremock.client.WireMock
+                        .urlPathMatching(".*" + endpoint + ".*"))).size();
     }
 }
