@@ -135,6 +135,7 @@ public class SignalEngine {
         Signal signal = strategy.analyze(domainCandles);
 
         // NEW: Check sentiment before saving for BUY signals
+        String warningFlag = SignalEntity.WARNING_NONE;
         try {
             if (signal.type() == Signal.SignalType.BUY) {
                 SentimentResult sentiment = sentimentAnalysisService.analyzeStockSentiment(symbol, latestDate);
@@ -148,6 +149,7 @@ public class SignalEngine {
                 if (sentiment.isNeutral()) {
                     logger.info("Saving NEUTRAL sentiment signal for {} on {} (reasoning: {})",
                                symbol, latestDate, sentiment.summary());
+                    warningFlag = SignalEntity.WARNING_NEUTRAL_SENTIMENT;
                 }
             }
         } catch (Exception e) {
@@ -163,11 +165,12 @@ public class SignalEngine {
         signalEntity.setSignalType(signal.type().toString());
         signalEntity.setConfidenceScore(signal.confidence());
         signalEntity.setReasoning(buildSignalReason(signal));
+        signalEntity.setWarningFlag(warningFlag);
 
         signalRepository.save(signalEntity);
 
-        logger.info("Generated {} signal for {} on {} (confidence: {:.2%})",
-                    signal.type(), symbol, latestDate, signal.confidence());
+        logger.info("Generated {} signal for {} on {} (confidence: {:.2%}, warning: {})",
+                    signal.type(), symbol, latestDate, signal.confidence(), warningFlag);
     }
 
     /**
