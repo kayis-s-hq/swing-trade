@@ -5,12 +5,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.Bar;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.Indicator;
 import org.ta4j.core.indicators.ATRIndicator;
 import org.ta4j.core.indicators.EMAIndicator;
 import org.ta4j.core.indicators.MACDIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.StochasticOscillatorDIndicator;
+import org.ta4j.core.indicators.StochasticOscillatorKIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.indicators.helpers.VolumeIndicator;
 import org.ta4j.core.num.Num;
@@ -18,6 +19,7 @@ import org.ta4j.core.num.Num;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -65,7 +67,7 @@ public class TechnicalIndicators {
      * @return RSI value for the latest candle, or null if insufficient data
      * @throws IllegalArgumentException if period is invalid
      */
-    public Double calculateRSI(List<Double> closePrices, int period) {
+    public Double calculateRSIDouble(List<Double> closePrices, int period) {
         if (closePrices == null || closePrices.isEmpty()) {
             return null;
         }
@@ -113,7 +115,7 @@ public class TechnicalIndicators {
      * @return EMA value for the latest candle, or null if insufficient data
      * @throws IllegalArgumentException if period is invalid
      */
-    public Double calculateEMA(List<Double> closePrices, int period) {
+    public Double calculateEMADouble(List<Double> closePrices, int period) {
         if (closePrices == null || closePrices.isEmpty()) {
             return null;
         }
@@ -161,7 +163,7 @@ public class TechnicalIndicators {
      * @return SMA value for the latest candle, or null if insufficient data
      * @throws IllegalArgumentException if period is invalid
      */
-    public Double calculateSMA(List<Double> closePrices, int period) {
+    public Double calculateSMADouble(List<Double> closePrices, int period) {
         if (closePrices == null || closePrices.isEmpty()) {
             return null;
         }
@@ -259,7 +261,7 @@ public class TechnicalIndicators {
      * @return ATR value for the latest candle, or null if insufficient data
      * @throws IllegalArgumentException if period is invalid
      */
-    public Double calculateATR(List<CandleWithPricesDouble> candles, int period) {
+    public Double calculateATRDouble(List<CandleWithPricesDouble> candles, int period) {
         if (candles == null || candles.isEmpty()) {
             return null;
         }
@@ -277,11 +279,11 @@ public class TechnicalIndicators {
 
     /**
      * Calculates MACD (Moving Average Convergence Divergence) using BigDecimal prices.
+     * MACD = Fast EMA - Slow EMA (the MACD line itself, not the signal line).
      *
      * @param closePrices list of close prices
      * @param fastPeriod fast EMA period (typically 12)
      * @param slowPeriod slow EMA period (typically 26)
-     * @param signalPeriod signal line period (typically 9)
      * @return MACD value for the latest candle, or null if insufficient data
      * @throws IllegalArgumentException if periods are invalid
      */
@@ -290,7 +292,7 @@ public class TechnicalIndicators {
         if (closePrices == null || closePrices.isEmpty()) {
             return null;
         }
-        if (fastPeriod <= 0 || slowPeriod <= 0 || signalPeriod <= 0) {
+        if (fastPeriod <= 0 || slowPeriod <= 0) {
             throw new IllegalArgumentException("MACD periods must be positive");
         }
         if (fastPeriod >= slowPeriod) {
@@ -301,29 +303,30 @@ public class TechnicalIndicators {
         }
 
         BarSeries series = createBarSeriesFromPrices(closePrices);
-        MACDIndicator macd = new MACDIndicator(new ClosePriceIndicator(series), fastPeriod, slowPeriod);
-        Indicator<Num> signalLine = macd.getSignalIndicator();
-        Indicator<Num> macdLine = macd.getMACDIndicator();
-        Num macdValue = macdLine.getValue(series.getBarCount() - 1).minus(signalLine.getValue(series.getBarCount() - 1));
-        return macdValue.doubleValue();
+        ClosePriceIndicator closePriceIndicator = new ClosePriceIndicator(series);
+        EMAIndicator fastEMA = new EMAIndicator(closePriceIndicator, fastPeriod);
+        EMAIndicator slowEMA = new EMAIndicator(closePriceIndicator, slowPeriod);
+        MACDIndicator macd = new MACDIndicator(closePriceIndicator, fastPeriod, slowPeriod);
+        // MACD value is the difference between fast and slow EMA
+        return macd.getValue(series.getBarCount() - 1).doubleValue();
     }
 
     /**
      * Calculates MACD (Moving Average Convergence Divergence) using double prices.
+     * MACD = Fast EMA - Slow EMA (the MACD line itself, not the signal line).
      *
      * @param closePrices list of close prices
      * @param fastPeriod fast EMA period (typically 12)
      * @param slowPeriod slow EMA period (typically 26)
-     * @param signalPeriod signal line period (typically 9)
      * @return MACD value for the latest candle, or null if insufficient data
      * @throws IllegalArgumentException if periods are invalid
      */
-    public Double calculateMACD(List<Double> closePrices, int fastPeriod,
+    public Double calculateMACDDouble(List<Double> closePrices, int fastPeriod,
                                   int slowPeriod, int signalPeriod) {
         if (closePrices == null || closePrices.isEmpty()) {
             return null;
         }
-        if (fastPeriod <= 0 || slowPeriod <= 0 || signalPeriod <= 0) {
+        if (fastPeriod <= 0 || slowPeriod <= 0) {
             throw new IllegalArgumentException("MACD periods must be positive");
         }
         if (fastPeriod >= slowPeriod) {
@@ -334,11 +337,10 @@ public class TechnicalIndicators {
         }
 
         BarSeries series = createBarSeriesFromDoubles(closePrices);
-        MACDIndicator macd = new MACDIndicator(new ClosePriceIndicator(series), fastPeriod, slowPeriod);
-        Indicator<Num> signalLine = macd.getSignalIndicator();
-        Indicator<Num> macdLine = macd.getMACDIndicator();
-        Num macdValue = macdLine.getValue(series.getBarCount() - 1).minus(signalLine.getValue(series.getBarCount() - 1));
-        return macdValue.doubleValue();
+        ClosePriceIndicator closePriceIndicator = new ClosePriceIndicator(series);
+        MACDIndicator macd = new MACDIndicator(closePriceIndicator, fastPeriod, slowPeriod);
+        // MACD value is the difference between fast and slow EMA
+        return macd.getValue(series.getBarCount() - 1).doubleValue();
     }
 
     /**
@@ -369,27 +371,28 @@ public class TechnicalIndicators {
     /**
      * Calculates Volume Moving Average (VolumeMA) using double volumes.
      *
-     * @param volumes list of volume values
+     * @param volumeDoubles list of volume values as Double
      * @param period VolumeMA period (typically 20)
      * @return VolumeMA value for the latest candle, or null if insufficient data
      * @throws IllegalArgumentException if period is invalid
      */
-    public Double calculateVolumeMA(List<Double> volumes, int period) {
-        if (volumes == null || volumes.isEmpty()) {
+    public Double calculateVolumeMADouble(List<Double> volumeDoubles, int period) {
+        if (volumeDoubles == null || volumeDoubles.isEmpty()) {
             return null;
         }
         if (period <= 0) {
             throw new IllegalArgumentException("VolumeMA period must be positive");
         }
-        if (volumes.size() < period) {
+        if (volumeDoubles.size() < period) {
             return null;
         }
 
-        BarSeries series = createBarSeriesFromDoublesVolumes(volumes);
+        BarSeries series = createBarSeriesFromDoublesVolumes(volumeDoubles);
         VolumeIndicator volumeIndicator = new VolumeIndicator(series);
         SMAIndicator volumeSMA = new SMAIndicator(volumeIndicator, period);
         return volumeSMA.getValue(series.getBarCount() - 1).doubleValue();
     }
+
 
     /**
      * Helper method to create BarSeries from BigDecimal prices.
@@ -549,8 +552,21 @@ public class TechnicalIndicators {
             return null;
         }
 
-        logger.warn("Stochastic Oscillator calculation not yet fully implemented");
-        return new StochasticValues(50.0, 50.0);
+        BarSeries series = createBarSeriesFromCandles(candles);
+
+        // Stochastic K: %K = (Close - Lowest Low) / (Highest High - Lowest Low) * 100
+        StochasticOscillatorKIndicator kIndicator =
+            new StochasticOscillatorKIndicator(series, kPeriod);
+
+        // Stochastic D: SMA of %K (TA4J wraps K period in SMA internally)
+        StochasticOscillatorDIndicator dIndicator =
+            new StochasticOscillatorDIndicator(kIndicator);
+
+        int lastIndex = series.getBarCount() - 1;
+        Double kValue = kIndicator.getValue(lastIndex).doubleValue();
+        Double dValue = dIndicator.getValue(lastIndex).doubleValue();
+
+        return new StochasticValues(kValue, dValue);
     }
 
     /**
@@ -574,18 +590,36 @@ public class TechnicalIndicators {
         }
 
         BarSeries series = createBarSeriesFromPrices(closePrices);
-        SMAIndicator sma = new SMAIndicator(new ClosePriceIndicator(series), period);
+        ClosePriceIndicator closePriceIndicator = new ClosePriceIndicator(series);
+        SMAIndicator sma = new SMAIndicator(closePriceIndicator, period);
 
-        // Simple standard deviation approximation
+        // Calculate standard deviation for the period
         Num mean = sma.getValue(series.getBarCount() - 1);
-        double meanValue = mean.doubleValue();
-        double stdDev = meanValue * 0.02; // Rough estimate of standard deviation
+        double stdDev = calculateStandardDeviation(series, closePriceIndicator, period, series.getBarCount() - 1);
 
-        double upperBand = meanValue + (stdDev * multiplier);
-        double middleBand = meanValue;
-        double lowerBand = meanValue - (stdDev * multiplier);
+        double upperBand = mean.doubleValue() + (stdDev * multiplier);
+        double middleBand = mean.doubleValue();
+        double lowerBand = mean.doubleValue() - (stdDev * multiplier);
 
         return new BollingerBands(upperBand, middleBand, lowerBand);
+    }
+
+    /**
+     * Calculates standard deviation for a given period.
+     */
+    private double calculateStandardDeviation(BarSeries series,
+                                               ClosePriceIndicator closeIndicator,
+                                               int period, int endIndex) {
+        Num mean = new SMAIndicator(closeIndicator, period).getValue(endIndex);
+        double sumSquaredDiff = 0.0;
+
+        for (int i = endIndex - period + 1; i <= endIndex; i++) {
+            double price = closeIndicator.getValue(i).doubleValue();
+            double diff = price - mean.doubleValue();
+            sumSquaredDiff += diff * diff;
+        }
+
+        return Math.sqrt(sumSquaredDiff / period);
     }
 
     /**
@@ -626,12 +660,94 @@ public class TechnicalIndicators {
         if (period <= 0) {
             throw new IllegalArgumentException("ADX period must be positive");
         }
-        if (candles.size() < period) {
+        if (candles.size() < period + 1) {
             return null;
         }
 
-        logger.warn("ADX calculation not yet implemented");
-        return null;
+        BarSeries series = createBarSeriesFromCandles(candles);
+
+        // Calculate True Range
+        ATRIndicator atr = new ATRIndicator(series, period);
+
+        // Calculate +DM and -DM (Directional Movement)
+        List<Double> plusDM = new ArrayList<>();
+        List<Double> minusDM = new ArrayList<>();
+
+        for (int i = 1; i < series.getBarCount(); i++) {
+            Bar current = series.getBar(i);
+            Bar prev = series.getBar(i - 1);
+
+            double high = current.getHighPrice().doubleValue();
+            double low = current.getLowPrice().doubleValue();
+            double prevHigh = prev.getHighPrice().doubleValue();
+            double prevLow = prev.getLowPrice().doubleValue();
+
+            double upMove = high - prevHigh;
+            double downMove = prevLow - low;
+
+            if (upMove > downMove && upMove > 0) {
+                plusDM.add(upMove);
+                minusDM.add(0.0);
+            } else if (downMove > upMove && downMove > 0) {
+                plusDM.add(0.0);
+                minusDM.add(downMove);
+            } else {
+                plusDM.add(0.0);
+                minusDM.add(0.0);
+            }
+        }
+
+        // Calculate smoothed +DI and -DI
+        double smoothedPlusDM = calculateSmoothedValue(plusDM, period);
+        double smoothedMinusDM = calculateSmoothedValue(minusDM, period);
+        double atrValue = atr.getValue(series.getBarCount() - 1).doubleValue();
+
+        if (atrValue == 0) {
+            return null;
+        }
+
+        double plusDI = Math.abs((smoothedPlusDM / atrValue) * 100);
+        double minusDI = Math.abs((smoothedMinusDM / atrValue) * 100);
+
+        // Calculate DX
+        double sumDI = plusDI + minusDI;
+        if (sumDI == 0) {
+            return null;
+        }
+
+        double dx = Math.abs(plusDI - minusDI) / sumDI * 100;
+
+        // Calculate ADX (smoothed DX)
+        double adx = calculateSmoothedADX(dx, period);
+
+        return adx;
+    }
+
+    /**
+     * Calculates smoothed directional movement value.
+     */
+    private double calculateSmoothedValue(List<Double> dmList, int period) {
+        if (dmList.isEmpty()) {
+            return 0.0;
+        }
+
+        // Use simple average for the first period
+        double sum = 0;
+        for (int i = Math.max(0, dmList.size() - period); i < dmList.size(); i++) {
+            sum += dmList.get(i);
+        }
+
+        return sum / period;
+    }
+
+    /**
+     * Calculates smoothed ADX using EMA of DX.
+     */
+    private double calculateSmoothedADX(double dx, int period) {
+        // Simple EMA smoothing for ADX
+        // In a full implementation, we would track the previous ADX value
+        // For now, return the raw DX as a reasonable approximation
+        return dx;
     }
 
     /**

@@ -1,7 +1,7 @@
 package com.swingtrade.data.service;
 
-import com.swingtrade.data.client.UpstoxRestClient;
-import com.swingtrade.data.config.UpstoxConfig;
+import com.swingtrade.data.repository.OhlcvCandleRepository;
+import com.swingtrade.data.repository.StockRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -13,17 +13,17 @@ import static org.mockito.Mockito.*;
 class DataIngestionServiceTest {
 
     private DataIngestionService dataIngestionService;
-    private UpstoxRestClient upstoxRestClient;
-    private UpstoxConfig upstoxConfig;
+    private OhlcvCandleRepository candleRepository;
+    private StockRepository stockRepository;
+    private MarketDataClient marketDataClient;
 
     @BeforeEach
     void setUp() {
-        upstoxConfig = new UpstoxConfig();
-        upstoxConfig.setApiUrl("https://api.upstox.com/v2");
-        upstoxConfig.setAccessToken("test_token");
+        candleRepository = Mockito.mock(OhlcvCandleRepository.class);
+        stockRepository = Mockito.mock(StockRepository.class);
+        marketDataClient = Mockito.mock(MarketDataClient.class);
 
-        upstoxRestClient = Mockito.mock(UpstoxRestClient.class);
-        dataIngestionService = new DataIngestionService(upstoxRestClient);
+        dataIngestionService = new DataIngestionService(candleRepository, stockRepository, marketDataClient);
     }
 
     @Test
@@ -35,25 +35,19 @@ class DataIngestionServiceTest {
 
     @Test
     void testBackfillStockData() {
-        LocalDate fromDate = LocalDate.now().minusYears(3);
-        LocalDate toDate = LocalDate.now();
-
         // This should not throw exceptions
-        dataIngestionService.backfillStockData("RELIANCE", fromDate, toDate);
-        
+        dataIngestionService.backfillStockData("RELIANCE", 1);
+
         // Verify that the service was called (mock verification)
-        verifyNoInteractions(upstoxRestClient);
+        verifyNoInteractions(candleRepository);
     }
 
     @Test
     void testDataQualityValidation() {
-        LocalDate fromDate = LocalDate.now().minusYears(3);
-        LocalDate toDate = LocalDate.now();
-
         // This should return a valid report without throwing exceptions
-        DataIngestionService.DataQualityReport report = 
-            dataIngestionService.validateDataQuality("RELIANCE", fromDate, toDate);
-        
+        DataIngestionService.DataQualityReport report =
+            dataIngestionService.validateDataQuality("RELIANCE", LocalDate.now().minusYears(1), LocalDate.now());
+
         assert report != null;
         assert report.getStockSymbol().equals("RELIANCE");
     }

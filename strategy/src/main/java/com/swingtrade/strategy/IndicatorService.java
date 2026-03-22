@@ -17,11 +17,16 @@
 package com.swingtrade.strategy;
 
 import org.ta4j.core.BarSeries;
+import org.ta4j.core.Indicator;
+import org.ta4j.core.indicators.ATRIndicator;
 import org.ta4j.core.indicators.EMAIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
-import org.ta4j.core.indicatorsATR;
-import org.ta4j.core.indicators.VolumeIndicator;
-import org.ta4j.core.indicators.WeeklyHighIndicator;
+import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
+import org.ta4j.core.indicators.helpers.HighestValueIndicator;
+import org.ta4j.core.indicators.helpers.HighPriceIndicator;
+import org.ta4j.core.indicators.helpers.VolumeIndicator;
+import org.ta4j.core.num.Num;
 
 /**
  * Service interface for calculating technical indicators used in trading strategies.
@@ -63,20 +68,21 @@ public interface IndicatorService {
     ATRIndicator calculateATR(BarSeries barSeries, int timeFrame);
     
     /**
-     * Calculates the Volume indicator for the given bar series.
-     * 
+     * Calculates the Volume Moving Average indicator for the given bar series.
+     *
      * @param barSeries The historical price data series
-     * @return A Volume indicator for the specified parameters
+     * @param period The period for volume MA calculation
+     * @return A Volume Moving Average indicator for the specified parameters
      * @throws IllegalArgumentException if barSeries is null
      */
-    VolumeIndicator calculateVolume(BarSeries barSeries);
+    SMAIndicator calculateVolumeMA(BarSeries barSeries, int period);
     
     /**
      * Calculates the 52-week high for the given bar series.
-     * 
+     *
      * @param barSeries The historical price data series
      * @return A Weekly High indicator for the specified parameters
      * @throws IllegalArgumentException if barSeries is null
      */
-    WeeklyHighIndicator calculateWeeklyHigh(BarSeries barSeries);
+    Indicator<Num> calculateWeeklyHigh(BarSeries barSeries);
 }

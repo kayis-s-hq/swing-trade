@@ -18,8 +18,6 @@ package com.swingtrade.strategy;
 
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Strategy;
-import org.ta4j.core.TradingRecord;
-import org.ta4j.core.backtest.BacktestResult;
 
 /**
  * Interface for managing backtesting of trading strategies.

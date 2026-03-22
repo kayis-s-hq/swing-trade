@@ -57,11 +57,24 @@
             <artifactId>langchain4j-web-search-engine-google-custom</artifactId>
         </dependency>
 
-        <!-- Spring Boot RSS Client -->
+        <!-- Commons Codec for HTML/URL utilities -->
         <dependency>
-            <groupId>com.vatsha</groupId>
-            <artifactId>spring-rss-client</artifactId>
-            <version>1.0.0</version>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.16.0</version>
+        </dependency>
+
+        <!-- Commons Lang for string utilities -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.14.0</version>
+        </dependency>
+
+        <!-- LangChain4j vLLM model -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-ollama</artifactId>
         </dependency>
 
         <!-- Jackson for JSON processing -->

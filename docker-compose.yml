@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # PostgreSQL with TimescaleDB extension
+  # Postgrea/SQL with TimescaleDB extension
   postgres:
     image: timescale/timescaledb:latest
     container_name: swing_trade_postgres

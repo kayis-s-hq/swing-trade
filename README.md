@@ -1,255 +1,353 @@
 # Swing Trade System
 
-A comprehensive swing trading system built with modern Java technologies and microservices architecture.
+A production-ready automated swing trading system for NSE/BSE Indian equities with multi-factor technical analysis and LLM sentiment filtering.
 
 ## Project Overview
 
-The Swing Trade System is a modular trading platform designed for swing trading strategies. It integrates real-time market data, technical analysis, sentiment analysis, and automated trading capabilities. The system is composed of several interconnected modules that work together to provide a complete trading solution.
+This system implements swing trading strategies (1-4 week hold periods) on Nifty 500 stocks, combining:
+- **Technical Analysis**: EMA crossovers, RSI, MACD, ATR-based stops using TA4J
+- **LLM Sentiment Filtering**: vLLM-powered sentiment analysis on financial news
+- **Paper Trading**: Full order management with risk controls
+- **Automated Execution**: Scheduled EOD signal generation and trade execution
 
 ## Architecture
 
 ```
 Swing Trade System
-├── Core Components
-│   ├── Data Layer (Data Module)
-│   ├── Strategy Engine (Strategy Module)
-│   ├── LLM Integration (LLM Module)
-│   └── Broker Layer (Broker Module)
-├── API Layer (API Module)
-└── Database & Caching
-    ├── PostgreSQL with TimescaleDB
-    └── Redis
+│
+├── API Module (REST Interface)
+│   ├── TradingController - Execute trades, manage positions
+│   ├── SignalController - Get analysis signals
+│   ├── PositionController - Position management
+│   └── HealthController - System health checks
+│
+├── Strategy Module (Signal Generation)
+│   ├── TechnicalIndicators - TA4J integration (RSI, EMA, MACD, ATR)
+│   ├── SwingTradingStrategy - Multi-factor signal logic
+│   └── SignalEngine - Scheduled signal generation
+│
+├── LLM Module (Sentiment Analysis)
+│   ├── VLLMClient - OpenAI-compatible LLM client
+│   ├── SentimentAnalysisService - Sentiment pipeline
+│   ├── SentimentAnalyzer - Prompt formatting
+│   └── NewsIngestionService - RSS news fetching
+│
+├── Broker Module (Paper Trading)
+│   ├── PaperTradingEngine - Order execution
+│   ├── OrderManager - Order lifecycle
+│   ├── PositionManager - Position tracking
+│   └── TelegramNotificationService - Alert system
+│
+├── Data Module (Data Ingestion)
+│   ├── DataIngestionService - EOD data collection
+│   ├── UpstoxRestClient - Market data API
+│   ├── Repositories - JPA data access
+│   └── Entity Layer - JPA entities
+│
+└── Core Module (Domain Models)
+    ├── Stock, OhlcvCandle, Signal, Position, Trade
+    └── Domain interfaces and enums
+
+Infrastructure:
+├── PostgreSQL + TimescaleDB (time-series storage)
+├── Redis (caching)
+└── Docker Compose (orchestration)
 ```
-
-### Key Modules
-
-1. **Core Module**: Shared domain models and utilities
-2. **Data Module**: Market data ingestion and storage
-3. **Strategy Module**: Trading strategy implementation and backtesting
-4. **LLM Module**: Natural language processing for sentiment analysis
-5. **Broker Module**: Paper trading engine and position management
-6. **API Module**: REST endpoints for system interaction
 
 ## Technology Stack
 
-- **Language**: Java 11+
-- **Build Tool**: Maven
-- **Framework**: Spring Boot
-- **Database**: PostgreSQL with TimescaleDB extension
-- **Caching**: Redis
-- **Containerization**: Docker
-- **Monitoring**: Prometheus + Grafana (not included in this repo)
+| Component | Technology |
+|-----------|------------|
+| Language | Java 21 |
+| Framework | Spring Boot 3.3.1 |
+| Build Tool | Maven 3.8+ |
+| Database | PostgreSQL 15 + TimescaleDB |
+| Caching | Redis 7 |
+| Technical Analysis | TA4J 0.17 |
+| LLM Integration | LangChain4j + vLLM |
+| HTTP Client | Spring WebFlux (reactive) |
+| Database Migration | Flyway |
+| Containerization | Docker |
 
-## Setup Instructions
+## Prerequisites
 
-### Prerequisites
+- Java 21 (OpenJDK or Oracle JDK)
+- Maven 3.8+
+- Docker and Docker Compose
+- Mac M1/M2 or x86_64 Linux (Raspberry Pi 5 also supported)
 
-1. Java 11 or higher
-2. Maven 3.6+
-3. Docker and Docker Compose
-4. IDE (IntelliJ IDEA recommended)
+## Quick Start
 
-### Environment Setup
+### 1. Start Infrastructure
 
-#### 1. Database Configuration
-
-The system requires PostgreSQL with TimescaleDB extension and Redis.
-
-```bash
-# Start required services using Docker
-docker-compose up -d
-```
-
-This will start:
-- PostgreSQL database (port 5432)
-- Redis cache (port 6379)
-
-#### 2. Environment Variables
-
-Create a `.env` file in the root directory:
-
-```bash
-# Database Configuration
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=swingtrade_db
-POSTGRES_USER=swingtrade_user
-POSTGRES_PASSWORD=swingtrade_password
-
-# Redis Configuration
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-# API Configuration
-API_PORT=8080
-
-# LLM Configuration (optional)
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-### Build and Run
-
-```bash
-# Build the entire project
-mvn clean install
-
-# Run individual modules
-cd api && mvn spring-boot:run
-
-# Or run the full application using the Spring Boot plugin
-mvn spring-boot:run
-```
-
-## How to Run the System
-
-### Option 1: Using Docker (Recommended)
-
-```bash
-# Start all services
-docker-compose up -d
-
-# Build and run the application
-mvn clean install
-java -jar api/target/api-1.0.0.jar
-```
-
-### Option 2: Manual Setup
-
-1. Start PostgreSQL and Redis containers:
 ```bash
 docker-compose up -d
 ```
 
-2. Configure database schema:
+This starts:
+- PostgreSQL with TimescaleDB (port 5432)
+- Redis (port 6379)
+
+Wait 10-15 seconds for databases to initialize.
+
+### 2. Configure Environment
+
+The API module uses environment variables for configuration. Create `.env` in project root:
+
 ```bash
-# Apply database migrations using Flyway
-# This is typically handled automatically during application startup
+# Database
+DATABASE_URL=jdbc:postgresql://host.docker.internal:5432/swingtrade_db
+DATABASE_USERNAME=swingtrade_user
+DATABASE_PASSWORD=swingtrade_password
+DATABASE_POOL_SIZE=10
+
+# Redis
+REDIS_URL=redis://host.docker.internal:6379
+
+# Upstox API (for market data)
+UPSTOX_API_KEY=your_upstox_api_key
+UPSTOX_API_SECRET=your_upstox_secret
+UPSTOX_ACCESS_TOKEN=your_access_token
+
+# LLM/vLLM (optional - disable by setting BASE_URL empty)
+LLM_VLLM_BASE_URL=http://host.docker.internal:8000/v1
+LLM_VLLM_MODEL_NAME=qwen3
+
+# Telegram (optional)
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_ADMIN_IDS=123456789
 ```
 
-3. Build and run the application:
+### 3. Build and Run
+
 ```bash
+# Build entire project
 mvn clean install
-java -jar api/target/api-1.0.0.jar
+
+# Run API module (main entry point)
+cd api
+mvn spring-boot:run -Pdev
 ```
 
-### Option 3: Development Mode
+Application starts on `http://localhost:8080/api`
 
-```bash
-# Import the project into your IDE
-# Run the main class: com.swingtrade.api.app.SwingTradeApiApplication
-```
+## Configuration Guide
 
-## Module Descriptions
+### Application Properties
 
-### Core Module
-- Contains shared domain models and utilities
-- Defines common data structures used across the system
-- Includes basic utility classes
+All configurable properties in `api/src/main/resources/application.properties`:
 
-### Data Module
-- **Purpose**: Market data ingestion and storage
-- **Key Features**:
-  - Real-time market data collection
-  - Historical data storage with TimescaleDB
-  - Data validation and normalization
-- **Components**:
-  - `DataIngestionService`: Manages data flow from external sources
-  - `UpstoxRestClient`: Integration with Upstox API
-  - Database migration scripts (Flyway)
+| Category | Key | Description |
+|----------|-----|-------------|
+| Server | `server.port` | API port (default: 8080) |
+| Database | `spring.datasource.*` | PostgreSQL connection |
+| Redis | `spring.data.redis.*` | Redis cache |
+| Upstox | `upstox.api.*` | Market data API |
+| LLM | `llm.vllm.*` | vLLM endpoint |
+| Telegram | `telegram.bot.*` | Bot configuration |
+| Trading | `trading.*` | Position limits, risk |
+| Strategy | `strategy.*` | Indicator parameters |
 
-### Strategy Module
-- **Purpose**: Trading strategy implementation and backtesting
-- **Key Features**:
-  - Technical indicator calculations
-  - Strategy composition and execution
-  - Backtesting framework
-- **Components**:
-  - `DefaultStrategy`: Main trading strategy implementation
-  - `DefaultIndicatorService`: Technical indicators calculation
-  - `BacktestEngine`: Backtesting infrastructure
+### Development Mode
 
-### LLM Module
-- **Purpose**: Sentiment analysis and natural language processing
-- **Key Features**:
-  - News sentiment analysis
-  - Technical signal generation from text
-  - Integration with LLM APIs
-- **Components**:
-  - `LangChain4jLlmClient`: LLM integration layer
-  - `NewsIngestionService`: News data processing
-  - `SentimentAnalysisResult`: Sentiment data structures
-
-### Broker Module
-- **Purpose**: Order management and paper trading simulation
-- **Key Features**:
-  - Portfolio management
-  - Order processing and execution
-  - Position tracking
-- **Components**:
-  - `PaperTradingEngine`: Paper trade execution engine
-  - `BrokerService`: Core broker functionality
-  - Position and order data models
-
-### API Module
-- **Purpose**: RESTful interface for system interaction
-- **Key Features**:
-  - Trading signals endpoint
-  - Performance metrics
-  - Position management
-- **Endpoints**:
-  - `GET /api/signals` - Get trading signals
-  - `GET /api/performance` - Get performance statistics
-  - `GET /api/positions` - Get current positions
-  - `POST /api/trade` - Execute trades
+Use `application-local.properties` for local development:
+- Verbose DEBUG logging
+- Development CORS settings
+- Paper trading only mode
+- Disabled Telegram notifications
 
 ## API Endpoints
 
-### Signals Endpoint
+### Health Check
+```bash
+GET /api/health
 ```
+Returns system status, database/Redis/Upstox connection states.
+
+### Get Signals
+```bash
+GET /api/signals/{symbol}
 GET /api/signals
 ```
-Returns trading signals with:
-- Stock symbols
-- Signal types (Buy/Sell)
-- Confidence scores
-- Technical indicators
+Returns latest technical + sentiment analysis signal.
 
-### Performance Endpoint
+### Scan Stocks
+```bash
+GET /api/scan?days=30&marketCap=min
 ```
+Scan multiple stocks for signals.
+
+### Execute Trade
+```bash
+POST /api/trade
+{
+  "symbol": "RELIANCE",
+  "direction": "BUY",
+  "quantity": 100
+}
+```
+Execute market order (paper mode).
+
+### Position Management
+```bash
+GET /api/positions
+GET /api/positions/{symbol}
+POST /api/positions/{symbol}/close
+```
+View and close positions.
+
+### Performance
+```bash
 GET /api/performance
 ```
-Returns portfolio performance metrics:
-- Total return
-- Drawdown statistics
-- Win rate
-- Profitability metrics
+Returns P&L, win rate, trade statistics.
 
-### Positions Endpoint
+## Trading Strategy
+
+### Entry Signals (BUY)
+The system generates BUY signals when 4+ of these conditions align:
+
+1. **EMA Crossover**: Fast EMA (20) > Slow EMA (50)
+2. **RSI Oversold**: RSI < 30 (potential reversal)
+3. **MACD Positive**: MACD histogram > 0
+4. **Price Above EMA**: Close > Fast EMA
+5. **Volume Confirmation**: Volume > 10-day average with bullish candle
+6. **Positive Momentum**: Daily price change > 0
+
+### Exit Signals (SELL)
+Exit when 4+ conditions indicate bearish momentum:
+- EMA bearish crossover
+- RSI > 70 (overbought)
+- MACD negative
+- Volume spike with bearish candle
+- Price decline > threshold
+
+### Risk Management
+- **Stop Loss**: Entry price - 2×ATR
+- **Target**: Entry price + 2.5×R (2.5:1 risk-reward)
+- **Position Size**: Based on ATR and account risk %
+- **Max Exposure**: Configurable per-position and total
+
+## Scheduled Jobs
+
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| Data Ingestion | 16:30 IST M-F | Fetch EOD candles from Upstox |
+| Signal Generation | 17:00 IST M-F | Analyze all stocks, generate signals |
+| Stop Loss Check | Every 5 min | Monitor open positions for stops |
+| News Ingestion | Every 30 min | Fetch and analyze financial news |
+
+## Project Structure
+
 ```
-GET /api/positions
+swing-trade/
+├── core/                 # Domain models
+│   └── src/main/java/com/swingtrade/domain/
+│       ├── Stock.java
+│       ├── OhlcvCandle.java
+│       ├── Signal.java
+│       ├── Position.java
+│       ├── Trade.java
+│       └── SentimentResult.java
+│
+├── data/                 # Data layer
+│   ├── src/main/java/com/swingtrade/data/
+│   │   ├── entity/       # JPA entities
+│   │   ├── repository/   # Spring Data repos
+│   │   └── service/      # DataIngestionService, MarketDataClient
+│   └── src/main/resources/db/migration/
+│       ├── V1__swing_trade_schema.sql
+│       ├── V2__create_hypertables.sql
+│       ├── V3__create_stocks_table.sql
+│       └── V4__add_trades_table.sql
+│
+├── strategy/             # Trading strategies
+│   └── src/main/java/com/swingtrade/strategy/
+│       ├── TechnicalIndicators.java
+│       ├── SwingTradingStrategy.java
+│       └── SignalEngine.java
+│
+├── llm/                  # LLM integration
+│   └── src/main/java/com/swingtrade/llm/
+│       ├── client/VLLMClient.java
+│       ├── service/SentimentAnalysisService.java
+│       ├── service/SentimentAnalyzer.java
+│       └── service/NewsIngestionService.java
+│
+├── broker/               # Paper trading
+│   └── src/main/java/com/swingtrade/broker/
+│       ├── engine/PaperTradingEngine.java
+│       ├── manager/OrderManager.java
+│       ├── manager/PositionManager.java
+│       └── telegram/TelegramNotificationService.java
+│
+└── api/                  # REST interface
+    └── src/main/java/com/swingtrade/api/
+        ├── controller/    # REST controllers
+        ├── service/       # Business logic services
+        ├── dto/           # Request/Response DTOs
+        └── config/        # Spring configuration
 ```
-Returns current open positions:
-- Stock symbols
-- Quantity held
-- Entry price
-- Current value
-- P&L
 
-## Contributing
+## Testing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+```bash
+# Run all tests
+mvn test
+
+# Run specific module tests
+cd data && mvn test
+cd strategy && mvn test
+cd broker && mvn test
+cd api && mvn test
+
+# Run with coverage report
+mvn clean test jacoco:report
+```
+
+## Troubleshooting
+
+### Database Connection Failed
+- Verify PostgreSQL is running: `docker-compose ps`
+- Check credentials match `.env` file
+- Ensure Flyway migrations completed: check logs for "schema validated"
+
+### Upstox API Errors
+- Verify API key/secret are valid
+- Check access token hasn't expired
+- Review Upstox API documentation for rate limits
+
+### vLLM/LLM Not Available
+- Ensure vLLM server running on configured port
+- Check model name matches deployed model
+- Set `LLM_VLLM_BASE_URL=` empty to disable LLM features
+
+### Build Failures
+- Ensure Java 21 is installed: `java -version`
+- Clear Maven cache: `mvn clean`
+- Update dependencies: `mvn update-snapshots`
+
+## Production Deployment
+
+### Environment Variables Required
+- `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`
+- `REDIS_URL`
+- `UPSTOX_API_KEY`, `UPSTOX_API_SECRET`, `UPSTOX_ACCESS_TOKEN`
+- `TELEGRAM_BOT_TOKEN` (optional)
+- `LLM_VLLM_BASE_URL` (optional)
+
+### Docker Deployment
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker build -t swing-trade-api ./api
+docker push swing-trade-api:latest
+```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - See LICENSE file for details.
 
-## Support
+## Disclaimer
 
-For support, please open an issue in the repository or contact the maintainers.
-
----
-*Built with ❤️ for algorithmic trading*
+This software is for educational purposes only. Trading stocks involves risk of loss.
+Past performance does not guarantee future results. Use at your own risk.

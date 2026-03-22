@@ -1,0 +1,60 @@
+package com.swingtrade.data.service;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+/**
+ * Interface for market data clients.
+ * Implementations can use Upstox, NSE, or any other data provider.
+ */
+public interface MarketDataClient {
+
+    /**
+     * Fetches a single day's OHLCV data for a stock.
+     *
+     * @param symbol the stock symbol
+     * @param date the trading date
+     * @return candle data or null if not found
+     */
+    CandleData fetchCandle(String symbol, LocalDate date);
+
+    /**
+     * Fetches multiple days of OHLCV data for a stock.
+     *
+     * @param symbol the stock symbol
+     * @param startDate start date (inclusive)
+     * @param endDate end date (inclusive)
+     * @return list of candle data
+     */
+    Iterable<CandleData> fetchCandles(String symbol, LocalDate startDate, LocalDate endDate);
+
+    /**
+     * Fetches the most recent candle for a stock.
+     *
+     * @param symbol the stock symbol
+     * @return the latest candle data
+     */
+    CandleData fetchLatestCandle(String symbol);
+
+    /**
+     * Fetches the instrument details for a stock.
+     *
+     * @param symbol the stock symbol
+     * @return instrument details or null if not found
+     */
+    InstrumentDetails fetchInstrumentDetails(String symbol);
+
+    /**
+     * Fetches a list of all available stocks.
+     *
+     * @return list of stock symbols
+     */
+    Iterable<String> fetchAllStockSymbols();
+
+    /**
+     * Checks if the client is connected and working.
+     *
+     * @return true if connected
+     */
+    boolean isConnected();
+}

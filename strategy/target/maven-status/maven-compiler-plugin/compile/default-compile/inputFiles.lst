@@ -1,0 +1,12 @@
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/BacktestEngine.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/BacktestResult.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/IndicatorService.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/SignalEngine.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/StrategyContext.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/SwingTradingStrategy.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/TechnicalIndicators.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/TradingStrategy.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/impl/DefaultBacktestEngine.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/impl/DefaultIndicatorService.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/impl/DefaultStrategy.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/strategy/src/main/java/com/swingtrade/strategy/impl/DefaultStrategyContext.java

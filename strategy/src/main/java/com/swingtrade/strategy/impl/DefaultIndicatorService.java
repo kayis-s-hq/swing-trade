@@ -18,14 +18,16 @@ package com.swingtrade.strategy.impl;
 
 import com.swingtrade.strategy.IndicatorService;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.indicators.*;
+import org.ta4j.core.Indicator;
+import org.ta4j.core.indicators.ATRIndicator;
 import org.ta4j.core.indicators.EMAIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
-import org.ta4j.core.indicatorsATR;
-import org.ta4j.core.indicators.VolumeIndicator;
-import org.ta4j.core.indicators.WeeklyHighIndicator;
+import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
+import org.ta4j.core.indicators.helpers.HighestValueIndicator;
+import org.ta4j.core.indicators.helpers.HighPriceIndicator;
+import org.ta4j.core.indicators.helpers.VolumeIndicator;
 import org.ta4j.core.num.Num;
-import org.ta4j.core.num.DecimalNum;
 import org.springframework.stereotype.Service;
 
 /**
@@ -60,8 +62,8 @@ public class DefaultIndicatorService implements IndicatorService {
         if (timeFrame <= 0) {
             throw new IllegalArgumentException("Time frame must be positive");
         }
-        
-        return new EMAIndicator(barSeries, timeFrame);
+
+        return new EMAIndicator(new ClosePriceIndicator(barSeries), timeFrame);
     }
     
     /**
@@ -80,8 +82,8 @@ public class DefaultIndicatorService implements IndicatorService {
         if (timeFrame <= 0) {
             throw new IllegalArgumentException("Time frame must be positive");
         }
-        
-        return new RSIIndicator(barSeries, timeFrame);
+
+        return new RSIIndicator(new ClosePriceIndicator(barSeries), timeFrame);
     }
     
     /**
@@ -105,34 +107,38 @@ public class DefaultIndicatorService implements IndicatorService {
     }
     
     /**
-     * Calculates the Volume indicator for the given bar series.
-     * 
+     * Calculates the Volume Moving Average indicator for the given bar series.
+     *
      * @param barSeries The historical price data series
-     * @return A Volume indicator for the specified parameters
+     * @param period The period for volume MA calculation
+     * @return A Volume Moving Average indicator for the specified parameters
      * @throws IllegalArgumentException if barSeries is null
      */
     @Override
-    public VolumeIndicator calculateVolume(BarSeries barSeries) {
+    public SMAIndicator calculateVolumeMA(BarSeries barSeries, int period) {
         if (barSeries == null) {
             throw new IllegalArgumentException("BarSeries cannot be null");
         }
-        
-        return new VolumeIndicator(barSeries);
+        if (period <= 0) {
+            throw new IllegalArgumentException("Period must be positive");
+        }
+
+        return new SMAIndicator(new VolumeIndicator(barSeries), period);
     }
     
     /**
      * Calculates the 52-week high for the given bar series.
-     * 
+     *
      * @param barSeries The historical price data series
      * @return A Weekly High indicator for the specified parameters
      * @throws IllegalArgumentException if barSeries is null
      */
     @Override
-    public WeeklyHighIndicator calculateWeeklyHigh(BarSeries barSeries) {
+    public Indicator<Num> calculateWeeklyHigh(BarSeries barSeries) {
         if (barSeries == null) {
             throw new IllegalArgumentException("BarSeries cannot be null");
         }
-        
-        return new WeeklyHighIndicator(barSeries);
+
+        return new HighestValueIndicator(new HighPriceIndicator(barSeries), DEFAULT_WEEKLY_HIGH_PERIOD);
     }
 }

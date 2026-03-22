@@ -117,7 +117,7 @@ public record Trade(
         BigDecimal totalPnL = exitPrice.subtract(trade.entryPrice())
             .multiply(BigDecimal.valueOf(trade.quantity()));
 
-        int durationDays = (int) java.time ChronoUnit.DAYS.between(trade.entryDate(), exitDate);
+        int durationDays = (int) java.time.temporal.ChronoUnit.DAYS.between(trade.entryDate(), exitDate);
 
         return new Trade(
             trade.id(),

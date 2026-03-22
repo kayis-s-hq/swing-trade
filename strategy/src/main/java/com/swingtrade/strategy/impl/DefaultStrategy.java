@@ -16,21 +16,18 @@
 
 package com.swingtrade.strategy.impl;
 
-import com.swingtrade.strategy.Strategy;
+import com.swingtrade.strategy.TradingStrategy;
 import org.ta4j.core.*;
-import org.ta4j.core.indicators.*;
+import org.ta4j.core.indicators.ATRIndicator;
 import org.ta4j.core.indicators.EMAIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
-import org.ta4j.core.indicatorsATR;
-import org.ta4j.core.indicators.VolumeIndicator;
-import org.ta4j.core.indicators.WeeklyHighIndicator;
+import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
+import org.ta4j.core.indicators.helpers.HighestValueIndicator;
+import org.ta4j.core.indicators.helpers.HighPriceIndicator;
+import org.ta4j.core.indicators.helpers.VolumeIndicator;
 import org.ta4j.core.num.Num;
-import org.ta4j.core.num.DecimalNum;
+import org.ta4j.core.rules.*;
 import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Default implementation of the trading strategy with comprehensive rule sets.
@@ -40,7 +37,7 @@ import java.util.List;
  * @since 1.0.0
  */
 @Component
-public class DefaultStrategy implements Strategy {
+public class DefaultStrategy implements TradingStrategy {
     
     private static final int EMA_FAST_PERIOD = 12;
     private static final int EMA_SLOW_PERIOD = 26;
@@ -61,57 +58,37 @@ public class DefaultStrategy implements Strategy {
         if (barSeries == null) {
             throw new IllegalArgumentException("BarSeries cannot be null");
         }
-        
+
         // Initialize indicators
-        EMAIndicator emaFast = new EMAIndicator(barSeries, EMA_FAST_PERIOD);
-        EMAIndicator emaSlow = new EMAIndicator(barSeries, EMA_SLOW_PERIOD);
-        RSIIndicator rsi = new RSIIndicator(barSeries, RSI_PERIOD);
+        ClosePriceIndicator close = new ClosePriceIndicator(barSeries);
+        EMAIndicator emaFast = new EMAIndicator(close, EMA_FAST_PERIOD);
+        EMAIndicator emaSlow = new EMAIndicator(close, EMA_SLOW_PERIOD);
+        RSIIndicator rsi = new RSIIndicator(close, RSI_PERIOD);
         ATRIndicator atr = new ATRIndicator(barSeries, ATR_PERIOD);
         VolumeIndicator volume = new VolumeIndicator(barSeries);
-        WeeklyHighIndicator weeklyHigh = new WeeklyHighIndicator(barSeries);
-        
-        // Create entry rules (ALL must be true)
-        // Rule 1: EMA(12) crosses above EMA(26)
-        BooleanIndicator emaCrossUp = new OverIndicator(emaFast, emaSlow);
-        
-        // Rule 2: RSI below 30 (oversold condition)
-        Num rsiThreshold = DecimalNum.valueOf(30);
-        BooleanIndicator rsiOversold = new LessThanIndicator(rsi, rsiThreshold);
-        
-        // Rule 3: Volume above average
-        Num volumeThreshold = volume.getValue(0).multipliedBy(DecimalNum.valueOf(1.5));
-        BooleanIndicator volumeAboveAverage = new GreaterThanIndicator(volume, volumeThreshold);
-        
-        // Rule 4: Price above 52-week high
-        ClosePriceIndicator closePrice = new ClosePriceIndicator(barSeries);
-        BooleanIndicator priceAboveWeeklyHigh = new GreaterThanIndicator(closePrice, weeklyHigh);
-        
-        // Combine all entry rules with AND
-        Rule entryRule = emaCrossUp.and(rsiOversold).and(volumeAboveAverage).and(priceAboveWeeklyHigh);
-        
-        // Exit rules (ANY triggers exit)
-        // Rule 1: EMA(12) crosses below EMA(26)
-        BooleanIndicator emaCrossDown = new UnderIndicator(emaFast, emaSlow);
-        
-        // Rule 2: RSI above 70 (overbought condition)
-        Num rsiOverboughtThreshold = DecimalNum.valueOf(70);
-        BooleanIndicator rsiOverbought = new GreaterThanIndicator(rsi, rsiOverboughtThreshold);
-        
-        // Rule 3: Stop loss based on ATR (2x ATR)
-        Num stopLossFactor = DecimalNum.valueOf(2.0);
-        Num atrValue = atr.getValue(0);
-        Num stopLossLevel = new ClosePriceIndicator(barSeries).getValue(0).minus(atrValue.multipliedBy(stopLossFactor));
-        BooleanIndicator stopLossTrigger = new LessThanIndicator(new ClosePriceIndicator(barSeries), stopLossLevel);
-        
-        // Rule 4: Take profit (5% gain)
-        Num takeProfitFactor = DecimalNum.valueOf(1.05);
-        Num takeProfitLevel = new ClosePriceIndicator(barSeries).getValue(0).multipliedBy(takeProfitFactor);
-        BooleanIndicator takeProfitTrigger = new GreaterThanIndicator(new ClosePriceIndicator(barSeries), takeProfitLevel);
-        
-        // Combine all exit rules with OR
-        Rule exitRule = emaCrossDown.or(rsiOverbought).or(stopLossTrigger).or(takeProfitTrigger);
-        
-        // Create strategy with combined rules
+        EMAIndicator volumeMA = new EMAIndicator(volume, VOLUME_PERIOD);
+        Indicator<Num> weeklyHigh = new HighestValueIndicator(new HighPriceIndicator(barSeries), WEEKLY_HIGH_PERIOD * 5);
+
+        // Entry rules
+        // Rule 1: EMA fast crosses above slow
+        Rule entryRule = new CrossedUpIndicatorRule(emaFast, emaSlow)
+            // Rule 2: RSI < 30 (oversold)
+            .and(new UnderIndicatorRule(rsi, 30))
+            // Rule 3: Volume > 1.5x average
+            .and(new OverIndicatorRule(volume, volumeMA))
+            // Rule 4: Close > 52-week high
+            .and(new OverIndicatorRule(close, weeklyHigh));
+
+        // Exit rules
+        // Rule 1: EMA fast crosses below slow
+        // Rule 2: RSI > 70 (overbought)
+        // Rule 3: Stop loss at 2x ATR
+        // Rule 4: Take profit at 5%
+        Rule exitRule = new CrossedDownIndicatorRule(emaFast, emaSlow)
+            .or(new OverIndicatorRule(rsi, 70))
+            .or(new StopLossRule(close, 2.0))
+            .or(new StopGainRule(close, 5.0));
+
         return new BaseStrategy(entryRule, exitRule);
     }
     

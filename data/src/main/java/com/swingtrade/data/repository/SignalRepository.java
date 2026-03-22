@@ -37,6 +37,7 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * @param date the date
      * @return list of signals
      */
+    @Query("SELECT s FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date")
     List<SignalEntity> findBySymbolAndDate(
         @Param("symbol") String symbol,
         @Param("date") LocalDate date

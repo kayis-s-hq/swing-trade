@@ -1,0 +1,12 @@
+com/swingtrade/domain/Position.class
+com/swingtrade/domain/Trade$TradeStatus.class
+com/swingtrade/domain/Stock.class
+com/swingtrade/domain/SentimentResult$SentimentScore.class
+com/swingtrade/domain/Stock$Exchange.class
+com/swingtrade/domain/Signal$SignalType.class
+com/swingtrade/domain/Signal.class
+com/swingtrade/domain/Stock$Sector.class
+com/swingtrade/domain/OhlcvCandle.class
+com/swingtrade/domain/Position$PositionStatus.class
+com/swingtrade/domain/Trade.class
+com/swingtrade/domain/SentimentResult.class

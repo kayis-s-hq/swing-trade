@@ -50,7 +50,7 @@ public record Stock(
         AUTO,
         BANK,
         CHEMICAL,
-        CONSUMER goods,
+        CONSUMER_GOODS,
         ENERGY,
         FINANCIAL_SERVICES,
         FMCG,

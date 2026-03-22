@@ -17,26 +17,25 @@
 package com.swingtrade.strategy;
 
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.Strategy;
 import org.ta4j.core.TradingRecord;
 
 /**
  * Interface for managing the context of trading strategies.
  * Provides methods to retrieve strategy instances and manage their execution context.
- * 
+ *
  * @author Swing Trade Team
  * @since 1.0.0
  */
 public interface StrategyContext {
-    
+
     /**
      * Gets the current strategy for the given bar series.
-     * 
+     *
      * @param barSeries The historical price data series
-     * @return A configured Strategy object for the given data
+     * @return A configured TradingStrategy object for the given data
      * @throws IllegalArgumentException if barSeries is null
      */
-    Strategy getStrategy(BarSeries barSeries);
+    TradingStrategy getStrategy(BarSeries barSeries);
     
     /**
      * Checks if a trade should be executed based on current strategy rules.

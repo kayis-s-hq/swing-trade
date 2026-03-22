@@ -5,8 +5,7 @@ import com.swingtrade.llm.SentimentAnalysisResult;
 import com.swingtrade.llm.SentimentType;
 import com.swingtrade.llm.TechnicalSignal;
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.vllm.VllmChatModel;
-import dev.langchain4j.model.vllm.VllmChatModel.Builder;
+import dev.langchain4j.model.ollama.OllamaChatModel;
 import java.util.List;
 import java.util.ArrayList;
 import java.time.LocalDateTime;
@@ -31,12 +30,13 @@ public class LangChain4jLlmClient implements LlmClient {
     
     /**
      * Creates a new LangChain4j LLM client with custom base URL.
-     * 
-     * @param baseUrl The base URL of the vLLM endpoint
+     *
+     * @param baseUrl The base URL of the LLM endpoint (vLLM, Ollama, etc.)
      */
     public LangChain4jLlmClient(String baseUrl) {
-        // Initialize the vLLM model with the provided base URL
-        this.chatLanguageModel = VllmChatModel.builder()
+        // Initialize the Ollama model with the provided base URL
+        // Ollama supports multiple model types and is compatible with vLLM endpoints
+        this.chatLanguageModel = OllamaChatModel.builder()
                 .baseUrl(baseUrl)
                 .modelName("meta-llama/Llama-3.2-3B-Instruct") // Default model, can be configured
                 .temperature(0.0) // Deterministic output for consistent results
