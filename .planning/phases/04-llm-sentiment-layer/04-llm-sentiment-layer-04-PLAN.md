@@ -17,7 +17,7 @@ must_haves:
     - "SectorDigestTest verifies SentimentAnalysisService.groupBySectorAndSentiment() groups correctly and getTopSectors() ranks correctly"
   artifacts:
     - path: "api/src/main/java/com/swingtrade/api/scheduler/WeeklySectorDigestScheduler.java"
-      provides: "Scheduled bean bridging SentimentAnalysisService (llm) and TelegramService (broker) to send weekly digest"
+      provides: "Scheduled bean bridging SentimentAnalysisService (llm) and TelegramNotificationService (broker) to send weekly digest"
       must_exist: true
     - path: "strategy/src/test/java/com/swingtrade/strategy/SignalEngineIntegrationTest.java"
       provides: "Integration test verifying SignalEngine.generateSignalsForSymbol() with mocked SentimentAnalysisService"
@@ -27,13 +27,13 @@ must_haves:
       must_exist: true
   key_links:
     - from: "WeeklySectorDigestScheduler"
-      to: "TelegramService.sendMessage"
+      to: "TelegramNotificationService.sendMessage"
       via: "dependency injection in api module"
-      pattern: "telegramService.sendMessage(digest, digestChatId)"
+      pattern: "telegramService.sendMessage(digest)"
     - from: "SignalEngineIntegrationTest"
       to: "SignalEngine.generateSignalsForSymbol()"
       via: "direct method call with mocked sentiment service"
-      pattern: "signalEngine.generateSignalsForSymbol\\(.*\\) should suppress NEGATIVE"
+      pattern: "signalEngine.generateSignalsForSymbol\\(symbol\\) should suppress NEGATIVE"
     - from: "SectorDigestTest"
       to: "SentimentAnalysisService"
       via: "instantiation with mocked repositories"
@@ -57,7 +57,7 @@ must_haves:
 
 Fix 3 gaps identified in Phase 04 verification:
 
-1. **Telegram Delivery (REQ-029 partial)** — `LlmConfig.sendWeeklySectorDigest()` generates digest string but never calls `TelegramService.sendMessage()`. Solution: Create a thin scheduled bean in api module injecting both services, avoiding circular dependency (llm → broker).
+1. **Telegram Delivery (REQ-029 partial)** — `LlmConfig.sendWeeklySectorDigest()` generates digest string but never calls `TelegramNotificationService.sendMessage()`. Solution: Create a thin scheduled bean in api module injecting both services, avoiding circular dependency (llm → broker).
 
 2. **SignalEngine Integration Test (REQ-028 test coverage)** — Current `SentimentFilteringTest` tests a private stub class, not the actual `SignalEngine.generateSignalsForSymbol()` logic. Solution: Create strategy-module integration test that mocks `SentimentAnalysisService` and verifies real SignalEngine behavior.
 
@@ -82,11 +82,11 @@ Fix 3 gaps identified in Phase 04 verification:
 
 ## Codebase Interfaces
 
-**TelegramService** (broker module):
+**TelegramNotificationService** (broker module):
 ```java
-public interface TelegramService {
-  void sendMessage(String message, String chatId);
-  void sendMessage(String message);
+public class TelegramNotificationService {
+  public boolean sendMessage(String message);
+  // Broadcasts to all configured chat IDs
 }
 ```
 
@@ -101,7 +101,7 @@ public List<Map.Entry<String, SectorSentimentData>> getTopSectors(Map<String, Se
 
 **SignalEngine** (strategy module):
 ```java
-public void generateSignalsForSymbol(String symbol, LocalDate date);
+public void generateSignalsForSymbol(String symbol);
 // At line 138-159: sentiment check before signal save
 // NEGATIVE → return (suppress)
 // NEUTRAL → save with WARNING_NEUTRAL_SENTIMENT
@@ -120,17 +120,16 @@ public void generateSignalsForSymbol(String symbol, LocalDate date);
 
     1. Is annotated with `@Component`
     2. Injects `SentimentAnalysisService` from llm module (constructor injection)
-    3. Injects `TelegramService` from broker module (constructor injection)
-    4. Injects `@Value("${llm.telegram.digest-chat-id}")` for chat ID
-    5. Has a `@Scheduled(cron = "0 0 11 * * SUN", zone = "Asia/Kolkata")` method `sendWeeklySectorDigest()`
-    6. This method:
+    3. Injects `TelegramNotificationService` from broker module (constructor injection)
+    4. Has a `@Scheduled(cron = "0 0 17 * * SUN", zone = "Asia/Kolkata")` method `sendWeeklySectorDigest()`
+    5. This method:
        - Calls `sentimentAnalysisService.generateSectorDigestForLastWeek()` to get digest string
-       - Calls `telegramService.sendMessage(digest, chatId)` to send via Telegram
+       - Calls `telegramService.sendMessage(digest)` to send via Telegram (single argument, broadcasts to all configured chat IDs)
        - Logs start: "Starting weekly sector digest delivery to Telegram"
-       - Logs success: "Weekly sector digest sent successfully to Telegram chat [chatId]"
+       - Logs success: "Weekly sector digest sent successfully to Telegram"
        - Catches all exceptions and logs error without rethrowing (scheduler resilience)
 
-    Design rationale: This scheduled bean lives in the api module, which already depends on both llm (for sentiment) and broker (for notifications). It bridges the two services without creating a circular dependency. The original `LlmConfig.sendWeeklySectorDigest()` can remain as a utility/test method, but production delivery now uses this bean.
+    Design rationale: This scheduled bean lives in the api module, which already depends on both llm (for sentiment) and broker (for notifications). It bridges the two services without creating a circular dependency. The single-argument sendMessage(String) method broadcasts to all configured chat IDs, which is appropriate for a weekly digest. The original `LlmConfig.sendWeeklySectorDigest()` can remain as a utility/test method, but production delivery now uses this bean.
 
     Note: Do NOT modify LlmConfig.sendWeeklySectorDigest() — that method can stay as-is for testing purposes.
   </action>
@@ -141,10 +140,10 @@ public void generateSignalsForSymbol(String symbol, LocalDate date);
     WeeklySectorDigestScheduler.java created with:
     - @Component annotation
     - SentimentAnalysisService injected
-    - TelegramService injected
-    - @Scheduled(cron = "0 0 11 * * SUN", zone = "Asia/Kolkata") sendWeeklySectorDigest() method
+    - TelegramNotificationService injected (not TelegramService interface)
+    - @Scheduled(cron = "0 0 17 * * SUN", zone = "Asia/Kolkata") sendWeeklySectorDigest() method
     - Calls sentimentAnalysisService.generateSectorDigestForLastWeek()
-    - Calls telegramService.sendMessage(digest, chatId)
+    - Calls telegramService.sendMessage(digest) with single argument
     - Proper error handling and logging
     - mvn clean compile succeeds
   </done>
@@ -156,7 +155,7 @@ public void generateSignalsForSymbol(String symbol, LocalDate date);
   <action>
     Create a new integration test class in the strategy module (package `com.swingtrade.strategy`) named `SignalEngineIntegrationTest` that:
 
-    1. Tests the actual `SignalEngine.generateSignalsForSymbol()` method with mocked `SentimentAnalysisService`
+    1. Tests the actual `SignalEngine.generateSignalsForSymbol(String symbol)` method with mocked `SentimentAnalysisService`
     2. Does NOT use the internal stub `SentimentFilterService` — test against the real SignalEngine
     3. Mocks repositories (SignalRepository, StockRepository) using Mockito
     4. Mocks `SentimentAnalysisService` to return controlled sentiment values
@@ -173,6 +172,8 @@ public void generateSignalsForSymbol(String symbol, LocalDate date);
     - Mock TechnicalIndicators to return BUY signal
     - Mock SentimentAnalysisService to return controlled sentiment types
 
+    Method signature: Call `signalEngine.generateSignalsForSymbol(symbol)` with only the symbol parameter (no LocalDate).
+
     Why replace instead of enhance: The current SentimentFilteringTest uses a local stub that never calls the real SignalEngine. It provides false confidence. The integration test should verify the actual code path in SignalEngine.generateSignalsForSymbol() where sentiment check occurs.
   </action>
   <verify>
@@ -182,6 +183,7 @@ public void generateSignalsForSymbol(String symbol, LocalDate date);
     SignalEngineIntegrationTest.java created with:
     - 4 test methods covering NEGATIVE suppression, NEUTRAL flagging, POSITIVE normal, exception handling
     - Mocks real SignalEngine dependencies
+    - Calls signalEngine.generateSignalsForSymbol(symbol) with correct signature (no LocalDate parameter)
     - All 4 tests pass
     - Integration test verifies actual SignalEngine.generateSignalsForSymbol() behavior
     - mvn test -pl strategy passes SignalEngineIntegrationTest
@@ -279,10 +281,10 @@ public void generateSignalsForSymbol(String symbol, LocalDate date);
 After Task 1 completes, the weekly digest delivery chain is:
 1. Spring scheduler calls `WeeklySectorDigestScheduler.sendWeeklySectorDigest()` every Sunday 17:00 IST
 2. Method fetches digest from `SentimentAnalysisService.generateSectorDigestForLastWeek()`
-3. Method sends via `TelegramService.sendMessage(digest, chatId)`
+3. Method sends via `TelegramNotificationService.sendMessage(digest)` — broadcasts to all configured chat IDs
 4. Logs confirm delivery attempt
 
-To verify end-to-end: Run application on Sunday 17:00 IST or manually trigger the scheduler (requires Telegram bot token and chat ID configured via `TELEGRAM_DIGEST_CHAT_ID` env var).
+To verify end-to-end: Run application on Sunday 17:00 IST or manually trigger the scheduler (requires Telegram bot token and chat ID configured via environment variables or application.yml).
 
 **Gap 2 — SignalEngine Integration Test:**
 After Task 2 completes, the integration test covers the actual signal filtering in `SignalEngine.generateSignalsForSymbol()`:
@@ -303,13 +305,13 @@ After Task 3 completes, SectorDigestTest exercises the actual service methods:
 
 ## Success Criteria
 
-- [ ] **Task 1:** WeeklySectorDigestScheduler.java created, @Component and @Scheduled annotations correct, calls both services, logs properly, `mvn compile` succeeds
-- [ ] **Task 2:** SignalEngineIntegrationTest.java created, 4 test methods cover all sentiment types, all 4 tests pass, SignalEngine.generateSignalsForSymbol() is actually tested (not a stub)
+- [ ] **Task 1:** WeeklySectorDigestScheduler.java created, @Component and @Scheduled annotations correct, injects TelegramNotificationService (not TelegramService interface), calls sendMessage(digest) with single argument, logs properly, `mvn compile` succeeds
+- [ ] **Task 2:** SignalEngineIntegrationTest.java created, 4 test methods cover all sentiment types, calls generateSignalsForSymbol(symbol) with correct signature (no LocalDate), all 4 tests pass, SignalEngine.generateSignalsForSymbol() is actually tested (not a stub)
 - [ ] **Task 3:** SectorDigestTest.java enhanced with 3+ tests calling real service methods, assertions on grouping/ranking logic (not just non-empty), all tests pass
 - [ ] **Build:** `mvn clean install -pl strategy,llm,api` succeeds
 - [ ] **All 3 gaps closed:**
-  - Telegram delivery wired: scheduler → sentiment service → telegram service
-  - SignalEngine integration tested: real method under test with mocked sentiment
+  - Telegram delivery wired: scheduler → sentiment service → telegram service (using actual TelegramNotificationService.sendMessage(String) method)
+  - SignalEngine integration tested: real method under test with mocked sentiment, correct method signature used
   - SectorDigest service tested: real grouping and ranking methods called and verified
 
 ---
