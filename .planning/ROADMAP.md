@@ -1,8 +1,8 @@
 # ROADMAP.md - SwingTrade Implementation Phases
 
-**Document Version:** 2.0
+**Document Version:** 2.2
 **Created:** 2026-03-07
-**Last Updated:** 2026-03-22 (Re-initialized with 7 phases)
+**Last Updated:** 2026-03-22 (Phase 4 plans created)
 
 ---
 
@@ -42,12 +42,12 @@ SwingTrade is a 7-phase project to build a production swing trading system for I
 
 ---
 
-## Phase 2: Strategy Engine ✅ COMPLETE
+## Phase 2: Strategy Engine ✅ COMPLETE (with gap closure pending)
 
 **Objective:** Technical indicators and multi-factor signal generation.
 
-**Status:** ✅ Complete (2026-03-20)
-**Duration:** 3–4 days
+**Status:** ✅ Complete (2026-03-20), ⚠️ Gap closure pending (2026-03-22)
+**Duration:** 3–4 days (base), 0.5 days (gap closure)
 **Priority:** High
 
 ### Requirements Mapped
@@ -58,15 +58,25 @@ SwingTrade is a 7-phase project to build a production swing trading system for I
 - REQ-007d: ATR-based Stops (entry − 2×ATR, target +2.5×risk) ✅
 - REQ-008a: 4-factor entry logic ✅
 - REQ-008b: Exit logic (stop/target/time/EMA break) ✅
-- REQ-009: Scheduled signal generation at 17:00 IST ✅
-- REQ-010: Backtest engine ✅
+- REQ-009: Scheduled signal generation at 17:00 IST ✅ ⚠️ Redis caching pending
+- REQ-010: Backtest engine ✅ ⚠️ Performance metrics pending
 
 ### Success Criteria
 
 - [x] All indicators implemented (TA4J v0.16)
 - [x] 4-factor signal generation working
-- [x] Backtest engine calculates accurate metrics
+- [ ] Backtest engine calculates accurate metrics (Sharpe ratio, Max drawdown, Avg trade duration)
 - [x] Scheduled signal generation runs at 17:00 IST
+- [ ] Redis caching implemented for SignalEngine
+
+### Gap Closure Plans
+
+| Plan | Objective | Status |
+|------|-----------|--------|
+| 02-01 | Add Redis caching to SignalEngine (@EnableCaching, @Cacheable, @CacheEvict) | Created |
+| 02-02 | Implement BacktestEngine performance metrics (Sharpe, MaxDrawdown, AvgTradeDuration) | Created |
+
+Plans to execute: `/gsd:execute-phase 02 --gaps-only`
 
 ---
 
@@ -109,11 +119,11 @@ SwingTrade is a 7-phase project to build a production swing trading system for I
 
 ---
 
-## Phase 4: LLM Sentiment Layer ⚠️ PARTIAL
+## Phase 4: LLM Sentiment Layer ⚠️ PARTIAL → PLANNED
 
 **Objective:** News ingestion, sentiment analysis, signal filtering.
 
-**Status:** ⚠️ Partial (module exists, integration TBD)
+**Status:** ⚠️ Partial (module exists, integration TBD) → **PLANNED** (3 plans)
 **Duration:** 1–2 weeks
 **Priority:** High
 **Blocking:** Phase 5 cannot start until Phase 4 verified
@@ -136,14 +146,49 @@ SwingTrade is a 7-phase project to build a production swing trading system for I
 - [ ] Weekly sector digest sent Sunday 17:00 IST
 - [ ] Integration tests pass with TestContainers
 
+### Plans
+
+**3 plans** in 3 waves
+
+#### Plan 01: SignalEngine Sentiment Integration (Wave 1)
+- **Objective:** Integrate sentiment filtering into SignalEngine
+- **Files Modified:** SignalEngine.java, SignalEntity.java, SentimentResultRepository.java
+- **Tasks:**
+  1. Add SentimentAnalysisService dependency to SignalEngine
+  2. Add sentiment check before signal save in generateSignalsForSymbol
+  3. Add warning flag field to SignalEntity
+  4. Add SentimentResultRepository if not exists
+- **Requirement:** REQ-028
+
+#### Plan 02: Weekly Sector Digest (Wave 2)
+- **Objective:** Implement weekly sector digest scheduled job
+- **Files Modified:** LlmConfig.java, SentimentAnalysisService.java
+- **Tasks:**
+  1. Add sector digest generation method to SentimentAnalysisService
+  2. Add Telegram notification integration
+  3. Add scheduled job to LlmConfig
+  4. Verify Scheduling configuration
+- **Requirement:** REQ-029
+
+#### Plan 03: Test Infrastructure (Wave 3)
+- **Objective:** Create comprehensive test suite for LLM module
+- **Files Modified:** 5 test classes + test resources
+- **Tasks:**
+  1. Create VLLMClientTest with MockServer (REQ-025)
+  2. Create NewsIngestionServiceTest (REQ-026)
+  3. Create SentimentAnalyzerTest (REQ-027)
+  4. Create SentimentFilteringTest (REQ-028)
+  5. Create SectorDigestTest (REQ-029)
+  6. Create test resources configuration
+- **Requirements:** REQ-025, REQ-026, REQ-027, REQ-028, REQ-029
+
 ### What Needs to Be Done
 
-1. **Verify LLM module:** Confirm all classes exist and are integrated
-2. **Verify news ingestion:** Google News RSS, NSE API, 7-day history
-3. **Verify sentiment pipeline:** Structured prompt, vLLM response parsing
-4. **Verify signal filtering:** Integration with SignalEngine, NEGATIVE suppression
-5. **Verify scheduling:** Weekly digest job Sundays, Telegram formatting
-6. **Add integration tests:** TestContainers for PostgreSQL, MockRestServiceServer for vLLM
+Execute Phase 4 plans in order: `/gsd:execute-phase 04`
+
+1. **Plan 01:** SignalEngine integration with sentiment filtering
+2. **Plan 02:** Weekly sector digest scheduled job
+3. **Plan 03:** Comprehensive test infrastructure
 
 ---
 
@@ -239,11 +284,11 @@ SwingTrade is a 7-phase project to build a production swing trading system for I
 ```
 Phase 1: Core Domain ✅
     │
-    ├──> Phase 2: Strategy Engine ✅
+    ├──> Phase 2: Strategy Engine ✅ (gap closure pending)
     │       │
     │       ├──> Phase 3: Data Pipeline + Paper Trading ✅
     │       │       │
-    │       │       ├──> Phase 4: LLM Sentiment ⚠️ (verification needed)
+    │       │       ├──> Phase 4: LLM Sentiment ⚠️ (PLANNED)
     │       │       │       │
     │       │       │       ├──> Phase 5: Testing Foundation ⏳
     │       │       │       │       │
@@ -268,11 +313,11 @@ Phase 1: Core Domain ✅
 ## Timeline Summary
 
 | Phase | Status | Target Start | Target End |
-|-------|--------|--------------|-----------|
+|-------|--------|--------------|------------|
 | 1 | ✅ Complete | 2026-03-15 | 2026-03-20 |
-| 2 | ✅ Complete | 2026-03-15 | 2026-03-20 |
+| 2 | ⚠️ Gap closure | 2026-03-22 | 2026-03-22 |
 | 3 | ✅ Complete | 2026-03-15 | 2026-03-20 |
-| 4 | ⏳ In Planning | 2026-03-23 | 2026-04-06 |
+| 4 | 📋 **PLANNED** | **2026-03-23** | **2026-04-06** |
 | 5 | ⏳ Pending Phase 4 | 2026-04-07 | 2026-04-30 |
 | 6 | ⏳ Pending Phase 5 | 2026-05-01 | 2026-05-15 |
 | 7 | ⏳ Pending Phase 6 | 2026-05-15 | 2026-06-30 |
@@ -281,15 +326,18 @@ Phase 1: Core Domain ✅
 
 ## Next Immediate Action
 
-**Phase 4 (LLM Sentiment Layer) Verification**
+**Phase 4: LLM Sentiment Layer Planning Complete**
 
-The LLM module exists but needs verification:
+Phase 4 has been planned with 3 sequential plans covering all requirements:
 
-1. Run `/gsd:plan-phase 4` to create detailed implementation plan
-2. Verify news ingestion pipeline completeness
-3. Verify sentiment filtering integration with SignalEngine
-4. After Phase 4 verified, run `/gsd:plan-phase 5` for testing foundation
+1. **Plan 01:** SignalEngine sentiment filtering integration (REQ-028)
+2. **Plan 02:** Weekly sector digest scheduled job (REQ-029)
+3. **Plan 03:** Comprehensive test infrastructure (REQ-025 to REQ-029)
+
+**Execute Phase 4:** `/gsd:execute-phase 04`
+
+After Phase 4 completion, proceed to Phase 5 (Testing Foundation) for 80%+ code coverage.
 
 ---
 
-*Roadmap: 2026-03-22 (Re-initialized with 7 phases, full context)*
+*Roadmap: 2026-03-22 (Phase 4 plans created: 04-01, 04-02, 04-03)*
