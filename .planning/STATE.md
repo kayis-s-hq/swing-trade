@@ -4,13 +4,13 @@ milestone: v0.16
 milestone_name: milestone
 status: executing
 current_phase: 04-llm-sentiment-layer
-current_plan: 01
-last_updated: "2026-03-22T22:17:00.000Z"
+current_plan: 02
+last_updated: "2026-03-22T23:45:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # STATE.md - Current Project State
@@ -37,7 +37,7 @@ progress:
 | **Data Ingestion** | ✅ Scheduled | Auto-ingests at 16:30 IST (weekday) |
 | **Signal Engine** | ✅ Scheduled | Auto-generates at 17:00 IST (weekday) |
 | **Paper Trading** | ✅ Running | Order execution, position tracking, P&L working |
-| **LLM Module** | ⚠️ Partial | Exists but integration completeness TBD |
+| **LLM Module** | ✅ Partial | Sentiment analysis + weekly digest scheduling implemented |
 | **REST API** | ✅ Operational | 15+ endpoints serving requests |
 | **Telegram Alerts** | ✅ Working | Trade events notified |
 | **Risk Controls** | ✅ Enforced | 5 position limit, 20% size cap, daily loss circuit |
