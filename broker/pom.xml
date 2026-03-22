@@ -122,6 +122,12 @@
             <artifactId>logback-classic</artifactId>
         </dependency>
 
+        <!-- Micrometer for Prometheus metrics -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
