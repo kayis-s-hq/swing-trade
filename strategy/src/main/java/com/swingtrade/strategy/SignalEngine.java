@@ -1,6 +1,7 @@
 package com.swingtrade.strategy;
 
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
@@ -132,6 +133,28 @@ public class SignalEngine {
                 .collect(Collectors.toList());
 
         Signal signal = strategy.analyze(domainCandles);
+
+        // NEW: Check sentiment before saving for BUY signals
+        try {
+            if (signal.type() == Signal.SignalType.BUY) {
+                SentimentResult sentiment = sentimentAnalysisService.analyzeStockSentiment(symbol, latestDate);
+
+                if (sentiment.isNegative()) {
+                    logger.info("Suppressing BUY signal for {} on {} due to NEGATIVE sentiment (reasoning: {})",
+                               symbol, latestDate, sentiment.summary());
+                    return; // Don't save - signal suppressed
+                }
+
+                if (sentiment.isNeutral()) {
+                    logger.info("Saving NEUTRAL sentiment signal for {} on {} (reasoning: {})",
+                               symbol, latestDate, sentiment.summary());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to check sentiment for {} on {}: {}, saving signal anyway",
+                       symbol, latestDate, e.getMessage());
+            // Continue saving signal - sentiment check failure should not block signals
+        }
 
         // Save signal
         SignalEntity signalEntity = new SignalEntity();
