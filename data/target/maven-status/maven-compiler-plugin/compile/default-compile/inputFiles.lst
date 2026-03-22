@@ -4,11 +4,13 @@
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/config/UpstoxConfig.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/entity/OhlcvCandleEntity.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/entity/PositionEntity.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/entity/SentimentResultEntity.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/entity/SignalEntity.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/entity/StockEntity.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/model/CandleData.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/repository/OhlcvCandleRepository.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/repository/PositionRepository.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/repository/SentimentResultRepository.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/repository/SignalRepository.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/repository/StockRepository.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/service/CandleData.java

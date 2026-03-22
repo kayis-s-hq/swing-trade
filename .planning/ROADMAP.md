@@ -204,11 +204,11 @@ Execute Phase 4 plans in order: `/gsd:execute-phase 04`
 
 ---
 
-## Phase 5: Testing Foundation ⏳ DEFERRED
+## Phase 5: Testing Foundation 📋 PLANNED
 
 **Objective:** Unit + integration tests, 80%+ code coverage.
 
-**Status:** ⏳ Deferred (start after Phase 4 verified)
+**Status:** 📋 **Planned** (6 plans created)
 **Duration:** 2–3 weeks
 **Priority:** High
 **Depends On:** Phase 4 completion
@@ -216,12 +216,14 @@ Execute Phase 4 plans in order: `/gsd:execute-phase 04`
 
 ### Requirements Mapped
 
-- REQ-101: Core domain unit tests ⏳
-- REQ-102: Strategy module unit tests ⏳
-- REQ-103: TestContainers integration ⏳
-- REQ-104: MockRestServiceServer (NOT WireMock) ⏳
-- REQ-105: API endpoint tests ⏳
-- REQ-106: JaCoCo coverage (80%+) ⏳
+| Req ID | Description | Plan Coverage |
+|--------|-------------|---------------|
+| REQ-101 | Core domain unit tests | Plan 01 |
+| REQ-102 | Strategy module unit tests | Plan 02 |
+| REQ-103 | TestContainers integration | Plan 03 |
+| REQ-104 | MockRestServiceServer (NOT WireMock) | Plan 04 |
+| REQ-105 | API endpoint tests | Plan 05 |
+| REQ-106 | JaCoCo coverage (80%+) | Plan 06 |
 
 ### Success Criteria
 
@@ -231,6 +233,59 @@ Execute Phase 4 plans in order: `/gsd:execute-phase 04`
 - [ ] strategy: 85%+ coverage
 - [ ] data, broker, api, llm: 80%+ coverage
 - [ ] JaCoCo Maven profile working (`mvn clean install -P coverage`)
+
+### Plans
+
+**6 plans** in 6 waves
+
+#### Plan 01: Core Domain Unit Tests (Wave 1)
+- **Objective:** Unit tests for all domain models (100% coverage)
+- **Requirement IDs:** REQ-101
+- **Files Modified:** StockTest.java, OhlcvCandleTest.java, SignalTest.java, PositionTest.java, TradeTest.java, SentimentResultTest.java
+- **Wave:** 1 (no dependencies)
+
+#### Plan 02: Strategy Unit Tests (Wave 2)
+- **Objective:** Unit tests for TechnicalIndicators, DefaultStrategy, BacktestEngine (85%+ coverage)
+- **Requirement IDs:** REQ-102
+- **Files Modified:** TechnicalIndicatorsTest.java, DefaultStrategyTest.java, DefaultBacktestEngineTest.java
+- **Wave:** 2 (depends on Plan 01)
+
+#### Plan 03: TestContainers Integration (Wave 3)
+- **Objective:** Integration tests with PostgreSQL + TimescaleDB TestContainers
+- **Requirement IDs:** REQ-103
+- **Files Modified:** TestContainersConfig.java, FlywayMigrationTest.java, RepositoryIntegrationTest.java
+- **Wave:** 3 (depends on Plan 02)
+
+#### Plan 04: HTTP Mocking with MockRestServiceServer (Wave 4)
+- **Objective:** Mock Upstox API and vLLM using Spring MockRestServiceServer (NOT WireMock)
+- **Requirement IDs:** REQ-104
+- **Files Modified:** UpstoxRestClientTest.java, VLLMClientTest.java
+- **Wave:** 4 (depends on Plan 03)
+
+#### Plan 05: API Endpoint Tests (Wave 5)
+- **Objective:** @SpringBootTest + MockMvc tests for REST endpoints
+- **Requirement IDs:** REQ-105
+- **Files Modified:** SignalControllerTest.java, TradingControllerTest.java, PositionControllerTest.java, HealthControllerTest.java
+- **Wave:** 5 (depends on Plan 04)
+
+#### Plan 06: JaCoCo Coverage Configuration (Wave 6)
+- **Objective:** Configure JaCoCo Maven profile with module-specific thresholds
+- **Requirement IDs:** REQ-106
+- **Files Modified:** 6 pom.xml files (core, data, strategy, llm, broker, api)
+- **Wave:** 6 (depends on Plan 05)
+
+### What Needs to Be Done
+
+Execute Phase 5 plans in order: `/gsd:execute-phase 05`
+
+1. **Plan 01:** Core domain unit tests (100% coverage)
+2. **Plan 02:** Strategy unit tests (85%+ coverage)
+3. **Plan 03:** TestContainers integration tests
+4. **Plan 04:** HTTP mocking tests (MockRestServiceServer)
+5. **Plan 05:** API endpoint tests
+6. **Plan 06:** JaCoCo coverage configuration
+
+---
 
 ### Key Implementation Decisions
 
@@ -361,6 +416,16 @@ After Phase 4 completion, proceed to Phase 5 (Testing Foundation) for 80%+ code 
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 8 to break down)
+
+### Phase 9: replace telegram with signal
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 8
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 9 to break down)
 
 ---
 

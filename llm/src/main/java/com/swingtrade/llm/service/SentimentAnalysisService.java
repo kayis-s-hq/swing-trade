@@ -1,9 +1,12 @@
 package com.swingtrade.llm.service;
 
 import com.swingtrade.data.entity.SentimentResultEntity;
+import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.repository.SentimentResultRepository;
+import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.Stock;
 import com.swingtrade.llm.SentimentAnalysisResult;
 import com.swingtrade.llm.SentimentType;
 import com.swingtrade.llm.client.VLLMClient;
@@ -18,6 +21,8 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
@@ -44,6 +49,7 @@ public class SentimentAnalysisService {
     private final NewsIngestionService newsIngestionService;
     private final SentimentCacheService sentimentCacheService;
     private final SentimentResultRepository sentimentResultRepository;
+    private final StockRepository stockRepository;
 
     private final int maxCacheSize;
     private final long cacheExpiryMinutes;
@@ -69,6 +75,7 @@ public class SentimentAnalysisService {
             NewsIngestionService newsIngestionService,
             SentimentCacheService sentimentCacheService,
             SentimentResultRepository sentimentResultRepository,
+            StockRepository stockRepository,
             @Value("${llm.sentiment.cache.max-size:100}") int maxCacheSize,
             @Value("${llm.sentiment.cache.expiry-minutes:60}") long cacheExpiryMinutes,
             @Value("${llm.sentiment.cache.enabled:true}") boolean enableCaching,
@@ -79,6 +86,7 @@ public class SentimentAnalysisService {
         this.newsIngestionService = newsIngestionService;
         this.sentimentCacheService = sentimentCacheService;
         this.sentimentResultRepository = sentimentResultRepository;
+        this.stockRepository = stockRepository;
 
         this.maxCacheSize = maxCacheSize;
         this.cacheExpiryMinutes = cacheExpiryMinutes;
@@ -655,6 +663,274 @@ public class SentimentAnalysisService {
             analysisExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
+    }
+
+    // ============ Weekly Sector Digest Methods ============
+
+    /**
+     * Generates a weekly sector sentiment digest.
+     * Groups sentiment results by stock sector and identifies top positive/negative sectors.
+     *
+     * @param startDate the start date of the date range (inclusive)
+     * @param endDate the end date of the date range (inclusive)
+     * @return formatted digest string ready for Telegram
+     */
+    public String generateSectorDigest(LocalDate startDate, LocalDate endDate) {
+        logger.info("Generating sector digest for date range: {} to {}", startDate, endDate);
+
+        // Fetch all sentiment results in date range
+        List<SentimentResultEntity> results = sentimentResultRepository
+                .findAllByDateBetween(startDate, endDate);
+
+        if (results.isEmpty()) {
+            return formatEmptyDigest(startDate, endDate);
+        }
+
+        // Convert to domain objects
+        List<SentimentResult> domainResults = results.stream()
+                .map(SentimentResultEntity::toDomain)
+                .collect(Collectors.toList());
+
+        // Group by sector and count sentiment
+        Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> sectorCounts =
+                groupBySectorAndSentiment(domainResults);
+
+        // Get sector names for each symbol
+        Map<String, Stock.Sector> symbolToSector = buildSymbolToSectorMap(domainResults);
+
+        // Identify top sectors
+        List<Stock.Sector> topPositiveSectors = getTopSectors(sectorCounts, 3, true);
+        List<Stock.Sector> topNegativeSectors = getTopSectors(sectorCounts, 3, false);
+
+        // Calculate totals
+        long totalStocks = symbolToSector.size();
+        long totalPositive = sectorCounts.values().stream()
+                .map(m -> m.get(SentimentResult.SentimentScore.POSITIVE))
+                .filter(Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .sum();
+        long totalNeutral = sectorCounts.values().stream()
+                .map(m -> m.get(SentimentResult.SentimentScore.NEUTRAL))
+                .filter(Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .sum();
+        long totalNegative = sectorCounts.values().stream()
+                .map(m -> m.get(SentimentResult.SentimentScore.NEGATIVE))
+                .filter(Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .sum();
+
+        return formatSectorDigest(
+                startDate, endDate, sectorCounts, topPositiveSectors,
+                topNegativeSectors, totalStocks, totalPositive, totalNeutral, totalNegative,
+                symbolToSector
+        );
+    }
+
+    /**
+     * Groups sentiment results by stock sector and sentiment score.
+     *
+     * @param results list of sentiment results
+     * @return map of sector -> (sentiment score -> count)
+     */
+    public Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> groupBySectorAndSentiment(
+            List<SentimentResult> results) {
+
+        Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> sectorMap = new HashMap<>();
+
+        for (SentimentResult result : results) {
+            Stock.Sector sector = getSectorForSymbol(result.symbol());
+            if (sector == null) {
+                sector = Stock.Sector.OTHERS;
+            }
+
+            SentimentResult.SentimentScore score = result.score();
+
+            sectorMap.computeIfAbsent(sector, k -> new HashMap<>());
+            sectorMap.get(sector).merge(score, 1L, Long::sum);
+        }
+
+        return sectorMap;
+    }
+
+    /**
+     * Gets sector for a symbol by looking up in the database.
+     *
+     * @param symbol stock symbol
+     * @return the sector for the stock, or null if not found
+     */
+    public Stock.Sector getSectorForSymbol(String symbol) {
+        Optional<StockEntity> stock = stockRepository.findBySymbol(symbol);
+        return stock.map(StockEntity::toDomain)
+                .map(Stock::sector)
+                .orElse(null);
+    }
+
+    /**
+     * Builds a map of symbol to sector from sentiment results.
+     *
+     * @param results list of sentiment results
+     * @return map of symbol -> sector
+     */
+    private Map<String, Stock.Sector> buildSymbolToSectorMap(List<SentimentResult> results) {
+        Map<String, Stock.Sector> map = new HashMap<>();
+
+        for (SentimentResult result : results) {
+            if (!map.containsKey(result.symbol().toUpperCase())) {
+                Stock.Sector sector = getSectorForSymbol(result.symbol().toUpperCase());
+                map.put(result.symbol().toUpperCase(), sector != null ? sector : Stock.Sector.OTHERS);
+            }
+        }
+
+        return map;
+    }
+
+    /**
+     * Gets top sectors by a specific sentiment score.
+     *
+     * @param sectorCounts map of sector -> (sentiment score -> count)
+     * @param count number of top sectors to return
+     * @param positive if true, get top positive sectors; if false, get top negative
+     * @return list of top sectors
+     */
+    public List<Stock.Sector> getTopSectors(
+            Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> sectorCounts,
+            int count, boolean positive) {
+
+        return sectorCounts.entrySet().stream()
+                .sorted(Map.Entry.<Stock.Sector, Map<SentimentResult.SentimentScore, Long>>comparingByValue(
+                        (m1, m2) -> {
+                            Long v1 = positive ?
+                                    m1.getOrDefault(SentimentResult.SentimentScore.POSITIVE, 0L) :
+                                    m1.getOrDefault(SentimentResult.SentimentScore.NEGATIVE, 0L);
+                            Long v2 = positive ?
+                                    m2.getOrDefault(SentimentResult.SentimentScore.POSITIVE, 0L) :
+                                    m2.getOrDefault(SentimentResult.SentimentScore.NEGATIVE, 0L);
+                            return Long.compare(v2, v1); // Descending order
+                        }
+                ))
+                .limit(count)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Formats the sector digest output string for Telegram.
+     *
+     * @param startDate start date of the range
+     * @param endDate end date of the range
+     * @param sectorCounts map of sector sentiment counts
+     * @param topPositiveSectors list of top positive sectors
+     * @param topNegativeSectors list of top negative sectors
+     * @param totalStocks total number of stocks analyzed
+     * @param totalPositive total positive signals
+     * @param totalNeutral total neutral signals
+     * @param totalNegative total negative signals
+     * @param symbolToSector map of symbol to sector
+     * @return formatted digest string
+     */
+    private String formatSectorDigest(
+            LocalDate startDate, LocalDate endDate,
+            Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> sectorCounts,
+            List<Stock.Sector> topPositiveSectors,
+            List<Stock.Sector> topNegativeSectors,
+            long totalStocks, long totalPositive, long totalNeutral, long totalNegative,
+            Map<String, Stock.Sector> symbolToSector) {
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("📊 Weekly Sector Sentiment Digest\n");
+        sb.append(String.format("Week of: %s to %s\n\n", startDate, endDate));
+
+        // Top Positive Sectors
+        sb.append("*Top Positive Sectors:*\n");
+        int posIndex = 1;
+        for (Stock.Sector sector : topPositiveSectors) {
+            Map<SentimentResult.SentimentScore, Long> counts = sectorCounts.get(sector);
+            String posCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.POSITIVE, 0L).toString() : "0";
+            String neuCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.NEUTRAL, 0L).toString() : "0";
+            String negCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.NEGATIVE, 0L).toString() : "0";
+
+            sb.append(String.format("%d. %s - %s POS, %s NEU, %s NEG\n",
+                    posIndex++, sector.name(), posCount, neuCount, negCount));
+        }
+
+        if (topPositiveSectors.isEmpty()) {
+            sb.append("No positive sectors data available\n");
+        }
+
+        sb.append("\n*Top Negative Sectors:*\n");
+        int negIndex = 1;
+        for (Stock.Sector sector : topNegativeSectors) {
+            Map<SentimentResult.SentimentScore, Long> counts = sectorCounts.get(sector);
+            String posCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.POSITIVE, 0L).toString() : "0";
+            String neuCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.NEUTRAL, 0L).toString() : "0";
+            String negCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.NEGATIVE, 0L).toString() : "0";
+
+            sb.append(String.format("%d. %s - %s POS, %s NEU, %s NEG\n",
+                    negIndex++, sector.name(), posCount, neuCount, negCount));
+        }
+
+        if (topNegativeSectors.isEmpty()) {
+            sb.append("No negative sectors data available\n");
+        }
+
+        // Summary stats
+        sb.append("\n*Summary Statistics*:\n");
+        sb.append(String.format("Total stocks analyzed: %d\n", totalStocks));
+        sb.append(String.format("Positive signals: %d | Neutral: %d | Negative: %d\n",
+                totalPositive, totalNeutral, totalNegative));
+
+        return sb.toString();
+    }
+
+    /**
+     * Formats an empty digest when no sentiment data is available.
+     *
+     * @param startDate start date of the range
+     * @param endDate end date of the range
+     * @return formatted empty digest string
+     */
+    private String formatEmptyDigest(LocalDate startDate, LocalDate endDate) {
+        return String.format(
+                "📊 Weekly Sector Sentiment Digest\n" +
+                "Week of: %s to %s\n\n" +
+                "No sentiment data available for the specified date range.\n\n" +
+                "*Summary Statistics*:\n" +
+                "Total stocks analyzed: 0\n" +
+                "Positive signals: 0 | Neutral: 0 | Negative: 0",
+                startDate, endDate
+        );
+    }
+
+    /**
+     * Generates sector digest for the last calendar week (Sunday to Saturday).
+     * This is called by the scheduled job.
+     *
+     * @return formatted digest string ready for Telegram
+     */
+    public String generateSectorDigestForLastWeek() {
+        ZoneId ist = ZoneId.of("Asia/Kolkata");
+        LocalDate today = LocalDate.now(ist);
+
+        // Get last Sunday (or today if today is Sunday)
+        LocalDate endDate = today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.SUNDAY));
+
+        // If today is Sunday, use today as end, otherwise use Saturday of this week
+        if (!today.equals(endDate)) {
+            endDate = today.minusDays(1).with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.SUNDAY));
+        }
+
+        // Get start date (previous Monday, or 7 days before end date)
+        LocalDate startDate = endDate.minusDays(6);
+
+        logger.info("Generating sector digest for week: {} to {}", startDate, endDate);
+        return generateSectorDigest(startDate, endDate);
     }
 
     // ============ Inner Classes ============

@@ -111,3 +111,4 @@ progress:
 ## Roadmap Evolution
 
 - Phase 8 added: Vue Dashboard + Monitoring UI
+- Phase 9 added: replace telegram with signal

@@ -1,6 +1,8 @@
 com/swingtrade/data/repository/OhlcvCandleRepository.class
+com/swingtrade/data/repository/SentimentResultRepository.class
 com/swingtrade/data/entity/SignalEntity.class
 com/swingtrade/data/repository/StockRepository.class
+com/swingtrade/data/entity/SentimentResultEntity.class
 com/swingtrade/data/service/UpstoxRestClient$InstrumentResponse.class
 com/swingtrade/data/model/CandleData.class
 com/swingtrade/data/Application.class
