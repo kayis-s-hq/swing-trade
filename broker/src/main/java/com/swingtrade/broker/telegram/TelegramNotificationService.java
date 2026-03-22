@@ -523,7 +523,7 @@ public class TelegramNotificationService {
                 riskControlsService.setKillSwitchActive(true);
             }
 
-            logger.warn("Kill switch activated via Telegram from chat: {}", chatId);
+            log.warn("Kill switch activated via Telegram from chat: {}", chatId);
         } else {
             sendMessageToChat("https://api.telegram.org/bot" + botToken, chatId,
                     "ℹ️ Kill switch is already active.\n" +
@@ -551,7 +551,7 @@ public class TelegramNotificationService {
                 riskControlsService.setKillSwitchActive(false);
             }
 
-            logger.info("Kill switch deactivated via Telegram from chat: {}", chatId);
+            log.info("Kill switch deactivated via Telegram from chat: {}", chatId);
         } else {
             sendMessageToChat("https://api.telegram.org/bot" + botToken, chatId,
                     "ℹ️ Kill switch is already inactive.\n" +
@@ -626,22 +626,6 @@ public class TelegramNotificationService {
      */
     public String getKillSwitchReason() {
         return killSwitchReason;
-    }
-
-    /**
-     * Send message to a specific chat.
-     */
-    private void sendMessageToChat(String botUrl, String chatId, String message) {
-        if (chatId == null || chatId.trim().isEmpty()) {
-            logger.warn("Cannot send message: empty chat ID");
-            return;
-        }
-
-        try {
-            sendMessageToChat(botUrl, chatId.trim(), message);
-        } catch (Exception e) {
-            logger.error("Failed to send message to chat {}: {}", chatId, e.getMessage());
-        }
     }
 
     /**

@@ -171,11 +171,11 @@ public class OrderManager {
         Order order = createMarketOrder(symbol, direction, quantity, entryPrice);
 
         // Attach signal parameters to order (stored as metadata)
-        order.setAdditionalProperties(Map.of(
-            "stopLoss", stopLoss != null ? stopLoss.toString() : null,
-            "target", target != null ? target.toString() : null,
-            "signalType", signalType
-        ));
+        Map<String, Object> props = new java.util.HashMap<>();
+        props.put("stopLoss", stopLoss != null ? stopLoss.toString() : "");
+        props.put("target", target != null ? target.toString() : "");
+        props.put("signalType", signalType);
+        order.setAdditionalProperties(props);
 
         return order;
     }

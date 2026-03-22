@@ -163,7 +163,7 @@ public class TelegramMessageFormatter {
           .append("</code>\n");
         sb.append("💵 <b>Total Value:</b> <code>")
           .append(formatPrice(position.getEntryPrice().multiply(
-              new BigDecimal(position.getQuantity()))))
+              position.getQuantity())))
           .append("</code>\n");
         sb.append("🛑 <b>Stop Loss:</b> <code>")
           .append(formatPrice(position.getSlPrice()))

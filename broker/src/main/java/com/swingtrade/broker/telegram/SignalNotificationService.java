@@ -2,7 +2,8 @@ package com.swingtrade.broker.telegram;
 
 import com.swingtrade.broker.model.Position;
 import com.swingtrade.domain.Trade;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -31,8 +32,9 @@ import java.util.Map;
  * @author SwingTrade Team
  */
 @Service
-@Slf4j
 public class SignalNotificationService {
+
+    private static final Logger log = LoggerFactory.getLogger(SignalNotificationService.class);
 
     private static final DateTimeFormatter MESSAGE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");

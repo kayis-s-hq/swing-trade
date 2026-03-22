@@ -196,7 +196,7 @@ public class PositionManager {
      * @param position the position to check
      * @param candleData the candle data with OHLC prices
      */
-    private void checkPositionTriggers(Position position, OhlcvCandle candleData) {
+    public void checkPositionTriggers(Position position, OhlcvCandle candleData) {
         if (position.getStatus() != PositionStatus.OPEN) {
             return;
         }
@@ -360,7 +360,7 @@ public class PositionManager {
      * @param reason the reason for closing
      * @return the closed position
      */
-    private Position closePosition(Position position, PositionStatus status, String reason) {
+    Position closePosition(Position position, PositionStatus status, String reason) {
         if (position.getStatus() == PositionStatus.CLOSED ||
             position.getStatus() == PositionStatus.STOPPED ||
             position.getStatus() == PositionStatus.TARGET_HIT) {
@@ -376,7 +376,7 @@ public class PositionManager {
         position.setExitTime(LocalDateTime.now());
         position.setProfitLoss(realizedPnL);
 
-        logger.info("Closed position {} with status {} at {} - Reason: {} | P&L: {} ({:.2f}%)",
+        logger.info("Closed position {} with status {} at {} - Reason: {} | P&L: {} ({}%)",
             position.getPositionId(), status, exitPrice, reason, realizedPnL,
             calculatePnLPercentage(position));
 

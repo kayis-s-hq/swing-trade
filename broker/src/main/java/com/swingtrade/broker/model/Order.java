@@ -2,6 +2,8 @@ package com.swingtrade.broker.model;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Represents a trading order in the paper trading system.
@@ -20,6 +22,7 @@ public class Order {
     private LocalDateTime timestamp;
     private LocalDateTime executionTime;
     private BigDecimal commission;
+    private Map<String, Object> additionalProperties;
     
     /**
      * Creates a new order with default values.
@@ -150,5 +153,13 @@ public class Order {
     
     public void setCommission(BigDecimal commission) {
         this.commission = commission;
+    }
+
+    public Map<String, Object> getAdditionalProperties() {
+        return additionalProperties;
+    }
+
+    public void setAdditionalProperties(Map<String, Object> additionalProperties) {
+        this.additionalProperties = additionalProperties;
     }
 }

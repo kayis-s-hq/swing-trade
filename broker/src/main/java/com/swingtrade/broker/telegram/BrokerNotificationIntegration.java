@@ -4,7 +4,8 @@ import com.swingtrade.broker.model.Position;
 import com.swingtrade.broker.service.BrokerService;
 import com.swingtrade.domain.Trade;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -32,8 +33,9 @@ import java.math.BigDecimal;
  */
 @Component
 @RequiredArgsConstructor
-@Slf4j
 public class BrokerNotificationIntegration {
+
+    private static final Logger log = LoggerFactory.getLogger(BrokerNotificationIntegration.class);
 
     private final SignalNotificationService signalService;
     private final BrokerService brokerService;
@@ -154,7 +156,7 @@ public class BrokerNotificationIntegration {
      * Error notifications are deferred.
      */
     @Deprecated
-    public boolean onError(String errorType, String message, SignalNotificationService.ErrorSeverity severity) {
+    public boolean onError(String errorType, String message, String severity) {
         log.error("Broker error [{}]: {}", errorType, message);
         return false;
     }
@@ -181,7 +183,7 @@ public class BrokerNotificationIntegration {
      * Daily summaries are deferred.
      */
     @Deprecated
-    public boolean onDailySummary(SignalNotificationService.DailySummary summary) {
+    public boolean onDailySummary(Object summary) {
         log.info("Daily summaries are deferred");
         return false;
     }

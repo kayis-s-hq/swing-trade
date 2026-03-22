@@ -29,6 +29,7 @@ public class Position {
     private LocalDateTime lastUpdated;
     private List<Order> orders;
     private BigDecimal marginUtilized;
+    private String entryReason;
     
     /**
      * Creates a new position with default values.
@@ -116,7 +117,11 @@ public class Position {
     public BigDecimal getProfitLoss() {
         return profitLoss;
     }
-    
+
+    public void setProfitLoss(BigDecimal profitLoss) {
+        this.profitLoss = profitLoss;
+    }
+
     private void calculateProfitLoss() {
         if (entryPrice.compareTo(BigDecimal.ZERO) == 0) {
             profitLoss = BigDecimal.ZERO;
@@ -234,5 +239,13 @@ public class Position {
 
     public void setMarginUtilized(BigDecimal marginUtilized) {
         this.marginUtilized = marginUtilized;
+    }
+
+    public String getEntryReason() {
+        return entryReason;
+    }
+
+    public void setEntryReason(String entryReason) {
+        this.entryReason = entryReason;
     }
 }

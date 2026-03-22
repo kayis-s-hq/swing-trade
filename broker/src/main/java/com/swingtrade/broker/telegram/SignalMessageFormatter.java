@@ -3,10 +3,10 @@ package com.swingtrade.broker.telegram;
 import com.swingtrade.broker.model.Position;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Trade;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
@@ -36,7 +36,6 @@ import java.time.format.DateTimeFormatter;
  * @author SwingTrade Team
  */
 @Component
-@Slf4j
 public class SignalMessageFormatter {
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -73,7 +72,7 @@ public class SignalMessageFormatter {
           .append("</code>\n");
         sb.append("💵 <b>Total Value:</b> <code>")
           .append(formatPrice(position.getEntryPrice().multiply(
-              new BigDecimal(position.getQuantity()))))
+              position.getQuantity())))
           .append("</code>\n");
 
         // Stop loss and target

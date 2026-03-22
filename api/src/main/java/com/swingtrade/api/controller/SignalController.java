@@ -405,7 +405,7 @@ public class SignalController {
         private Double emaFast;
         private Double emaSlow;
         private Double atr;
-        private DoublebollingerBandUpper;
+        private Double bollingerBandUpper;
         private Double bollingerBandLower;
         private Double volume;
         private Double avgVolume;
