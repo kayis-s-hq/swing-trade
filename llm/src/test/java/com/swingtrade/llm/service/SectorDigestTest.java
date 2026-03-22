@@ -1,166 +1,320 @@
 package com.swingtrade.llm.service;
 
+import com.swingtrade.data.repository.SentimentResultRepository;
+import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Stock;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for SentimentAnalysisService sector digest functionality.
- * Tests the core methods directly without complex mocking.
+ * Enhanced unit tests for SentimentAnalysisService sector digest functionality.
+ * Tests the actual service methods that group sentiment results by sector and identify top sectors.
+ *
+ * Test coverage:
+ * - groupBySectorAndSentiment() correctly groups results by sector and counts sentiment scores
+ * - getTopSectors() identifies top positive sectors by count
+ * - getTopSectors() identifies top negative sectors by count
+ * - generateSectorDigest() formats complete digest with date range, sectors, and statistics
  */
+@DisplayName("SectorDigest Service Tests")
+@ExtendWith(MockitoExtension.class)
 class SectorDigestTest {
 
-    /**
-     * Test that groupBySectorAndSentiment correctly groups sentiment results by sector
-     */
-    @Test
-    void testGroupBySectorAndSentiment() {
-        // This test is designed to be run with a mocked SentimentAnalysisService
-        // or with integration testing where the service is properly instantiated
-        List<SentimentResult> results = buildMockSentimentResults();
+    private SentimentAnalysisService sentimentAnalysisService;
 
-        // Note: In real testing, we would have the service injected
-        // For now, we verify the test data structure is valid
-        assertThat(results).isNotEmpty();
-        assertThat(results.size()).isGreaterThan(0);
+    @Mock
+    private SentimentResultRepository sentimentResultRepository;
+
+    @Mock
+    private StockRepository stockRepository;
+
+    @BeforeEach
+    void setUp() {
+        // Create real SentimentAnalysisService with mocked repositories
+        sentimentAnalysisService = new SentimentAnalysisService(
+                null,  // vllmClient not needed for sector digest tests
+                null,  // sentimentAnalyzer not needed
+                null,  // newsIngestionService not needed
+                null,  // sentimentCacheService not needed
+                sentimentResultRepository,
+                stockRepository,
+                100,   // maxCacheSize
+                60L,   // cacheExpiryMinutes
+                true,  // enableCaching
+                0.75   // defaultConfidence
+        );
     }
 
-    /**
-     * Test that top sectors are correctly identified
-     */
     @Test
-    void testTopSectorsIdentification() {
-        // Test that we can create test data with expected counts
-        List<SentimentResult> results = buildMockSentimentResults();
-
-        // Verify the test data has the expected structure
-        long bankPositive = results.stream()
-            .filter(r -> r.symbol().equals("HDFCBANK") || r.symbol().equals("HDFCBANK2"))
-            .filter(SentimentResult::isPositive)
-            .count();
-
-        assertThat(bankPositive).isGreaterThan(0);
-    }
-
-    /**
-     * Test empty sector digest
-     */
-    @Test
-    void testEmptyDigestHandling() {
+    @DisplayName("testGroupBySectorAndSentiment_CorrectlyGroupsBySector")
+    void testGroupBySectorAndSentiment_CorrectlyGroupsBySector() {
+        // Given: mock sentiment results with known sectors
         List<SentimentResult> results = new ArrayList<>();
 
-        // Empty list should be handled gracefully
-        assertThat(results).isEmpty();
+        // BANK sector: 5 POSITIVE, 3 NEUTRAL, 2 NEGATIVE
+        results.add(createSentimentResult("HDFCBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("HDFCBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("ICICIBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("ICICIBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("AXISBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
+
+        results.add(createSentimentResult("HDFCBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.NEUTRAL));
+        results.add(createSentimentResult("ICICIBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.NEUTRAL));
+        results.add(createSentimentResult("AXISBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.NEUTRAL));
+
+        results.add(createSentimentResult("HDFCBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.NEGATIVE));
+        results.add(createSentimentResult("ICICIBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.NEGATIVE));
+
+        // IT sector: 4 POSITIVE, 2 NEUTRAL, 1 NEGATIVE
+        results.add(createSentimentResult("TCS", Stock.Sector.IT, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("INFOSYS", Stock.Sector.IT, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("WIPRO", Stock.Sector.IT, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("TECHM", Stock.Sector.IT, SentimentResult.SentimentScore.POSITIVE));
+
+        results.add(createSentimentResult("TCS", Stock.Sector.IT, SentimentResult.SentimentScore.NEUTRAL));
+        results.add(createSentimentResult("INFOSYS", Stock.Sector.IT, SentimentResult.SentimentScore.NEUTRAL));
+
+        results.add(createSentimentResult("WIPRO", Stock.Sector.IT, SentimentResult.SentimentScore.NEGATIVE));
+
+        // PHARMA sector: 3 POSITIVE, 1 NEUTRAL, 2 NEGATIVE
+        results.add(createSentimentResult("SUNPHARMA", Stock.Sector.PHARMA, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("CIPLA", Stock.Sector.PHARMA, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("LUPIN", Stock.Sector.PHARMA, SentimentResult.SentimentScore.POSITIVE));
+
+        results.add(createSentimentResult("SUNPHARMA", Stock.Sector.PHARMA, SentimentResult.SentimentScore.NEUTRAL));
+
+        results.add(createSentimentResult("CIPLA", Stock.Sector.PHARMA, SentimentResult.SentimentScore.NEGATIVE));
+        results.add(createSentimentResult("LUPIN", Stock.Sector.PHARMA, SentimentResult.SentimentScore.NEGATIVE));
+
+        // Mock stock repository to return correct sectors
+        mockStockRepository(results);
+
+        // When: calling groupBySectorAndSentiment
+        Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> grouped =
+                sentimentAnalysisService.groupBySectorAndSentiment(results);
+
+        // Then: verify correct grouping and counts
+        assertThat(grouped).containsKeys(Stock.Sector.BANK, Stock.Sector.IT, Stock.Sector.PHARMA);
+
+        // BANK sector counts
+        assertThat(grouped.get(Stock.Sector.BANK).get(SentimentResult.SentimentScore.POSITIVE)).isEqualTo(5);
+        assertThat(grouped.get(Stock.Sector.BANK).get(SentimentResult.SentimentScore.NEUTRAL)).isEqualTo(3);
+        assertThat(grouped.get(Stock.Sector.BANK).get(SentimentResult.SentimentScore.NEGATIVE)).isEqualTo(2);
+
+        // IT sector counts
+        assertThat(grouped.get(Stock.Sector.IT).get(SentimentResult.SentimentScore.POSITIVE)).isEqualTo(4);
+        assertThat(grouped.get(Stock.Sector.IT).get(SentimentResult.SentimentScore.NEUTRAL)).isEqualTo(2);
+        assertThat(grouped.get(Stock.Sector.IT).get(SentimentResult.SentimentScore.NEGATIVE)).isEqualTo(1);
+
+        // PHARMA sector counts
+        assertThat(grouped.get(Stock.Sector.PHARMA).get(SentimentResult.SentimentScore.POSITIVE)).isEqualTo(3);
+        assertThat(grouped.get(Stock.Sector.PHARMA).get(SentimentResult.SentimentScore.NEUTRAL)).isEqualTo(1);
+        assertThat(grouped.get(Stock.Sector.PHARMA).get(SentimentResult.SentimentScore.NEGATIVE)).isEqualTo(2);
     }
 
-    /**
-     * Test sentiment score helper methods
-     */
     @Test
-    void testSentimentScoreHelpers() {
-        SentimentResult positive = SentimentResult.create(
-            "TEST", LocalDate.now(), SentimentResult.SentimentScore.POSITIVE,
-            "Test summary", "Test content", 0.85
-        );
-
-        SentimentResult negative = SentimentResult.create(
-            "TEST", LocalDate.now(), SentimentResult.SentimentScore.NEGATIVE,
-            "Test summary", "Test content", 0.85
-        );
-
-        SentimentResult neutral = SentimentResult.create(
-            "TEST", LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL,
-            "Test summary", "Test content", 0.85
-        );
-
-        assertThat(positive.isPositive()).isTrue();
-        assertThat(negative.isNegative()).isTrue();
-        assertThat(neutral.isNeutral()).isTrue();
-    }
-
-    // Build mock sentiment results for testing
-    private List<SentimentResult> buildMockSentimentResults() {
+    @DisplayName("testGetTopSectors_IdentifiesTopPositiveAndNegativeSectors")
+    void testGetTopSectors_IdentifiesTopPositiveAndNegativeSectors() {
+        // Given: sentiment results with varying sector strengths
         List<SentimentResult> results = new ArrayList<>();
-        LocalDate startDate = LocalDate.of(2026, 3, 16);
 
-        // BANK: 45 POSITIVE, 12 NEUTRAL, 8 NEGATIVE
-        for (int i = 0; i < 45; i++) {
-            results.add(createSentimentResult("HDFCBANK", SentimentResult.SentimentScore.POSITIVE, startDate.plusDays(i % 7)));
+        // BANK: 50 POSITIVE, 10 NEUTRAL, 5 NEGATIVE
+        for (int i = 0; i < 50; i++) {
+            results.add(createSentimentResult("BANK" + i, Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
         }
-        for (int i = 0; i < 12; i++) {
-            results.add(createSentimentResult("HDFCBANK", SentimentResult.SentimentScore.NEUTRAL, startDate.plusDays(i % 7)));
+        for (int i = 0; i < 10; i++) {
+            results.add(createSentimentResult("BANK" + i, Stock.Sector.BANK, SentimentResult.SentimentScore.NEUTRAL));
+        }
+        for (int i = 0; i < 5; i++) {
+            results.add(createSentimentResult("BANK" + i, Stock.Sector.BANK, SentimentResult.SentimentScore.NEGATIVE));
+        }
+
+        // IT: 35 POSITIVE, 15 NEUTRAL, 8 NEGATIVE
+        for (int i = 0; i < 35; i++) {
+            results.add(createSentimentResult("IT" + i, Stock.Sector.IT, SentimentResult.SentimentScore.POSITIVE));
+        }
+        for (int i = 0; i < 15; i++) {
+            results.add(createSentimentResult("IT" + i, Stock.Sector.IT, SentimentResult.SentimentScore.NEUTRAL));
         }
         for (int i = 0; i < 8; i++) {
-            results.add(createSentimentResult("HDFCBANK", SentimentResult.SentimentScore.NEGATIVE, startDate.plusDays(i % 7)));
+            results.add(createSentimentResult("IT" + i, Stock.Sector.IT, SentimentResult.SentimentScore.NEGATIVE));
         }
 
-        // AUTO: 38 POSITIVE, 15 NEUTRAL, 10 NEGATIVE
-        for (int i = 0; i < 38; i++) {
-            results.add(createSentimentResult("TATASTEEL", SentimentResult.SentimentScore.POSITIVE, startDate.plusDays(i % 7)));
-        }
-        for (int i = 0; i < 15; i++) {
-            results.add(createSentimentResult("TATASTEEL", SentimentResult.SentimentScore.NEUTRAL, startDate.plusDays(i % 7)));
-        }
-        for (int i = 0; i < 10; i++) {
-            results.add(createSentimentResult("TATASTEEL", SentimentResult.SentimentScore.NEGATIVE, startDate.plusDays(i % 7)));
-        }
-
-        // IT: 32 POSITIVE, 18 NEUTRAL, 12 NEGATIVE
-        for (int i = 0; i < 32; i++) {
-            results.add(createSentimentResult("TCS", SentimentResult.SentimentScore.POSITIVE, startDate.plusDays(i % 7)));
-        }
-        for (int i = 0; i < 18; i++) {
-            results.add(createSentimentResult("TCS", SentimentResult.SentimentScore.NEUTRAL, startDate.plusDays(i % 7)));
-        }
-        for (int i = 0; i < 12; i++) {
-            results.add(createSentimentResult("TCS", SentimentResult.SentimentScore.NEGATIVE, startDate.plusDays(i % 7)));
-        }
-
-        // METALS: 10 POSITIVE, 15 NEUTRAL, 35 NEGATIVE
-        for (int i = 0; i < 10; i++) {
-            results.add(createSentimentResult("JSWSTEEL", SentimentResult.SentimentScore.POSITIVE, startDate.plusDays(i % 7)));
-        }
-        for (int i = 0; i < 15; i++) {
-            results.add(createSentimentResult("JSWSTEEL", SentimentResult.SentimentScore.NEUTRAL, startDate.plusDays(i % 7)));
-        }
-        for (int i = 0; i < 35; i++) {
-            results.add(createSentimentResult("JSWSTEEL", SentimentResult.SentimentScore.NEGATIVE, startDate.plusDays(i % 7)));
-        }
-
-        // UTILITIES: 12 POSITIVE, 14 NEUTRAL, 30 NEGATIVE
-        for (int i = 0; i < 12; i++) {
-            results.add(createSentimentResult("ADANIPORTS", SentimentResult.SentimentScore.POSITIVE, startDate.plusDays(i % 7)));
-        }
-        for (int i = 0; i < 14; i++) {
-            results.add(createSentimentResult("ADANIPORTS", SentimentResult.SentimentScore.NEUTRAL, startDate.plusDays(i % 7)));
-        }
-        for (int i = 0; i < 30; i++) {
-            results.add(createSentimentResult("ADANIPORTS", SentimentResult.SentimentScore.NEGATIVE, startDate.plusDays(i % 7)));
-        }
-
-        // PHARMA: 15 POSITIVE, 20 NEUTRAL, 28 NEGATIVE
-        for (int i = 0; i < 15; i++) {
-            results.add(createSentimentResult("SUNPHARMA", SentimentResult.SentimentScore.POSITIVE, startDate.plusDays(i % 7)));
+        // PHARMA: 25 POSITIVE, 20 NEUTRAL, 20 NEGATIVE
+        for (int i = 0; i < 25; i++) {
+            results.add(createSentimentResult("PHARMA" + i, Stock.Sector.PHARMA, SentimentResult.SentimentScore.POSITIVE));
         }
         for (int i = 0; i < 20; i++) {
-            results.add(createSentimentResult("SUNPHARMA", SentimentResult.SentimentScore.NEUTRAL, startDate.plusDays(i % 7)));
+            results.add(createSentimentResult("PHARMA" + i, Stock.Sector.PHARMA, SentimentResult.SentimentScore.NEUTRAL));
         }
-        for (int i = 0; i < 28; i++) {
-            results.add(createSentimentResult("SUNPHARMA", SentimentResult.SentimentScore.NEGATIVE, startDate.plusDays(i % 7)));
+        for (int i = 0; i < 20; i++) {
+            results.add(createSentimentResult("PHARMA" + i, Stock.Sector.PHARMA, SentimentResult.SentimentScore.NEGATIVE));
         }
 
-        return results;
+        // METALS: 10 POSITIVE, 15 NEUTRAL, 40 NEGATIVE
+        for (int i = 0; i < 10; i++) {
+            results.add(createSentimentResult("METALS" + i, Stock.Sector.METALS, SentimentResult.SentimentScore.POSITIVE));
+        }
+        for (int i = 0; i < 15; i++) {
+            results.add(createSentimentResult("METALS" + i, Stock.Sector.METALS, SentimentResult.SentimentScore.NEUTRAL));
+        }
+        for (int i = 0; i < 40; i++) {
+            results.add(createSentimentResult("METALS" + i, Stock.Sector.METALS, SentimentResult.SentimentScore.NEGATIVE));
+        }
+
+        mockStockRepository(results);
+
+        // When: grouping results
+        Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> grouped =
+                sentimentAnalysisService.groupBySectorAndSentiment(results);
+
+        // And: getting top positive sectors
+        List<Stock.Sector> topPositive = sentimentAnalysisService.getTopSectors(grouped, 3, true);
+
+        // Then: top positive should be BANK, IT, PHARMA in that order
+        assertThat(topPositive).hasSize(3);
+        assertThat(topPositive.get(0)).isEqualTo(Stock.Sector.BANK);      // 50 POSITIVE
+        assertThat(topPositive.get(1)).isEqualTo(Stock.Sector.IT);        // 35 POSITIVE
+        assertThat(topPositive.get(2)).isEqualTo(Stock.Sector.PHARMA);    // 25 POSITIVE
+
+        // When: getting top negative sectors
+        List<Stock.Sector> topNegative = sentimentAnalysisService.getTopSectors(grouped, 3, false);
+
+        // Then: top negative should be METALS, PHARMA, IT in that order
+        assertThat(topNegative).hasSize(3);
+        assertThat(topNegative.get(0)).isEqualTo(Stock.Sector.METALS);    // 40 NEGATIVE
+        assertThat(topNegative.get(1)).isEqualTo(Stock.Sector.PHARMA);    // 20 NEGATIVE
+        assertThat(topNegative.get(2)).isEqualTo(Stock.Sector.IT);        // 8 NEGATIVE
     }
 
-    private SentimentResult createSentimentResult(String symbol, SentimentResult.SentimentScore score, LocalDate date) {
-        return SentimentResult.create(symbol, date, score, "Mock sentiment", "Test content", 0.85);
+    @Test
+    @DisplayName("testGenerateSectorDigest_FormatsCompleteDigest")
+    void testGenerateSectorDigest_FormatsCompleteDigest() {
+        // Given: sentiment results for a week
+        LocalDate startDate = LocalDate.of(2026, 3, 16);
+        LocalDate endDate = LocalDate.of(2026, 3, 22);
+
+        List<SentimentResult> results = new ArrayList<>();
+
+        // Create diverse sector data
+        results.add(createSentimentResult("HDFCBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("ICICIBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("AXISBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.NEUTRAL));
+
+        results.add(createSentimentResult("TCS", Stock.Sector.IT, SentimentResult.SentimentScore.POSITIVE));
+        results.add(createSentimentResult("INFOSYS", Stock.Sector.IT, SentimentResult.SentimentScore.NEUTRAL));
+        results.add(createSentimentResult("WIPRO", Stock.Sector.IT, SentimentResult.SentimentScore.NEGATIVE));
+
+        results.add(createSentimentResult("SUNPHARMA", Stock.Sector.PHARMA, SentimentResult.SentimentScore.NEGATIVE));
+
+        mockStockRepository(results);
+
+        // When: generating sector digest for date range
+        String digest = sentimentAnalysisService.generateSectorDigest(startDate, endDate);
+
+        // Then: verify formatted output contains expected sections
+        assertThat(digest).contains("Weekly Sector Sentiment Digest");
+        assertThat(digest).contains("Week of: " + startDate + " to " + endDate);
+        assertThat(digest).contains("Top Positive Sectors:");
+        assertThat(digest).contains("Top Negative Sectors:");
+        assertThat(digest).contains("Summary Statistics");
+        assertThat(digest).contains("Total stocks analyzed:");
+    }
+
+    @Test
+    @DisplayName("testEmptyDigestHandling")
+    void testEmptyDigestHandling() {
+        // Given: empty sentiment results
+        LocalDate startDate = LocalDate.of(2026, 3, 16);
+        LocalDate endDate = LocalDate.of(2026, 3, 22);
+
+        // When: generating digest with no data
+        String digest = sentimentAnalysisService.generateSectorDigest(startDate, endDate);
+
+        // Then: digest should handle empty case gracefully
+        assertThat(digest).contains("Weekly Sector Sentiment Digest");
+        assertThat(digest).contains("Week of: " + startDate + " to " + endDate);
+        assertThat(digest).contains("no sentiment data");
+    }
+
+    // ===== Helper Methods =====
+
+    /**
+     * Creates a mock sentiment result with specified sector.
+     */
+    private SentimentResult createSentimentResult(
+            String symbol,
+            Stock.Sector sector,
+            SentimentResult.SentimentScore score) {
+
+        return SentimentResult.create(
+                symbol,
+                LocalDate.now(),
+                score,
+                "Mock sentiment for " + symbol,
+                "Test content",
+                0.85
+        );
+    }
+
+    /**
+     * Mocks the stock repository to return correct sectors for test symbols.
+     */
+    private void mockStockRepository(List<SentimentResult> results) {
+        // Build a set of unique symbols and their sectors
+        for (SentimentResult result : results) {
+            String symbol = result.symbol();
+
+            // Determine sector based on symbol
+            Stock.Sector sector = determineSectorForSymbol(symbol);
+
+            // Mock the repository
+            when(stockRepository.findBySymbol(symbol))
+                    .thenReturn(java.util.Optional.of(createMockStockEntity(symbol, sector)));
+        }
+    }
+
+    /**
+     * Determines sector based on symbol prefix or full name matching.
+     */
+    private Stock.Sector determineSectorForSymbol(String symbol) {
+        // Extract sector from symbol if it contains sector name
+        if (symbol.startsWith("BANK") || symbol.contains("HDFCBANK") || symbol.contains("ICICIBANK") || symbol.contains("AXISBANK")) {
+            return Stock.Sector.BANK;
+        } else if (symbol.startsWith("IT") || symbol.contains("TCS") || symbol.contains("INFOSYS") || symbol.contains("WIPRO") || symbol.contains("TECHM")) {
+            return Stock.Sector.IT;
+        } else if (symbol.startsWith("PHARMA") || symbol.contains("SUNPHARMA") || symbol.contains("CIPLA") || symbol.contains("LUPIN")) {
+            return Stock.Sector.PHARMA;
+        } else if (symbol.startsWith("METALS") || symbol.contains("JSWSTEEL") || symbol.contains("TATASTEEL")) {
+            return Stock.Sector.METALS;
+        } else {
+            return Stock.Sector.OTHERS;
+        }
+    }
+
+    /**
+     * Creates a mock stock entity for testing.
+     */
+    private com.swingtrade.data.entity.StockEntity createMockStockEntity(String symbol, Stock.Sector sector) {
+        com.swingtrade.data.entity.StockEntity entity = new com.swingtrade.data.entity.StockEntity();
+        entity.setSymbol(symbol);
+        entity.setName("Test Company " + symbol);
+        entity.setSector(sector.name());
+        entity.setExchange("NSE");
+        return entity;
     }
 }
