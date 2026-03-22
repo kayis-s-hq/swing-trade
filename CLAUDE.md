@@ -69,7 +69,11 @@ The database schema is managed with Flyway migrations in `data/src/main/resource
 
 ## Documentation Rules
 
-All documentation files must be written in Markdown format and placed in the `docs/` folder. This includes:
+All documentation files must be written in Markdown format and placed in the `docs/` folder.
+
+## Planning Directory
+
+The GSD planning folder is located at `.planning/` (root of the swing-trade repository, NOT in this worktree directory). Always reference planning artifacts (SUMMARY.md, PLAN.md, UAT.md, etc.) from `/Users/kayisrahman/Documents/workspace/ideas/swing-trade/.planning/`. This includes:
 - System architecture documentation
 - API documentation
 - User guides
