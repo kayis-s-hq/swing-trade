@@ -85,3 +85,11 @@ Each Markdown file should follow these conventions:
 - Include code blocks with appropriate language syntax highlighting
 - Use consistent terminology throughout the documentation
 - Link to related documents and code sections where relevant
+
+## Session Memory
+
+At the start of every session, read all `.md` files in `.claude/memory/` for accumulated project context (decisions, trade-offs, session summaries). Start with `MEMORY.md` as the index, then read files listed there.
+
+When saving session memories (via session-wrap), write to `.claude/memory/` in this project directory — NOT to `~/.claude/projects/…/memory/`. Use descriptive filenames:
+- Memory files: `{type}_{slug}.md` (e.g., `project_phase9_notification_migration.md`)
+- Session summaries: `session-YYYY-MM-DD-{slug}.md` (e.g., `session-2026-03-22-phase9-plan.md`)

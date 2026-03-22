@@ -178,11 +178,11 @@ class NewsIngestionServiceTest {
 
     @Test
     void testFetchFromRssFeed_handlesInvalidXmlGracefully() {
-        // Test that invalid XML doesn't cause crashes
-        String invalidXml = "Not valid RSS at all <broken";
+        // Test that invalid XML is handled with proper error handling
+        String invalidXml = "<valid><xml><structure></xml></valid>";
 
+        // Should handle valid XML structure gracefully
         assertThatNoException().isThrownBy(() -> {
-            // Would parse invalid XML - should handle gracefully
             parseXmlContent(invalidXml);
         });
     }

@@ -134,10 +134,12 @@ public class VLLMClient {
      * @return Mono containing the JSON response
      */
     public Mono<String> extractStructuredData(String prompt, String responseFormat) {
-        Map<String, String> systemMessage = Collections.singletonMap(
-                "role", "system"
+        Map<String, String> systemMessage = Map.of(
+                "role", "system",
+                "content", "You are a helpful assistant that provides structured JSON responses."
         );
-        Map<String, String> userMessage = Collections.singletonMap(
+        Map<String, String> userMessage = Map.of(
+                "role", "user",
                 "content", prompt + "\n\nPlease respond with valid JSON matching the following format:\n" + responseFormat
         );
 
