@@ -29,6 +29,12 @@
             <artifactId>data</artifactId>
         </dependency>
 
+        <!-- LLM module dependency for sentiment analysis -->
+        <dependency>
+            <groupId>com.swingtrade</groupId>
+            <artifactId>llm</artifactId>
+        </dependency>
+
                 <!-- Spring Boot Starters -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

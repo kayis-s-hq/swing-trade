@@ -5,6 +5,7 @@ import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.repository.SignalRepository;
+import com.swingtrade.llm.service.SentimentAnalysisService;
 import com.swingtrade.strategy.SwingTradingStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,16 +34,19 @@ public class SignalEngine {
     private final OhlcvCandleRepository candleRepository;
     private final SignalRepository signalRepository;
     private final SwingTradingStrategy strategy;
+    private final SentimentAnalysisService sentimentAnalysisService;
 
     /**
      * Constructs SignalEngine with required dependencies.
      */
     public SignalEngine(OhlcvCandleRepository candleRepository,
                         SignalRepository signalRepository,
-                        SwingTradingStrategy strategy) {
+                        SwingTradingStrategy strategy,
+                        SentimentAnalysisService sentimentAnalysisService) {
         this.candleRepository = candleRepository;
         this.signalRepository = signalRepository;
         this.strategy = strategy;
+        this.sentimentAnalysisService = sentimentAnalysisService;
     }
 
     /**
