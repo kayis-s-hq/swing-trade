@@ -181,7 +181,7 @@ public class BrokerNotificationIntegration {
      * Daily summaries are deferred.
      */
     @Deprecated
-    public boolean onDailySummary(SignalNotificationService.DailySummary summary) {
+    public boolean onDailySummary(Object summary) {
         log.info("Daily summaries are deferred");
         return false;
     }

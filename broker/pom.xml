@@ -75,21 +75,25 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- Telegram Bot API -->
+        <!-- Telegram Bot API (commented out - not available in Maven repos) -->
+        <!--
         <dependency>
             <groupId>com.github.thegz</groupId>
             <artifactId>telegram-spring-boot-starter</artifactId>
             <version>0.2.0</version>
             <optional>true</optional>
         </dependency>
+        -->
 
-        <!-- Zerodha Kite Connect for live trading -->
+        <!-- Zerodha Kite Connect for live trading (commented out - not available in Maven repos) -->
+        <!--
         <dependency>
             <groupId>com.zerodha</groupId>
             <artifactId>kiteconnect</artifactId>
             <version>4.2.0</version>
             <optional>true</optional>
         </dependency>
+        -->
 
         <!-- Jackson for JSON processing -->
         <dependency>
@@ -154,6 +158,8 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Testcontainers Redis - not available in Maven repos, commenting out -->
+        <!--
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>redis</artifactId>
@@ -161,6 +167,7 @@
             <scope>test</scope>
             <optional>true</optional>
         </dependency>
+        -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
@@ -171,8 +178,24 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.36</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <addResources>true</addResources>
+                </configuration>
             </plugin>
         </plugins>
     </build>

@@ -1,8 +1,0 @@
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/llm/src/test/java/com/swingtrade/llm/LlmModuleTest.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/llm/src/test/java/com/swingtrade/llm/client/VLLMClientTest.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/llm/src/test/java/com/swingtrade/llm/service/NewsIngestionServiceTest.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/llm/src/test/java/com/swingtrade/llm/service/SectorDigestTest.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/llm/src/test/java/com/swingtrade/llm/service/SentimentAnalyzerTest.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/llm/src/test/java/com/swingtrade/llm/service/SentimentFilteringTest.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/llm/src/test/java/com/swingtrade/llm/test/LlmWireMockHelper.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/llm/src/test/java/com/swingtrade/llm/test/LlmWireMockRule.java

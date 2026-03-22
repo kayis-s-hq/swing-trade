@@ -9,6 +9,7 @@ files_modified:
   - strategy/src/test/java/com/swingtrade/strategy/SignalEngineIntegrationTest.java
   - llm/src/test/java/com/swingtrade/llm/service/SectorDigestTest.java
 autonomous: true
+gap_closure: true
 requirements: [REQ-028, REQ-029]
 must_haves:
   truths:

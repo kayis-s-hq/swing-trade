@@ -296,21 +296,23 @@ Execute Phase 5 plans in order: `/gsd:execute-phase 05`
 
 ---
 
-## Phase 6: Live Trading ⏳ PLANNED
+## Phase 6: Live Trading 📋 PLANNED
 
 **Objective:** Zerodha Kite Connect integration.
 
-**Status:** ⏳ Planned (start after Phase 5 + paper validation)
-**Duration:** 1–2 weeks
+**Status:** 📋 **Planned** (2 plans created)
+**Duration:** 1 week
 **Priority:** Medium
 **Depends On:** Phase 5 completion + 2–3 months paper validation
 
 ### Requirements Mapped
 
-- REQ-030: Zerodha Kite Connect ⏳
-- REQ-031: BrokerServiceFactory routing ⏳
-- REQ-032: Kill switch ⏳
-- REQ-033: Capital management ⏳
+| Req ID | Description | Plan Coverage |
+|--------|-------------|---------------|
+| REQ-030 | Zerodha Kite Connect | Plan 01, Plan 02 |
+| REQ-031 | BrokerServiceFactory routing | Plan 01, Plan 02 |
+| REQ-032 | Kill switch | Plan 01, Plan 02 |
+| REQ-033 | Capital management | Plan 01, Plan 02 |
 
 ### Success Criteria
 
@@ -320,6 +322,48 @@ Execute Phase 5 plans in order: `/gsd:execute-phase 05`
 - [ ] BrokerServiceFactory switches modes via config
 - [ ] Capital tracking enforces ₹50K limit
 - [ ] Max 3 live positions enforced
+- [ ] 80%+ code coverage for broker module
+
+### Plans
+
+**2 plans** in 2 waves
+
+#### Plan 01: Live Trading Verification (Wave 1)
+- **Objective:** Verify Kite Connect integration is production-ready
+- **Requirement IDs:** REQ-030, REQ-031, REQ-032, REQ-033
+- **Files Modified:** KiteConnectClient.java, BrokerServiceFactory.java, RiskControlsService.java, application.properties
+- **Wave:** 1 (no dependencies)
+- **Tasks:**
+  1. Verify KiteConnectClient implementation completeness
+  2. Verify BrokerServiceFactory mode switching
+  3. Verify RiskControlsService integration
+  4. Document Zerodha API setup steps
+
+#### Plan 02: Live Trading Test Suite (Wave 2)
+- **Objective:** Create comprehensive unit tests for Kite Connect integration
+- **Requirement IDs:** REQ-030, REQ-031, REQ-032, REQ-033
+- **Files Modified:** KiteConnectClientTest.java, BrokerServiceFactoryTest.java, LiveTradingServiceTest.java, DryRunServiceTest.java
+- **Wave:** 2 (depends on Plan 01)
+- **Tasks:**
+  1. Create KiteConnectClientTest (15+ tests)
+  2. Create BrokerServiceFactoryTest (12+ tests)
+  3. Create LiveTradingServiceTest (15+ tests)
+  4. Create DryRunServiceTest (12+ tests)
+  5. Run all broker tests and verify 80%+ coverage
+
+### Plan Details
+
+| Plan | Objective | Tasks | Files | Wave |
+|------|-----------|-------|-------|------|
+| 06-01 | Live trading verification | 5 | KiteConnectClient.java, BrokerServiceFactory.java, RiskControlsService.java, application.properties | 1 |
+| 06-02 | Live trading test suite | 5 | KiteConnectClientTest.java, BrokerServiceFactoryTest.java, LiveTradingServiceTest.java, DryRunServiceTest.java | 2 |
+
+### What Needs to Be Done
+
+Execute Phase 6 plans in order: `/gsd:execute-phase 06`
+
+1. **Plan 01:** Verify Kite Connect integration (implementation already exists)
+2. **Plan 02:** Add comprehensive test suite (80%+ coverage)
 
 ---
 
@@ -492,7 +536,7 @@ Phase 1: Core Domain ✅
 | 3 | ✅ Complete | 2026-03-15 | 2026-03-20 |
 | 4 | 📋 **PLANNED** | **2026-03-23** | **2026-04-06** |
 | 5 | ⏳ Pending Phase 4 | 2026-04-07 | 2026-04-30 |
-| 6 | ⏳ Pending Phase 5 | 2026-05-01 | 2026-05-15 |
+| 6 | 📋 **PLANNED** | **2026-05-01** | **2026-05-08** |
 | 7 | ⏳ Pending Phase 6 | 2026-05-15 | 2026-06-30 |
 | 8 | ⏳ Pending Phase 7 | TBD | TBD |
 | 9 | 📋 **PLANNED** | **TBD** | **TBD** |

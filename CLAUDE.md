@@ -93,3 +93,76 @@ At the start of every session, read all `.md` files in `.claude/memory/` for acc
 When saving session memories (via session-wrap), write to `.claude/memory/` in this project directory — NOT to `~/.claude/projects/…/memory/`. Use descriptive filenames:
 - Memory files: `{type}_{slug}.md` (e.g., `project_phase9_notification_migration.md`)
 - Session summaries: `session-YYYY-MM-DD-{slug}.md` (e.g., `session-2026-03-22-phase9-plan.md`)
+
+### Loading relevant context
+
+Use the `read-project-memory` skill to load only the memory files relevant to your current task, avoiding context bloat:
+
+```bash
+# Load memory for a specific topic
+read-project-memory
+
+# Or phrase it naturally:
+# "what do we know about Phase 9?"
+# "did we decide how to handle notifications?"
+# "check memory for the data pipeline"
+```
+
+The skill reads `.claude/memory/MEMORY.md`, filters for matching files, and reports key context compactly. This keeps sessions focused without reading unnecessary files.
+
+## Custom Skills
+
+This project includes 16 domain-specific skills in `.claude/skills/`. See `.claude/SKILLS.md` for the complete index with trigger conditions.
+
+**Common triggers to invoke skills proactively:**
+- **Data quality issues** → `swing-trade-data-quality-audit` (signal drops, ingestion errors, anomalies)
+- **Signal analysis** → `swing-trade-signal-suppression-analyzer` (when signals drop unexpectedly)
+- **Before auto-trade** → `swing-trade-risk-control-validator` (validate risk parameters)
+- **Strategy changes** → `swing-trade-signal-backtest-runner` (backtest new indicators or rules)
+- **Performance reports** → `swing-trade-performance-report-generator` (EOD/weekly reviews)
+- **Prompt tuning** → `swing-trade-llm-prompt-optimizer` (if sentiment accuracy drops)
+- **Build issues** → `swing-trade-maven-multi-module-build` (Maven build or dependency errors)
+- **System health** → `swing-trade-health-check-monitor` (pre-trade status checks)
+- **Infrastructure** → `swing-trade-docker-compose-deployer` (Docker/deployment changes)
+- **Debugging** → `swing-trade-systematic-debugging` (bugs, test failures)
+
+Invoke skills using the `Skill` tool: `Skill("swing-trade-{skill-name}")`
+
+## Worktree & Planning Workflow
+
+This project uses git worktrees for parallel phase development. Each worktree gets its own copy of `.planning/`, but the **root `.planning/` is the source of truth**.
+
+### Planning Document Locations
+
+When working in a worktree (e.g., `.claude/worktrees/phase-05/`):
+- **Worktree `.planning/`** (editable): `/Users/kayisrahman/Documents/workspace/ideas/swing-trade/.claude/worktrees/phase-05/.planning/`
+- **Root `.planning/` (source of truth)**: `/Users/kayisrahman/Documents/workspace/ideas/swing-trade/.planning/`
+
+### Workflow
+
+1. **Start worktree:** You have a git worktree branch (e.g., `worktree-phase-05`) with its own `.planning/` copy
+2. **Edit planning docs:** Update `.planning/` files in the worktree freely (STATE.md, phase plans, verification artifacts)
+3. **Sync to root:** Periodically run `Skill("superpowers:gsd-worktree-workflow --sync-to-root")` to copy changes back to root `.planning/`
+4. **Verify phase:** Run `gsd:verify` to validate phase goal achievement
+5. **Post-verify merge:** Run `Skill("superpowers:gsd-worktree-workflow --post-verify")` for merge guidance
+6. **Merge to main:** Merge worktree branch back to main with updated planning docs
+7. **Clean up:** Remove worktree via `gsd:remove-workspace` or `git worktree remove .claude/worktrees/phase-X`
+
+### Key Rules
+
+- **Root `.planning/` on main is authoritative** — don't edit it directly from main, wait for worktree merge
+- **Worktree `.planning/` is your working copy** — update freely, sync to root before merging
+- **Always sync before merging** — run `--sync-to-root` before `git merge` to avoid conflicts
+- **Verify before merge** — `gsd:verify` must complete before merging worktree to main
+- **Planning conflicts may occur** — resolve manually if root and worktree diverged during parallel work
+- **Commit everything before merge** — worktree must have no uncommitted changes
+
+### Worktree Management Skill
+
+Use `Skill("superpowers:gsd-worktree-workflow")` to:
+- Detect current branch and show planning locations
+- Sync `.planning/` changes from worktree to root (`--sync-to-root`)
+- Get merge guidance after `gsd:verify` passes (`--post-verify`)
+- Track worktree verification status and sync history (`--show-state`)
+
+See the skill documentation for detailed usage and examples.
