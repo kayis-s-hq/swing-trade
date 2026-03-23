@@ -3,8 +3,8 @@ package com.swingtrade.broker.telegram;
 import com.swingtrade.broker.model.Position;
 import com.swingtrade.broker.service.BrokerService;
 import com.swingtrade.domain.Trade;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -31,13 +31,21 @@ import java.math.BigDecimal;
  * @author SwingTrade Team
  */
 @Component
-@RequiredArgsConstructor
-@Slf4j
 public class BrokerNotificationIntegration {
+
+    private static final Logger log = LoggerFactory.getLogger(BrokerNotificationIntegration.class);
 
     private final SignalNotificationService signalService;
     private final BrokerService brokerService;
     private final SignalMessageFormatter messageFormatter;
+
+    public BrokerNotificationIntegration(SignalNotificationService signalService,
+                                          BrokerService brokerService,
+                                          SignalMessageFormatter messageFormatter) {
+        this.signalService = signalService;
+        this.brokerService = brokerService;
+        this.messageFormatter = messageFormatter;
+    }
 
     /**
      * Sends a notification when a new position is entered (trade open).
@@ -154,7 +162,7 @@ public class BrokerNotificationIntegration {
      * Error notifications are deferred.
      */
     @Deprecated
-    public boolean onError(String errorType, String message, SignalNotificationService.ErrorSeverity severity) {
+    public boolean onError(String errorType, String message, String severity) {
         log.error("Broker error [{}]: {}", errorType, message);
         return false;
     }

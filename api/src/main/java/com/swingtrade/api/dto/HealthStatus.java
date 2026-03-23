@@ -101,6 +101,13 @@ public class HealthStatus {
             this.description = description;
         }
 
+        public ComponentStatus(String name, String status, String description, Map<String, ?> details) {
+            this(name, status, description);
+            if (details != null) {
+                this.details.putAll(details);
+            }
+        }
+
         // Getters and Setters
         public String getName() {
             return name;

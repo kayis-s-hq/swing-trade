@@ -18,5 +18,15 @@ public enum PositionStatus {
     /**
      * Position is pending closure (e.g., exit order placed).
      */
-    PENDING_CLOSE
+    PENDING_CLOSE,
+
+    /**
+     * Position was closed because stop loss was triggered.
+     */
+    STOPPED,
+
+    /**
+     * Position was closed because target price was hit.
+     */
+    TARGET_HIT
 }

@@ -81,14 +81,31 @@ public class RiskCheckResult {
         return this;
     }
 
+    public RiskCheckResult addWarning(String format, Object... args) {
+        this.passed = false;
+        this.messages.add("WARNING: " + String.format(format.replace("{}", "%s"), args));
+        return this;
+    }
+
     public RiskCheckResult addError(String message) {
         this.passed = false;
         this.messages.add("ERROR: " + message);
         return this;
     }
 
+    public RiskCheckResult addError(String format, Object... args) {
+        this.passed = false;
+        this.messages.add("ERROR: " + String.format(format.replace("{}", "%s"), args));
+        return this;
+    }
+
     public RiskCheckResult addInfo(String message) {
         this.messages.add("INFO: " + message);
+        return this;
+    }
+
+    public RiskCheckResult addInfo(String format, Object... args) {
+        this.messages.add("INFO: " + String.format(format.replace("{}", "%s"), args));
         return this;
     }
 

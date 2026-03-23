@@ -64,6 +64,18 @@ public class SignalService {
     }
 
     /**
+     * Get signals by date range
+     * @param startDate start date (inclusive)
+     * @param endDate end date (inclusive)
+     * @return List of signals in the date range
+     */
+    public List<Signal> getSignalsByDateRange(LocalDate startDate, LocalDate endDate) {
+        Pageable pageable = PageRequest.of(0, 100);
+        List<SignalEntity> entities = signalRepository.findByDateRangeAndSignalType(startDate, endDate, "BUY", pageable);
+        return convertToDomain(entities);
+    }
+
+    /**
      * Get signals by type
      * @param signalType signal type (BUY, SELL, HOLD)
      * @return List of signals of the specified type
@@ -71,7 +83,15 @@ public class SignalService {
     public List<Signal> getSignalsByType(String signalType) {
         Pageable pageable = PageRequest.of(0, 100);
         List<SignalEntity> entities = signalRepository.findBuySignalsSince(LocalDate.now().minusDays(30), pageable);
-        return convertToDomain(entities);
+        // Filter by the actual signalType parameter instead of hardcoding BUY
+        List<Signal> signals = convertToDomain(entities);
+        List<Signal> filtered = new ArrayList<>();
+        for (Signal signal : signals) {
+            if (signal.getType().toString().equals(signalType)) {
+                filtered.add(signal);
+            }
+        }
+        return filtered;
     }
 
     /**

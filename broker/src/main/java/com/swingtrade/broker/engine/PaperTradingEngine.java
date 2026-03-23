@@ -105,8 +105,9 @@ public class PaperTradingEngine {
             return null;
         }
 
-        // Validate position capacity
-        if (!validatePositionCapacity(currentPrice, signal.quantity())) {
+        // Validate position capacity (default 100 shares if no specific quantity in signal)
+        int defaultQuantity = 100;
+        if (!validatePositionCapacity(currentPrice, defaultQuantity)) {
             logger.warn("Cannot execute signal for {}: position capacity exceeded", signal.symbol());
             return null;
         }
@@ -118,17 +119,17 @@ public class PaperTradingEngine {
         Order order = orderManager.createBuyOrder(signal.symbol(), quantity.intValue(), currentPrice);
 
         // Attach signal metadata
-        order.setAdditionalProperties(java.util.Map.of(
-            "signalId", signal.id(),
-            "signalReason", signal.reasoning(),
-            "confidence", signal.confidence().toString(),
-            "stopLoss", signal.stopLoss().toString(),
-            "target", signal.target().toString(),
-            "riskReward", signal.riskReward().toString(),
-            "entryDate", LocalDate.now().toString()
-        ));
+        java.util.Map<String, Object> signalProps = new java.util.HashMap<>();
+        signalProps.put("signalId", signal.id() != null ? signal.id().toString() : "");
+        signalProps.put("signalReason", signal.reasoning() != null ? signal.reasoning() : "");
+        signalProps.put("confidence", signal.confidence() != null ? signal.confidence().toString() : "0");
+        signalProps.put("stopLoss", signal.stopLoss() != null ? signal.stopLoss().toString() : "0");
+        signalProps.put("target", signal.target() != null ? signal.target().toString() : "0");
+        signalProps.put("riskReward", signal.riskReward() != null ? signal.riskReward().toString() : "0");
+        signalProps.put("entryDate", LocalDate.now().toString());
+        order.setAdditionalProperties(signalProps);
 
-        logger.info("Executing BUY order for {} at {}: signal confidence={:.2%}, SL={}, Target={}",
+        logger.info("Executing BUY order for {} at {}: signal confidence={}, SL={}, Target={}",
             signal.symbol(), currentPrice, signal.confidence(), signal.stopLoss(), signal.target());
 
         return order;
@@ -190,7 +191,7 @@ public class PaperTradingEngine {
      *
      * @param candleData the OHLCV candle data
      */
-    public void updatePositions(CandleData candleData) {
+    public void updatePositions(OhlcvCandle candleData) {
         List<Position> updatedPositions = positionManager.updatePositionsWithCandleData(
             candleData.symbol(), candleData);
 
@@ -585,8 +586,7 @@ public class PaperTradingEngine {
             entity.getHighPrice(),
             entity.getLowPrice(),
             entity.getClosePrice(),
-            entity.getVolume(),
-            entity.getAdjClosePrice()
+            entity.getVolume()
         );
         updatePositionsFromDomain(candle);
     }

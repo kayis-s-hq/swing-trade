@@ -9,7 +9,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -38,7 +40,7 @@ public class SignalController {
         logger.debug("Fetching latest signals");
 
         try {
-            List<SignalResponse> signals = signalService.getLatestSignals();
+            List<SignalResponse> signals = convertSignalsToResponses(signalService.getLatestSignals());
             return ResponseEntity.ok(signals);
 
         } catch (Exception e) {
@@ -59,7 +61,7 @@ public class SignalController {
         logger.debug("Fetching signals for symbol: {}", symbol);
 
         try {
-            List<SignalResponse> signals = signalService.getSignalsBySymbol(symbol);
+            List<SignalResponse> signals = convertSignalsToResponses(signalService.getSignalsBySymbol(symbol));
             return ResponseEntity.ok(signals);
 
         } catch (Exception e) {
@@ -84,7 +86,7 @@ public class SignalController {
         logger.debug("Fetching signals for date range: {} to {}", startDate, endDate);
 
         try {
-            List<SignalResponse> signals = signalService.getSignalsByDateRange(startDate, endDate);
+            List<SignalResponse> signals = convertSignalsToResponses(signalService.getSignalsByDateRange(startDate, endDate));
             return ResponseEntity.ok(signals);
 
         } catch (Exception e) {
@@ -105,7 +107,7 @@ public class SignalController {
         logger.debug("Fetching signals of type: {}", type);
 
         try {
-            List<SignalResponse> signals = signalService.getSignalsByType(type);
+            List<SignalResponse> signals = convertSignalsToResponses(signalService.getSignalsByType(type.name()));
             return ResponseEntity.ok(signals);
 
         } catch (Exception e) {
@@ -133,7 +135,7 @@ public class SignalController {
                         .body(List.of(buildSignalErrorResponse("Bad Request", "Confidence must be between 0.0 and 1.0")));
             }
 
-            List<SignalResponse> signals = signalService.getHighConfidenceSignals(minConfidence);
+            List<SignalResponse> signals = convertSignalsToResponses(signalService.getHighConfidenceSignals(minConfidence));
             return ResponseEntity.ok(signals);
 
         } catch (Exception e) {
@@ -161,7 +163,7 @@ public class SignalController {
                         .body(buildSignalErrorResponse("Bad Request", "Invalid symbol format"));
             }
 
-            SignalResponse signal = signalService.generateSignal(request.getSymbol());
+            SignalResponse signal = convertSignalToResponse(signalService.generateSignal(request.getSymbol()));
             return ResponseEntity.status(HttpStatus.CREATED).body(signal);
 
         } catch (IllegalArgumentException e) {
@@ -188,7 +190,7 @@ public class SignalController {
         logger.info("Triggering market scan");
 
         try {
-            ScanResponse scanResult = scanService.triggerScan(request);
+            ScanResponse scanResult = scanService.triggerScan();
 
             if (scanResult.getSignalsFound() == 0) {
                 scanResult.setStatus(ScanResponse.ScanStatus.NO_SIGNALS);
@@ -236,7 +238,7 @@ public class SignalController {
         logger.debug("Fetching technical analysis for symbol: {}", symbol);
 
         try {
-            TechnicalAnalysisResponse analysis = signalService.getTechnicalAnalysis(symbol);
+            TechnicalAnalysisResponse analysis = convertTechnicalAnalysis(signalService.getTechnicalAnalysis(symbol));
 
             if (analysis == null) {
                 return ResponseEntity.notFound().build();
@@ -262,7 +264,7 @@ public class SignalController {
         logger.debug("Fetching sentiment analysis for symbol: {}", symbol);
 
         try {
-            SentimentAnalysisResponse sentiment = signalService.getSentimentAnalysis(symbol);
+            SentimentAnalysisResponse sentiment = convertSentimentAnalysis(signalService.getSentimentAnalysis(symbol));
 
             if (sentiment == null) {
                 return ResponseEntity.notFound().build();
@@ -288,7 +290,7 @@ public class SignalController {
         logger.debug("Fetching combined signal for symbol: {}", symbol);
 
         try {
-            CombinedSignalResponse combined = signalService.getCombinedSignal(symbol);
+            CombinedSignalResponse combined = convertCombinedSignal(signalService.getCombinedSignal(symbol));
 
             if (combined == null) {
                 return ResponseEntity.notFound().build();
@@ -301,6 +303,82 @@ public class SignalController {
             return ResponseEntity.internalServerError()
                     .body(buildCombinedSignalErrorResponse("Internal Server Error", "Failed to fetch combined signal"));
         }
+    }
+
+    /**
+     * Convert SignalService.Signal to SignalResponse DTO
+     */
+    private SignalResponse convertSignalToResponse(com.swingtrade.api.SignalService.Signal signal) {
+        if (signal == null) {
+            return null;
+        }
+        SignalResponse response = new SignalResponse();
+        response.setSymbol(signal.getSymbol());
+        response.setSignalType(SignalResponse.SignalType.valueOf(signal.getType().toString()));
+        response.setConfidence(signal.getConfidence() != null ? BigDecimal.valueOf(signal.getConfidence()) : null);
+        response.setGeneratedAt(signal.getDate());
+        response.setReasoning(signal.getReasoning());
+        return response;
+    }
+
+    /**
+     * Convert list of SignalService.Signal to SignalResponse DTOs
+     */
+    private List<SignalResponse> convertSignalsToResponses(List<com.swingtrade.api.SignalService.Signal> signals) {
+        if (signals == null) {
+            return new ArrayList<>();
+        }
+        List<SignalResponse> responses = new ArrayList<>();
+        for (com.swingtrade.api.SignalService.Signal signal : signals) {
+            responses.add(convertSignalToResponse(signal));
+        }
+        return responses;
+    }
+
+    /**
+     * Convert SignalService.TechnicalAnalysis to TechnicalAnalysisResponse DTO
+     */
+    private TechnicalAnalysisResponse convertTechnicalAnalysis(com.swingtrade.api.SignalService.TechnicalAnalysis analysis) {
+        if (analysis == null) {
+            return null;
+        }
+        TechnicalAnalysisResponse response = new TechnicalAnalysisResponse();
+        response.setSymbol(analysis.getSymbol());
+        response.setAnalysisDate(analysis.getDate());
+        response.setIndicators(analysis.getIndicators());
+        response.setSignal("TECHNICAL");
+        return response;
+    }
+
+    /**
+     * Convert SignalService.SentimentAnalysis to SentimentAnalysisResponse DTO
+     */
+    private SentimentAnalysisResponse convertSentimentAnalysis(com.swingtrade.api.SignalService.SentimentAnalysis sentiment) {
+        if (sentiment == null) {
+            return null;
+        }
+        SentimentAnalysisResponse response = new SentimentAnalysisResponse();
+        response.setSymbol(sentiment.getSymbol());
+        response.setAnalyzedAt(sentiment.getDate());
+        response.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(sentiment.getScore()));
+        response.setSummary(sentiment.getSummary());
+        return response;
+    }
+
+    /**
+     * Convert SignalService.CombinedSignal to CombinedSignalResponse DTO
+     */
+    private CombinedSignalResponse convertCombinedSignal(com.swingtrade.api.SignalService.CombinedSignal combined) {
+        if (combined == null) {
+            return null;
+        }
+        CombinedSignalResponse response = new CombinedSignalResponse();
+        response.setSymbol(combined.getSymbol());
+        response.setAnalysisDate(combined.getDate());
+        response.setSignalType(SignalResponse.SignalType.valueOf(combined.getFinalSignal().toString()));
+        response.setTechnicalAnalysis(convertTechnicalAnalysis(null)); // Placeholder
+        response.setSentimentAnalysis(convertSentimentAnalysis(combined.getSentiment()));
+        return response;
     }
 
     /**
@@ -405,7 +483,7 @@ public class SignalController {
         private Double emaFast;
         private Double emaSlow;
         private Double atr;
-        private DoublebollingerBandUpper;
+        private Double bollingerBandUpper;
         private Double bollingerBandLower;
         private Double volume;
         private Double avgVolume;

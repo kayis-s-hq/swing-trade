@@ -1,5 +1,6 @@
 package com.swingtrade.api;
 
+import com.swingtrade.api.dto.ScanResponse;
 import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.strategy.SignalEngine;
@@ -57,10 +58,19 @@ public class ScanService {
     }
 
     /**
-     * Get scan history
-     * @return List of previous scan results
+     * Trigger scan and return ScanResponse DTO
+     * @return ScanResponse with scan results
      */
-    public List<ScanResult> getScanHistory() {
+    public ScanResponse triggerScan() {
+        ScanResult result = triggerManualScan();
+        return convertScanResultToResponse(result);
+    }
+
+    /**
+     * Get scan history
+     * @return List of previous scan results as ScanResponse DTOs
+     */
+    public List<ScanResponse> getScanHistory() {
         // Query recent signals as scan history
         // In production, would have a dedicated scan history table
         return new ArrayList<>();
@@ -88,6 +98,23 @@ public class ScanService {
             opportunities,
             "SUCCESS"
         );
+    }
+
+    /**
+     * Convert ScanResult to ScanResponse DTO
+     */
+    private ScanResponse convertScanResultToResponse(ScanResult result) {
+        ScanResponse response = new ScanResponse();
+        response.setScanTime(result.getScanTime());
+        response.setStatus(ScanResponse.ScanStatus.COMPLETED);
+        response.setSymbolsScannedCount(result.getOpportunityCount());
+        response.setSignalsFound(result.getOpportunityCount());
+        response.setBuySignals(result.getOpportunityCount());
+        response.setSellSignals(0);
+        response.setHoldSignals(0);
+        response.setSymbolsScanned(result.getOpportunities());
+        response.setMessage(result.getStatus());
+        return response;
     }
 
     // DTO class for API response

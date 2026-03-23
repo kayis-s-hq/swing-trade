@@ -12,7 +12,6 @@ import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.domain.Trade;
 import com.swingtrade.domain.Trade.TradeStatus;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -27,7 +26,6 @@ import java.time.format.DateTimeFormatter;
  * @author SwingTrade Team
  */
 @Component
-@Slf4j
 public class TelegramMessageFormatter {
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -163,7 +161,7 @@ public class TelegramMessageFormatter {
           .append("</code>\n");
         sb.append("💵 <b>Total Value:</b> <code>")
           .append(formatPrice(position.getEntryPrice().multiply(
-              new BigDecimal(position.getQuantity()))))
+              position.getQuantity())))
           .append("</code>\n");
         sb.append("🛑 <b>Stop Loss:</b> <code>")
           .append(formatPrice(position.getSlPrice()))
