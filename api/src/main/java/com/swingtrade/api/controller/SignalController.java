@@ -315,7 +315,7 @@ public class SignalController {
         SignalResponse response = new SignalResponse();
         response.setSymbol(signal.getSymbol());
         response.setSignalType(SignalResponse.SignalType.valueOf(signal.getType().toString()));
-        response.setConfidence(signal.getConfidence());
+        response.setConfidence(signal.getConfidence() != null ? BigDecimal.valueOf(signal.getConfidence()) : null);
         response.setGeneratedAt(signal.getDate());
         response.setReasoning(signal.getReasoning());
         return response;

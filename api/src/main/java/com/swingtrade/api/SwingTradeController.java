@@ -1,5 +1,6 @@
 package com.swingtrade.api;
 
+import com.swingtrade.api.dto.PositionResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,7 +32,7 @@ public class SwingTradeController {
      * @return List of latest trading signals
      */
     @GetMapping("/signals/latest")
-    public ResponseEntity<List<Signal>> getLatestSignals() {
+    public ResponseEntity<List<SignalService.Signal>> getLatestSignals() {
         return ResponseEntity.ok(signalService.getLatestSignals());
     }
 
@@ -40,7 +41,7 @@ public class SwingTradeController {
      * @return List of open paper positions
      */
     @GetMapping("/positions")
-    public ResponseEntity<List<Position>> getOpenPositions() {
+    public ResponseEntity<List<PositionResponse>> getOpenPositions() {
         return ResponseEntity.ok(positionService.getOpenPositions());
     }
 
@@ -49,7 +50,7 @@ public class SwingTradeController {
      * @return Performance statistics
      */
     @GetMapping("/performance")
-    public ResponseEntity<PerformanceStats> getPerformance() {
+    public ResponseEntity<PerformanceService.PerformanceStats> getPerformance() {
         return ResponseEntity.ok(performanceService.getPerformanceStats());
     }
 
@@ -58,7 +59,7 @@ public class SwingTradeController {
      * @return Scan result
      */
     @PostMapping("/scan")
-    public ResponseEntity<ScanResult> triggerScan() {
+    public ResponseEntity<ScanService.ScanResult> triggerScan() {
         return ResponseEntity.ok(scanService.triggerManualScan());
     }
 }
