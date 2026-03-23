@@ -1,70 +1,53 @@
 {
   "version": "1.0",
-  "timestamp": "2026-03-23T00:15:00.000Z",
-  "phase": "06",
-  "phase_name": "live-trading",
-  "phase_dir": ".planning/phases/06-live-trading",
-  "plan": 2,
-  "task": 5,
-  "total_tasks": 5,
-  "status": "paused",
+  "timestamp": "2026-03-23T07:29:52.666Z",
+  "phase": "05",
+  "phase_name": "API Layer",
+  "phase_dir": "05-api-layer",
+  "plan": 6,
+  "task": 6,
+  "total_tasks": 6,
+  "status": "in_progress",
   "completed_tasks": [
-    {"id": 1, "name": "Verify KiteConnectClient implementation", "status": "done", "commit": "08dfc41"},
-    {"id": 2, "name": "Verify BrokerServiceFactory mode switching", "status": "done", "commit": "08dfc41"},
-    {"id": 3, "name": "Verify RiskControlsService integration", "status": "done", "commit": "08dfc41"},
-    {"id": 4, "name": "Document Zerodha API setup steps", "status": "done", "commit": "08dfc41"},
-    {"id": 5, "name": "Verify application properties configuration", "status": "done", "commit": "08dfc41"},
-    {"id": 6, "name": "Create KiteConnectClientTest", "status": "done", "progress": "32 tests created"},
-    {"id": 7, "name": "Create BrokerServiceFactoryTest", "status": "done", "progress": "36 tests created"},
-    {"id": 8, "name": "Create LiveTradingServiceTest", "status": "done", "progress": "21 tests created"},
-    {"id": 9, "name": "Create DryRunServiceTest", "status": "done", "progress": "17 tests created"},
-    {"id": 10, "name": "Run tests and verify coverage", "status": "in_progress", "progress": "Blocked by compilation errors"}
+    {"id": 1, "name": "TradingController", "status": "done"},
+    {"id": 2, "name": "SignalController", "status": "done"},
+    {"id": 3, "name": "PositionController", "status": "done"},
+    {"id": 4, "name": "PerformanceService", "status": "done"},
+    {"id": 5, "name": "ScanService", "status": "done"},
+    {"id": 6, "name": "DTOs and Compilation Fixes", "status": "in_progress", "progress": "Fixed 16 compilation errors across core, data, broker, api modules. Remaining: controller type inference issues"}
   ],
-  "remaining_tasks": [
-    {"id": 10, "name": "Run tests and verify coverage", "status": "blocked"}
-  ],
+  "remaining_tasks": [],
   "blockers": [
-    {
-      "description": "Order.java missing setAdditionalProperties/getAdditionalProperties methods",
-      "type": "technical",
-      "workaround": "Add Map<String, Object> additionalProperties field to Order.java"
-    },
-    {
-      "description": "PaperTradingEngine.java private access to checkPositionTriggers",
-      "type": "technical",
-      "workaround": "Change method visibility to protected or public"
-    },
-    {
-      "description": "BigDecimal constructor error in SignalMessageFormatter.java",
-      "type": "technical",
-      "workaround": "Fix BigDecimal usage pattern"
-    }
+    {"description": "Controller type inference issues with error response builders", "type": "technical", "workaround": "Use fully qualified type names"}
   ],
   "human_actions_pending": [],
   "decisions": [
-    {
-      "decision": "Conservative position limits (3 positions, ₹16,666 max per position)",
-      "rationale": "Align with ₹50K live trading capital target (20% per position)",
-      "phase": "06"
-    },
-    {
-      "decision": "Safe activation progression: dry_run → paper → live",
-      "rationale": "Minimize risk during testing phase",
-      "phase": "06"
-    }
+    {"decision": "Use Duration instead of TimeUnit for Timer.record()", "rationale": "Micrometer 2.x API changed to use Duration objects", "phase": "05"},
+    {"decision": "Keep local DTO classes in services", "rationale": "PositionService, SignalService need internal DTOs for service-layer operations", "phase": "05"},
+    {"decision": "Use fully qualified type names in controllers", "rationale": "Avoid ambiguity between service DTOs and controller DTOs", "phase": "05"}
   ],
   "uncommitted_files": [
-    "broker/pom.xml",
-    "broker/src/main/java/com/swingtrade/broker/factory/DryRunService.java",
-    "broker/src/main/java/com/swingtrade/broker/factory/LiveTradingService.java",
-    "broker/src/main/java/com/swingtrade/broker/kite/KiteConnectClient.java",
-    "broker/src/main/java/com/swingtrade/broker/manager/OrderManager.java",
-    "broker/src/main/java/com/swingtrade/broker/telegram/SignalMessageFormatter.java",
-    "broker/src/main/java/com/swingtrade/broker/telegram/SignalNotificationService.java",
-    "broker/src/main/java/com/swingtrade/broker/telegram/TelegramNotificationService.java",
-    "broker/src/test/java/com/swingtrade/broker/factory/BrokerServiceFactoryTest.java",
-    "core/src/main/java/com/swingtrade/domain/Signal.java"
+    "api/pom.xml",
+    "api/src/main/java/com/swingtrade/api/PerformanceService.java",
+    "api/src/main/java/com/swingtrade/api/PositionService.java",
+    "api/src/main/java/com/swingtrade/api/ScanService.java",
+    "api/src/main/java/com/swingtrade/api/SignalService.java",
+    "api/src/main/java/com/swingtrade/api/config/ActuatorConfig.java",
+    "api/src/main/java/com/swingtrade/api/config/SchedulingConfig.java",
+    "api/src/main/java/com/swingtrade/api/controller/PositionController.java",
+    "api/src/main/java/com/swingtrade/api/controller/SignalController.java",
+    "api/src/main/java/com/swingtrade/api/controller/TradingController.java",
+    "api/src/main/java/com/swingtrade/api/dto/ScanResponse.java",
+    "api/src/main/java/com/swingtrade/api/metrics/TradeMetrics.java",
+    "api/src/main/java/com/swingtrade/api/scheduler/WeeklySectorDigestScheduler.java",
+    "api/src/main/java/com/swingtrade/api/service/MonthlyReportService.java",
+    "core/src/main/java/com/swingtrade/core/metrics/TradeMetrics.java",
+    "data/src/main/java/com/swingtrade/data/entity/PositionEntity.java",
+    "data/src/main/java/com/swingtrade/data/entity/TradeLabel.java",
+    "data/src/main/java/com/swingtrade/data/repository/PositionRepository.java",
+    "data/src/main/java/com/swingtrade/data/repository/StockRepository.java",
+    "data/src/main/java/com/swingtrade/data/repository/TradeLabelRepository.java"
   ],
-  "next_action": "Add additionalProperties map to Order.java with getters/setters, then re-run mvn test -pl broker",
-  "context_notes": "Phase 6 implementation complete, test suite created, blocked by compilation errors in PaperTradingEngine.java and missing Order methods. Context nearly exhausted."
+  "next_action": "Fix remaining controller type inference issues in TradingController, PositionController, SignalController. Then compile and start server for UAT testing.",
+  "context_notes": "Fixing cascading compilation errors across modules. Most errors resolved (16 fixes). Remaining: controller type inference issues. Once compiled, start server and test 15+ API endpoints for UAT."
 }

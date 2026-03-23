@@ -1,9 +1,10 @@
 package com.swingtrade.broker.factory;
 
+import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.kite.KiteConnectClient;
 import com.swingtrade.broker.model.*;
 import com.swingtrade.broker.risk.RiskCheckResult;
-import com.swingtrade.broker.risk.RiskControlsService;
+import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.broker.service.BrokerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,16 +23,16 @@ public class LiveTradingService implements BrokerService {
 
     private static final Logger logger = LoggerFactory.getLogger(LiveTradingService.class);
 
-    private final KiteConnectClient kiteConnectClient;
-    private final RiskControlsService riskControlsService;
+    private final BrokerClient brokerClient;
+    private final RiskControls riskControls;
 
     private final int maxConcurrentPositions;
     private final BigDecimal maxCapitalPerPosition;
 
-    public LiveTradingService(KiteConnectClient kiteConnectClient,
-                              RiskControlsService riskControlsService) {
-        this.kiteConnectClient = kiteConnectClient;
-        this.riskControlsService = riskControlsService;
+    public LiveTradingService(BrokerClient brokerClient,
+                              RiskControls riskControls) {
+        this.brokerClient = brokerClient;
+        this.riskControls = riskControls;
 
         this.maxConcurrentPositions = 5; // Default, can be configured
         this.maxCapitalPerPosition = new BigDecimal("200000"); // Default, can be configured
@@ -57,22 +58,24 @@ public class LiveTradingService implements BrokerService {
             orderResponse.setExchange(Exchange.NSE); // Default to NSE
 
             // Get current market price
-            BigDecimal marketPrice = kiteConnectClient.getMarketPrice(order.getSymbol(), Exchange.NSE);
+            BigDecimal marketPrice = brokerClient.getMarketPrice(order.getSymbol(), Exchange.NSE);
             if (marketPrice != null) {
                 orderResponse.setPrice(marketPrice);
             }
 
             // Perform pre-trade risk checks
-            RiskCheckResult riskResult = riskControlsService.preTradeCheck(orderResponse, marketPrice);
+            RiskCheckResult riskResult = riskControls.preTradeCheck(orderResponse, marketPrice);
             if (!riskResult.isPassed()) {
                 logger.warn("Pre-trade risk checks failed: {}", riskResult.getMessages());
                 orderResponse.setStatus(OrderStatus.CANCELLED);
                 orderResponse.setMessage("Risk check failed: " + String.join(", ", riskResult.getMessages()));
-                return order; // Return original order unchanged
+                order.setStatus(OrderStatus.CANCELLED); // Update order status before returning
+                orderResponse.setMessage("Risk check failed: " + String.join(", ", riskResult.getMessages()));
+                return order;
             }
 
-            // Place order through Kite Connect
-            orderResponse = kiteConnectClient.placeOrder(orderResponse);
+            // Place order through broker
+            orderResponse = brokerClient.placeOrder(orderResponse);
 
             // Update order with response
             order.setOrderId(orderResponse.getBrokerOrderId());
@@ -94,17 +97,17 @@ public class LiveTradingService implements BrokerService {
     @Override
     public boolean cancelOrder(String orderId) {
         logger.info("Cancelling live order: {}", orderId);
-        return kiteConnectClient.cancelOrder(orderId);
+        return brokerClient.cancelOrder(orderId);
     }
 
     @Override
     public Portfolio getPortfolio() {
-        return kiteConnectClient.getPortfolio();
+        return brokerClient.getPortfolio();
     }
 
     @Override
     public List<Position> getOpenPositions() {
-        return kiteConnectClient.getPositions();
+        return brokerClient.getPositions();
     }
 
     @Override
@@ -144,16 +147,16 @@ public class LiveTradingService implements BrokerService {
     }
 
     /**
-     * Get the underlying Kite Connect client.
+     * Get the underlying broker client.
      */
-    public KiteConnectClient getKiteConnectClient() {
-        return kiteConnectClient;
+    public BrokerClient getBrokerClient() {
+        return brokerClient;
     }
 
     /**
      * Get the risk controls service.
      */
-    public RiskControlsService getRiskControlsService() {
-        return riskControlsService;
+    public RiskControls getRiskControls() {
+        return riskControls;
     }
 }
