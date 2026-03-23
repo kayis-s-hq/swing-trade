@@ -652,6 +652,103 @@ Phase 4 has been planned with 3 sequential plans covering all 5 requirements:
 
 After Phase 4 completion, proceed to Phase 5 (Testing Foundation) for 80%+ code coverage.
 
+## Phase 11: Create docker-compose.dev.yml for development
+
+**Goal:** Create a dedicated development docker-compose.yml with hot reload, debugging, and development utilities.
+
+**Status:** ⏳ PLANNED (6 plans)
+**Duration:** 1–2 days
+**Priority:** Medium
+
+### Requirements Mapped
+
+| Req ID | Description | Plan Coverage |
+|--------|-------------|---------------|
+| REQ-201 | Hot reload via Spring Boot DevTools | Plan 01, Plan 06 |
+| REQ-202 | Debug port 5005 for IDE remote debugging | Plan 01, Plan 05 |
+| REQ-203 | Development utilities (pgAdmin, Redis Commander) | Plan 01 |
+| REQ-204 | Database seed data for quick testing | Plan 02 |
+| REQ-205 | Backup/restore scripts | Plan 03 |
+| REQ-206 | Mock services for offline testing | Plan 01 |
+| REQ-207 | Resource limits for dev environment | Plan 01 |
+
+### Success Criteria
+
+- [ ] docker-compose.dev.yml created with all services
+- [ ] Hot reload works (file changes trigger restart)
+- [ ] Debug port accessible from IDE
+- [ ] Database auto-seeded with sample data
+- [ ] Backup/restore scripts functional
+- [ ] Selective service mode works (COMPOSE_SERVICES env var)
+- [ ] Mock services work for offline testing
+- [ ] Resource limits enforced (2g mem, 2 CPU)
+- [ ] DEBUG logging enabled
+- [ ] Ports exposed to localhost
+- [ ] Relaxed health checks (30s interval)
+- [ ] CLI tools available in container
+- [ ] pgAdmin and Redis Commander accessible
+
+### Plans
+
+**6 plans** in 1 wave (all parallel)
+
+#### Plan 01: Create docker-compose.dev.yml (Wave 1)
+- **Objective:** Create development Docker Compose configuration with all services
+- **Requirement IDs:** REQ-201, REQ-202, REQ-203, REQ-206, REQ-207
+- **Files Modified:** docker-compose.dev.yml, docker-compose.dev.example, mock-services/
+- **Wave:** 1 (no dependencies)
+
+#### Plan 02: Create Seed Data Script (Wave 1)
+- **Objective:** Create seed data script with Nifty 500 stocks
+- **Requirement IDs:** REQ-204
+- **Files Modified:** scripts/seed-data.sql, scripts/seed-data.sh
+- **Wave:** 1 (no dependencies)
+
+#### Plan 03: Create Backup/Restore Scripts (Wave 1)
+- **Objective:** Create database backup and restore scripts
+- **Requirement IDs:** REQ-205
+- **Files Modified:** scripts/backup-db.sh, scripts/restore-db.sh
+- **Wave:** 1 (no dependencies)
+
+#### Plan 04: Create Environment Files (Wave 1)
+- **Objective:** Create .env.dev and application-dev.properties
+- **Requirement IDs:** REQ-201
+- **Files Modified:** .env.dev, .env.dev.example, api/src/main/resources/application-dev.properties
+- **Wave:** 1 (no dependencies)
+
+#### Plan 05: Modify Dockerfile for Dev Mode (Wave 1)
+- **Objective:** Add debug port and dev mode support to Dockerfile
+- **Requirement IDs:** REQ-202
+- **Files Modified:** Dockerfile
+- **Wave:** 1 (no dependencies)
+
+#### Plan 06: Add Spring Boot DevTools (Wave 1)
+- **Objective:** Add spring-boot-devtools dependency for hot reload
+- **Requirement IDs:** REQ-201
+- **Files Modified:** api/pom.xml
+- **Wave:** 1 (no dependencies)
+
+### Plan Details
+
+| Plan | Objective | Tasks | Files | Wave |
+|------|-----------|-------|-------|------|
+| 11-01 | Create docker-compose.dev.yml | 3 | docker-compose.dev.yml, mock-services/ | 1 |
+| 11-02 | Create seed data script | 2 | scripts/seed-data.sql, scripts/seed-data.sh | 1 |
+| 11-03 | Create backup/restore scripts | 3 | scripts/backup-db.sh, scripts/restore-db.sh | 1 |
+| 11-04 | Create environment files | 3 | .env.dev, application-dev.properties | 1 |
+| 11-05 | Modify Dockerfile for dev mode | 3 | Dockerfile | 1 |
+| 11-06 | Add Spring Boot DevTools | 3 | api/pom.xml | 1 |
+
+### What Needs to Be Done
+
+Execute Phase 11 plans in parallel: `/gsd:execute-phase 11`
+
+All 6 plans can execute simultaneously (Wave 1) as they have no inter-dependencies.
+
+---
+
+*Roadmap: 2026-03-23 (Phase 4, Phase 9, Phase 10, and Phase 11 plans created)*
+
 ---
 
 *Roadmap: 2026-03-23 (Phase 4, Phase 9, and Phase 10 plans created with all requirements mapped)*
