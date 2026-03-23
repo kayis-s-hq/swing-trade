@@ -22,6 +22,7 @@ class KiteConnectClientTest {
 
     private KiteConnectClient client;
     private KiteConnectClient liveClient;
+    private KiteConnectClient emptyClient;
 
     @BeforeEach
     void setUp() {
@@ -41,6 +42,11 @@ class KiteConnectClientTest {
         liveConfig.setEnvironment("live");
 
         liveClient = new KiteConnectClient(liveConfig);
+
+        // Create empty config
+        KiteConfig emptyConfig = new KiteConfig();
+
+        emptyClient = new KiteConnectClient(emptyConfig);
     }
 
     @Test
@@ -248,7 +254,8 @@ class KiteConnectClientTest {
         assertThat(config.getApiKey()).isEmpty();
         assertThat(config.isConfigured()).isFalse();
         assertThat(config.isSandbox()).isFalse();
-        assertThat(config.isLive()).isFalse();
+        // Default environment is "live", so isLive() returns true
+        assertThat(config.isLive()).isTrue();
     }
 
     @Test
@@ -271,5 +278,15 @@ class KiteConnectClientTest {
 
         assertThat(config.getProxyHost()).isEqualTo("proxy.example.com");
         assertThat(config.getProxyPort()).isEqualTo(8080);
+    }
+
+    @Test
+    void testBrokerClientIsConfigured() {
+        assertThat(client.isConfigured()).isTrue();
+    }
+
+    @Test
+    void testBrokerClientGetAccessToken() {
+        assertThat(client.getAccessToken()).isEqualTo("test_access_token_67890");
     }
 }

@@ -4,9 +4,9 @@ import com.swingtrade.broker.risk.RiskControlsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.client.RestTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -20,12 +20,26 @@ class TelegramKillSwitchTest {
     @Mock
     private RiskControlsService riskControlsService;
 
-    @InjectMocks
+    @Mock
+    private TelegramMessageFormatter messageFormatter;
+
+    @Mock
+    private RestTemplate restTemplate;
+
     private TelegramNotificationService telegramService;
 
     @BeforeEach
     void setUp() {
-        reset(riskControlsService);
+        reset(riskControlsService, messageFormatter, restTemplate);
+        telegramService = new TelegramNotificationService(messageFormatter, riskControlsService);
+        // Inject mock restTemplate using reflection
+        try {
+            java.lang.reflect.Field field = TelegramNotificationService.class.getDeclaredField("restTemplate");
+            field.setAccessible(true);
+            field.set(telegramService, restTemplate);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to inject mock RestTemplate", e);
+        }
     }
 
     @Test

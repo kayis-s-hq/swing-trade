@@ -19,7 +19,7 @@ import java.util.List;
  * Coordinates all risk checks before trade execution.
  */
 @Component
-public class RiskControlsService {
+public class RiskControlsService implements RiskControls {
 
     private static final Logger logger = LoggerFactory.getLogger(RiskControlsService.class);
 
@@ -28,12 +28,15 @@ public class RiskControlsService {
     private final PositionSizeValidator positionSizeValidator;
     private final PositionManager positionManager;
     private final KiteConnectClient kiteConnectClient;
+    private boolean killSwitchActive;
 
     @Value("${broker.kill-switch-enabled:false}")
     private boolean killSwitchEnabled;
 
     @Value("${broker.kill-switch-active:false}")
-    private boolean killSwitchActive;
+    public void setKillSwitchActiveConfig(boolean killSwitchActive) {
+        this.killSwitchActive = killSwitchActive;
+    }
 
     @Autowired
     public RiskControlsService(PositionLimitChecker positionLimitChecker,
@@ -46,8 +49,26 @@ public class RiskControlsService {
         this.positionSizeValidator = positionSizeValidator;
         this.positionManager = positionManager;
         this.kiteConnectClient = kiteConnectClient;
+        this.killSwitchActive = false; // default
 
         logger.info("RiskControlsService initialized with kill switch: {}", killSwitchEnabled);
+    }
+
+    /**
+     * Constructor for testing purposes.
+     */
+    public RiskControlsService(PositionLimitChecker positionLimitChecker,
+                               DailyLossCircuitBreaker dailyLossCircuitBreaker,
+                               PositionSizeValidator positionSizeValidator,
+                               PositionManager positionManager,
+                               KiteConnectClient kiteConnectClient,
+                               boolean killSwitchActive) {
+        this.positionLimitChecker = positionLimitChecker;
+        this.dailyLossCircuitBreaker = dailyLossCircuitBreaker;
+        this.positionSizeValidator = positionSizeValidator;
+        this.positionManager = positionManager;
+        this.kiteConnectClient = kiteConnectClient;
+        this.killSwitchActive = killSwitchActive;
     }
 
     /**
@@ -75,6 +96,7 @@ public class RiskControlsService {
                 calculateEstimatedRisk(orderResponse, marketPrice)
         );
         result.getMessages().addAll(circuitBreakerResult.getMessages());
+        result.setPassed(circuitBreakerResult.isPassed());
         if (!circuitBreakerResult.isPassed()) {
             return result;
         }
@@ -83,6 +105,7 @@ public class RiskControlsService {
         BigDecimal estimatedValue = calculateTradeValue(orderResponse, marketPrice);
         RiskCheckResult positionLimitResult = positionLimitChecker.canAddPosition(estimatedValue);
         result.getMessages().addAll(positionLimitResult.getMessages());
+        result.setPassed(positionLimitResult.isPassed());
         if (!positionLimitResult.isPassed()) {
             return result;
         }
@@ -91,6 +114,7 @@ public class RiskControlsService {
         RiskCheckResult sizeResult = positionSizeValidator.validatePositionSize(estimatedValue);
         result.getMessages().addAll(sizeResult.getMessages());
         if (!sizeResult.isPassed() && sizeResult.hasErrors()) {
+            result.setPassed(false);
             return result;
         }
 
