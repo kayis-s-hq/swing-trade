@@ -1,9 +1,9 @@
 ---
-status: testing
+status: partial
 phase: 05-api-layer
-source: [05-api-layer-SUMMARY.md]
+source: [05-02-SUMMARY.md, 05-03-SUMMARY.md, 05-09-SUMMARY.md]
 started: 2026-03-22T00:00:00Z
-updated: 2026-03-22T00:00:00Z
+updated: 2026-03-23T12:45:00Z
 ---
 
 ## Current Test
@@ -20,7 +20,9 @@ awaiting: user response
 
 ### 1. Place Trade Order
 expected: POST /api/trades with body {"symbol": "RELIANCE", "quantity": 100, "entryReason": "Technical breakout"} should return OrderResponse with status "ACCEPTED" or "REJECTED" and order confirmation details.
-result: pending
+result: blocked
+blocked_by: build-error
+reason: API has compilation errors - cannot build or run server
 
 ### 2. Get Portfolio Overview
 expected: |
@@ -87,9 +89,25 @@ result: pending
 total: 13
 passed: 0
 issues: 0
-pending: 13
+pending: 12
 skipped: 0
+blocked: 1
 
 ## Gaps
 
-[none yet]
+- truth: "API server starts and trade endpoint responds"
+  status: failed
+  reason: "API has compilation errors - cannot build or run server"
+  severity: blocker
+  test: 1
+  artifacts:
+    - api/src/main/java/com/swingtrade/api/controller/TradingController.java
+    - api/src/main/java/com/swingtrade/api/metrics/TradeMetrics.java
+    - api/src/main/java/com/swingtrade/api/service/MonthlyReportService.java
+    - api/src/main/java/com/swingtrade/api/scheduler/WeeklySectorDigestScheduler.java
+  missing:
+    - PositionService.getRiskSummary()
+    - Timer.Builder.baseTimeUnit()
+    - Signal.signalType()
+    - PositionEntity.getPnl()
+    - SentimentAnalysisService.generateSectorDigestForLastWeek()
