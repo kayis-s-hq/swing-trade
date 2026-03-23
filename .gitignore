@@ -1,0 +1,86 @@
+# Compiled class files
+*.class
+
+# Log files
+*.log
+
+# Package files
+*.jar
+*.war
+*.ear
+*.nar
+
+# Maven target directory
+target/
+
+# Maven settings
+.settings/
+
+# IDE specific files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Eclipse
+.classpath
+.project
+bin/
+output/
+
+# IntelliJ
+*.iml
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# GSD worktree directories
+.claude/worktrees/
+
+# Generated docs (keep .planning/ but ignore generated reports)
+docs/generated/
+reports/
+
+# Build artifacts
+*.log
+*.tmp
+*.temp
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Database files (if any local DBs)
+*.db
+*.sqlite
+*.h2.db
+
+# Local configuration
+local.properties
+user.properties
+
+# Test containers
+.docker/
+
+# Node modules (if any frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Scala
+*.scala_bsp
+
+# Project specific
+broker/target/
+strategy/target/
+data/target/
+core/target/
+llm/target/
+api/target/
