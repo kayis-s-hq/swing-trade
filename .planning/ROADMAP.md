@@ -1,8 +1,8 @@
 # ROADMAP.md - SwingTrade Implementation Phases
 
-**Document Version:** 2.4
+**Document Version:** 2.5
 **Created:** 2026-03-07
-**Last Updated:** 2026-03-22 (Phase 9 plans created)
+**Last Updated:** 2026-03-23 (Phase 10 plans created)
 
 ---
 
@@ -521,11 +521,64 @@ Execute Phase 9 plans in order: `/gsd:execute-phase 09`
 
 ### Plans
 
-**0 plans** - Run `/gsd:plan-phase 10` to create plans
+**3 plans** in 2 waves
+
+#### Plan 01: Multi-stage Dockerfile (Wave 1)
+- **Objective:** Create multi-stage Dockerfile with JAR and native build targets
+- **Requirement IDs:** REQ-201, REQ-204, REQ-205
+- **Files Modified:** Dockerfile
+- **Wave:** 1 (no dependencies)
+- **Tasks:**
+  1. Create multi-stage Dockerfile with 4 build stages (dependency-cache, source-build, runtime-native, runtime-jar)
+  2. Configure health checks for Spring Actuator endpoints
+  3. Add timezone configuration for Asia/Kolkata
+
+#### Plan 02: Maven Native Configuration (Wave 1)
+- **Objective:** Configure Maven for GraalVM native compilation
+- **Requirement IDs:** REQ-202, REQ-204
+- **Files Modified:** pom.xml, api/pom.xml
+- **Wave:** 1 (no dependencies)
+- **Tasks:**
+  1. Add Spring Native BOM and properties to parent POM
+  2. Configure spring-boot-maven-plugin with native-image goal in API module
+  3. Add native Maven profile with optimization buildArgs
+
+#### Plan 03: Docker Compose Updates (Wave 2)
+- **Objective:** Update docker-compose.yml with swing-trade-api service
+- **Requirement IDs:** REQ-203, REQ-205
+- **Files Modified:** docker-compose.yml, .env.example
+- **Wave:** 2 (depends on Plan 01)
+- **Tasks:**
+  1. Add health checks to existing postgres and redis services
+  2. Add swing-trade-api native service
+  3. Add swing-trade-api-dev JAR service for development
+  4. Create .env.example template file
+  5. Update docker-compose network configuration
+
+### Plan Details
+
+| Plan | Objective | Tasks | Files | Wave |
+|------|-----------|-------|-------|------|
+| 10-01 | Multi-stage Dockerfile | 3 | Dockerfile | 1 |
+| 10-02 | Maven native configuration | 3 | pom.xml, api/pom.xml | 1 |
+| 10-03 | Docker Compose updates | 5 | docker-compose.yml, .env.example | 2 |
 
 ### What Needs to Be Done
 
-Run `/gsd:plan-phase 10` to create implementation plans.
+Execute Phase 10 plans in order: `/gsd:execute-phase 10`
+
+1. **Plan 01:** Create multi-stage Dockerfile (Wave 1)
+2. **Plan 02:** Configure Maven native build (Wave 1, parallel with Plan 01)
+3. **Plan 03:** Update docker-compose.yml (Wave 2, depends on Plan 01)
+
+Plans can be executed with:
+```bash
+# Wave 1 (parallel)
+gsd:execute-phase 10 --wave 1
+
+# Wave 2 (after Wave 1)
+gsd:execute-phase 10 --wave 2
+```
 
 ---
 
@@ -549,6 +602,8 @@ Phase 1: Core Domain ✅
     │       │       │       │       │       ├──> Phase 8: Vue Dashboard ⏳
     │       │       │       │       │       │       │
     │       │       │       │       │       ├──> Phase 9: Signal Notifications ⏳
+    │       │       │       │       │               │
+    │       │       │       │       │               ├──> Phase 10: Docker + GraalVM Native ⏳
 ```
 
 ---
@@ -577,6 +632,7 @@ Phase 1: Core Domain ✅
 | 7 | ⏳ Pending Phase 6 | 2026-05-15 | 2026-06-30 |
 | 8 | ⏳ Pending Phase 7 | TBD | TBD |
 | 9 | 📋 **PLANNED** | **TBD** | **TBD** |
+| 10 | 📋 **PLANNED** | **TBD** | **TBD** |
 
 ---
 
@@ -598,4 +654,4 @@ After Phase 4 completion, proceed to Phase 5 (Testing Foundation) for 80%+ code 
 
 ---
 
-*Roadmap: 2026-03-22 (Phase 4 & Phase 9 plans created with all requirements mapped)*
+*Roadmap: 2026-03-23 (Phase 4, Phase 9, and Phase 10 plans created with all requirements mapped)*
