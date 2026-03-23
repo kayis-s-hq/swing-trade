@@ -181,10 +181,61 @@
                     <execution>
                         <goals>
                             <goal>repackage</goal>
+                            <goal>native-image</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <classifier>exec</classifier>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
                         </goals>
                     </execution>
                 </executions>
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>native</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+            <properties>
+                <skipTests>true</skipTests>
+                <skipITs>true</skipITs>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-maven-plugin</artifactId>
+                        <configuration>
+                            <imageName>swing-trade-api</imageName>
+                            <classifier>native</classifier>
+                            <buildArgs>
+                                <buildArg>--gc=none</buildArg>
+                                <buildArg>--strict-image-heap</buildArg>
+                                <buildArg>-O3</buildArg>
+                                <buildArg>--allow-incomplete-classpath</buildArg>
+                                <buildArg>-H:Name=swing-trade-api</buildArg>
+                                <buildArg>--initialize-at-build-time=org.springframework</buildArg>
+                                <buildArg>--initialize-at-run-time=dev.langchain4j</buildArg>
+                            </buildArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
