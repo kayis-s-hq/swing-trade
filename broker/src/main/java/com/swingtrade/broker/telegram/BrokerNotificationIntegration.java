@@ -3,7 +3,6 @@ package com.swingtrade.broker.telegram;
 import com.swingtrade.broker.model.Position;
 import com.swingtrade.broker.service.BrokerService;
 import com.swingtrade.domain.Trade;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -32,7 +31,6 @@ import java.math.BigDecimal;
  * @author SwingTrade Team
  */
 @Component
-@RequiredArgsConstructor
 public class BrokerNotificationIntegration {
 
     private static final Logger log = LoggerFactory.getLogger(BrokerNotificationIntegration.class);
@@ -40,6 +38,14 @@ public class BrokerNotificationIntegration {
     private final SignalNotificationService signalService;
     private final BrokerService brokerService;
     private final SignalMessageFormatter messageFormatter;
+
+    public BrokerNotificationIntegration(SignalNotificationService signalService,
+                                          BrokerService brokerService,
+                                          SignalMessageFormatter messageFormatter) {
+        this.signalService = signalService;
+        this.brokerService = brokerService;
+        this.messageFormatter = messageFormatter;
+    }
 
     /**
      * Sends a notification when a new position is entered (trade open).

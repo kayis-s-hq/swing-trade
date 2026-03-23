@@ -5,7 +5,8 @@ import com.swingtrade.broker.model.Position;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Trade;
 import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -34,8 +35,9 @@ import com.swingtrade.broker.risk.RiskControlsService;
  * @author SwingTrade Team
  */
 @Service
-@Slf4j
 public class TelegramNotificationService {
+
+    private static final Logger log = LoggerFactory.getLogger(TelegramNotificationService.class);
 
     private static final DateTimeFormatter MESSAGE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");
