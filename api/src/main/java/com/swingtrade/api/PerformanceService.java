@@ -1,5 +1,6 @@
 package com.swingtrade.api;
 
+import com.swingtrade.api.dto.PerformanceResponse;
 import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,22 @@ public class PerformanceService {
     public PerformanceService(PaperTradingEngine paperTradingEngine, PositionRepository positionRepository) {
         this.paperTradingEngine = paperTradingEngine;
         this.positionRepository = positionRepository;
+    }
+
+    /**
+     * Get portfolio performance as PerformanceResponse DTO
+     * @return PerformanceResponse with real metrics
+     */
+    public PerformanceResponse getPortfolioPerformance() {
+        PerformanceStats stats = getPerformanceStats();
+        return PerformanceResponse.of(
+            stats.getTotalReturn(),
+            stats.getAnnualizedReturn(),
+            stats.getSharpeRatio(),
+            stats.getMaxDrawdown(),
+            stats.getTotalTrades(),
+            stats.getWinningTrades()
+        );
     }
 
     /**
