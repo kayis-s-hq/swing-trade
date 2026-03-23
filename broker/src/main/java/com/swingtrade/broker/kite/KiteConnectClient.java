@@ -206,4 +206,11 @@ public class KiteConnectClient {
         logger.warn("Connection test called but Kite SDK not available");
         return false;
     }
+
+    /**
+     * Get the Kite configuration.
+     */
+    public KiteConfig getKiteConfig() {
+        return kiteConfig;
+    }
 }

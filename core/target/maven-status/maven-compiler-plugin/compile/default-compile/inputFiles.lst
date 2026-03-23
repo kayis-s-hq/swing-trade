@@ -1,6 +1,7 @@
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/OhlcvCandle.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/Position.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/SentimentResult.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/Signal.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/Stock.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/Trade.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/Position.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/core/metrics/TradeMetrics.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/OhlcvCandle.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/Signal.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/core/src/main/java/com/swingtrade/domain/SentimentResult.java

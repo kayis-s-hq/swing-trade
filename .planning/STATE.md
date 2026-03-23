@@ -5,7 +5,7 @@ milestone_name: milestone
 status: executing
 last_updated: "2026-03-23T12:30:00.000Z"
 progress:
-  total_phases: 11
+  total_phases: 10
   completed_phases: 4
   total_plans: 21
   completed_plans: 16
@@ -69,6 +69,9 @@ progress:
 | 5 | Testing Foundation | ⏳ Planned | Phase 4 |
 | 6 | Live Trading | ⏳ Planned | Phase 5 |
 | 7 | Observability | ⏳ Planned | Phase 6 |
+| 8 | Vue Dashboard | ⏳ Planned | Phase 7 |
+| 9 | Signal Notifications | 📋 Planned | Phase 8 |
+| 10 | Docker + GraalVM Native | 📋 Planned | Phase 9 |
 
 ---
 
@@ -108,3 +111,4 @@ progress:
 
 - Phase 8 added: Vue Dashboard + Monitoring UI
 - Phase 9 added: replace telegram with signal
+- Phase 10 added: dockerize and use graalvm spring boot native

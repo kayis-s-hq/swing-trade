@@ -8,10 +8,6 @@
         <outputRelativeToContentRoot value="true" />
         <module name="core" />
         <module name="api" />
-        <module name="broker" />
-        <module name="data" />
-        <module name="llm" />
-        <module name="strategy" />
       </profile>
     </annotationProcessing>
   </component>
