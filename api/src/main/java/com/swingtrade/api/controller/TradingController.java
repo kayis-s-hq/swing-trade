@@ -52,11 +52,11 @@ public class TradingController {
         } catch (IllegalArgumentException e) {
             logger.error("Invalid request: {}", e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(buildErrorResponse("Bad Request", e.getMessage()));
+                    .body(buildPositionErrorResponse("Bad Request", e.getMessage()));
         } catch (Exception e) {
             logger.error("Error creating position: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(buildErrorResponse("Internal Server Error", "Failed to create position"));
+                    .body(buildPositionErrorResponse("Internal Server Error", "Failed to create position"));
         }
     }
 
@@ -76,7 +76,7 @@ public class TradingController {
         } catch (Exception e) {
             logger.error("Error fetching positions: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(buildErrorResponse("Internal Server Error", "Failed to fetch positions"));
+                    .body(java.util.List.of());
         }
     }
 
@@ -102,7 +102,7 @@ public class TradingController {
         } catch (Exception e) {
             logger.error("Error fetching position: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(buildErrorResponse("Internal Server Error", "Failed to fetch position"));
+                    .body(buildPositionErrorResponse("Internal Server Error", "Failed to fetch position"));
         }
     }
 
@@ -132,11 +132,11 @@ public class TradingController {
         } catch (IllegalArgumentException e) {
             logger.error("Invalid request: {}", e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(buildErrorResponse("Bad Request", e.getMessage()));
+                    .body(buildPositionErrorResponse("Bad Request", e.getMessage()));
         } catch (Exception e) {
             logger.error("Error closing position: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(buildErrorResponse("Internal Server Error", "Failed to close position"));
+                    .body(buildPositionErrorResponse("Internal Server Error", "Failed to close position"));
         }
     }
 
@@ -157,7 +157,7 @@ public class TradingController {
         } catch (Exception e) {
             logger.error("Error fetching trade history: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(buildErrorResponse("Internal Server Error", "Failed to fetch trade history"));
+                    .body(java.util.List.of());
         }
     }
 
@@ -177,7 +177,7 @@ public class TradingController {
         } catch (Exception e) {
             logger.error("Error fetching performance: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(buildErrorResponse("Internal Server Error", "Failed to fetch performance"));
+                    .body(buildPerformanceErrorResponse("Internal Server Error", "Failed to fetch performance"));
         }
     }
 
@@ -187,90 +187,47 @@ public class TradingController {
      * @return Risk summary
      */
     @GetMapping("/risk-summary")
-    public ResponseEntity<RiskSummary> getRiskSummary() {
+    public ResponseEntity<com.swingtrade.api.dto.RiskSummary> getRiskSummary() {
         logger.debug("Fetching risk summary");
 
         try {
-            RiskSummary riskSummary = positionService.getRiskSummary();
+            com.swingtrade.api.dto.RiskSummary riskSummary = positionService.getRiskSummary();
             return ResponseEntity.ok(riskSummary);
 
         } catch (Exception e) {
             logger.error("Error fetching risk summary: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(buildErrorResponse("Internal Server Error", "Failed to fetch risk summary"));
+            // Risk summary errors don't need error responses - return null or handle differently
+            return ResponseEntity.internalServerError().body(null);
         }
     }
 
     /**
-     * Build an error response wrapper.
+     * Build a PositionResponse error.
      */
-    private PositionResponse buildErrorResponse(String error, String message) {
-        PositionResponse response = new PositionResponse();
-        response.setEntryReason(error);
-        response.setEntryPrice(new com.swingtrade.api.dto.PositionResponse.PositionStatus[]{
-                com.swingtrade.api.dto.PositionResponse.PositionStatus.OPEN
-        }.length > 0 ? com.swingtrade.api.dto.PositionResponse.PositionStatus.OPEN : null);
+    private com.swingtrade.api.dto.PositionResponse buildPositionErrorResponse(String error, String message) {
+        com.swingtrade.api.dto.PositionResponse response = new com.swingtrade.api.dto.PositionResponse();
+        response.setSymbol("ERROR");
+        response.setEntryReason(error + ": " + message);
         return response;
     }
 
     /**
-     * Risk summary DTO.
+     * Build a TradeResponse error.
      */
-    public static class RiskSummary {
-        private BigDecimal totalExposure;
-        private BigDecimal availableCapital;
-        private BigDecimal usedCapital;
-        private BigDecimal stopLossExposure;
-        private Integer numberOfPositions;
-        private Map<String, Integer> sectorExposure;
+    private com.swingtrade.api.dto.TradeResponse buildTradeErrorResponse(String error, String message) {
+        com.swingtrade.api.dto.TradeResponse response = new com.swingtrade.api.dto.TradeResponse();
+        response.setSymbol("ERROR");
+        response.setEntryReason(error + ": " + message);
+        return response;
+    }
 
-        // Getters and Setters
-        public BigDecimal getTotalExposure() {
-            return totalExposure;
-        }
-
-        public void setTotalExposure(BigDecimal totalExposure) {
-            this.totalExposure = totalExposure;
-        }
-
-        public BigDecimal getAvailableCapital() {
-            return availableCapital;
-        }
-
-        public void setAvailableCapital(BigDecimal availableCapital) {
-            this.availableCapital = availableCapital;
-        }
-
-        public BigDecimal getUsedCapital() {
-            return usedCapital;
-        }
-
-        public void setUsedCapital(BigDecimal usedCapital) {
-            this.usedCapital = usedCapital;
-        }
-
-        public BigDecimal getStopLossExposure() {
-            return stopLossExposure;
-        }
-
-        public void setStopLossExposure(BigDecimal stopLossExposure) {
-            this.stopLossExposure = stopLossExposure;
-        }
-
-        public Integer getNumberOfPositions() {
-            return numberOfPositions;
-        }
-
-        public void setNumberOfPositions(Integer numberOfPositions) {
-            this.numberOfPositions = numberOfPositions;
-        }
-
-        public Map<String, Integer> getSectorExposure() {
-            return sectorExposure;
-        }
-
-        public void setSectorExposure(Map<String, Integer> sectorExposure) {
-            this.sectorExposure = sectorExposure;
-        }
+    /**
+     * Build a PerformanceResponse error.
+     */
+    private com.swingtrade.api.dto.PerformanceResponse buildPerformanceErrorResponse(String error, String message) {
+        com.swingtrade.api.dto.PerformanceResponse response = new com.swingtrade.api.dto.PerformanceResponse();
+        response.setTotalReturn(java.math.BigDecimal.ZERO);
+        response.setAsOfDate(java.time.LocalDateTime.now());
+        return response;
     }
 }
