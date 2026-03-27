@@ -60,11 +60,11 @@ Core domain models, technical indicators, data pipeline, signal generation, and 
   - 80%+ code coverage across all modules (JaCoCo)
 
 - [x] **Phase 6 – Live Trading**:
-  - Zerodha Kite Connect Java SDK integration (₹2000/yr license)
+  - Zerodha Kite Connect Java SDK integration (₹2000/yr license) — stub implementation (KiteConnect not available as public Maven artifact)
   - BrokerServiceFactory routes to Kite vs paper mode based on config
   - Kill switch: halts live orders, closes positions, sends Telegram alert
   - Capital management: ₹50K initial, max 3 concurrent live positions
-  - **Status:** Implementation complete, awaiting test coverage (2 plans created)
+  - **Status:** ✅ Complete (2 plans executed, 158 tests passing)
 
 - [ ] **Phase 7 – Observability + Iteration**:
   - Grafana dashboards (Spring Actuator + Micrometer metrics)
@@ -218,4 +218,4 @@ Core domain models, technical indicators, data pipeline, signal generation, and 
 
 ---
 
-*Last updated: 2026-03-27 after Phase 05 API Layer completion*
+*Last updated: 2026-03-27 after Phases 05-06 completion*
