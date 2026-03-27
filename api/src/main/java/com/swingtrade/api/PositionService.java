@@ -90,13 +90,15 @@ public class PositionService {
 
     /**
      * Get positions by status.
-     * @param status the position status to filter by
+     * @param status the position status to filter by (as string: "OPEN", "CLOSED", "STOPPED", "TARGET_HIT")
      * @return List of positions with the given status
      */
-    public List<PositionResponse> getPositionsByStatus(PositionResponse.PositionStatus status) {
+    public List<PositionResponse> getPositionsByStatus(String status) {
+        // Convert string to uppercase for comparison
+        String statusUpper = status.toUpperCase();
         List<PositionEntity> allPositions = positionRepository.findAll();
         return allPositions.stream()
-                .filter(p -> status.name().equals(p.getStatus()))
+                .filter(p -> statusUpper.equals(p.getStatus().toUpperCase()))
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }

@@ -113,7 +113,7 @@ public class PositionController {
      */
     @GetMapping("/status/{status}")
     public ResponseEntity<List<PositionResponse>> getPositionsByStatus(
-            @PathVariable PositionResponse.PositionStatus status
+            @PathVariable String status
     ) {
         logger.debug("Fetching positions with status: {}", status);
 
@@ -189,7 +189,7 @@ public class PositionController {
         logger.debug("Fetching position statistics");
 
         try {
-            PositionStats stats = positionService.getPositionStats();
+            com.swingtrade.api.dto.PositionStats stats = positionService.getPositionStats();
             return ResponseEntity.ok(stats);
 
         } catch (Exception e) {
@@ -209,7 +209,7 @@ public class PositionController {
         logger.debug("Fetching sector allocation");
 
         try {
-            SectorAllocation allocation = positionService.getSectorAllocation();
+            com.swingtrade.api.dto.SectorAllocation allocation = positionService.getSectorAllocation();
             return ResponseEntity.ok(allocation);
 
         } catch (Exception e) {
@@ -278,158 +278,18 @@ public class PositionController {
     /**
      * Build a PositionStats with error info.
      */
-    private PositionStats buildPositionStatsErrorResponse(String error, String message) {
-        PositionStats stats = new PositionStats();
-        stats.setMessage(error + ": " + message);
+    private com.swingtrade.api.dto.PositionStats buildPositionStatsErrorResponse(String error, String message) {
+        com.swingtrade.api.dto.PositionStats stats = new com.swingtrade.api.dto.PositionStats();
+        stats.setMessage(message);
         return stats;
     }
 
     /**
      * Build a SectorAllocation with error info.
      */
-    private SectorAllocation buildSectorAllocationErrorResponse(String error, String message) {
-        SectorAllocation allocation = new SectorAllocation();
-        allocation.setMessage(error + ": " + message);
+    private com.swingtrade.api.dto.SectorAllocation buildSectorAllocationErrorResponse(String error, String message) {
+        com.swingtrade.api.dto.SectorAllocation allocation = new com.swingtrade.api.dto.SectorAllocation();
+        allocation.setMessage(message);
         return allocation;
-    }
-
-    /**
-     * Position statistics DTO.
-     */
-    public static class PositionStats {
-        private Integer totalPositions;
-        private Integer openPositions;
-        private Integer closedPositions;
-        private Integer stoppedOut;
-        private Integer targetHit;
-        private BigDecimal totalPnL;
-        private BigDecimal unrealizedPnL;
-        private Double winRate;
-        private Double averageHoldingPeriod;
-        private String message;
-
-        // Getters and Setters
-        public Integer getTotalPositions() {
-            return totalPositions;
-        }
-
-        public void setTotalPositions(Integer totalPositions) {
-            this.totalPositions = totalPositions;
-        }
-
-        public Integer getOpenPositions() {
-            return openPositions;
-        }
-
-        public void setOpenPositions(Integer openPositions) {
-            this.openPositions = openPositions;
-        }
-
-        public Integer getClosedPositions() {
-            return closedPositions;
-        }
-
-        public void setClosedPositions(Integer closedPositions) {
-            this.closedPositions = closedPositions;
-        }
-
-        public Integer getStoppedOut() {
-            return stoppedOut;
-        }
-
-        public void setStoppedOut(Integer stoppedOut) {
-            this.stoppedOut = stoppedOut;
-        }
-
-        public Integer getTargetHit() {
-            return targetHit;
-        }
-
-        public void setTargetHit(Integer targetHit) {
-            this.targetHit = targetHit;
-        }
-
-        public BigDecimal getTotalPnL() {
-            return totalPnL;
-        }
-
-        public void setTotalPnL(BigDecimal totalPnL) {
-            this.totalPnL = totalPnL;
-        }
-
-        public BigDecimal getUnrealizedPnL() {
-            return unrealizedPnL;
-        }
-
-        public void setUnrealizedPnL(BigDecimal unrealizedPnL) {
-            this.unrealizedPnL = unrealizedPnL;
-        }
-
-        public Double getWinRate() {
-            return winRate;
-        }
-
-        public void setWinRate(Double winRate) {
-            this.winRate = winRate;
-        }
-
-        public Double getAverageHoldingPeriod() {
-            return averageHoldingPeriod;
-        }
-
-        public void setAverageHoldingPeriod(Double averageHoldingPeriod) {
-            this.averageHoldingPeriod = averageHoldingPeriod;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public void setMessage(String message) {
-            this.message = message;
-        }
-    }
-
-    /**
-     * Sector allocation DTO.
-     */
-    public static class SectorAllocation {
-        private java.util.Map<String, Double> allocation;
-        private BigDecimal totalExposure;
-        private Integer numberOfSectors;
-        private String message;
-
-        // Getters and Setters
-        public java.util.Map<String, Double> getAllocation() {
-            return allocation;
-        }
-
-        public void setAllocation(java.util.Map<String, Double> allocation) {
-            this.allocation = allocation;
-        }
-
-        public BigDecimal getTotalExposure() {
-            return totalExposure;
-        }
-
-        public void setTotalExposure(BigDecimal totalExposure) {
-            this.totalExposure = totalExposure;
-        }
-
-        public Integer getNumberOfSectors() {
-            return numberOfSectors;
-        }
-
-        public void setNumberOfSectors(Integer numberOfSectors) {
-            this.numberOfSectors = numberOfSectors;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public void setMessage(String message) {
-            this.message = message;
-        }
     }
 }
