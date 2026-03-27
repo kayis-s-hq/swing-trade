@@ -205,15 +205,53 @@ Execute Phase 4 plans in order: `/gsd:execute-phase 04`
 
 ---
 
-## Phase 5: Testing Foundation 📋 PLANNED
+## Phase 5: API Layer 📋 PLANNED
+
+**Objective:** REST API endpoints with proper DTOs and service layer.
+
+**Status:** 📋 **Planned** (1 plan created for gap closure)
+**Duration:** 1 day
+**Priority:** High
+**Depends On:** Phase 4 completion
+
+### Requirements Mapped
+
+- REQ-023: PerformanceService ✅
+- REQ-024: ScanService ✅
+
+### Success Criteria
+
+- [x] API module compiles with zero errors
+- [x] All inner DTO classes properly defined
+- [x] All service methods return correct types
+- [x] Parameter type mismatches resolved
+
+### Plans
+
+**1 plan** for gap closure
+
+#### Plan 12: API Compilation Gap Closure (No dependencies)
+- **Objective:** Close 5 critical compilation gaps blocking API module
+- **Requirement IDs:** REQ-023, REQ-024
+- **Files Modified:** PositionService.java, PositionController.java, TradingController.java
+- **Tasks:**
+  1. Add PositionStats, SectorAllocation, RiskSummary inner classes to PositionService
+  2. Remove RiskSummary inner class from TradingController
+  3. Fix getPositionsByStatus() parameter type mismatch
+  4. Update controller return types to use PositionService inner classes
+  5. Verify API module compilation success
+
+---
+
+## Phase 6: Testing Foundation ⏳ PLANNED
 
 **Objective:** Unit + integration tests, 80%+ code coverage.
 
-**Status:** 📋 **Planned** (6 plans created)
+**Status:** ⏳ **Planned** (6 plans created)
 **Duration:** 2–3 weeks
 **Priority:** High
-**Depends On:** Phase 4 completion
-**Blocking:** Phase 6 cannot start until testing complete
+**Depends On:** Phase 5 API Layer completion
+**Blocking:** Phase 7 cannot start until testing complete
 
 ### Requirements Mapped
 
