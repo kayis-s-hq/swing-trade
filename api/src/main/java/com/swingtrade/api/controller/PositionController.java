@@ -185,11 +185,11 @@ public class PositionController {
      * @return Position statistics
      */
     @GetMapping("/stats")
-    public ResponseEntity<PositionStats> getPositionStats() {
+    public ResponseEntity<com.swingtrade.api.PositionService.PositionStats> getPositionStats() {
         logger.debug("Fetching position statistics");
 
         try {
-            com.swingtrade.api.dto.PositionStats stats = positionService.getPositionStats();
+            com.swingtrade.api.PositionService.PositionStats stats = positionService.getPositionStats();
             return ResponseEntity.ok(stats);
 
         } catch (Exception e) {
@@ -205,11 +205,11 @@ public class PositionController {
      * @return Sector allocation percentages
      */
     @GetMapping("/sector-allocation")
-    public ResponseEntity<SectorAllocation> getSectorAllocation() {
+    public ResponseEntity<com.swingtrade.api.PositionService.SectorAllocation> getSectorAllocation() {
         logger.debug("Fetching sector allocation");
 
         try {
-            com.swingtrade.api.dto.SectorAllocation allocation = positionService.getSectorAllocation();
+            com.swingtrade.api.PositionService.SectorAllocation allocation = positionService.getSectorAllocation();
             return ResponseEntity.ok(allocation);
 
         } catch (Exception e) {
@@ -278,8 +278,8 @@ public class PositionController {
     /**
      * Build a PositionStats with error info.
      */
-    private com.swingtrade.api.dto.PositionStats buildPositionStatsErrorResponse(String error, String message) {
-        com.swingtrade.api.dto.PositionStats stats = new com.swingtrade.api.dto.PositionStats();
+    private com.swingtrade.api.PositionService.PositionStats buildPositionStatsErrorResponse(String error, String message) {
+        com.swingtrade.api.PositionService.PositionStats stats = new com.swingtrade.api.PositionService.PositionStats();
         stats.setMessage(message);
         return stats;
     }
@@ -287,8 +287,8 @@ public class PositionController {
     /**
      * Build a SectorAllocation with error info.
      */
-    private com.swingtrade.api.dto.SectorAllocation buildSectorAllocationErrorResponse(String error, String message) {
-        com.swingtrade.api.dto.SectorAllocation allocation = new com.swingtrade.api.dto.SectorAllocation();
+    private com.swingtrade.api.PositionService.SectorAllocation buildSectorAllocationErrorResponse(String error, String message) {
+        com.swingtrade.api.PositionService.SectorAllocation allocation = new com.swingtrade.api.PositionService.SectorAllocation();
         allocation.setMessage(message);
         return allocation;
     }
