@@ -67,7 +67,8 @@ progress:
 |-------|------|--------|--------|
 | 5 | Testing Foundation | ⏳ Planned | Phase 4 |
 | 6 | Live Trading | 📋 Deferred | Focus on core analysis tests first |
-| 7 | Observability | ⏳ Planned | Phase 6 |
+| 7 | Observability | 📋 Deferred | UI testing first |
+| 8 | Vue Dashboard | ⏳ Planned | Phase 7 (repurposed for testing UI) |
 
 ### Deferred
 
@@ -76,7 +77,7 @@ progress:
 | 5 | Testing Foundation | ⏳ Planned | Phase 4 |
 | 6 | Live Trading | ⏳ Planned | Phase 5 |
 | 7 | Observability | ⏳ Planned | Phase 6 |
-| 8 | Vue Dashboard | ⏳ Planned | Phase 7 |
+| 8 | Vue Dashboard | ⏳ Planned | Phase 7 (repurposed for testing UI) |
 | 9 | Signal Notifications | 📋 Planned | Phase 8 |
 
 ---
