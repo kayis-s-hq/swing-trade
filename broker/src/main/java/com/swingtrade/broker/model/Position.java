@@ -248,4 +248,14 @@ public class Position {
     public void setEntryReason(String entryReason) {
         this.entryReason = entryReason;
     }
+
+    // Setter for disposable quantity (available for trading)
+    public void setAvailableQuantity(BigDecimal availableQuantity) {
+        // This can be tracked in quantity if needed
+    }
+
+    // Setter for net quantity (net position)
+    public void setNetQuantity(BigDecimal netQuantity) {
+        // This can be used to track net position
+    }
 }

@@ -4,6 +4,7 @@ import com.swingtrade.broker.config.BrokerMode;
 import com.swingtrade.broker.engine.PaperTradeEngine;
 import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.kite.KiteConnectClient;
+import com.swingtrade.broker.risk.KillSwitchService;
 import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.broker.service.BrokerService;
 import com.swingtrade.broker.service.PaperTradingServiceImpl;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 /**
  * Factory for creating the appropriate BrokerService implementation
  * based on the configured broker mode.
+ * Integrates KillSwitchService to prevent LIVE mode when kill switch is active.
  */
 @Component
 public class BrokerServiceFactory {
@@ -25,6 +27,7 @@ public class BrokerServiceFactory {
     private final PaperTradeEngine paperTradeEngine;
     private final BrokerClient brokerClient;
     private final RiskControls riskControlsService;
+    private final KillSwitchService killSwitchService;
 
     @Value("${broker.mode:paper}")
     private String brokerModeString;
@@ -35,10 +38,12 @@ public class BrokerServiceFactory {
     @Autowired
     public BrokerServiceFactory(PaperTradeEngine paperTradeEngine,
                                 BrokerClient brokerClient,
-                                RiskControls riskControlsService) {
+                                RiskControls riskControlsService,
+                                KillSwitchService killSwitchService) {
         this.paperTradeEngine = paperTradeEngine;
         this.brokerClient = brokerClient;
         this.riskControlsService = riskControlsService;
+        this.killSwitchService = killSwitchService;
 
         initialize();
     }
@@ -81,8 +86,16 @@ public class BrokerServiceFactory {
 
     /**
      * Create live trading service wrapper.
+     * Validates kill switch before allowing live mode switch.
      */
     private BrokerService createLiveTradingService() {
+        // Validate kill switch first
+        if (killSwitchService.isActive()) {
+            logger.error("Cannot switch to LIVE mode: Kill switch is active!");
+            throw new IllegalStateException("Cannot switch to LIVE mode: Kill switch is active. " +
+                    "Disable kill switch first. Reason: " + killSwitchService.getReason());
+        }
+
         // Validate broker client configuration
         if (!brokerClient.isConfigured()) {
             logger.error("Broker client not configured. Cannot create live trading service.");

@@ -2,6 +2,7 @@ package com.swingtrade.broker.model;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -123,5 +124,33 @@ public class Portfolio {
      */
     public LocalDateTime getLastUpdated() {
         return lastUpdated;
+    }
+
+    // Default constructor for deserialization and testing
+    public Portfolio() {
+        this.positions = new ConcurrentHashMap<>();
+        this.currentCapital = BigDecimal.ZERO;
+        this.lastUpdated = LocalDateTime.now();
+    }
+
+    // Setter for holdings
+    public void setHoldings(List<Position> holdings) {
+        for (Position position : holdings) {
+            this.positions.put(position.getPositionId(), position);
+        }
+        this.lastUpdated = LocalDateTime.now();
+    }
+
+    // Setter for available cash
+    public void setAvailableCash(BigDecimal availableCash) {
+        this.currentCapital = availableCash;
+        this.lastUpdated = LocalDateTime.now();
+    }
+
+    // Setter for total capital
+    public void setTotalCapital(BigDecimal totalCapital) {
+        this.initialCapital = totalCapital;
+        this.currentCapital = totalCapital;
+        this.lastUpdated = LocalDateTime.now();
     }
 }

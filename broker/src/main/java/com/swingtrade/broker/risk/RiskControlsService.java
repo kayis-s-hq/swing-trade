@@ -8,7 +8,6 @@ import com.swingtrade.broker.manager.PositionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -17,6 +16,7 @@ import java.util.List;
 /**
  * Main risk controls orchestrator.
  * Coordinates all risk checks before trade execution.
+ * Integrates KillSwitchService and CapitalTracker for live trading.
  */
 @Component
 public class RiskControlsService implements RiskControls {
@@ -28,30 +28,26 @@ public class RiskControlsService implements RiskControls {
     private final PositionSizeValidator positionSizeValidator;
     private final PositionManager positionManager;
     private final KiteConnectClient kiteConnectClient;
-    private boolean killSwitchActive;
-
-    @Value("${broker.kill-switch-enabled:false}")
-    private boolean killSwitchEnabled;
-
-    @Value("${broker.kill-switch-active:false}")
-    public void setKillSwitchActiveConfig(boolean killSwitchActive) {
-        this.killSwitchActive = killSwitchActive;
-    }
+    private final KillSwitchService killSwitchService;
+    private final CapitalTracker capitalTracker;
 
     @Autowired
     public RiskControlsService(PositionLimitChecker positionLimitChecker,
                                DailyLossCircuitBreaker dailyLossCircuitBreaker,
                                PositionSizeValidator positionSizeValidator,
                                PositionManager positionManager,
-                               KiteConnectClient kiteConnectClient) {
+                               KiteConnectClient kiteConnectClient,
+                               KillSwitchService killSwitchService,
+                               CapitalTracker capitalTracker) {
         this.positionLimitChecker = positionLimitChecker;
         this.dailyLossCircuitBreaker = dailyLossCircuitBreaker;
         this.positionSizeValidator = positionSizeValidator;
         this.positionManager = positionManager;
         this.kiteConnectClient = kiteConnectClient;
-        this.killSwitchActive = false; // default
+        this.killSwitchService = killSwitchService;
+        this.capitalTracker = capitalTracker;
 
-        logger.info("RiskControlsService initialized with kill switch: {}", killSwitchEnabled);
+        logger.info("RiskControlsService initialized with KillSwitchService and CapitalTracker");
     }
 
     /**
@@ -62,13 +58,16 @@ public class RiskControlsService implements RiskControls {
                                PositionSizeValidator positionSizeValidator,
                                PositionManager positionManager,
                                KiteConnectClient kiteConnectClient,
+                               KillSwitchService killSwitchService,
+                               CapitalTracker capitalTracker,
                                boolean killSwitchActive) {
         this.positionLimitChecker = positionLimitChecker;
         this.dailyLossCircuitBreaker = dailyLossCircuitBreaker;
         this.positionSizeValidator = positionSizeValidator;
         this.positionManager = positionManager;
         this.kiteConnectClient = kiteConnectClient;
-        this.killSwitchActive = killSwitchActive;
+        this.killSwitchService = killSwitchService;
+        this.capitalTracker = capitalTracker;
     }
 
     /**
@@ -85,8 +84,9 @@ public class RiskControlsService implements RiskControls {
         result.setCheckType("PRE_TRADE_CHECK");
 
         // 1. Check kill switch
-        if (killSwitchActive) {
+        if (killSwitchService.isActive()) {
             result.addError("KILL SWITCH ACTIVE. All trading is halted.");
+            result.addInfo("Kill switch reason: {}", killSwitchService.getReason());
             return result;
         }
 
@@ -101,7 +101,19 @@ public class RiskControlsService implements RiskControls {
             return result;
         }
 
-        // 3. Check position limits
+        // 3. Get current positions and check capital limits
+        List<Position> currentPositions = positionManager.getOpenPositions();
+        BigDecimal orderValue = calculateTradeValue(orderResponse, marketPrice);
+
+        // 4. Check capital limits
+        RiskCheckResult capitalResult = capitalTracker.enforceLimits(currentPositions, orderValue);
+        result.getMessages().addAll(capitalResult.getMessages());
+        result.setPassed(capitalResult.isPassed());
+        if (!capitalResult.isPassed()) {
+            return result;
+        }
+
+        // 5. Check position limits
         BigDecimal estimatedValue = calculateTradeValue(orderResponse, marketPrice);
         RiskCheckResult positionLimitResult = positionLimitChecker.canAddPosition(estimatedValue);
         result.getMessages().addAll(positionLimitResult.getMessages());
@@ -110,7 +122,7 @@ public class RiskControlsService implements RiskControls {
             return result;
         }
 
-        // 4. Check position size
+        // 6. Check position size
         RiskCheckResult sizeResult = positionSizeValidator.validatePositionSize(estimatedValue);
         result.getMessages().addAll(sizeResult.getMessages());
         if (!sizeResult.isPassed() && sizeResult.hasErrors()) {
@@ -183,20 +195,19 @@ public class RiskControlsService implements RiskControls {
      * Get kill switch status.
      */
     public boolean isKillSwitchActive() {
-        return killSwitchActive;
+        return killSwitchService.isActive();
     }
 
     /**
-     * Set kill switch status.
+     * Set kill switch status via KillSwitchService.
      */
     public void setKillSwitchActive(boolean active) {
-        this.killSwitchActive = active;
-        logger.warn("Kill switch set to: {}", active);
-
         if (active) {
+            killSwitchService.enableKillSwitch("Set via API");
             dailyLossCircuitBreaker.openCircuit();
             logger.warn("Daily loss circuit breaker opened due to kill switch");
         } else {
+            killSwitchService.disableKillSwitch();
             dailyLossCircuitBreaker.closeCircuit();
             logger.info("Daily loss circuit breaker closed, trading resumed");
         }

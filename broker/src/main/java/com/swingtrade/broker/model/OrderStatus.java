@@ -38,5 +38,15 @@ public enum OrderStatus {
     /**
      * Order has expired due to time constraints.
      */
-    EXPIRED
+    EXPIRED,
+
+    /**
+     * Order has been rejected by the broker.
+     */
+    REJECTED,
+
+    /**
+     * Order has been modified.
+     */
+    MODIFIED
 }

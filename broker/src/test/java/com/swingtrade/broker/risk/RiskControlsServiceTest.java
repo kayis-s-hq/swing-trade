@@ -13,9 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for RiskControlsService.
@@ -38,12 +36,24 @@ class RiskControlsServiceTest {
     @Mock
     private KiteConnectClient kiteConnectClient;
 
+    @Mock
+    private KillSwitchService killSwitchService;
+
+    @Mock
+    private CapitalTracker capitalTracker;
+
     private RiskControlsService riskControlsService;
 
     @BeforeEach
     void setUp() {
+        // Mock kill switch as inactive
+        when(killSwitchService.isActive()).thenReturn(false);
+
+        // Mock capital tracker to pass limits
+        when(capitalTracker.enforceLimits(any(), any())).thenReturn(new RiskCheckResult(true));
+
         riskControlsService = new RiskControlsService(positionLimitChecker, dailyLossCircuitBreaker,
-                positionSizeValidator, positionManager, kiteConnectClient, false);
+                positionSizeValidator, positionManager, kiteConnectClient, killSwitchService, capitalTracker);
     }
 
     @Test

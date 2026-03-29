@@ -3,6 +3,7 @@ package com.swingtrade.broker.factory;
 import com.swingtrade.broker.config.BrokerMode;
 import com.swingtrade.broker.engine.PaperTradeEngine;
 import com.swingtrade.broker.kite.BrokerClient;
+import com.swingtrade.broker.risk.KillSwitchService;
 import com.swingtrade.broker.risk.RiskControls;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,10 +29,13 @@ class BrokerServiceFactoryTest {
     @Mock
     private PaperTradeEngine mockPaperEngine;
 
+    @Mock
+    private KillSwitchService mockKillSwitch;
+
     @Test
     void testBrokerMode_Paper() {
         // When
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("paper");
         factory.initialize();
 
@@ -43,7 +47,7 @@ class BrokerServiceFactoryTest {
     @Test
     void testBrokerMode_DryRun() {
         // When
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("dry_run");
         factory.initialize();
 
@@ -56,7 +60,7 @@ class BrokerServiceFactoryTest {
     void testBrokerMode_Live_WithoutConfig() {
         // Given
         when(mockClient.isConfigured()).thenReturn(false);
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("live");
 
         // When/Then
@@ -69,7 +73,7 @@ class BrokerServiceFactoryTest {
     void testSwitchMode() {
         // Given
         when(mockClient.isConfigured()).thenReturn(true);
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("paper");
         factory.initialize();
 
@@ -84,7 +88,7 @@ class BrokerServiceFactoryTest {
     void testSwitchMode_String() {
         // Given
         when(mockClient.isConfigured()).thenReturn(true);
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("paper");
         factory.initialize();
 
@@ -98,7 +102,7 @@ class BrokerServiceFactoryTest {
     @Test
     void testAllowsExecution_Paper() {
         // When
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("paper");
         factory.initialize();
 
@@ -113,7 +117,7 @@ class BrokerServiceFactoryTest {
     void testAllowsExecution_Live() {
         // Given
         when(mockClient.isConfigured()).thenReturn(true);
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("paper");
         factory.initialize();
         factory.switchMode(BrokerMode.LIVE);
@@ -128,7 +132,7 @@ class BrokerServiceFactoryTest {
     @Test
     void testIsSafeMode_Paper() {
         // When
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("paper");
         factory.initialize();
 
@@ -142,7 +146,7 @@ class BrokerServiceFactoryTest {
     @Test
     void testIsSafeMode_DryRun() {
         // When
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("dry_run");
         factory.initialize();
 
@@ -157,7 +161,7 @@ class BrokerServiceFactoryTest {
     void testIsSafeMode_Live() {
         // Given
         when(mockClient.isConfigured()).thenReturn(true);
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("paper");
         factory.initialize();
         factory.switchMode(BrokerMode.LIVE);
@@ -172,7 +176,7 @@ class BrokerServiceFactoryTest {
     @Test
     void testGetModeString() {
         // Given
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk, mockKillSwitch);
         factory.setModeString("live");
 
         // When
