@@ -1,10 +1,10 @@
 package com.swingtrade.broker.service;
 
 import com.swingtrade.broker.factory.LiveTradingService;
-import com.swingtrade.broker.kite.KiteConnectClient;
+import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.model.*;
 import com.swingtrade.broker.risk.RiskCheckResult;
-import com.swingtrade.broker.risk.RiskControlsService;
+import com.swingtrade.broker.risk.RiskControls;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,26 +21,26 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for LiveTradingService.
- * Tests that it delegates to KiteConnectClient and enforces risk controls.
+ * Tests that it delegates to BrokerClient and enforces risk controls.
  */
 @ExtendWith(MockitoExtension.class)
 class LiveTradingServiceTest {
 
     @Mock
-    private KiteConnectClient kiteConnectClient;
+    private BrokerClient brokerClient;
 
     @Mock
-    private RiskControlsService riskControlsService;
+    private RiskControls riskControls;
 
     private LiveTradingService service;
 
     @BeforeEach
     void setUp() {
-        service = new LiveTradingService(kiteConnectClient, riskControlsService);
+        service = new LiveTradingService(brokerClient, riskControls);
     }
 
     @Test
-    void testPlaceOrder_callsKiteClient() {
+    void testPlaceOrder_callsBrokerClient() {
         // Given
         Order order = new Order();
         order.setOrderId("order-123");
@@ -53,9 +53,9 @@ class LiveTradingServiceTest {
         mockResponse.setBrokerOrderId("kite-order-123");
         mockResponse.setStatus(OrderStatus.ACCEPTED);
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("2500"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
-        when(kiteConnectClient.placeOrder(any())).thenReturn(mockResponse);
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("2500"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.placeOrder(any())).thenReturn(mockResponse);
 
         // When
         Order result = service.placeOrder(order);
@@ -63,8 +63,8 @@ class LiveTradingServiceTest {
         // Then
         assertThat(result.getOrderId()).isEqualTo("kite-order-123");
         assertThat(result.getStatus()).isEqualTo(OrderStatus.ACCEPTED);
-        verify(kiteConnectClient).getMarketPrice("RELIANCE-EQ", Exchange.NSE);
-        verify(kiteConnectClient).placeOrder(any(OrderResponse.class));
+        verify(brokerClient).getMarketPrice("RELIANCE-EQ", Exchange.NSE);
+        verify(brokerClient).placeOrder(any(OrderResponse.class));
     }
 
     @Test
@@ -76,14 +76,14 @@ class LiveTradingServiceTest {
         order.setDirection(TradeDirection.LONG);
         order.setQuantity(new BigDecimal("50"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("3500"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("3500"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
 
         // When
         Order result = service.placeOrder(order);
 
         // Then
-        verify(riskControlsService).preTradeCheck(any(OrderResponse.class), any(BigDecimal.class));
+        verify(riskControls).preTradeCheck(any(OrderResponse.class), any(BigDecimal.class));
     }
 
     @Test
@@ -95,16 +95,16 @@ class LiveTradingServiceTest {
         order.setDirection(TradeDirection.LONG);
         order.setQuantity(new BigDecimal("100"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1450"));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1450"));
         RiskCheckResult riskResult = new RiskCheckResult(false, "Position limit exceeded");
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(riskResult);
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(riskResult);
 
         // When
         Order result = service.placeOrder(order);
 
         // Then
         assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-        verify(kiteConnectClient, never()).placeOrder(any(OrderResponse.class));
+        verify(brokerClient, never()).placeOrder(any(OrderResponse.class));
     }
 
     @Test
@@ -116,16 +116,16 @@ class LiveTradingServiceTest {
         order.setDirection(TradeDirection.LONG);
         order.setQuantity(new BigDecimal("75"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1350"));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1350"));
         RiskCheckResult riskResult = new RiskCheckResult(false, "Daily loss circuit breaker active");
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(riskResult);
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(riskResult);
 
         // When
         Order result = service.placeOrder(order);
 
         // Then
         assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-        verify(kiteConnectClient, never()).placeOrder(any(OrderResponse.class));
+        verify(brokerClient, never()).placeOrder(any(OrderResponse.class));
     }
 
     @Test
@@ -137,69 +137,69 @@ class LiveTradingServiceTest {
         order.setDirection(TradeDirection.LONG);
         order.setQuantity(new BigDecimal("60"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("450"));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("450"));
         RiskCheckResult riskResult = new RiskCheckResult(false, "KILL SWITCH ACTIVE");
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(riskResult);
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(riskResult);
 
         // When
         Order result = service.placeOrder(order);
 
         // Then
         assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-        verify(kiteConnectClient, never()).placeOrder(any(OrderResponse.class));
+        verify(brokerClient, never()).placeOrder(any(OrderResponse.class));
     }
 
     @Test
-    void testCancelOrder_callsKiteClient() {
+    void testCancelOrder_callsBrokerClient() {
         // Given
         String orderId = "kite-order-123";
-        when(kiteConnectClient.cancelOrder(orderId)).thenReturn(true);
+        when(brokerClient.cancelOrder(orderId)).thenReturn(true);
 
         // When
         boolean result = service.cancelOrder(orderId);
 
         // Then
         assertThat(result).isTrue();
-        verify(kiteConnectClient).cancelOrder(orderId);
+        verify(brokerClient).cancelOrder(orderId);
     }
 
     @Test
-    void testGetPortfolio_callsKiteClient() {
+    void testGetPortfolio_callsBrokerClient() {
         // Given
         Portfolio mockPortfolio = new Portfolio("portfolio-1", new BigDecimal("100000"));
-        when(kiteConnectClient.getPortfolio()).thenReturn(mockPortfolio);
+        when(brokerClient.getPortfolio()).thenReturn(mockPortfolio);
 
         // When
         Portfolio result = service.getPortfolio();
 
         // Then
         assertThat(result).isEqualTo(mockPortfolio);
-        verify(kiteConnectClient).getPortfolio();
+        verify(brokerClient).getPortfolio();
     }
 
     @Test
-    void testGetPositions_callsKiteClient() {
+    void testGetPositions_callsBrokerClient() {
         // Given
         List<Position> mockPositions = List.of(
             new Position("pos-1", "RELIANCE-EQ", TradeDirection.LONG,
                 new BigDecimal("100"), new BigDecimal("2500"), null, null)
         );
-        when(kiteConnectClient.getPositions()).thenReturn(mockPositions);
+        when(brokerClient.getPositions()).thenReturn(mockPositions);
 
         // When
         List<Position> result = service.getOpenPositions();
 
         // Then
         assertThat(result).isEqualTo(mockPositions);
-        verify(kiteConnectClient).getPositions();
+        verify(brokerClient).getPositions();
     }
 
     @Test
-    void testGetPosition_callsKiteClient() {
+    void testGetPosition_callsBrokerClient() {
         // Given
         Position position = new Position("pos-1", "RELIANCE-EQ", TradeDirection.LONG,
             new BigDecimal("100"), new BigDecimal("2500"), null, null);
-        when(kiteConnectClient.getPositions()).thenReturn(List.of(position));
+        when(brokerClient.getPositions()).thenReturn(List.of(position));
 
         // When
         var result = service.getPosition("pos-1");
@@ -210,7 +210,7 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void testCalculateProfitLoss_callsKiteClient() {
+    void testCalculateProfitLoss_calculatesCorrectly() {
         // Given
         Position position = new Position();
         position.setSymbol("RELIANCE-EQ");
@@ -227,12 +227,12 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void testGetMaxConcurrentPositions_returns3() {
+    void testGetMaxConcurrentPositions_returnsDefault() {
         assertThat(service.getMaxConcurrentPositions()).isEqualTo(5);
     }
 
     @Test
-    void testGetMaxCapitalPerPosition_returnsConfigValue() {
+    void testGetMaxCapitalPerPosition_returnsDefault() {
         assertThat(service.getMaxCapitalPerPosition()).isEqualTo(new BigDecimal("200000"));
     }
 
@@ -245,9 +245,9 @@ class LiveTradingServiceTest {
         order.setDirection(TradeDirection.LONG);
         order.setQuantity(new BigDecimal("80"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1100"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
-        when(kiteConnectClient.placeOrder(any()))
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1100"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.placeOrder(any()))
                 .thenThrow(new RuntimeException("API Error: Connection timeout"));
 
         // When
@@ -266,9 +266,9 @@ class LiveTradingServiceTest {
         order.setDirection(TradeDirection.LONG);
         order.setQuantity(new BigDecimal("90"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("550"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
-        when(kiteConnectClient.placeOrder(any()))
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("550"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.placeOrder(any()))
                 .thenThrow(new RuntimeException("Request timeout"));
 
         // When
@@ -287,9 +287,9 @@ class LiveTradingServiceTest {
         order.setDirection(TradeDirection.SHORT);
         order.setQuantity(new BigDecimal("40"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1700"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
-        when(kiteConnectClient.placeOrder(any()))
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1700"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.placeOrder(any()))
                 .thenThrow(new RuntimeException("Order rejected: Insufficient funds"));
 
         // When
@@ -303,7 +303,7 @@ class LiveTradingServiceTest {
     void testCancelOrder_failure() {
         // Given
         String orderId = "kite-order-999";
-        when(kiteConnectClient.cancelOrder(orderId)).thenReturn(false);
+        when(brokerClient.cancelOrder(orderId)).thenReturn(false);
 
         // When
         boolean result = service.cancelOrder(orderId);
@@ -315,7 +315,7 @@ class LiveTradingServiceTest {
     @Test
     void testGetPortfolio_null() {
         // Given
-        when(kiteConnectClient.getPortfolio()).thenReturn(null);
+        when(brokerClient.getPortfolio()).thenReturn(null);
 
         // When
         Portfolio result = service.getPortfolio();
@@ -327,7 +327,7 @@ class LiveTradingServiceTest {
     @Test
     void testGetOpenPositions_empty() {
         // Given
-        when(kiteConnectClient.getPositions()).thenReturn(List.of());
+        when(brokerClient.getPositions()).thenReturn(List.of());
 
         // When
         List<Position> result = service.getOpenPositions();
@@ -351,5 +351,23 @@ class LiveTradingServiceTest {
 
         // Then
         assertThat(result).isEqualTo(new BigDecimal("2500"));
+    }
+
+    @Test
+    void testGetBrokerClient_returnsMock() {
+        // When/Then
+        assertThat(service.getBrokerClient()).isSameAs(brokerClient);
+    }
+
+    @Test
+    void testGetRiskControls_returnsMock() {
+        // When/Then
+        assertThat(service.getRiskControls()).isSameAs(riskControls);
+    }
+
+    @Test
+    void testGetRiskControlsService_returnsMock() {
+        // When/Then
+        assertThat(service.getRiskControls()).isSameAs(riskControls);
     }
 }

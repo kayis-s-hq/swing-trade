@@ -16,6 +16,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -52,7 +55,7 @@ class RegressionTestSuite {
     void fullTradingDay() throws Exception {
         // Step 1: Generate signal for a symbol
         String generateRequest = "{\"symbol\": \"AAPL\"}";
-        SignalResponse signal = mockMvc.perform(post("/api/signals/generate")
+        String signalJson = mockMvc.perform(post("/api/signals/generate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(generateRequest))
                 .andExpect(status().isCreated())
@@ -63,7 +66,7 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
-        generatedSignal = objectMapper.readValue(signal, SignalResponse.class);
+        generatedSignal = objectMapper.readValue(signalJson, SignalResponse.class);
 
         // Step 2: Create position based on signal
         TradeRequest tradeRequest = new TradeRequest();
@@ -75,7 +78,7 @@ class RegressionTestSuite {
         tradeRequest.setEntryReason("Generated from signal");
         tradeRequest.setRiskTolerance(0.02);
 
-        PositionResponse position = mockMvc.perform(post("/api/trades")
+        String positionJson = mockMvc.perform(post("/api/trades")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(tradeRequest)))
                 .andExpect(status().isCreated())
@@ -87,7 +90,7 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
-        createdPosition = objectMapper.readValue(position, PositionResponse.class);
+        createdPosition = objectMapper.readValue(positionJson, PositionResponse.class);
 
         // Step 3: Verify position is in open positions list
         mockMvc.perform(get("/api/trades")
@@ -97,7 +100,7 @@ class RegressionTestSuite {
                 .andExpect(jsonPath("$[0].symbol").value("AAPL"));
 
         // Step 4: Get position details
-        PositionResponse retrievedPosition = mockMvc.perform(get("/api/trades/AAPL")
+        String retrievedJson = mockMvc.perform(get("/api/trades/AAPL")
                 .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.symbol").value("AAPL"))
@@ -107,7 +110,7 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
-        PositionResponse retrieved = objectMapper.readValue(retrievedPosition, PositionResponse.class);
+        PositionResponse retrieved = objectMapper.readValue(retrievedJson, PositionResponse.class);
         assertEquals(createdPosition.getId(), retrieved.getId());
 
         // Step 5: Close position
@@ -115,7 +118,7 @@ class RegressionTestSuite {
         closeRequest.setSymbol("AAPL");
         closeRequest.setExitReason("Target reached");
 
-        PositionResponse closedPosition = mockMvc.perform(post("/api/trades/AAPL/close")
+        String closedPositionJson = mockMvc.perform(post("/api/trades/AAPL/close")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(closeRequest)))
                 .andExpect(status().isOk())
@@ -126,6 +129,7 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
+        PositionResponse closedPosition = objectMapper.readValue(closedPositionJson, PositionResponse.class);
         assertEquals("CLOSED", closedPosition.getStatus().name());
 
         // Step 6: Verify position is no longer in open positions
@@ -156,7 +160,7 @@ class RegressionTestSuite {
         String symbolRequest = "{\"symbol\": \"TSLA\"}";
 
         // Generate signal twice
-        SignalResponse signal1 = mockMvc.perform(post("/api/signals/generate")
+        String signal1Json = mockMvc.perform(post("/api/signals/generate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(symbolRequest))
                 .andExpect(status().isCreated())
@@ -167,7 +171,7 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
-        SignalResponse signal2 = mockMvc.perform(post("/api/signals/generate")
+        String signal2Json = mockMvc.perform(post("/api/signals/generate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(symbolRequest))
                 .andExpect(status().isCreated())
@@ -178,8 +182,8 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
-        SignalResponse parsed1 = objectMapper.readValue(signal1, SignalResponse.class);
-        SignalResponse parsed2 = objectMapper.readValue(signal2, SignalResponse.class);
+        SignalResponse parsed1 = objectMapper.readValue(signal1Json, SignalResponse.class);
+        SignalResponse parsed2 = objectMapper.readValue(signal2Json, SignalResponse.class);
 
         // Both signals should have same symbol
         assertEquals(parsed1.getSymbol(), parsed2.getSymbol());
@@ -255,7 +259,7 @@ class RegressionTestSuite {
         entryRequest.setPrice(new BigDecimal("100.00"));
         entryRequest.setEntryReason("Entry for rollup test");
 
-        PositionResponse entryPosition = mockMvc.perform(post("/api/trades")
+        String entryPositionJson = mockMvc.perform(post("/api/trades")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(entryRequest)))
                 .andExpect(status().isCreated())
@@ -269,7 +273,7 @@ class RegressionTestSuite {
         closeRequest.setSymbol("ROLLUP");
         closeRequest.setExitReason("Exit for rollup test");
 
-        PositionResponse closePosition = mockMvc.perform(post("/api/trades/ROLLUP/close")
+        String closePositionJson = mockMvc.perform(post("/api/trades/ROLLUP/close")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(closeRequest)))
                 .andExpect(status().isOk())
@@ -279,7 +283,7 @@ class RegressionTestSuite {
                 .getContentAsString();
 
         // Verify performance shows the trade
-        PerformanceResponse performance = mockMvc.perform(get("/api/trades/performance")
+        String performanceJson = mockMvc.perform(get("/api/trades/performance")
                 .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalTrades").value(1))
@@ -288,7 +292,7 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
-        PerformanceResponse parsedPerformance = objectMapper.readValue(performance, PerformanceResponse.class);
+        PerformanceResponse parsedPerformance = objectMapper.readValue(performanceJson, PerformanceResponse.class);
         assertEquals(1, parsedPerformance.getTotalTrades());
         assertEquals(1, parsedPerformance.getClosedTrades());
         assertNotNull(parsedPerformance.getTotalPnL());
@@ -303,7 +307,7 @@ class RegressionTestSuite {
         // Trigger scan
         String scanRequest = "{\"symbols\": [\"AAPL\", \"GOOGL\", \"MSFT\"], \"includeSentiment\": true, \"minConfidence\": 0.5}";
 
-        ScanResponse scanResult = mockMvc.perform(post("/api/signals/scan")
+        String scanResultJson = mockMvc.perform(post("/api/signals/scan")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(scanRequest))
                 .andExpect(status().isOk())
@@ -314,7 +318,7 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
-        ScanResponse parsedScan = objectMapper.readValue(scanResult, ScanResponse.class);
+        ScanResponse parsedScan = objectMapper.readValue(scanResultJson, ScanResponse.class);
         assertNotNull(parsedScan.getScanTime());
         assertNotNull(parsedScan.getSignalsFound());
         assertTrue(parsedScan.getSignalsFound() >= 0);

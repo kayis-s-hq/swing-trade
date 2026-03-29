@@ -19,22 +19,40 @@ import java.util.*;
  * in live trading mode without the SDK.
  */
 @Component
-public class KiteConnectClient {
+public class KiteConnectClient implements BrokerClient {
 
     private static final Logger logger = LoggerFactory.getLogger(KiteConnectClient.class);
 
     private final KiteConfig kiteConfig;
     private String accessToken;
 
+    public KiteConnectClient() {
+        this.kiteConfig = null;
+        this.accessToken = null;
+        logger.info("KiteConnectClient initialized with no config (stub mode - Kite SDK not available)");
+    }
+
     @Autowired
     public KiteConnectClient(KiteConfig kiteConfig) {
         this.kiteConfig = kiteConfig;
+        this.accessToken = kiteConfig != null && kiteConfig.getAccessToken() != null
+            ? kiteConfig.getAccessToken()
+            : null;
 
         logger.info("KiteConnectClient initialized (stub mode - Kite SDK not available)");
-        if (kiteConfig.getApiKey() != null && !kiteConfig.getApiKey().isEmpty()) {
+        if (kiteConfig != null && kiteConfig.getApiKey() != null && !kiteConfig.getApiKey().isEmpty()) {
             logger.info("API key configured: {}...",
                     kiteConfig.getApiKey().substring(0, Math.min(8, kiteConfig.getApiKey().length())));
         }
+    }
+
+    /**
+     * Constructor for testing purposes.
+     */
+    public KiteConnectClient(KiteConfig kiteConfig, String accessToken) {
+        this.kiteConfig = kiteConfig;
+        this.accessToken = accessToken;
+        logger.info("KiteConnectClient initialized for testing");
     }
 
     /**

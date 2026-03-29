@@ -25,11 +25,7 @@ public class DailyLossCircuitBreaker {
     private static final Logger logger = LoggerFactory.getLogger(DailyLossCircuitBreaker.class);
 
     private final PositionManager positionManager;
-
-    @Value("${broker.daily-loss-circuit-breaker:2.0}")
     private BigDecimal dailyLossThresholdPercent;
-
-    @Value("${broker.initial-capital:1000000}")
     private BigDecimal initialCapital;
 
     // Track daily P&L
@@ -40,11 +36,33 @@ public class DailyLossCircuitBreaker {
     private LocalDateTime circuitOpenTime;
     private BigDecimal lossAtCircuitOpen;
 
+    @Value("${broker.daily-loss-circuit-breaker:2.0}")
+    public void setDailyLossThresholdPercent(BigDecimal dailyLossThresholdPercent) {
+        this.dailyLossThresholdPercent = dailyLossThresholdPercent;
+    }
+
+    @Value("${broker.initial-capital:1000000}")
+    public void setInitialCapital(BigDecimal initialCapital) {
+        this.initialCapital = initialCapital;
+    }
+
     @Autowired
     public DailyLossCircuitBreaker(PositionManager positionManager) {
         this.positionManager = positionManager;
+        this.dailyLossThresholdPercent = BigDecimal.valueOf(2.0); // default
+        this.initialCapital = BigDecimal.valueOf(1000000); // default
         logger.info("DailyLossCircuitBreaker initialized with {}% daily loss threshold",
                 dailyLossThresholdPercent);
+        resetDailyTracker();
+    }
+
+    /**
+     * Constructor for testing purposes.
+     */
+    public DailyLossCircuitBreaker(PositionManager positionManager, BigDecimal dailyLossThresholdPercent, BigDecimal initialCapital) {
+        this.positionManager = positionManager;
+        this.dailyLossThresholdPercent = dailyLossThresholdPercent;
+        this.initialCapital = initialCapital;
         resetDailyTracker();
     }
 
@@ -78,8 +96,8 @@ public class DailyLossCircuitBreaker {
         // Check if circuit is already open
         if (isCircuitOpen) {
             result.addError("Daily loss circuit breaker is OPEN. Trading halted for today.");
-            result.addInfo("Circuit opened at: {}, Loss: ₹{} ({}%)",
-                    circuitOpenTime, lossAtCircuitOpen, calculateLossPercent());
+            result.addInfo(String.format("Circuit opened at: %s, Loss: %s (%s%%)",
+                    circuitOpenTime, lossAtCircuitOpen, calculateLossPercent()));
             return result;
         }
 
@@ -87,7 +105,7 @@ public class DailyLossCircuitBreaker {
         BigDecimal currentDailyPnL = getCurrentDailyPnL();
         BigDecimal lossPercent = calculateLossPercent();
 
-        logger.info("Current daily P&L: ₹{} ({}%)", currentDailyPnL, lossPercent);
+        logger.info("Current daily P&L: {} ({}%)", currentDailyPnL, lossPercent);
 
         // Check if adding this trade would exceed threshold
         BigDecimal projectedPnL = currentDailyPnL.subtract(estimatedRisk);
@@ -96,16 +114,14 @@ public class DailyLossCircuitBreaker {
         BigDecimal thresholdAmount = initialCapital.multiply(dailyLossThresholdPercent).divide(BigDecimal.valueOf(100));
 
         if (projectedPnL.compareTo(thresholdAmount.negate()) < 0) {
-            result.addError("Trade would exceed daily loss limit. Projected loss: ₹{} ({}%), " +
-                            "Threshold: ₹{}",
-                    projectedPnL, projectedLossPercent, thresholdAmount);
+            result.addError(String.format("Trade would exceed daily loss limit. Projected loss: %s (%s%%), Threshold: %s",
+                    projectedPnL, projectedLossPercent, thresholdAmount));
             return result;
         }
 
-        result.addInfo("Trade allowed. Current daily P&L: ₹{} ({}%), " +
-                        "Projected P&L after trade: ₹{} ({}%)",
+        result.addInfo(String.format("Trade allowed. Current daily P&L: %s (%s%%), Projected P&L after trade: %s (%s%%)",
                 currentDailyPnL, lossPercent,
-                projectedPnL, projectedLossPercent);
+                projectedPnL, projectedLossPercent));
 
         return result;
     }

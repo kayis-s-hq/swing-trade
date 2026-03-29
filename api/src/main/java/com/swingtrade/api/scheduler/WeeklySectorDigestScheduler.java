@@ -2,7 +2,8 @@ package com.swingtrade.api.scheduler;
 
 import com.swingtrade.broker.telegram.TelegramNotificationService;
 import com.swingtrade.llm.service.SentimentAnalysisService;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -16,8 +17,9 @@ import org.springframework.stereotype.Component;
  * by placing the orchestration in the api module which depends on both.
  */
 @Component
-@Slf4j
 public class WeeklySectorDigestScheduler {
+
+    private static final Logger log = LoggerFactory.getLogger(WeeklySectorDigestScheduler.class);
 
     private final SentimentAnalysisService sentimentAnalysisService;
     private final TelegramNotificationService telegramService;

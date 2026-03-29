@@ -399,6 +399,28 @@ public class PaperTradingEngine {
     }
 
     /**
+     * Closes a position by its database ID.
+     * Looks up the position using "POS_{id}" format and closes it at current market price.
+     *
+     * @param positionId the database position ID
+     * @return the closed position
+     * @throws IllegalArgumentException if position not found
+     */
+    public Position closePosition(Long positionId) {
+        String posId = "POS_" + String.format("%08d", positionId);
+        Optional<Position> position = getPosition(posId);
+        if (position.isEmpty()) {
+            throw new IllegalArgumentException("Position not found: " + positionId);
+        }
+
+        BigDecimal exitPrice = position.get().getCurrentPrice();
+        String reason = "manual_close";
+
+        closePosition(posId, exitPrice, reason);
+        return position.get();
+    }
+
+    /**
      * Closes a position completely.
      *
      * @param positionId the position to close

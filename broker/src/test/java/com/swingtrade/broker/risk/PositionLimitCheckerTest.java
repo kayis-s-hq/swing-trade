@@ -4,14 +4,13 @@ import com.swingtrade.broker.manager.PositionManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for PositionLimitChecker.
@@ -22,15 +21,13 @@ class PositionLimitCheckerTest {
     @Mock
     private PositionManager positionManager;
 
-    @InjectMocks
     private PositionLimitChecker positionLimitChecker;
 
     private static final BigDecimal TEST_VALUE = new BigDecimal("50000");
 
     @BeforeEach
     void setUp() {
-        // Reset mocks before each test
-        reset(positionManager);
+        positionLimitChecker = new PositionLimitChecker(positionManager, 5, BigDecimal.valueOf(200000));
     }
 
     @Test

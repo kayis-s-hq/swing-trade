@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -68,12 +69,11 @@ public class TradeMetrics {
                 .register(meterRegistry);
 
         this.tradeDurationTimer = Timer.builder("trades.duration")
-                .description("Trade duration in days")
-                .baseTimeUnit(java.util.concurrent.TimeUnit.DAYS)
+                .description("Trade duration in seconds")
                 .register(meterRegistry);
 
         this.tradePnLTimer = Timer.builder("trades.pnl")
-                .description("Trade P&L in INR")
+                .description("Trade P&L")
                 .register(meterRegistry);
 
         log.info("TradeMetrics initialized with 9 counters and 2 timers");
@@ -95,11 +95,13 @@ public class TradeMetrics {
     }
 
     public void recordTradeDuration(double days) {
-        tradeDurationTimer.record(days, java.util.concurrent.TimeUnit.DAYS);
+        // Convert days to seconds for Micrometer
+        long seconds = (long) (days * 86400);
+        tradeDurationTimer.record(Duration.ofSeconds(seconds));
     }
 
     public void recordTradePnL(double pnl) {
-        tradePnLTimer.record(Math.abs(pnl), java.util.concurrent.TimeUnit.INR);
+        tradePnLTimer.record(Duration.ofMillis((long) Math.abs(pnl)));
     }
 
     public void recordSymbolTrade(String symbol) {

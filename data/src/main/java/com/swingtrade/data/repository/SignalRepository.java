@@ -78,7 +78,7 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * @param symbol the stock symbol
      * @return optional containing the latest signal
      */
-    @Query("SELECT s FROM SignalEntity s WHERE s.symbol = :symbol ORDER BY s.date DESC LIMIT 1")
+    @Query("SELECT s FROM SignalEntity s WHERE s.symbol = :symbol ORDER BY s.date DESC, s.createdAt DESC")
     Optional<SignalEntity> findLatestBySymbol(@Param("symbol") String symbol);
 
     /**

@@ -2,6 +2,7 @@ package com.swingtrade.llm.service;
 
 import com.swingtrade.data.repository.SentimentResultRepository;
 import com.swingtrade.data.repository.StockRepository;
+import com.swingtrade.data.entity.SentimentResultEntity;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Stock;
 import org.junit.jupiter.api.BeforeEach;
@@ -208,20 +209,24 @@ class SectorDigestTest {
         LocalDate startDate = LocalDate.of(2026, 3, 16);
         LocalDate endDate = LocalDate.of(2026, 3, 22);
 
-        List<SentimentResult> results = new ArrayList<>();
+        List<SentimentResultEntity> results = new ArrayList<>();
 
-        // Create diverse sector data
-        results.add(createSentimentResult("HDFCBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
-        results.add(createSentimentResult("ICICIBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE));
-        results.add(createSentimentResult("AXISBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.NEUTRAL));
+        // Create diverse sector data as entities
+        results.add(createSentimentResultEntity("HDFCBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE, startDate));
+        results.add(createSentimentResultEntity("ICICIBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.POSITIVE, startDate));
+        results.add(createSentimentResultEntity("AXISBANK", Stock.Sector.BANK, SentimentResult.SentimentScore.NEUTRAL, startDate));
 
-        results.add(createSentimentResult("TCS", Stock.Sector.IT, SentimentResult.SentimentScore.POSITIVE));
-        results.add(createSentimentResult("INFOSYS", Stock.Sector.IT, SentimentResult.SentimentScore.NEUTRAL));
-        results.add(createSentimentResult("WIPRO", Stock.Sector.IT, SentimentResult.SentimentScore.NEGATIVE));
+        results.add(createSentimentResultEntity("TCS", Stock.Sector.IT, SentimentResult.SentimentScore.POSITIVE, startDate));
+        results.add(createSentimentResultEntity("INFOSYS", Stock.Sector.IT, SentimentResult.SentimentScore.NEUTRAL, startDate));
+        results.add(createSentimentResultEntity("WIPRO", Stock.Sector.IT, SentimentResult.SentimentScore.NEGATIVE, startDate));
 
-        results.add(createSentimentResult("SUNPHARMA", Stock.Sector.PHARMA, SentimentResult.SentimentScore.NEGATIVE));
+        results.add(createSentimentResultEntity("SUNPHARMA", Stock.Sector.PHARMA, SentimentResult.SentimentScore.NEGATIVE, startDate));
 
-        mockStockRepository(results);
+        // Mock repository to return our test data
+        when(sentimentResultRepository.findAllByDateBetween(startDate, endDate))
+                .thenReturn(results);
+
+        mockStockRepositoryForEntities(results);
 
         // When: generating sector digest for date range
         String digest = sentimentAnalysisService.generateSectorDigest(startDate, endDate);
@@ -242,13 +247,17 @@ class SectorDigestTest {
         LocalDate startDate = LocalDate.of(2026, 3, 16);
         LocalDate endDate = LocalDate.of(2026, 3, 22);
 
+        // Mock repository to return empty list
+        when(sentimentResultRepository.findAllByDateBetween(startDate, endDate))
+                .thenReturn(new ArrayList<>());
+
         // When: generating digest with no data
         String digest = sentimentAnalysisService.generateSectorDigest(startDate, endDate);
 
         // Then: digest should handle empty case gracefully
         assertThat(digest).contains("Weekly Sector Sentiment Digest");
         assertThat(digest).contains("Week of: " + startDate + " to " + endDate);
-        assertThat(digest).contains("no sentiment data");
+        assertThat(digest).contains("No sentiment data");
     }
 
     // ===== Helper Methods =====
@@ -272,12 +281,49 @@ class SectorDigestTest {
     }
 
     /**
+     * Creates a mock sentiment result entity with specified sector and date.
+     */
+    private SentimentResultEntity createSentimentResultEntity(
+            String symbol,
+            Stock.Sector sector,
+            SentimentResult.SentimentScore score,
+            LocalDate date) {
+
+        SentimentResultEntity entity = new SentimentResultEntity();
+        entity.setId(null);
+        entity.setSymbol(symbol.toUpperCase());
+        entity.setDate(date);
+        entity.setSentimentScore(score.name());
+        entity.setSummary("Mock sentiment for " + symbol);
+        entity.setRawContent("Test content");
+        entity.setConfidence(0.85);
+        entity.setAnalyzedAt(date);
+        return entity;
+    }
+
+    /**
      * Mocks the stock repository to return correct sectors for test symbols.
      */
     private void mockStockRepository(List<SentimentResult> results) {
         // Build a set of unique symbols and their sectors
         for (SentimentResult result : results) {
             String symbol = result.symbol();
+
+            // Determine sector based on symbol
+            Stock.Sector sector = determineSectorForSymbol(symbol);
+
+            // Mock the repository
+            when(stockRepository.findBySymbol(symbol))
+                    .thenReturn(java.util.Optional.of(createMockStockEntity(symbol, sector)));
+        }
+    }
+
+    /**
+     * Mocks the stock repository for entity-based tests.
+     */
+    private void mockStockRepositoryForEntities(List<SentimentResultEntity> results) {
+        for (SentimentResultEntity entity : results) {
+            String symbol = entity.getSymbol();
 
             // Determine sector based on symbol
             Stock.Sector sector = determineSectorForSymbol(symbol);

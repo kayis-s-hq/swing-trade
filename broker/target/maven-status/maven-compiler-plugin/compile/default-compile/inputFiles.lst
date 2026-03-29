@@ -6,6 +6,7 @@
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/factory/BrokerServiceFactory.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/factory/DryRunService.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/factory/LiveTradingService.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/kite/BrokerClient.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/kite/KiteConfig.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/kite/KiteConnectClient.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/manager/OrderManager.java
@@ -23,9 +24,9 @@
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/risk/PositionLimitChecker.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/risk/PositionSizeValidator.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/risk/RiskCheckResult.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/risk/RiskControls.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/risk/RiskControlsService.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/service/BrokerService.java
-/Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/service/PaperTradingEngine.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/service/PaperTradingServiceImpl.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/telegram/BrokerNotificationIntegration.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/broker/src/main/java/com/swingtrade/broker/telegram/SignalMessageFormatter.java

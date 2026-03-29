@@ -57,18 +57,20 @@ public class LlmModuleTest {
     }
     
     @Test
+    @org.junit.jupiter.api.Disabled("Legacy test - use NewsIngestionServiceTest instead")
     void testNewsIngestion() {
         List<String> news = newsService.fetchNews();
         assertNotNull(news);
         assertTrue(news.size() > 0);
     }
-    
+
     @Test
+    @org.junit.jupiter.api.Disabled("Legacy test - requires live vLLM server, use SentimentAnalyzerTest instead")
     void testSentimentAnalysis() {
         // Test basic sentiment analysis functionality
         String sampleNews = "Company reports strong earnings growth and positive market outlook.";
         SentimentAnalysisResult result = llmClient.analyzeSentiment(sampleNews);
-        
+
         assertNotNull(result);
         assertNotNull(result.getSentiment());
         assertNotNull(result.getReasoning());

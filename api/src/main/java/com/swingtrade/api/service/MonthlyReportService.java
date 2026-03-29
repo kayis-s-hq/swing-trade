@@ -5,6 +5,7 @@ import com.swingtrade.broker.telegram.TelegramMessageFormatter;
 import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.SignalRepository;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -24,7 +25,6 @@ public class MonthlyReportService {
 
     private final PositionRepository positionRepository;
     private final SignalRepository signalRepository;
-    private final PerformanceService performanceService;
     private final TelegramConfig telegramConfig;
     private final TelegramMessageFormatter telegramMessageFormatter;
 
@@ -33,12 +33,10 @@ public class MonthlyReportService {
     public MonthlyReportService(
             PositionRepository positionRepository,
             SignalRepository signalRepository,
-            PerformanceService performanceService,
             TelegramConfig telegramConfig,
             TelegramMessageFormatter telegramMessageFormatter) {
         this.positionRepository = positionRepository;
         this.signalRepository = signalRepository;
-        this.performanceService = performanceService;
         this.telegramConfig = telegramConfig;
         this.telegramMessageFormatter = telegramMessageFormatter;
     }
@@ -58,7 +56,10 @@ public class MonthlyReportService {
             LocalDate lastDay = now.withDayOfMonth(now.lengthOfMonth());
 
             List<PositionEntity> monthlyPositions = positionRepository.findAll();
-            List<Signal> monthlySignals = signalRepository.findAll();
+            List<SignalEntity> monthlySignalEntities = signalRepository.findAll();
+            List<Signal> monthlySignals = monthlySignalEntities.stream()
+                .map(com.swingtrade.data.entity.SignalEntity::toDomain)
+                .toList();
 
             Map<String, Object> report = buildReport(now, monthlyPositions, monthlySignals);
 
@@ -77,7 +78,7 @@ public class MonthlyReportService {
         }
     }
 
-    private Map<String, Object> buildReport(LocalDate reportDate, List<PositionEntity> positions, List<Signal> signals) {
+    Map<String, Object> buildReport(LocalDate reportDate, List<PositionEntity> positions, List<Signal> signals) {
         Map<String, Object> report = new HashMap<>();
 
         // Period info
@@ -123,13 +124,13 @@ public class MonthlyReportService {
 
         // Signal distribution
         long buySignals = signals.stream()
-            .filter(s -> "BUY".equals(s.signalType()))
+            .filter(s -> com.swingtrade.domain.Signal.SignalType.BUY == s.type())
             .count();
         long sellSignals = signals.stream()
-            .filter(s -> "SELL".equals(s.signalType()))
+            .filter(s -> com.swingtrade.domain.Signal.SignalType.SELL == s.type())
             .count();
         long holdSignals = signals.stream()
-            .filter(s -> "HOLD".equals(s.signalType()))
+            .filter(s -> com.swingtrade.domain.Signal.SignalType.HOLD == s.type())
             .count();
 
         Map<String, Long> signalDistribution = new HashMap<>();
@@ -139,10 +140,9 @@ public class MonthlyReportService {
         report.put("signalDistribution", signalDistribution);
 
         // Performance stats
-        PerformanceService.PerformanceStats stats = performanceService.getPerformanceStats();
-        report.put("totalReturn", stats.getTotalReturn());
-        report.put("sharpeRatio", stats.getSharpeRatio());
-        report.put("maxDrawdown", stats.getMaxDrawdown());
+        report.put("totalReturn", "N/A");
+        report.put("sharpeRatio", "N/A");
+        report.put("maxDrawdown", "N/A");
 
         return report;
     }

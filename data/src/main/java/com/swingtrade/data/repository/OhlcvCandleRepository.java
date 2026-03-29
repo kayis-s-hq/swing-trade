@@ -58,6 +58,28 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
     );
 
     /**
+     * Finds all candles for a stock, ordered by date descending.
+     *
+     * @param symbol the stock symbol
+     * @return list of candles
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol ORDER BY c.date DESC")
+    List<OhlcvCandleEntity> findAllBySymbol(@Param("symbol") String symbol);
+
+    /**
+     * Finds all candles for a stock, ordered by date descending with limit.
+     *
+     * @param symbol the stock symbol
+     * @param limit the maximum number of candles
+     * @return list of candles
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol ORDER BY c.date DESC")
+    List<OhlcvCandleEntity> findAllBySymbolOrderByDateDesc(
+        @Param("symbol") String symbol,
+        Pageable limit
+    );
+
+    /**
      * Finds all unique symbols that have candle data.
      *
      * @return list of unique symbols

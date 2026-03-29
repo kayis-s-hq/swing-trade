@@ -52,14 +52,23 @@ reports/
 *.temp
 
 # Environment files
+# .env - Production secrets (never commit)
+# .env.local - Local overrides (never commit)
+# .env.dev - Development credentials (may or may not commit based on content)
+# .env.example - Reference template (always commit)
+# .env.dev.example - Development reference template (always commit)
 .env
 .env.local
 .env.*.local
+.env.dev
 
 # Database files (if any local DBs)
 *.db
 *.sqlite
 *.h2.db
+
+# Database backups
+backups/
 
 # Local configuration
 local.properties

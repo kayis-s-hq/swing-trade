@@ -1,8 +1,10 @@
 package com.swingtrade.broker.factory;
 
 import com.swingtrade.broker.config.BrokerMode;
+import com.swingtrade.broker.engine.PaperTradeEngine;
+import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.kite.KiteConnectClient;
-import com.swingtrade.broker.risk.RiskControlsService;
+import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.broker.service.BrokerService;
 import com.swingtrade.broker.service.PaperTradingServiceImpl;
 import org.slf4j.Logger;
@@ -20,9 +22,9 @@ public class BrokerServiceFactory {
 
     private static final Logger logger = LoggerFactory.getLogger(BrokerServiceFactory.class);
 
-    private final PaperTradingServiceImpl paperTradingService;
-    private final KiteConnectClient kiteConnectClient;
-    private final RiskControlsService riskControlsService;
+    private final PaperTradeEngine paperTradeEngine;
+    private final BrokerClient brokerClient;
+    private final RiskControls riskControlsService;
 
     @Value("${broker.mode:paper}")
     private String brokerModeString;
@@ -31,11 +33,11 @@ public class BrokerServiceFactory {
     private BrokerService currentService;
 
     @Autowired
-    public BrokerServiceFactory(PaperTradingServiceImpl paperTradingService,
-                                KiteConnectClient kiteConnectClient,
-                                RiskControlsService riskControlsService) {
-        this.paperTradingService = paperTradingService;
-        this.kiteConnectClient = kiteConnectClient;
+    public BrokerServiceFactory(PaperTradeEngine paperTradeEngine,
+                                BrokerClient brokerClient,
+                                RiskControls riskControlsService) {
+        this.paperTradeEngine = paperTradeEngine;
+        this.brokerClient = brokerClient;
         this.riskControlsService = riskControlsService;
 
         initialize();
@@ -61,7 +63,7 @@ public class BrokerServiceFactory {
         switch (mode) {
             case PAPER:
                 logger.info("Using Paper Trading Service");
-                return paperTradingService;
+                return new PaperTradingServiceImpl(paperTradeEngine);
 
             case LIVE:
                 logger.info("Using Kite Connect Live Trading Service");
@@ -73,7 +75,7 @@ public class BrokerServiceFactory {
 
             default:
                 logger.warn("Unknown mode {}, defaulting to PAPER", mode);
-                return paperTradingService;
+                return new PaperTradingServiceImpl(paperTradeEngine);
         }
     }
 
@@ -81,25 +83,25 @@ public class BrokerServiceFactory {
      * Create live trading service wrapper.
      */
     private BrokerService createLiveTradingService() {
-        // Validate Kite Connect configuration
-        if (!kiteConnectClient.isConfigured()) {
-            logger.error("Kite Connect not configured. Cannot create live trading service.");
-            throw new IllegalStateException("Kite Connect API key not configured. " +
+        // Validate broker client configuration
+        if (!brokerClient.isConfigured()) {
+            logger.error("Broker client not configured. Cannot create live trading service.");
+            throw new IllegalStateException("Broker API key not configured. " +
                     "Set kite.api-key in application properties.");
         }
 
-        if (kiteConnectClient.getAccessToken() == null || kiteConnectClient.getAccessToken().isEmpty()) {
-            logger.warn("Kite Connect access token not set. Live trading will fail until authorized.");
+        if (brokerClient.getAccessToken() == null || brokerClient.getAccessToken().isEmpty()) {
+            logger.warn("Broker access token not set. Live trading will fail until authorized.");
         }
 
-        return new LiveTradingService(kiteConnectClient, riskControlsService);
+        return new LiveTradingService(brokerClient, riskControlsService);
     }
 
     /**
      * Create dry-run service wrapper.
      */
     private BrokerService createDryRunService() {
-        return new DryRunService(kiteConnectClient, riskControlsService);
+        return new DryRunService(brokerClient, riskControlsService);
     }
 
     /**

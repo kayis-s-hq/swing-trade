@@ -1,9 +1,10 @@
 package com.swingtrade.broker.factory;
 
+import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.kite.KiteConnectClient;
 import com.swingtrade.broker.model.*;
 import com.swingtrade.broker.risk.RiskCheckResult;
-import com.swingtrade.broker.risk.RiskControlsService;
+import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.broker.service.BrokerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,15 +24,15 @@ public class DryRunService implements BrokerService {
 
     private static final Logger logger = LoggerFactory.getLogger(DryRunService.class);
 
-    private final KiteConnectClient kiteConnectClient;
-    private final RiskControlsService riskControlsService;
+    private final BrokerClient brokerClient;
+    private final RiskControls riskControlsService;
 
     private final int maxConcurrentPositions = 5;
     private final BigDecimal maxCapitalPerPosition = new BigDecimal("200000");
 
-    public DryRunService(KiteConnectClient kiteConnectClient,
-                         RiskControlsService riskControlsService) {
-        this.kiteConnectClient = kiteConnectClient;
+    public DryRunService(BrokerClient brokerClient,
+                         RiskControls riskControlsService) {
+        this.brokerClient = brokerClient;
         this.riskControlsService = riskControlsService;
 
         logger.info("DryRunService initialized - orders will be logged but not executed");
@@ -62,7 +63,7 @@ public class DryRunService implements BrokerService {
         orderResponse.setExchange(Exchange.NSE);
 
         // Get market price for risk checks
-        BigDecimal marketPrice = kiteConnectClient.getMarketPrice(order.getSymbol(), Exchange.NSE);
+        BigDecimal marketPrice = brokerClient.getMarketPrice(order.getSymbol(), Exchange.NSE);
         if (marketPrice != null) {
             orderResponse.setPrice(marketPrice);
         }
@@ -127,16 +128,16 @@ public class DryRunService implements BrokerService {
     }
 
     /**
-     * Get the underlying Kite Connect client (for market data).
+     * Get the underlying broker client (for market data).
      */
-    public KiteConnectClient getKiteConnectClient() {
-        return kiteConnectClient;
+    public BrokerClient getBrokerClient() {
+        return brokerClient;
     }
 
     /**
      * Get the risk controls service.
      */
-    public RiskControlsService getRiskControlsService() {
+    public RiskControls getRiskControls() {
         return riskControlsService;
     }
 }

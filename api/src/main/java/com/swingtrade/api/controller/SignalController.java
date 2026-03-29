@@ -163,7 +163,8 @@ public class SignalController {
                         .body(buildSignalErrorResponse("Bad Request", "Invalid symbol format"));
             }
 
-            SignalResponse signal = convertSignalToResponse(signalService.generateSignal(request.getSymbol()));
+            com.swingtrade.domain.Signal domainSignal = signalService.generateSignal(request.getSymbol());
+            SignalResponse signal = signalService.convertSignalToResponse(domainSignal);
             return ResponseEntity.status(HttpStatus.CREATED).body(signal);
 
         } catch (IllegalArgumentException e) {

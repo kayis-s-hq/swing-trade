@@ -52,6 +52,12 @@ public class PositionEntity {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "direction", length = 10)
+    private String direction;
+
+    @Column(name = "pnl", precision = 15, scale = 4)
+    private BigDecimal pnl;
+
     public PositionEntity() {
     }
 
@@ -191,5 +197,21 @@ public class PositionEntity {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getDirection() {
+        return direction;
+    }
+
+    public void setDirection(String direction) {
+        this.direction = direction;
+    }
+
+    public BigDecimal getPnl() {
+        return pnl;
+    }
+
+    public void setPnl(BigDecimal pnl) {
+        this.pnl = pnl;
     }
 }

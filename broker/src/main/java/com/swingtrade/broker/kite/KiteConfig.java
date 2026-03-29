@@ -12,25 +12,25 @@ import org.springframework.context.annotation.Configuration;
 public class KiteConfig {
 
     @Value("${kite.api-key:}")
-    private String apiKey;
+    private String apiKey = "";
 
     @Value("${kite.access-token:}")
-    private String accessToken;
+    private String accessToken = "";
 
     @Value("${kite.environment:live}")
-    private String environment;
+    private String environment = "live";
 
     @Value("${kite.proxy-host:}")
-    private String proxyHost;
+    private String proxyHost = "";
 
-    @Value("${kite.proxy-port:}")
+    @Value("${kite.proxy-port:0}")
     private int proxyPort = 0;
 
     /**
      * Get API key for Kite Connect authentication.
      */
     public String getApiKey() {
-        return apiKey;
+        return apiKey != null ? apiKey : "";
     }
 
     public void setApiKey(String apiKey) {

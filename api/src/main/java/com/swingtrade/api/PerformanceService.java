@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -48,21 +49,21 @@ public class PerformanceService {
      */
     public PerformanceStats getPerformanceStats() {
         // Calculate metrics from actual trades and positions
-        double totalPnL = calculateTotalPnL();
-        double totalReturn = calculateTotalReturn(totalPnL);
-        double annualizedReturn = calculateAnnualizedReturn(totalReturn);
-        double sharpeRatio = calculateSharpeRatio();
-        double maxDrawdown = calculateMaxDrawdown();
+        BigDecimal totalPnL = calculateTotalPnL();
+        BigDecimal totalReturn = calculateTotalReturn(totalPnL);
+        BigDecimal annualizedReturn = calculateAnnualizedReturn(totalReturn);
+        BigDecimal sharpeRatio = calculateSharpeRatio();
+        BigDecimal maxDrawdown = calculateMaxDrawdown();
         int totalTrades = getTotalTrades();
         int winningTrades = getWinningTrades();
         BigDecimal avgWin = calculateAvgWin();
         BigDecimal avgLoss = calculateAvgLoss();
 
         return new PerformanceStats(
-            BigDecimal.valueOf(totalReturn),
-            BigDecimal.valueOf(annualizedReturn),
-            BigDecimal.valueOf(sharpeRatio),
-            BigDecimal.valueOf(maxDrawdown),
+            totalReturn,
+            annualizedReturn,
+            sharpeRatio,
+            maxDrawdown,
             totalTrades,
             winningTrades,
             avgWin,
@@ -74,7 +75,7 @@ public class PerformanceService {
     /**
      * Calculate total P&L from all closed positions
      */
-    private double calculateTotalPnL() {
+    private BigDecimal calculateTotalPnL() {
         // Sum P&L from all closed positions
         // This would query the trade repository for actual data
         // For now, return calculated value from paper trading engine
@@ -84,15 +85,16 @@ public class PerformanceService {
     /**
      * Calculate total return percentage
      */
-    private double calculateTotalReturn(double totalPnL) {
-        double initialCapital = 100000.0; // Default initial capital
-        return (totalPnL / initialCapital) * 100;
+    private BigDecimal calculateTotalReturn(BigDecimal totalPnL) {
+        BigDecimal initialCapital = BigDecimal.valueOf(100000); // Default initial capital
+        return totalPnL.divide(initialCapital, 4, RoundingMode.HALF_UP)
+            .multiply(BigDecimal.valueOf(100));
     }
 
     /**
      * Calculate annualized return
      */
-    private double calculateAnnualizedReturn(double totalReturn) {
+    private BigDecimal calculateAnnualizedReturn(BigDecimal totalReturn) {
         // Assuming 1 year of trading data
         // In production, calculate based on actual trading period
         return totalReturn;
@@ -101,22 +103,20 @@ public class PerformanceService {
     /**
      * Calculate Sharpe ratio
      */
-    private double calculateSharpeRatio() {
+    private BigDecimal calculateSharpeRatio() {
         // Risk-free rate for Indian government bonds
-        double riskFreeRate = 6.0;
-
         // Calculate from actual trade returns
         // For now, return a placeholder
-        return 1.0;
+        return BigDecimal.ONE;
     }
 
     /**
      * Calculate maximum drawdown
      */
-    private double calculateMaxDrawdown() {
+    private BigDecimal calculateMaxDrawdown() {
         // Calculate from equity curve
         // For now, return a placeholder
-        return 5.0;
+        return BigDecimal.valueOf(5);
     }
 
     /**
@@ -133,9 +133,12 @@ public class PerformanceService {
      * Get number of winning trades
      */
     private int getWinningTrades() {
-        // Count profitable closed positions
+        // Count profitable closed positions (current price > entry price)
         return (int) positionRepository.findAll().stream()
-            .filter(p -> "CLOSED".equals(p.getStatus()) && p.getPnl() > 0)
+            .filter(p -> "CLOSED".equals(p.getStatus())
+                && p.getCurrentPrice() != null
+                && p.getEntryPrice() != null
+                && p.getCurrentPrice().compareTo(p.getEntryPrice()) > 0)
             .count();
     }
 

@@ -61,6 +61,39 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- Spring Boot DevTools for Development -->
+        <!-- =============================================================================
+             Spring Boot DevTools for Development
+             =============================================================================
+             Enables hot reload and remote debugging capabilities during development.
+
+             Features:
+             - Automatic application restart on classpath changes
+             - Live reload for static resource changes
+             - Remote development support (disable in production)
+
+             Configuration:
+             - Scope: provided (excluded from production builds)
+             - Works with JAR-based development builds
+             - Native builds do not use DevTools (too small/focused)
+
+             Usage in Development:
+             1. Run application with Docker: docker run -v $(pwd):/app ...
+             2. Modify source files - application auto-restarts
+             3. Debug port 5005 available for IDE attachment
+
+             Notes:
+             - DevTools is excluded from production native builds
+             - DevTools is excluded from production JAR builds (scope=provided)
+             - For production, use SPRING_DEVTOOLS_REMOTE_SECRET environment variable
+             -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Micrometer for metrics -->
         <dependency>
             <groupId>io.micrometer</groupId>
@@ -153,6 +186,11 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
             <scope>test</scope>
@@ -162,12 +200,9 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- org.testcontainers:redis does not exist as a separate artifact;
-             Redis support is included in the core testcontainers jar -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <version>1.19.3</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -181,12 +216,11 @@
                     <execution>
                         <goals>
                             <goal>repackage</goal>
-                            <goal>native-image</goal>
                         </goals>
                     </execution>
                 </executions>
                 <configuration>
-                    <classifier>exec</classifier>
+                    <mainClass>com.swingtrade.api.app.SwingTradeApiApplication</mainClass>
                 </configuration>
             </plugin>
             <plugin>
@@ -218,21 +252,30 @@
             <build>
                 <plugins>
                     <plugin>
-                        <groupId>org.springframework.boot</groupId>
-                        <artifactId>spring-boot-maven-plugin</artifactId>
-                        <configuration>
-                            <imageName>swing-trade-api</imageName>
-                            <classifier>native</classifier>
-                            <buildArgs>
-                                <buildArg>--gc=none</buildArg>
-                                <buildArg>--strict-image-heap</buildArg>
-                                <buildArg>-O3</buildArg>
-                                <buildArg>--allow-incomplete-classpath</buildArg>
-                                <buildArg>-H:Name=swing-trade-api</buildArg>
-                                <buildArg>--initialize-at-build-time=org.springframework</buildArg>
-                                <buildArg>--initialize-at-run-time=dev.langchain4j</buildArg>
-                            </buildArgs>
-                        </configuration>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <version>0.10.2</version>
+                        <executions>
+                            <execution>
+                                <id>native-image</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>compile</goal>
+                                </goals>
+                                <configuration>
+                                    <mainClass>com.swingtrade.api.app.SwingTradeApiApplication</mainClass>
+                                    <imageName>swing-trade-api</imageName>
+                                    <buildArgs>
+                                        <buildArg>--gc=serial</buildArg>
+                                        <buildArg>-O3</buildArg>
+                                        <buildArg>--allow-incomplete-classpath</buildArg>
+                                        <buildArg>-H:Name=swing-trade-api</buildArg>
+                                        <buildArg>--initialize-at-build-time=org.springframework</buildArg>
+                                        <buildArg>--initialize-at-run-time=dev.langchain4j</buildArg>
+                                    </buildArgs>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>

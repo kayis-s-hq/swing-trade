@@ -28,14 +28,14 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
-public class UpstoxRestClient implements MarketDataClient {
+public class UpstoxApiClient implements MarketDataClient {
     
     private final WebClient webClient;
     private final UpstoxConfig upstoxConfig;
     private final ObjectMapper objectMapper;
     private final OhlcvCandleRepository ohlcvCandleRepository;
 
-    public UpstoxRestClient(UpstoxConfig upstoxConfig, OhlcvCandleRepository ohlcvCandleRepository) {
+    public UpstoxApiClient(UpstoxConfig upstoxConfig, OhlcvCandleRepository ohlcvCandleRepository) {
         this.upstoxConfig = upstoxConfig;
         this.ohlcvCandleRepository = ohlcvCandleRepository;
         this.objectMapper = new ObjectMapper();

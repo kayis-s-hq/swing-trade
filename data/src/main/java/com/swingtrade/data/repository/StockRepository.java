@@ -77,4 +77,12 @@ public interface StockRepository extends JpaRepository<StockEntity, Long> {
      */
     @Query("SELECT COUNT(s) > 0 FROM StockEntity s WHERE s.symbol = :symbol")
     boolean existsSymbol(@Param("symbol") String symbol);
+
+    /**
+     * Finds all distinct stock symbols.
+     *
+     * @return list of distinct symbols
+     */
+    @Query("SELECT DISTINCT s.symbol FROM StockEntity s ORDER BY s.symbol")
+    List<String> findAllDistinctSymbols();
 }

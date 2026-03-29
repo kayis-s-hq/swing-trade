@@ -16,7 +16,7 @@ public class ScanResponse {
     private Integer buySignals;
     private Integer sellSignals;
     private Integer holdSignals;
-    private List<String> symbolsScanned;
+    private List<String> scannedSymbols;
     private List<ScanSignalResult> scanResults;
     private String message;
 
@@ -80,12 +80,12 @@ public class ScanResponse {
         this.holdSignals = holdSignals;
     }
 
-    public List<String> getSymbolsScanned() {
-        return symbolsScanned;
+    public List<String> getScannedSymbols() {
+        return scannedSymbols;
     }
 
-    public void setSymbolsScanned(List<String> symbolsScanned) {
-        this.symbolsScanned = symbolsScanned;
+    public void setScannedSymbols(List<String> scannedSymbols) {
+        this.scannedSymbols = scannedSymbols;
     }
 
     public List<ScanSignalResult> getScanResults() {

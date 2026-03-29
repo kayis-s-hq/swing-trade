@@ -19,18 +19,35 @@ public class PositionLimitChecker {
     private static final Logger logger = LoggerFactory.getLogger(PositionLimitChecker.class);
 
     private final PositionManager positionManager;
+    private int maxConcurrentPositions;
+    private BigDecimal maxCapitalPerPosition;
 
     @Value("${broker.max-concurrent-positions:5}")
-    private int maxConcurrentPositions;
+    public void setMaxConcurrentPositions(int maxConcurrentPositions) {
+        this.maxConcurrentPositions = maxConcurrentPositions;
+    }
 
     @Value("${broker.max-capital-per-position:200000}")
-    private BigDecimal maxCapitalPerPosition;
+    public void setMaxCapitalPerPosition(BigDecimal maxCapitalPerPosition) {
+        this.maxCapitalPerPosition = maxCapitalPerPosition;
+    }
 
     @Autowired
     public PositionLimitChecker(PositionManager positionManager) {
         this.positionManager = positionManager;
+        this.maxConcurrentPositions = 5; // default
+        this.maxCapitalPerPosition = BigDecimal.valueOf(200000); // default
         logger.info("PositionLimitChecker initialized with max {} positions, max ₹{} per position",
                 maxConcurrentPositions, maxCapitalPerPosition);
+    }
+
+    /**
+     * Constructor for testing purposes.
+     */
+    public PositionLimitChecker(PositionManager positionManager, int maxConcurrentPositions, BigDecimal maxCapitalPerPosition) {
+        this.positionManager = positionManager;
+        this.maxConcurrentPositions = maxConcurrentPositions;
+        this.maxCapitalPerPosition = maxCapitalPerPosition;
     }
 
     /**

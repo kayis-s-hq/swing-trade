@@ -18,4 +18,6 @@ public interface TradeLabelRepository extends JpaRepository<TradeLabel, UUID> {
     @Query("SELECT new map(er as exitReason, COUNT(tl) as count) " +
            "FROM TradeLabel tl GROUP BY tl.exitReason")
     Map<ExitReason, Long> countByExitReason();
+
+    Optional<TradeLabel> findByTradeId(UUID tradeId);
 }

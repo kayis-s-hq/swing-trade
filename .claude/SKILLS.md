@@ -36,13 +36,14 @@ This document provides an overview of all custom skills created for the swing-tr
 | `swing-trade-llm-prompt-optimizer` | Test and optimize LLM prompts for sentiment | Sentiment accuracy drops, prompt changes |
 | `swing-trade-systematic-debugging` | Systematic debugging with persistent state | Bugs, test failures, unexpected behavior |
 
-### Category 5: Infrastructure & Operations (4 skills)
+### Category 5: Infrastructure & Operations (5 skills)
 
 | Skill Name | Purpose | Trigger |
 |------------|---------|---------|
 | `swing-trade-health-check-monitor` | Monitor system health via Actuator endpoints | Pre-trade, continuous monitoring, incidents |
 | `swing-trade-docker-compose-deployer` | Deploy with Docker Compose including health checks | Infrastructure changes, new environments |
 | `swing-trade-maven-multi-module-build` | Build and test specific modules with dependency resolution | Module changes, targeted tests, deployment |
+| `swing-trade-e2e-smoke-test` | Run lightweight E2E smoke tests on the running API | Phase completion, post-merge validation, gsd:verify-work integration |
 | `swing-trade-telegram-signal-migrator` | Migrate from Telegram to Signal/Signl4 webhook | Notification changes, Telegram issues |
 
 ## Installation

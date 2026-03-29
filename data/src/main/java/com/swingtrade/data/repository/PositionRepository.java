@@ -80,4 +80,21 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
      */
     @Query("SELECT p FROM PositionEntity p WHERE p.status = 'STOPPED' ORDER BY p.updatedAt DESC")
     List<PositionEntity> findAllStoppedPositions();
+
+    /**
+     * Finds positions by status.
+     *
+     * @param status the position status
+     * @return list of positions with the specified status
+     */
+    @Query("SELECT p FROM PositionEntity p WHERE p.status = :status ORDER BY p.entryDate DESC")
+    List<PositionEntity> findByStatus(@Param("status") String status);
+
+    /**
+     * Finds positions by symbol.
+     *
+     * @param symbol the stock symbol
+     * @return list of positions
+     */
+    List<PositionEntity> findBySymbol(String symbol);
 }

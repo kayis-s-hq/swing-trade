@@ -8,15 +8,15 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class TradeMetricsTest {
+class ApiTradeMetricsTest {
 
     private MeterRegistry meterRegistry;
-    private TradeMetrics tradeMetrics;
+    private ApiTradeMetrics tradeMetrics;
 
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        tradeMetrics = new TradeMetrics(meterRegistry);
+        tradeMetrics = new ApiTradeMetrics(meterRegistry);
     }
 
     @Test

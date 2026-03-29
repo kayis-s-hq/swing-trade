@@ -37,9 +37,9 @@ import java.util.stream.Collectors;
  * Handles authentication, rate limiting, and data transformation.
  */
 @Component
-public class UpstoxRestClient implements MarketDataClient {
+public class UpstoxServiceClient implements MarketDataClient {
 
-    private static final Logger logger = LoggerFactory.getLogger(UpstoxRestClient.class);
+    private static final Logger logger = LoggerFactory.getLogger(UpstoxServiceClient.class);
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
@@ -65,7 +65,7 @@ public class UpstoxRestClient implements MarketDataClient {
      * @param apiSecret Upstox API secret
      * @param accessToken pre-fetched access token (optional)
      */
-    public UpstoxRestClient(
+    public UpstoxServiceClient(
             WebClient.Builder webClientBuilder,
             @Value("${upstox.api.key}") String apiKey,
             @Value("${upstox.api.secret}") String apiSecret,

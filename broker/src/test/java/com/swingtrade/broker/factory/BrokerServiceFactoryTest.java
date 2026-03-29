@@ -1,19 +1,17 @@
 package com.swingtrade.broker.factory;
 
 import com.swingtrade.broker.config.BrokerMode;
-import com.swingtrade.broker.kite.KiteConnectClient;
-import com.swingtrade.broker.risk.RiskControlsService;
-import com.swingtrade.broker.service.PaperTradingServiceImpl;
-import org.junit.jupiter.api.BeforeEach;
+import com.swingtrade.broker.engine.PaperTradeEngine;
+import com.swingtrade.broker.kite.BrokerClient;
+import com.swingtrade.broker.risk.RiskControls;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for BrokerServiceFactory.
@@ -22,28 +20,19 @@ import static org.mockito.Mockito.*;
 class BrokerServiceFactoryTest {
 
     @Mock
-    private PaperTradingServiceImpl paperTradingService;
+    private BrokerClient mockClient;
 
     @Mock
-    private KiteConnectClient kiteConnectClient;
+    private RiskControls mockRisk;
 
     @Mock
-    private RiskControlsService riskControlsService;
-
-    @InjectMocks
-    private BrokerServiceFactory factory;
-
-    @BeforeEach
-    void setUp() {
-        reset(paperTradingService, kiteConnectClient, riskControlsService);
-    }
+    private PaperTradeEngine mockPaperEngine;
 
     @Test
-    void testInitialize_PaperMode() {
-        // Given
-        factory.setModeString("paper");
-
+    void testBrokerMode_Paper() {
         // When
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        factory.setModeString("paper");
         factory.initialize();
 
         // Then
@@ -52,11 +41,10 @@ class BrokerServiceFactoryTest {
     }
 
     @Test
-    void testInitialize_DryRunMode() {
-        // Given
-        factory.setModeString("dry_run");
-
+    void testBrokerMode_DryRun() {
         // When
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        factory.setModeString("dry_run");
         factory.initialize();
 
         // Then
@@ -65,20 +53,23 @@ class BrokerServiceFactoryTest {
     }
 
     @Test
-    void testInitialize_LiveMode_WithoutConfig() {
+    void testBrokerMode_Live_WithoutConfig() {
         // Given
+        when(mockClient.isConfigured()).thenReturn(false);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
         factory.setModeString("live");
-        when(kiteConnectClient.isConfigured()).thenReturn(false);
 
         // When/Then
-        assertThatThrownBy(factory::initialize)
+        assertThatThrownBy(() -> factory.initialize())
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Kite Connect API key not configured");
+                .hasMessageContaining("Broker API key not configured");
     }
 
     @Test
     void testSwitchMode() {
         // Given
+        when(mockClient.isConfigured()).thenReturn(true);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
         factory.setModeString("paper");
         factory.initialize();
 
@@ -92,6 +83,8 @@ class BrokerServiceFactoryTest {
     @Test
     void testSwitchMode_String() {
         // Given
+        when(mockClient.isConfigured()).thenReturn(true);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
         factory.setModeString("paper");
         factory.initialize();
 
@@ -104,7 +97,8 @@ class BrokerServiceFactoryTest {
 
     @Test
     void testAllowsExecution_Paper() {
-        // Given
+        // When
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
         factory.setModeString("paper");
         factory.initialize();
 
@@ -118,8 +112,11 @@ class BrokerServiceFactoryTest {
     @Test
     void testAllowsExecution_Live() {
         // Given
-        factory.setModeString("live");
+        when(mockClient.isConfigured()).thenReturn(true);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        factory.setModeString("paper");
         factory.initialize();
+        factory.switchMode(BrokerMode.LIVE);
 
         // When
         boolean allows = factory.allowsExecution();
@@ -130,7 +127,8 @@ class BrokerServiceFactoryTest {
 
     @Test
     void testIsSafeMode_Paper() {
-        // Given
+        // When
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
         factory.setModeString("paper");
         factory.initialize();
 
@@ -143,7 +141,8 @@ class BrokerServiceFactoryTest {
 
     @Test
     void testIsSafeMode_DryRun() {
-        // Given
+        // When
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
         factory.setModeString("dry_run");
         factory.initialize();
 
@@ -157,8 +156,11 @@ class BrokerServiceFactoryTest {
     @Test
     void testIsSafeMode_Live() {
         // Given
-        factory.setModeString("live");
+        when(mockClient.isConfigured()).thenReturn(true);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
+        factory.setModeString("paper");
         factory.initialize();
+        factory.switchMode(BrokerMode.LIVE);
 
         // When
         boolean safe = factory.isSafeMode();
@@ -170,6 +172,7 @@ class BrokerServiceFactoryTest {
     @Test
     void testGetModeString() {
         // Given
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClient, mockRisk);
         factory.setModeString("live");
 
         // When

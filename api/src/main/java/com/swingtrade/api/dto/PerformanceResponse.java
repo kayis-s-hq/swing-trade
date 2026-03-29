@@ -10,14 +10,16 @@ import java.time.LocalDateTime;
 public class PerformanceResponse {
 
     private BigDecimal totalReturn;
+    private BigDecimal totalPnL;
     private BigDecimal annualizedReturn;
     private BigDecimal sharpeRatio;
     private BigDecimal maxDrawdown;
     private BigDecimal sortinoRatio;
     private Integer totalTrades;
+    private Integer closedTrades;
     private Integer winningTrades;
     private Integer losingTrades;
-    private Integer winRate;
+    private BigDecimal winRate;
     private BigDecimal averageWin;
     private BigDecimal averageLoss;
     private BigDecimal averageTrade;
@@ -39,6 +41,14 @@ public class PerformanceResponse {
 
     public void setTotalReturn(BigDecimal totalReturn) {
         this.totalReturn = totalReturn;
+    }
+
+    public BigDecimal getTotalPnL() {
+        return totalPnL;
+    }
+
+    public void setTotalPnL(BigDecimal totalPnL) {
+        this.totalPnL = totalPnL;
     }
 
     public BigDecimal getAnnualizedReturn() {
@@ -81,6 +91,14 @@ public class PerformanceResponse {
         this.totalTrades = totalTrades;
     }
 
+    public Integer getClosedTrades() {
+        return closedTrades;
+    }
+
+    public void setClosedTrades(Integer closedTrades) {
+        this.closedTrades = closedTrades;
+    }
+
     public Integer getWinningTrades() {
         return winningTrades;
     }
@@ -97,11 +115,11 @@ public class PerformanceResponse {
         this.losingTrades = losingTrades;
     }
 
-    public Integer getWinRate() {
+    public BigDecimal getWinRate() {
         return winRate;
     }
 
-    public void setWinRate(Integer winRate) {
+    public void setWinRate(BigDecimal winRate) {
         this.winRate = winRate;
     }
 
@@ -207,7 +225,8 @@ public class PerformanceResponse {
         // Calculate derived metrics
         if (totalTrades != null && totalTrades > 0) {
             response.setLosingTrades(totalTrades - winningTrades);
-            response.setWinRate((winningTrades * 100) / totalTrades);
+            response.setWinRate(BigDecimal.valueOf(winningTrades * 100)
+                .divide(BigDecimal.valueOf(totalTrades), 2, java.math.RoundingMode.HALF_UP));
         }
 
         response.setAsOfDate(LocalDateTime.now());

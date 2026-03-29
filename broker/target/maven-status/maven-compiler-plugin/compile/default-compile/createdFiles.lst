@@ -4,6 +4,7 @@ com/swingtrade/broker/manager/PositionManager.class
 com/swingtrade/broker/telegram/TelegramNotificationService$ErrorSeverity.class
 com/swingtrade/broker/model/Order.class
 com/swingtrade/broker/config/BrokerConfig.class
+com/swingtrade/broker/risk/RiskControls.class
 com/swingtrade/broker/factory/DryRunService.class
 com/swingtrade/broker/telegram/TelegramNotificationService$TelegramResponse.class
 com/swingtrade/broker/model/PositionStatus.class
@@ -27,7 +28,6 @@ com/swingtrade/broker/engine/PaperTradingEngine.class
 com/swingtrade/broker/risk/RiskCheckResult.class
 com/swingtrade/broker/BrokerApplication.class
 com/swingtrade/broker/model/OrderResponse.class
-com/swingtrade/broker/service/PaperTradingEngine.class
 com/swingtrade/broker/risk/PositionSizeValidator.class
 com/swingtrade/broker/telegram/BrokerNotificationIntegration.class
 com/swingtrade/broker/telegram/TelegramMessageFormatter.class
@@ -38,6 +38,7 @@ com/swingtrade/broker/service/BrokerService.class
 com/swingtrade/broker/engine/PaperTradeEngine.class
 com/swingtrade/broker/factory/BrokerServiceFactory$1.class
 com/swingtrade/broker/telegram/SignalNotificationService$SignalResponse.class
+com/swingtrade/broker/kite/BrokerClient.class
 com/swingtrade/broker/telegram/TelegramConfig.class
 com/swingtrade/broker/telegram/TelegramNotificationService$TelegramResponse$Result.class
 com/swingtrade/broker/risk/RiskControlsService.class

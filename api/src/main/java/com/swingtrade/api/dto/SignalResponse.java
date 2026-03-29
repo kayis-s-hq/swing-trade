@@ -27,6 +27,23 @@ public class SignalResponse {
     public SignalResponse() {
     }
 
+    public SignalResponse(String symbol, LocalDate date, SignalType signalType,
+                          BigDecimal confidence, String reasoning, BigDecimal entryPrice,
+                          BigDecimal stopLoss, BigDecimal target, BigDecimal riskRewardRatio,
+                          List<String> indicators, java.time.LocalDateTime generatedAt) {
+        this.symbol = symbol;
+        this.date = date;
+        this.signalType = signalType;
+        this.confidence = confidence;
+        this.reasoning = reasoning;
+        this.entryPrice = entryPrice;
+        this.stopLoss = stopLoss;
+        this.target = target;
+        this.riskRewardRatio = riskRewardRatio;
+        this.indicators = indicators;
+        this.generatedAt = generatedAt.toLocalDate();
+    }
+
     public SignalResponse(Signal signal) {
         this.id = signal.id();
         this.symbol = signal.symbol();

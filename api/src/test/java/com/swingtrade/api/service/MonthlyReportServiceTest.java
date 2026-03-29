@@ -1,5 +1,6 @@
 package com.swingtrade.api.service;
 
+import com.swingtrade.api.PerformanceService;
 import com.swingtrade.broker.telegram.TelegramConfig;
 import com.swingtrade.broker.telegram.TelegramMessageFormatter;
 import com.swingtrade.data.repository.PositionRepository;
@@ -30,10 +31,10 @@ class MonthlyReportServiceTest {
     private PositionRepository positionRepository;
 
     @Mock
-    private SignalRepository signalRepository;
+    private PerformanceService performanceService;
 
     @Mock
-    private PerformanceService performanceService;
+    private SignalRepository signalRepository;
 
     @Mock
     private TelegramConfig telegramConfig;
@@ -68,7 +69,7 @@ class MonthlyReportServiceTest {
         );
 
         when(positionRepository.findAll()).thenReturn(positions);
-        when(signalRepository.findAll()).thenReturn(signals);
+        when(signalRepository.findAll()).thenReturn(List.of());
 
         // Act
         Map<String, Object> report = monthlyReportService.buildReport(reportDate, positions, signals);
@@ -112,7 +113,7 @@ class MonthlyReportServiceTest {
         List<Signal> signals = List.of();
 
         when(positionRepository.findAll()).thenReturn(positions);
-        when(signalRepository.findAll()).thenReturn(signals);
+        when(signalRepository.findAll()).thenReturn(List.of());
 
         // Act
         Map<String, Object> report = monthlyReportService.buildReport(reportDate, positions, signals);
@@ -134,7 +135,7 @@ class MonthlyReportServiceTest {
         List<Signal> signals = List.of();
 
         when(positionRepository.findAll()).thenReturn(positions);
-        when(signalRepository.findAll()).thenReturn(signals);
+        when(signalRepository.findAll()).thenReturn(List.of());
 
         // Act
         Map<String, Object> report = monthlyReportService.buildReport(reportDate, positions, signals);
@@ -157,7 +158,7 @@ class MonthlyReportServiceTest {
         );
 
         when(positionRepository.findAll()).thenReturn(positions);
-        when(signalRepository.findAll()).thenReturn(signals);
+        when(signalRepository.findAll()).thenReturn(List.of());
 
         // Act
         Map<String, Object> report = monthlyReportService.buildReport(reportDate, positions, signals);
@@ -184,7 +185,7 @@ class MonthlyReportServiceTest {
         List<Signal> signals = List.of();
 
         when(positionRepository.findAll()).thenReturn(positions);
-        when(signalRepository.findAll()).thenReturn(signals);
+        when(signalRepository.findAll()).thenReturn(List.of());
 
         // Act
         Map<String, Object> report = monthlyReportService.buildReport(reportDate, positions, signals);
@@ -208,7 +209,7 @@ class MonthlyReportServiceTest {
         List<Signal> signals = List.of();
 
         when(positionRepository.findAll()).thenReturn(positions);
-        when(signalRepository.findAll()).thenReturn(signals);
+        when(signalRepository.findAll()).thenReturn(List.of());
 
         // Act
         Map<String, Object> report = monthlyReportService.buildReport(reportDate, positions, signals);
@@ -230,7 +231,7 @@ class MonthlyReportServiceTest {
         List<Signal> signals = List.of();
 
         when(positionRepository.findAll()).thenReturn(positions);
-        when(signalRepository.findAll()).thenReturn(signals);
+        when(signalRepository.findAll()).thenReturn(List.of());
 
         // Act
         Map<String, Object> report = monthlyReportService.buildReport(reportDate, positions, signals);
@@ -252,7 +253,7 @@ class MonthlyReportServiceTest {
         List<Signal> signals = List.of();
 
         when(positionRepository.findAll()).thenReturn(positions);
-        when(signalRepository.findAll()).thenReturn(signals);
+        when(signalRepository.findAll()).thenReturn(List.of());
 
         // Act
         Map<String, Object> report = monthlyReportService.buildReport(reportDate, positions, signals);

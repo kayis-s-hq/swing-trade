@@ -30,22 +30,32 @@ public class ScanService {
     }
 
     /**
-     * Trigger manual scan for trading opportunities
+     * Trigger manual scan for trading opportunities.
+     * Generates signals for all stocks via the signal engine, then queries
+     * today's BUY signals from the repository.
+     *
      * @return Scan result
      */
     public ScanResult triggerManualScan() {
-        // Trigger the signal engine to generate signals for all stocks
-        List<String> opportunities = new ArrayList<>();
-
         // Get all stock symbols
         List<String> symbols = new ArrayList<>();
         stockRepository.findAll().forEach(stock -> symbols.add(stock.getSymbol()));
 
-        // Generate signals for each stock
+        // Generate signals for each stock (void method - saves to DB)
         for (String symbol : symbols) {
-            var signal = signalEngine.generateSignal(symbol);
-            if (signal != null && signal.getType() == SignalEngine.SignalType.BUY) {
-                opportunities.add(symbol);
+            signalEngine.generateSignalForSymbolNow(symbol);
+        }
+
+        // Query today's BUY signals from the repository
+        LocalDate today = LocalDate.now();
+        List<String> opportunities = new ArrayList<>();
+        for (String symbol : symbols) {
+            var signals = signalRepository.findBySymbolAndDate(symbol, today);
+            for (var signal : signals) {
+                if ("BUY".equals(signal.getSignalType())) {
+                    opportunities.add(symbol);
+                    break;
+                }
             }
         }
 
@@ -107,12 +117,12 @@ public class ScanService {
         ScanResponse response = new ScanResponse();
         response.setScanTime(result.getScanTime());
         response.setStatus(ScanResponse.ScanStatus.COMPLETED);
-        response.setSymbolsScannedCount(result.getOpportunityCount());
+        response.setSymbolsScanned(result.getOpportunityCount());
         response.setSignalsFound(result.getOpportunityCount());
         response.setBuySignals(result.getOpportunityCount());
         response.setSellSignals(0);
         response.setHoldSignals(0);
-        response.setSymbolsScanned(result.getOpportunities());
+        response.setScannedSymbols(result.getOpportunities());
         response.setMessage(result.getStatus());
         return response;
     }

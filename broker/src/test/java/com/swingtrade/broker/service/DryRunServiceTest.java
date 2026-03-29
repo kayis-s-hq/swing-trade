@@ -1,10 +1,10 @@
 package com.swingtrade.broker.service;
 
 import com.swingtrade.broker.factory.DryRunService;
-import com.swingtrade.broker.kite.KiteConnectClient;
+import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.model.*;
 import com.swingtrade.broker.risk.RiskCheckResult;
-import com.swingtrade.broker.risk.RiskControlsService;
+import com.swingtrade.broker.risk.RiskControls;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,16 +27,16 @@ import static org.mockito.Mockito.*;
 class DryRunServiceTest {
 
     @Mock
-    private KiteConnectClient kiteConnectClient;
+    private BrokerClient brokerClient;
 
     @Mock
-    private RiskControlsService riskControlsService;
+    private RiskControls riskControls;
 
     private DryRunService service;
 
     @BeforeEach
     void setUp() {
-        service = new DryRunService(kiteConnectClient, riskControlsService);
+        service = new DryRunService(brokerClient, riskControls);
     }
 
     @Test
@@ -49,15 +49,15 @@ class DryRunServiceTest {
         order.setQuantity(new BigDecimal("100"));
         order.setType(OrderType.MARKET);
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("2500"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("2500"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
 
         // When
         Order result = service.placeOrder(order);
 
         // Then
         assertThat(result.getStatus()).isEqualTo(OrderStatus.ACCEPTED);
-        verify(riskControlsService).preTradeCheck(any(OrderResponse.class), any(BigDecimal.class));
+        verify(riskControls).preTradeCheck(any(OrderResponse.class), any(BigDecimal.class));
     }
 
     @Test
@@ -69,14 +69,14 @@ class DryRunServiceTest {
         order.setDirection(TradeDirection.LONG);
         order.setQuantity(new BigDecimal("50"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("3500"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("3500"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
 
         // When
         Order result = service.placeOrder(order);
 
         // Then - Verify no actual broker call was made
-        verify(kiteConnectClient, never()).placeOrder(any(OrderResponse.class));
+        verify(brokerClient, never()).placeOrder(any(OrderResponse.class));
     }
 
     @Test
@@ -89,7 +89,7 @@ class DryRunServiceTest {
 
         // Then
         assertThat(result).isTrue();
-        verify(kiteConnectClient, never()).cancelOrder(orderId);
+        verify(brokerClient, never()).cancelOrder(orderId);
     }
 
     @Test
@@ -101,11 +101,11 @@ class DryRunServiceTest {
         boolean result = service.cancelOrder(orderId);
 
         // Then - Verify no actual broker cancellation was made
-        verify(kiteConnectClient, never()).cancelOrder(orderId);
+        verify(brokerClient, never()).cancelOrder(orderId);
     }
 
     @Test
-    void testGetPortfolio_returnsEmpty() {
+    void testGetPortfolio_returnsNull() {
         // When
         Portfolio result = service.getPortfolio();
 
@@ -123,7 +123,7 @@ class DryRunServiceTest {
     }
 
     @Test
-    void testGetPosition_returnsNull() {
+    void testGetPosition_returnsEmpty() {
         // When
         var result = service.getPosition("pos-123");
 
@@ -149,14 +149,12 @@ class DryRunServiceTest {
     }
 
     @Test
-    void testGetMaxConcurrentPositions_returns3() {
-        // Given/When/Then - Default is 5 based on the constructor
+    void testGetMaxConcurrentPositions_returnsDefault() {
         assertThat(service.getMaxConcurrentPositions()).isEqualTo(5);
     }
 
     @Test
-    void testGetMaxCapitalPerPosition_returnsConfigValue() {
-        // Given/When/Then - Default is 200000 based on the constructor
+    void testGetMaxCapitalPerPosition_returnsDefault() {
         assertThat(service.getMaxCapitalPerPosition()).isEqualTo(new BigDecimal("200000"));
     }
 
@@ -169,9 +167,9 @@ class DryRunServiceTest {
         order.setDirection(TradeDirection.LONG);
         order.setQuantity(new BigDecimal("100"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1450"));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1450"));
         RiskCheckResult riskResult = new RiskCheckResult(false, "Position limit exceeded");
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(riskResult);
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(riskResult);
 
         // When
         Order result = service.placeOrder(order);
@@ -182,11 +180,9 @@ class DryRunServiceTest {
 
     @Test
     void testDryRunMode_isSafeMode() {
-        // Given/When/Then
         assertThat(service).isInstanceOf(DryRunService.class);
-        // Verify the service doesn't actually execute any broker operations
-        verify(kiteConnectClient, never()).placeOrder(any());
-        verify(kiteConnectClient, never()).cancelOrder(any());
+        verify(brokerClient, never()).placeOrder(any());
+        verify(brokerClient, never()).cancelOrder(any());
     }
 
     @Test
@@ -199,8 +195,8 @@ class DryRunServiceTest {
         order.setQuantity(new BigDecimal("75"));
         order.setType(OrderType.MARKET);
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1350"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1350"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
 
         // When
         Order result = service.placeOrder(order);
@@ -220,8 +216,8 @@ class DryRunServiceTest {
         order.setType(OrderType.LIMIT);
         order.setLimitPrice(new BigDecimal("440"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("450"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("450"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
 
         // When
         Order result = service.placeOrder(order);
@@ -241,8 +237,8 @@ class DryRunServiceTest {
         order.setType(OrderType.STOP_LOSS);
         order.setStopPrice(new BigDecimal("540"));
 
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("550"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("550"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
 
         // When
         Order result = service.placeOrder(order);
@@ -254,8 +250,8 @@ class DryRunServiceTest {
     @Test
     void testPlaceOrder_multipleOrders() {
         // Given
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("2500"));
-        when(riskControlsService.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("2500"));
+        when(riskControls.preTradeCheck(any(), any())).thenReturn(new RiskCheckResult(true));
 
         // When
         Order order1 = service.placeOrder(createOrder("RELIANCE-EQ"));
@@ -267,15 +263,15 @@ class DryRunServiceTest {
         assertThat(order2.getStatus()).isEqualTo(OrderStatus.ACCEPTED);
         assertThat(order3.getStatus()).isEqualTo(OrderStatus.ACCEPTED);
         // Verify no actual broker calls
-        verify(kiteConnectClient, never()).placeOrder(any(OrderResponse.class));
+        verify(brokerClient, never()).placeOrder(any(OrderResponse.class));
     }
 
     @Test
     void testPlaceOrder_riskCheckFails() {
         // Given
         Order order = createOrder("AXISBANK-EQ");
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1100"));
-        when(riskControlsService.preTradeCheck(any(), any()))
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1100"));
+        when(riskControls.preTradeCheck(any(), any()))
                 .thenReturn(new RiskCheckResult(false, "Daily loss circuit breaker active"));
 
         // When
@@ -289,8 +285,8 @@ class DryRunServiceTest {
     void testPlaceOrder_killSwitchActive() {
         // Given
         Order order = createOrder("KOTAKBANK-EQ");
-        when(kiteConnectClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1700"));
-        when(riskControlsService.preTradeCheck(any(), any()))
+        when(brokerClient.getMarketPrice(anyString(), any())).thenReturn(new BigDecimal("1700"));
+        when(riskControls.preTradeCheck(any(), any()))
                 .thenReturn(new RiskCheckResult(false, "KILL SWITCH ACTIVE"));
 
         // When
@@ -300,7 +296,16 @@ class DryRunServiceTest {
         assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
 
-    // Helper method
+    @Test
+    void testGetBrokerClient_returnsMock() {
+        assertThat(service.getBrokerClient()).isSameAs(brokerClient);
+    }
+
+    @Test
+    void testGetRiskControls_returnsMock() {
+        assertThat(service.getRiskControls()).isSameAs(riskControls);
+    }
+
     private Order createOrder(String symbol) {
         Order order = new Order();
         order.setOrderId("dry-run-order-" + symbol);

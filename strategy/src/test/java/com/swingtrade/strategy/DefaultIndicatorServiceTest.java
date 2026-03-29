@@ -551,10 +551,7 @@ class DefaultIndicatorServiceTest {
 
     // Helper method
     private BarSeries createValidBarSeries(int numberOfBars) {
-        BarSeries series = new BaseSeriesBuilder()
-            .withName("Test Series")
-            .withInitialPrice(100.0)
-            .build();
+        BarSeries series = new org.ta4j.core.BaseBarSeries("Test Series");
 
         double price = 100.0;
         for (int i = 0; i < numberOfBars; i++) {
@@ -564,7 +561,7 @@ class DefaultIndicatorServiceTest {
             double low = Math.min(open, close) - Math.random();
             long volume = (long) (1000000 + Math.random() * 500000);
 
-            series.addBar(LocalDate.of(2024, 1, i + 1), open, high, low, close, volume);
+            series.addBar(java.time.ZonedDateTime.of(2024, 1, i + 1, 0, 0, 0, 0, java.time.ZoneId.of("Asia/Kolkata")), open, high, low, close, volume);
             price = close;
         }
 

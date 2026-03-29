@@ -117,10 +117,13 @@ public class SignalService {
      * @param symbol the stock symbol
      * @return Generated signal
      */
-    public Signal generateSignal(String symbol) {
+    public com.swingtrade.domain.Signal generateSignal(String symbol) {
         // Delegate to SignalEngine for signal generation
         // This would typically trigger the strategy engine to analyze the symbol
-        return signalEngine.generateSignal(symbol);
+        signalEngine.generateSignalsForSymbol(symbol);
+        // Return the latest signal for the symbol
+        var latest = signalRepository.findLatestBySymbol(symbol);
+        return latest.map(com.swingtrade.domain.Signal.class::cast).orElse(null);
     }
 
     /**
@@ -151,13 +154,13 @@ public class SignalService {
      * @return Combined signal with technical and sentiment analysis
      */
     public CombinedSignal getCombinedSignal(String symbol) {
-        Signal technicalSignal = generateSignal(symbol);
+        com.swingtrade.domain.Signal technicalSignal = generateSignal(symbol);
         SentimentAnalysis sentiment = getSentimentAnalysis(symbol);
 
         return new CombinedSignal(
             symbol,
             LocalDate.now(),
-            technicalSignal,
+            convertDomainSignalToApiSignal(technicalSignal),
             sentiment,
             combineSignals(technicalSignal, sentiment)
         );
@@ -166,18 +169,39 @@ public class SignalService {
     /**
      * Combines technical signal with sentiment to determine final signal
      */
-    private SignalType combineSignals(Signal technicalSignal, SentimentAnalysis sentiment) {
-        SignalType technicalType = technicalSignal.getType();
+    private SignalType combineSignals(com.swingtrade.domain.Signal technicalSignal, SentimentAnalysis sentiment) {
+        com.swingtrade.domain.Signal.SignalType technicalType = technicalSignal.type();
         String sentimentScore = sentiment.getScore();
 
         if ("NEGATIVE".equals(sentimentScore)) {
             // Negative sentiment suppresses BUY signals
-            if (technicalType == SignalType.BUY) {
+            if (technicalType == com.swingtrade.domain.Signal.SignalType.BUY) {
                 return SignalType.HOLD;
             }
         }
 
-        return technicalType;
+        return SignalType.valueOf(technicalType.name());
+    }
+
+    /**
+     * Convert domain Signal to API SignalResponse
+     */
+    public com.swingtrade.api.dto.SignalResponse convertSignalToResponse(com.swingtrade.domain.Signal signal) {
+        if (signal == null) return null;
+        com.swingtrade.api.dto.SignalResponse response = new com.swingtrade.api.dto.SignalResponse();
+        response.setId(signal.id());
+        response.setSymbol(signal.symbol());
+        response.setDate(signal.date());
+        response.setSignalType(com.swingtrade.api.dto.SignalResponse.SignalType.valueOf(signal.type().name()));
+        response.setConfidence(signal.confidence());
+        response.setReasoning(signal.reasoning());
+        response.setEntryPrice(signal.entryPrice());
+        response.setStopLoss(signal.stopLoss());
+        response.setTarget(signal.target());
+        response.setRiskRewardRatio(signal.riskReward());
+        response.setIndicators(java.util.List.of(signal.indicators().split(",")));
+        response.setGeneratedAt(signal.generatedAt());
+        return response;
     }
 
     /**
@@ -186,15 +210,23 @@ public class SignalService {
     private List<Signal> convertToDomain(List<SignalEntity> entities) {
         List<Signal> signals = new ArrayList<>();
         for (SignalEntity entity : entities) {
-            signals.add(new Signal(
-                entity.getSymbol(),
-                entity.getSignalType(),
-                entity.getConfidence(),
-                entity.getDate(),
-                entity.getReasoning()
-            ));
+            signals.add(convertDomainSignalToApiSignal(entity.toDomain()));
         }
         return signals;
+    }
+
+    /**
+     * Convert domain Signal to local API Signal class
+     */
+    private Signal convertDomainSignalToApiSignal(com.swingtrade.domain.Signal domainSignal) {
+        if (domainSignal == null) return null;
+        return new Signal(
+            domainSignal.symbol(),
+            domainSignal.type().name(),
+            domainSignal.confidence().doubleValue(),
+            domainSignal.date(),
+            domainSignal.reasoning()
+        );
     }
 
     // DTO classes for API responses

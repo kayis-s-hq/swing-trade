@@ -103,7 +103,7 @@ class DefaultStrategyTest {
         @DisplayName("generateStrategy with empty BarSeries should return strategy")
         void testGenerateStrategy_withEmptyBarSeries_returnsStrategy() {
             // Given: empty bar series
-            BarSeries series = new BaseSeriesBuilder().build();
+            BarSeries series = new org.ta4j.core.BaseBarSeries("test");
 
             // When: generating strategy
             org.ta4j.core.Strategy strategy = defaultStrategy.generateStrategy(series);
@@ -116,11 +116,12 @@ class DefaultStrategyTest {
         @DisplayName("generateStrategy with short BarSeries should return strategy")
         void testGenerateStrategy_withShortBarSeries_returnsStrategy() {
             // Given: short bar series (less than typical indicator periods)
-            BarSeries series = new BaseSeriesBuilder()
-                .withName("Short Series")
-                .withInitialPrice(100.0)
-                .build();
-            series.addBar(100.0, 102.0, 98.0, 101.0, 1000);
+            BarSeries series = new org.ta4j.core.BaseBarSeries("Short Series");
+            series.addBar(new org.ta4j.core.BaseBar(
+                java.time.Duration.ofDays(1),
+                java.time.ZonedDateTime.of(2024, 1, 1, 0, 0, 0, 0, java.time.ZoneId.of("Asia/Kolkata")),
+                100.0, 102.0, 98.0, 101.0, 1000L
+            ));
 
             // When: generating strategy
             org.ta4j.core.Strategy strategy = defaultStrategy.generateStrategy(series);
@@ -449,8 +450,8 @@ class DefaultStrategyTest {
         @DisplayName("generateStrategy with single bar should return strategy")
         void testGenerateStrategy_withSingleBar_returnsStrategy() {
             // Given: single bar series
-            BarSeries series = new BaseSeriesBuilder().build();
-            series.addBar(100.0, 102.0, 98.0, 101.0, 1000);
+            BarSeries series = new org.ta4j.core.BaseBarSeries("test");
+            series.addBar(java.time.ZonedDateTime.of(2024, 1, 1, 0, 0, 0, 0, java.time.ZoneId.of("Asia/Kolkata")), 100.0, 102.0, 98.0, 101.0, 1000);
 
             // When: generating strategy
             org.ta4j.core.Strategy strategy = defaultStrategy.generateStrategy(series);
@@ -476,17 +477,14 @@ class DefaultStrategyTest {
         @DisplayName("generateStrategy with volatile prices should return strategy")
         void testGenerateStrategy_withVolatilePrices_returnsStrategy() {
             // Given: highly volatile series
-            BarSeries series = new BaseSeriesBuilder()
-                .withName("Volatile")
-                .withInitialPrice(100.0)
-                .build();
+            BarSeries series = new org.ta4j.core.BaseBarSeries("Volatile");
 
             // Add bars with high volatility
             double price = 100.0;
             for (int i = 0; i < 100; i++) {
                 double volatility = (Math.random() - 0.5) * 20;
                 price += volatility;
-                series.addBar(price, price + 5, price - 5, price + 2, 1000000L);
+                series.addBar(java.time.ZonedDateTime.of(2024, 1, i + 1, 0, 0, 0, 0, java.time.ZoneId.of("Asia/Kolkata")), price, price + 5, price - 5, price + 2, 1000000L);
             }
 
             // When: generating strategy
@@ -514,10 +512,7 @@ class DefaultStrategyTest {
     }
 
     private BarSeries createValidBarSeries(int numberOfBars) {
-        BarSeries series = new BaseSeriesBuilder()
-            .withName("Test Series")
-            .withInitialPrice(100.0)
-            .build();
+        BarSeries series = new org.ta4j.core.BaseBarSeries("Test Series");
 
         double price = 100.0;
         for (int i = 0; i < numberOfBars; i++) {
@@ -527,7 +522,11 @@ class DefaultStrategyTest {
             double low = Math.min(open, close) - Math.random();
             long volume = (long) (1000000 + Math.random() * 500000);
 
-            series.addBar(LocalDate.of(2024, 1, i + 1), open, high, low, close, volume);
+            series.addBar(new org.ta4j.core.BaseBar(
+                java.time.Duration.ofDays(1),
+                java.time.ZonedDateTime.of(2024, 1, i + 1, 0, 0, 0, 0, java.time.ZoneId.of("Asia/Kolkata")),
+                open, high, low, close, volume
+            ));
             price = close;
         }
 
@@ -535,10 +534,7 @@ class DefaultStrategyTest {
     }
 
     private BarSeries createTrendingBarSeries() {
-        BarSeries series = new BaseSeriesBuilder()
-            .withName("Trending Series")
-            .withInitialPrice(100.0)
-            .build();
+        BarSeries series = new org.ta4j.core.BaseBarSeries("Trending Series");
 
         double price = 100.0;
         for (int i = 0; i < 100; i++) {
@@ -549,7 +545,11 @@ class DefaultStrategyTest {
             double low = Math.min(open, close) - 0.5;
             long volume = 1000000L;
 
-            series.addBar(LocalDate.of(2024, 1, i + 1), open, high, low, close, volume);
+            series.addBar(new org.ta4j.core.BaseBar(
+                java.time.Duration.ofDays(1),
+                java.time.ZonedDateTime.of(2024, 1, i + 1, 0, 0, 0, 0, java.time.ZoneId.of("Asia/Kolkata")),
+                open, high, low, close, volume
+            ));
             price = close;
         }
 

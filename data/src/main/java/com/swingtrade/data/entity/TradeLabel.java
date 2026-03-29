@@ -12,6 +12,9 @@ public class TradeLabel {
     @Id
     private UUID id;
 
+    @Column(name = "trade_id")
+    private UUID tradeId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "position_id", nullable = false)
     private PositionEntity position;
@@ -58,6 +61,14 @@ public class TradeLabel {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public UUID getTradeId() {
+        return tradeId;
+    }
+
+    public void setTradeId(UUID tradeId) {
+        this.tradeId = tradeId;
     }
 
     public PositionEntity getPosition() {
