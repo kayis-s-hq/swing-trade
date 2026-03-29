@@ -5,11 +5,9 @@ import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -36,19 +34,11 @@ public class PositionController {
             @RequestParam(defaultValue = "20") int size
     ) {
         logger.debug("Fetching positions (page: {}, size: {})", page, size);
-
-        try {
-            List<PositionResponse> positions = positionService.getOpenPositions();
-            PaginatedResponse<PositionResponse> response = new PaginatedResponse<>(
-                    positions, page, size, (long) positions.size()
-            );
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            logger.error("Error fetching positions: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(buildPaginatedErrorResponse("Internal Server Error", "Failed to fetch positions"));
-        }
+        List<PositionResponse> positions = positionService.getOpenPositions();
+        PaginatedResponse<PositionResponse> response = new PaginatedResponse<>(
+                positions, page, size, (long) positions.size()
+        );
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -60,21 +50,13 @@ public class PositionController {
     @GetMapping("/{symbol}")
     public ResponseEntity<PositionResponse> getPosition(@PathVariable String symbol) {
         logger.debug("Fetching position for symbol: {}", symbol);
+        PositionResponse position = positionService.getPositionBySymbol(symbol);
 
-        try {
-            PositionResponse position = positionService.getPositionBySymbol(symbol);
-
-            if (position == null) {
-                return ResponseEntity.notFound().build();
-            }
-
-            return ResponseEntity.ok(position);
-
-        } catch (Exception e) {
-            logger.error("Error fetching position: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(buildPositionErrorResponse("Internal Server Error", "Failed to fetch position"));
+        if (position == null) {
+            return ResponseEntity.notFound().build();
         }
+
+        return ResponseEntity.ok(position);
     }
 
     /**
@@ -90,19 +72,11 @@ public class PositionController {
             @RequestParam(defaultValue = "20") int size
     ) {
         logger.debug("Fetching closed positions");
-
-        try {
-            List<PositionResponse> positions = positionService.getClosedPositions();
-            PaginatedResponse<PositionResponse> response = new PaginatedResponse<>(
-                    positions, page, size, (long) positions.size()
-            );
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            logger.error("Error fetching closed positions: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(buildPaginatedErrorResponse("Internal Server Error", "Failed to fetch closed positions"));
-        }
+        List<PositionResponse> positions = positionService.getClosedPositions();
+        PaginatedResponse<PositionResponse> response = new PaginatedResponse<>(
+                positions, page, size, (long) positions.size()
+        );
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -116,16 +90,8 @@ public class PositionController {
             @PathVariable String status
     ) {
         logger.debug("Fetching positions with status: {}", status);
-
-        try {
-            List<PositionResponse> positions = positionService.getPositionsByStatus(status);
-            return ResponseEntity.ok(positions);
-
-        } catch (Exception e) {
-            logger.error("Error fetching positions: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(List.of(buildPositionErrorResponse("Internal Server Error", "Failed to fetch positions")));
-        }
+        List<PositionResponse> positions = positionService.getPositionsByStatus(status);
+        return ResponseEntity.ok(positions);
     }
 
     /**
@@ -141,19 +107,11 @@ public class PositionController {
             @RequestParam(defaultValue = "20") int size
     ) {
         logger.debug("Fetching positions for symbol: {}", symbol);
-
-        try {
-            List<PositionResponse> positions = positionService.getPositionsBySymbol(symbol);
-            PaginatedResponse<PositionResponse> response = new PaginatedResponse<>(
-                    positions, page, size, (long) positions.size()
-            );
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            logger.error("Error fetching positions: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(buildPaginatedErrorResponse("Internal Server Error", "Failed to fetch positions"));
-        }
+        List<PositionResponse> positions = positionService.getPositionsBySymbol(symbol);
+        PaginatedResponse<PositionResponse> response = new PaginatedResponse<>(
+                positions, page, size, (long) positions.size()
+        );
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -167,16 +125,8 @@ public class PositionController {
             @PathVariable String sector
     ) {
         logger.debug("Fetching positions in sector: {}", sector);
-
-        try {
-            List<PositionResponse> positions = positionService.getPositionsBySector(sector);
-            return ResponseEntity.ok(positions);
-
-        } catch (Exception e) {
-            logger.error("Error fetching positions: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(List.of(buildPositionErrorResponse("Internal Server Error", "Failed to fetch positions")));
-        }
+        List<PositionResponse> positions = positionService.getPositionsBySector(sector);
+        return ResponseEntity.ok(positions);
     }
 
     /**
@@ -187,16 +137,8 @@ public class PositionController {
     @GetMapping("/stats")
     public ResponseEntity<com.swingtrade.api.PositionService.PositionStats> getPositionStats() {
         logger.debug("Fetching position statistics");
-
-        try {
-            com.swingtrade.api.PositionService.PositionStats stats = positionService.getPositionStats();
-            return ResponseEntity.ok(stats);
-
-        } catch (Exception e) {
-            logger.error("Error fetching position stats: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(buildPositionStatsErrorResponse("Internal Server Error", "Failed to fetch stats"));
-        }
+        com.swingtrade.api.PositionService.PositionStats stats = positionService.getPositionStats();
+        return ResponseEntity.ok(stats);
     }
 
     /**
@@ -207,16 +149,8 @@ public class PositionController {
     @GetMapping("/sector-allocation")
     public ResponseEntity<com.swingtrade.api.PositionService.SectorAllocation> getSectorAllocation() {
         logger.debug("Fetching sector allocation");
-
-        try {
-            com.swingtrade.api.PositionService.SectorAllocation allocation = positionService.getSectorAllocation();
-            return ResponseEntity.ok(allocation);
-
-        } catch (Exception e) {
-            logger.error("Error fetching sector allocation: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(buildSectorAllocationErrorResponse("Internal Server Error", "Failed to fetch allocation"));
-        }
+        com.swingtrade.api.PositionService.SectorAllocation allocation = positionService.getSectorAllocation();
+        return ResponseEntity.ok(allocation);
     }
 
     /**
@@ -232,64 +166,13 @@ public class PositionController {
             @Valid @RequestBody(required = false) com.swingtrade.api.dto.ClosePositionRequest request
     ) {
         logger.info("Closing position for symbol: {}", symbol);
+        PositionResponse position = positionService.closePosition(symbol,
+                request != null ? request.getExitReason() : null);
 
-        try {
-            PositionResponse position = positionService.closePosition(symbol,
-                    request != null ? request.getExitReason() : null);
-
-            if (position == null) {
-                return ResponseEntity.notFound().build();
-            }
-
-            return ResponseEntity.ok(position);
-
-        } catch (IllegalArgumentException e) {
-            logger.error("Invalid request: {}", e.getMessage());
-            return ResponseEntity.badRequest()
-                    .body(buildPositionErrorResponse("Bad Request", e.getMessage()));
-        } catch (Exception e) {
-            logger.error("Error closing position: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(buildPositionErrorResponse("Internal Server Error", "Failed to close position"));
+        if (position == null) {
+            return ResponseEntity.notFound().build();
         }
-    }
 
-    /**
-     * Build a PaginatedResponse with error info.
-     */
-    private PaginatedResponse<PositionResponse> buildPaginatedErrorResponse(String error, String message) {
-        PaginatedResponse<PositionResponse> response = new PaginatedResponse<>();
-        PositionResponse errorPos = buildPositionErrorResponse(error, message);
-        response.setContent(List.of(errorPos));
-        return response;
-    }
-
-    /**
-     * Build a PositionResponse with error info.
-     */
-    private PositionResponse buildPositionErrorResponse(String error, String message) {
-        PositionResponse response = new PositionResponse();
-        response.setSymbol("ERROR");
-        response.setEntryReason(error + ": " + message);
-        response.setStatus(PositionResponse.PositionStatus.CLOSED);
-        return response;
-    }
-
-    /**
-     * Build a PositionStats with error info.
-     */
-    private com.swingtrade.api.PositionService.PositionStats buildPositionStatsErrorResponse(String error, String message) {
-        com.swingtrade.api.PositionService.PositionStats stats = new com.swingtrade.api.PositionService.PositionStats();
-        stats.setMessage(message);
-        return stats;
-    }
-
-    /**
-     * Build a SectorAllocation with error info.
-     */
-    private com.swingtrade.api.PositionService.SectorAllocation buildSectorAllocationErrorResponse(String error, String message) {
-        com.swingtrade.api.PositionService.SectorAllocation allocation = new com.swingtrade.api.PositionService.SectorAllocation();
-        allocation.setMessage(message);
-        return allocation;
+        return ResponseEntity.ok(position);
     }
 }

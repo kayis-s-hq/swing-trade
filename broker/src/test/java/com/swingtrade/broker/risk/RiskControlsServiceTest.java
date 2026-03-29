@@ -46,7 +46,7 @@ class RiskControlsServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Mock kill switch as inactive
+        // Mock kill switch as inactive by default
         when(killSwitchService.isActive()).thenReturn(false);
 
         // Mock capital tracker to pass limits
@@ -82,8 +82,8 @@ class RiskControlsServiceTest {
 
     @Test
     void testPreTradeCheck_KillSwitchActive() {
-        // Given
-        riskControlsService.setKillSwitchActive(true);
+        // Given - activate kill switch
+        when(killSwitchService.isActive()).thenReturn(true);
 
         OrderResponse order = new OrderResponse();
         order.setSymbol("RELIANCE");
@@ -145,17 +145,19 @@ class RiskControlsServiceTest {
 
     @Test
     void testSetKillSwitchActive() {
-        // When
+        // When enabled
         riskControlsService.setKillSwitchActive(true);
 
-        // Then
-        assertThat(riskControlsService.isKillSwitchActive()).isTrue();
+        // Then - verify the kill switch methods were called
+        verify(killSwitchService).enableKillSwitch("Set via API");
+        verify(dailyLossCircuitBreaker).openCircuit();
 
-        // When
+        // When disabled
         riskControlsService.setKillSwitchActive(false);
 
-        // Then
-        assertThat(riskControlsService.isKillSwitchActive()).isFalse();
+        // Then - verify the kill switch methods were called
+        verify(killSwitchService).disableKillSwitch();
+        verify(dailyLossCircuitBreaker).closeCircuit();
     }
 
     @Test

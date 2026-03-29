@@ -11,6 +11,7 @@ All project memories are stored locally in this directory, co-located with the c
 - [session-2026-03-23-phase6-tests.md](./session-2026-03-23-phase6-tests.md) - Phase 6 test suite implementation: constructor injection refactoring, Java 25 compatibility fixes
 - [session-2026-03-23-phase6-complete.md](./session-2026-03-23-phase6-complete.md) - Phase 6 execution complete: 158 unit tests passing
 - [session-2026-03-23-phase11-dev-environment.md](./session-2026-03-23-phase11-dev-environment.md) - Phase 11 docker-compose.dev.yml implementation with hot reload, debugging, and mock services
+- [session-2026-03-27-cleanup.md](./session-2026-03-27-cleanup.md) - Repository cleanup: removed duplicate configs, empty directories, orphaned planning docs, and worktree references
 
 ## Project Memories
 

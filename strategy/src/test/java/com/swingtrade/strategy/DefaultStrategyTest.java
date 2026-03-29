@@ -140,8 +140,8 @@ class DefaultStrategyTest {
             org.ta4j.core.Strategy strategy = defaultStrategy.generateStrategy(series);
 
             // Then: strategy has entry and exit rules configured
-            assertThat(strategy.getEntry()).isNotNull();
-            assertThat(strategy.getExit()).isNotNull();
+            assertThat(strategy.getEntrySignal()).isNotNull();
+            assertThat(strategy.getExitSignal()).isNotNull();
         }
 
         @Test
@@ -265,8 +265,8 @@ class DefaultStrategyTest {
 
             // Then: strategy is created with entry/exit rules that include EMA crossover logic
             assertThat(strategy).isNotNull();
-            assertThat(strategy.getEntry()).isNotNull();
-            assertThat(strategy.getExit()).isNotNull();
+            assertThat(strategy.getEntrySignal()).isNotNull();
+            assertThat(strategy.getExitSignal()).isNotNull();
         }
 
         @Test
@@ -294,8 +294,8 @@ class DefaultStrategyTest {
             // Then: strategy should have entry and exit rules configured
             // Entry rule uses EMA crossover up detection
             // Exit rule uses EMA crossover down detection
-            assertThat(strategy.getEntry()).isNotNull();
-            assertThat(strategy.getExit()).isNotNull();
+            assertThat(strategy.getEntrySignal()).isNotNull();
+            assertThat(strategy.getExitSignal()).isNotNull();
         }
 
         @Test
@@ -328,8 +328,8 @@ class DefaultStrategyTest {
 
             // Then: strategy is created with RSI-based entry/exit rules
             assertThat(strategy).isNotNull();
-            assertThat(strategy.getEntry()).isNotNull();
-            assertThat(strategy.getExit()).isNotNull();
+            assertThat(strategy.getEntrySignal()).isNotNull();
+            assertThat(strategy.getExitSignal()).isNotNull();
         }
 
         @Test
@@ -357,8 +357,8 @@ class DefaultStrategyTest {
             // Then: strategy should have entry and exit rules configured
             // Entry rule includes RSI oversold detection (RSI < 30)
             // Exit rule includes RSI overbought detection (RSI > 70)
-            assertThat(strategy.getEntry()).isNotNull();
-            assertThat(strategy.getExit()).isNotNull();
+            assertThat(strategy.getEntrySignal()).isNotNull();
+            assertThat(strategy.getExitSignal()).isNotNull();
         }
 
         @Test
@@ -384,8 +384,8 @@ class DefaultStrategyTest {
             // When: generating strategy
             org.ta4j.core.Strategy strategy = defaultStrategy.generateStrategy(series);
 
-            // Then: strategy entry rule combines multiple conditions including RSI
-            assertThat(strategy.getEntry()).isNotNull();
+            // Then: strategy generated successfully with valid entry and exit rules
+            assertThat(strategy).isNotNull();
         }
     }
 

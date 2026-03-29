@@ -2,14 +2,8 @@ package com.swingtrade.api.test;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
-import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.DockerImageName;
-
-import javax.net.ssl.SSLContext;
-import java.io.IOException;
-import java.util.Properties;
 
 /**
  * TestContainer for Redis.
@@ -41,15 +35,12 @@ public class RedisTestContainer {
 
         redisContainer.start();
 
-        // Wait for container to be ready
-        redisContainer.waitUntil(container -> {
-            try {
-                return redisContainer.isRunning() &&
-                        redisContainer.getHealthStatus() != null;
-            } catch (Exception e) {
-                return true; // Accept if we can't check health
-            }
-        });
+        // Wait for container to be ready (simple health check)
+        try {
+            Thread.sleep(3000); // Give Redis time to start
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
 
         logger.info("Redis TestContainer started successfully");
         logger.info("Host: {}", redisContainer.getHost());
@@ -99,37 +90,6 @@ public class RedisTestContainer {
      */
     public static String getUrl() {
         return String.format("redis://%s:%s", getHost(), getPort());
-    }
-
-    /**
-     * Create a JedisConnectionFactory for Spring Data Redis.
-     *
-     * @return configured JedisConnectionFactory
-     */
-    public static JedisConnectionFactory createConnectionFactory() {
-        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
-        config.setHostName(getHost());
-        config.setPort(getPort());
-
-        JedisConnectionFactory factory = new JedisConnectionFactory(config);
-        factory.afterPropertiesSet();
-
-        logger.info("JedisConnectionFactory created for TestContainer");
-        return factory;
-    }
-
-    /**
-     * Create a JedisConnectionFactory without calling afterPropertiesSet.
-     * Useful for manual configuration.
-     *
-     * @return configured JedisConnectionFactory
-     */
-    public static JedisConnectionFactory createRawConnectionFactory() {
-        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
-        config.setHostName(getHost());
-        config.setPort(getPort());
-
-        return new JedisConnectionFactory(config);
     }
 
     /**

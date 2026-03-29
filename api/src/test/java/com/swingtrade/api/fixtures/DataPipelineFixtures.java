@@ -20,7 +20,7 @@ public class DataPipelineFixtures {
         candle.setHighPrice(new BigDecimal("1020.00"));
         candle.setLowPrice(new BigDecimal("990.00"));
         candle.setClosePrice(new BigDecimal("1015.00"));
-        candle.setVolume(1000000);
+        candle.setVolume(1000000L);
         candle.setAdjClosePrice(new BigDecimal("1015.00"));
         return candle;
     }
@@ -33,7 +33,7 @@ public class DataPipelineFixtures {
         candle.setHighPrice(new BigDecimal("900.00")); // Invalid: High < Open
         candle.setLowPrice(new BigDecimal("950.00"));
         candle.setClosePrice(new BigDecimal("980.00"));
-        candle.setVolume(1000000);
+        candle.setVolume(1000000L);
         candle.setAdjClosePrice(new BigDecimal("980.00"));
         return candle;
     }

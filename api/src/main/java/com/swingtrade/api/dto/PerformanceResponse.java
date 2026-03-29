@@ -10,13 +10,11 @@ import java.time.LocalDateTime;
 public class PerformanceResponse {
 
     private BigDecimal totalReturn;
-    private BigDecimal totalPnL;
     private BigDecimal annualizedReturn;
     private BigDecimal sharpeRatio;
     private BigDecimal maxDrawdown;
     private BigDecimal sortinoRatio;
     private Integer totalTrades;
-    private Integer closedTrades;
     private Integer winningTrades;
     private Integer losingTrades;
     private BigDecimal winRate;
@@ -30,6 +28,8 @@ public class PerformanceResponse {
     private LocalDateTime asOfDate;
     private BigDecimal totalCapitalGained;
     private BigDecimal totalFeesPaid;
+    private Integer closedTrades;
+    private BigDecimal totalPnL;
 
     public PerformanceResponse() {
     }
@@ -41,14 +41,6 @@ public class PerformanceResponse {
 
     public void setTotalReturn(BigDecimal totalReturn) {
         this.totalReturn = totalReturn;
-    }
-
-    public BigDecimal getTotalPnL() {
-        return totalPnL;
-    }
-
-    public void setTotalPnL(BigDecimal totalPnL) {
-        this.totalPnL = totalPnL;
     }
 
     public BigDecimal getAnnualizedReturn() {
@@ -89,14 +81,6 @@ public class PerformanceResponse {
 
     public void setTotalTrades(Integer totalTrades) {
         this.totalTrades = totalTrades;
-    }
-
-    public Integer getClosedTrades() {
-        return closedTrades;
-    }
-
-    public void setClosedTrades(Integer closedTrades) {
-        this.closedTrades = closedTrades;
     }
 
     public Integer getWinningTrades() {
@@ -201,6 +185,22 @@ public class PerformanceResponse {
 
     public void setTotalFeesPaid(BigDecimal totalFeesPaid) {
         this.totalFeesPaid = totalFeesPaid;
+    }
+
+    public Integer getClosedTrades() {
+        return closedTrades;
+    }
+
+    public void setClosedTrades(Integer closedTrades) {
+        this.closedTrades = closedTrades;
+    }
+
+    public BigDecimal getTotalPnL() {
+        return totalPnL;
+    }
+
+    public void setTotalPnL(BigDecimal totalPnL) {
+        this.totalPnL = totalPnL;
     }
 
     /**

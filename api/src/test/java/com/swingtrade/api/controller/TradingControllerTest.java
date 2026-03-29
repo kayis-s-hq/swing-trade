@@ -30,6 +30,13 @@ class TradingControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    private ObjectMapper objectMapper;
+
+    @BeforeEach
+    void setUp() {
+        this.objectMapper = new ObjectMapper();
+    }
+
     private TradeRequest createTradeRequest() {
         TradeRequest request = new TradeRequest();
         request.setSymbol("AAPL");

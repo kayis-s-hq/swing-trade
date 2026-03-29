@@ -1,0 +1,83 @@
+package com.swingtrade.api.config;
+
+import com.swingtrade.api.dto.ErrorResponse;
+import org.junit.jupiter.api.Test;
+
+import java.time.LocalDateTime;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Unit tests for GlobalExceptionHandler setup.
+ * Note: Actual exception handler tests will be integration tests using MockMvc.
+ * This file tests that the handler can be instantiated and error response methods work.
+ */
+class GlobalExceptionHandlerTest {
+
+    @Test
+    void testGlobalExceptionHandlerInstantiates() {
+        // Arrange & Act
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+        // Assert
+        assertNotNull(handler);
+    }
+
+    @Test
+    void testErrorResponseStaticFactoryMethods() {
+        // Test badRequest
+        ErrorResponse badRequest = ErrorResponse.badRequest("Validation failed");
+        assertEquals(400, badRequest.getStatus());
+        assertEquals("BAD_REQUEST", badRequest.getCode());
+        assertEquals("Validation failed", badRequest.getMessage());
+        assertNotNull(badRequest.getTimestamp());
+
+        // Test notFound
+        ErrorResponse notFound = ErrorResponse.notFound("Stock not found");
+        assertEquals(404, notFound.getStatus());
+        assertEquals("NOT_FOUND", notFound.getCode());
+        assertEquals("Stock not found", notFound.getMessage());
+        assertNotNull(notFound.getTimestamp());
+
+        // Test conflict
+        ErrorResponse conflict = ErrorResponse.conflict("Position already exists");
+        assertEquals(409, conflict.getStatus());
+        assertEquals("CONFLICT", conflict.getCode());
+        assertEquals("Position already exists", conflict.getMessage());
+        assertNotNull(conflict.getTimestamp());
+
+        // Test internalError
+        ErrorResponse internalError = ErrorResponse.internalError("Database error");
+        assertEquals(500, internalError.getStatus());
+        assertEquals("INTERNAL_ERROR", internalError.getCode());
+        assertEquals("Database error", internalError.getMessage());
+        assertNotNull(internalError.getTimestamp());
+    }
+
+    @Test
+    void testErrorResponseStaticFactoryMethodsWithPath() {
+        // Test badRequest with path
+        ErrorResponse badRequest = ErrorResponse.badRequest("Validation failed", "/api/stocks");
+        assertEquals(400, badRequest.getStatus());
+        assertEquals("BAD_REQUEST", badRequest.getCode());
+        assertEquals("/api/stocks", badRequest.getPath());
+
+        // Test notFound with path
+        ErrorResponse notFound = ErrorResponse.notFound("Stock not found", "/api/stocks/123");
+        assertEquals(404, notFound.getStatus());
+        assertEquals("NOT_FOUND", notFound.getCode());
+        assertEquals("/api/stocks/123", notFound.getPath());
+
+        // Test conflict with path
+        ErrorResponse conflict = ErrorResponse.conflict("Position exists", "/api/positions");
+        assertEquals(409, conflict.getStatus());
+        assertEquals("CONFLICT", conflict.getCode());
+        assertEquals("/api/positions", conflict.getPath());
+
+        // Test internalError with path
+        ErrorResponse internalError = ErrorResponse.internalError("Server error", "/api/internal");
+        assertEquals(500, internalError.getStatus());
+        assertEquals("INTERNAL_ERROR", internalError.getCode());
+        assertEquals("/api/internal", internalError.getPath());
+    }
+}
