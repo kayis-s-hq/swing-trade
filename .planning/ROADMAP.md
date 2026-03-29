@@ -11,6 +11,7 @@ plans_executed:
   - "05-05: Fix ScanResponse/ScanService (completed 2026-03-23T09:19:42Z)"
   - "05-06: Fix PerformanceService BigDecimal (completed 2026-03-23T09:20:20Z)"
   - "05-07: Fix PositionService types (completed 2026-03-23)"
+  - "05-14: Integration tests with TestContainers (completed 2026-03-29)"
   - "05-17: API layer compilation verification (completed 2026-03-29)"
 gaps:
   - truth: "Health endpoint returns 200 with status UP"
