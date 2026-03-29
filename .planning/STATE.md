@@ -66,7 +66,7 @@ progress:
 | Phase | Name | Status | Target |
 |-------|------|--------|--------|
 | 5 | Testing Foundation | ⏳ Planned | Phase 4 |
-| 6 | Live Trading | 🚧 In Progress | Phase 5 |
+| 6 | Live Trading | 📋 Deferred | Focus on core analysis tests first |
 | 7 | Observability | ⏳ Planned | Phase 6 |
 
 ### Deferred
