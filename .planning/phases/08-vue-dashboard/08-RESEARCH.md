@@ -294,20 +294,20 @@ const closePosition = async () => {
 
 ## Open Questions
 
-1. **What backend endpoints are actually implemented?**
+1. **What backend endpoints are actually implemented? (RESOLVED)**
    - What we know: PositionController, SignalController, HealthController, TradingController exist
    - What's unclear: Are `/market/overview`, `/portfolio/summary`, `/portfolio/equity-curve` endpoints implemented?
-   - Recommendation: Check backend implementation or add placeholder endpoints in Vue
+   - Answer: These endpoints are NOT implemented in Phase 08. They will be handled in Phase 09 when the backend API layer is complete. Phase 08 uses placeholder responses and mock data.
 
-2. **Should we use a chart library for the Equity Curve?**
+2. **Should we use a chart library for the Equity Curve? (RESOLVED)**
    - What we know: PortfolioView.vue has a chart placeholder
    - What's unclear: What's the recommended chart library for Vue 3? (Charts.js, ApexCharts, Recharts?)
-   - Recommendation: Use ApexCharts - popular, well-maintained, Vue 3 support
+   - Answer: No chart library is added in Phase 08. The chart is a placeholder with dashed border and icon. A chart library (likely ApexCharts) will be integrated in Phase 09 with proper backend data.
 
-3. **Should we add Vue Router history mode?**
+3. **Should we add Vue Router history mode? (RESOLVED)**
    - What we know: Currently using hash history (`createWebHashHistory`)
    - What's unclear: Is nginx/Apache configured for history mode?
-   - Recommendation: Keep hash history for Phase 08, migrate to history mode later if needed
+   - Answer: Keep hash history for Phase 08. History mode requires server configuration (nginx/Apache rewrite rules) which is not currently set up. Hash mode works out of the box with static file serving. Migrate to history mode in Phase 09 if proper server configuration is added.
 
 ## Environment Availability
 
@@ -326,41 +326,32 @@ const closePosition = async () => {
 
 ## Validation Architecture
 
-### Test Framework
+### Unit Testing (Recommended)
 | Property | Value |
 |----------|-------|
-| Framework | Playwright (E2E) |
-| Config file | None detected in dashboard |
-| Quick run command | `npx playwright test tests/e2e/*.spec.ts` |
-| Full suite command | `npx playwright test` |
+| Framework | Vitest (unit) |
+| Config file | `vitest.config.ts` |
+| Quick run command | `npx vitest run` |
+| Full suite command | `npx vitest` |
 
 ### Phase Requirements → Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| DASH-01 | Vue.js application scaffolding | E2E | `npx playwright test tests/e2e/dashboard-init.spec.ts` | ❌ Not found |
-| DASH-02 | REST API client integration | E2E | `npx playwright test tests/e2e/api-client.spec.ts` | ❌ Not found |
-| DASH-03 | Dashboard view with system overview | E2E | `npx playwright test tests/e2e/dashboard-view.spec.ts` | ❌ Not found |
-| DASH-04 | Positions view with filtering | E2E | `npx playwright test tests/e2e/positions-view.spec.ts` | ❌ Not found |
-| DASH-05 | Signals view with generation | E2E | `npx playwright test tests/e2e/signals-view.spec.ts` | ❌ Not found |
-| DASH-06 | Portfolio view with metrics | E2E | `npx playwright test tests/e2e/portfolio-view.spec.ts` | ❌ Not found |
-| DASH-07 | Production build and responsive | E2E | `npx playwright test tests/e2e/production-build.spec.ts` | ❌ Not found |
+| DASH-01 | Vue.js application scaffolding | Unit | `npx vitest run src/main.ts` | N/A - foundation |
+| DASH-02 | REST API client integration | Unit | `npx vitest run src/api/` | N/A - integration |
+| DASH-03 | Dashboard view with system overview | Unit | `npx vitest run src/views/DashboardView.vue` | N/A - E2E only |
+| DASH-04 | Positions view with filtering | Unit | `npx vitest run src/views/PositionsView.vue` | N/A - E2E only |
+| DASH-05 | Signals view with generation | Unit | `npx vitest run src/views/SignalsView.vue` | N/A - E2E only |
+| DASH-06 | Portfolio view with metrics | Unit | `npx vitest run src/views/PortfolioView.vue` | N/A - E2E only |
+| DASH-07 | Production build and responsive | Manual | `npm run build` + visual check | N/A - manual |
 
 ### Sampling Rate
-- **Per task commit:** `npx playwright test tests/e2e/{relevant-test}.spec.ts`
-- **Per wave merge:** `npx playwright test`
-- **Phase gate:** Full suite green before `/gsd-verify-work`
+- **Per task commit:** Run relevant unit tests for changed files
+- **Per wave merge:** `npx vitest`
+- **Phase gate:** Production build green before `/gsd-verify-work`
 
-### Wave 0 Gaps
-- [ ] `tests/e2e/dashboard-init.spec.ts` — covers DASH-01, DASH-02
-- [ ] `tests/e2e/dashboard-view.spec.ts` — covers DASH-03
-- [ ] `tests/e2e/positions-view.spec.ts` — covers DASH-04
-- [ ] `tests/e2e/signals-view.spec.ts` — covers DASH-05
-- [ ] `tests/e2e/portfolio-view.spec.ts` — covers DASH-06
-- [ ] `tests/e2e/production-build.spec.ts` — covers DASH-07
-- [ ] `tests/e2e/fixtures.ts` — shared fixtures for test data
-- [ ] Playwright config: `playwright.config.ts` — not found in project
-
-*(If no gaps: "None — existing test infrastructure covers all phase requirements")*
+### Note on E2E Testing
+Playwright E2E testing is NOT being implemented in this phase (08-02/08-03). The focus is on production-ready features (loading states, error handling, responsive design). E2E testing infrastructure can be added in a future phase as a dedicated Wave 0 task.
 
 ## Security Domain
 

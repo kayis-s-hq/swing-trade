@@ -29,6 +29,8 @@ user_setup:
     why: "Mockito, MockRestServiceServer, TestContainers required"
     env_vars: []
     dashboard_config: []
+
+    dashboard_config: []
 must_haves:
   truths:
     - "VLLMClient test mocks HTTP calls and validates request format to /chat/completions"

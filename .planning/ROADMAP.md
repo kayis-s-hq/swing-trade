@@ -117,22 +117,29 @@
 **Goal:** Build a Vue.js web dashboard for real-time monitoring of the trading system
 **Requirements:** DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, DASH-06, DASH-07
 **Depends on:** Phase 7
-**Status:** PLANNED
+**Status:** EXECUTING
 **Plans:** 3 plans
+- [ ] 08-01-PLAN.md — Project Setup and Foundation
+- [ ] 08-02-PLAN.md — Core Dashboard Views
+- [ ] 08-03-PLAN.md — Polish and Production Build
 
 ### Plan 08-01: Project Setup and Foundation
 **Objective:** Initialize Vue.js dashboard with Vite, API client, and base layout
 **Tasks:**
 1. Initialize Vue 3 project with Vite build tooling
-2. Create API client with TypeScript types
-3. Build base application layout with sidebar navigation
-4. Create router configuration
+2. Configure Tailwind CSS with TailAdmin patterns
+3. Create API client with TypeScript types
+4. Build base application layout with sidebar navigation
+5. Create router configuration
 **Files:**
 - swing-trade-dashboard/package.json
-- swing-trade-dashboard/vue.config.js
+- swing-trade-dashboard/vite.config.ts
+- swing-trade-dashboard/tailwind.config.js
 - swing-trade-dashboard/src/main.ts
-- swing-trade-dashboard/src/api/client.ts
 - swing-trade-dashboard/src/App.vue
+- swing-trade-dashboard/src/router/index.ts
+- swing-trade-dashboard/src/api/client.ts
+- swing-trade-dashboard/src/api/types.ts
 **Dependencies:** None (Wave 1)
 **Requirements:** DASH-01, DASH-02
 
@@ -143,30 +150,35 @@
 2. Create PositionsView with filtering and search
 3. Create SignalsView with signal generation
 4. Create PortfolioView with performance metrics
+5. Build reusable components (MetricCard, PositionCard, SignalCard, PerformanceMetrics)
 **Files:**
 - swing-trade-dashboard/src/views/DashboardView.vue
 - swing-trade-dashboard/src/views/PositionsView.vue
 - swing-trade-dashboard/src/views/SignalsView.vue
 - swing-trade-dashboard/src/views/PortfolioView.vue
+- swing-trade-dashboard/src/components/MetricCard.vue
 - swing-trade-dashboard/src/components/PositionCard.vue
 - swing-trade-dashboard/src/components/SignalCard.vue
 - swing-trade-dashboard/src/components/PerformanceMetrics.vue
 **Dependencies:** Plan 08-01 (Wave 1)
-**Requirements:** DASH-03, DASH-04, DASH-05
+**Requirements:** DASH-03, DASH-04, DASH-05, DASH-06
 
 ### Plan 08-03: Polish and Production Build
 **Objective:** Add error handling, responsive design, and production build configuration
 **Tasks:**
-1. Configure Tailwind and create reusable components
-2. Add error and loading states to all views
-3. Configure production build and deployment
-4. Responsive design and mobile polish
+1. Create LoadingSpinner and ErrorMessage components
+2. Configure production build with proper routing
+3. Add environment configuration for API endpoints
+4. Implement responsive design for mobile/tablet
+5. Create NotFound page and documentation
 **Files:**
-- swing-trade-dashboard/tailwind.config.js
+- swing-trade-dashboard/vite.config.ts
+- swing-trade-dashboard/src/main.ts
+- swing-trade-dashboard/src/views/NotFoundView.vue
 - swing-trade-dashboard/src/components/LoadingSpinner.vue
 - swing-trade-dashboard/src/components/ErrorMessage.vue
-- swing-trade-dashboard/vite.config.ts
 - swing-trade-dashboard/README.md
+- swing-trade-dashboard/.env.example
 **Dependencies:** Plan 08-01, Plan 08-02 (Wave 2)
 **Requirements:** DASH-06, DASH-07
 

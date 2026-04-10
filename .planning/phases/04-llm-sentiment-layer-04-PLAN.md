@@ -11,6 +11,8 @@ files_modified:
 autonomous: true
 gap_closure: true
 requirements: [REQ-028, REQ-029]
+
+requirements: [REQ-028, REQ-029]
 must_haves:
   truths:
     - "Weekly sector digest is generated and sent via Telegram every Sunday 17:00 IST"

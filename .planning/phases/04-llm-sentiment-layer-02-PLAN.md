@@ -13,6 +13,8 @@ autonomous: true
 requirements:
   - REQ-029
 user_setup: []
+
+user_setup: []
 must_haves:
   truths:
     - Weekly sector digest runs every Sunday at 17:00 IST

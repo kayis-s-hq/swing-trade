@@ -16,6 +16,8 @@ requirements:
   - REQ-027
   - REQ-028
 user_setup: []
+
+user_setup: []
 must_haves:
   truths:
     - BUY signals are checked against sentiment before being saved
