@@ -166,7 +166,7 @@
             Cancel
           </button>
           <button
-            @click="closePosition"
+            @click="closeLocalPosition"
             class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
           >
             Confirm Close
@@ -179,7 +179,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getPositionList, closePosition } from '../api/client'
+import { getPositionList, closePosition as closePositionApi } from '../api/client'
 import type { Position } from '../api/types'
 
 const loading = ref(true)
@@ -225,10 +225,10 @@ const openCloseModal = (position: Position) => {
   positionToClose.value = position
 }
 
-const closePosition = async () => {
+const closeLocalPosition = async () => {
   if (!positionToClose.value) return
   try {
-    await closePosition(positionToClose.value.id)
+    await closePositionApi(positionToClose.value.id)
     // Refresh positions
     await refreshPositions()
     positionToClose.value = null

@@ -14,7 +14,9 @@ export interface PerformanceMetricsProps {
   }
 }
 
-const props = defineProps<PerformanceMetricsProps>()
+withDefaults(defineProps<PerformanceMetricsProps>(), {
+  portfolioSummary: undefined,
+})
 </script>
 
 <template>

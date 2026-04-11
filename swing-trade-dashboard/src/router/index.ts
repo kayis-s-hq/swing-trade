@@ -22,6 +22,11 @@ const routes: RouteRecordRaw[] = [
     name: 'Portfolio',
     component: () => import('../views/PortfolioView.vue'),
   },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('../views/NotFoundView.vue'),
+  },
 ]
 
 const router = createRouter({

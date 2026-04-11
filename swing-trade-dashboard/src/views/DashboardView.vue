@@ -73,7 +73,7 @@
           :value="`$${(marketOverview?.todayPnl ?? 0).toLocaleString()}`"
           :trend="{
             value: `${(portfolioSummary?.totalPnlPercent ?? 0).toFixed(2)}%`,
-            isPositive: portfolioSummary?.totalPnlPercent && portfolioSummary.totalPnlPercent >= 0,
+            isPositive: Boolean(portfolioSummary?.totalPnlPercent && portfolioSummary.totalPnlPercent >= 0),
           }"
           icon="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
         />
@@ -95,7 +95,7 @@
           :value="`$${(portfolioSummary?.totalPnl ?? 0).toLocaleString()}`"
           :trend="{
             value: `${(portfolioSummary?.totalPnlPercent ?? 0).toFixed(2)}%`,
-            isPositive: portfolioSummary?.totalPnlPercent && portfolioSummary.totalPnlPercent >= 0,
+            isPositive: Boolean(portfolioSummary?.totalPnlPercent && portfolioSummary.totalPnlPercent >= 0),
           }"
           icon="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
         />

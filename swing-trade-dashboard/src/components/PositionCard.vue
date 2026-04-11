@@ -53,7 +53,7 @@ const pnlColor = computed(() => {
   return props.position.pnl >= 0 ? 'text-success-600' : 'text-error-600'
 })
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'close-position', position: PositionCardProps['position']): void
 }>()
 </script>

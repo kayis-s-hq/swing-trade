@@ -60,7 +60,7 @@ export interface ApiResponse<T> {
 // Trend Data
 export interface Trend {
   value: string
-  isPositive: boolean
+  isPositive?: boolean
 }
 
 // Equity Curve Data
