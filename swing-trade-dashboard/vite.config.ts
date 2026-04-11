@@ -10,12 +10,25 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false,
+    sourcemap: process.env.NODE_ENV === 'development',
     minify: 'terser',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['vue', 'vue-router', 'pinia', 'axios'],
+        },
+      },
+    },
     terserOptions: {
       compress: {
         drop_console: true,
+        drop_debugger: true,
       },
     },
+    target: 'es2020',
+  },
+  preview: {
+    port: 4173,
+    host: true,
   },
 })
