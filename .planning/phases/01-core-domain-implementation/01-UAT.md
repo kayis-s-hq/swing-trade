@@ -2,8 +2,8 @@
 status: complete
 phase: 01-core-domain-implementation
 source: 01-core-domain-implementation-CONTEXT.md
-started: 2026-03-08T22:00:00Z
-updated: 2026-03-22T12:00:00Z
+started: 2026-04-11T11:23:00Z
+updated: 2026-04-11T11:27:00Z
 ---
 
 ## Current Test
@@ -13,7 +13,10 @@ updated: 2026-03-22T12:00:00Z
 ## Tests
 
 ### 1. Stock Model Structure
-expected: The Stock record has all required fields: symbol, exchange, name, sector, isin, lotSize, addedOn. Exchange enum has NSE and BSE with full names. Sector enum has 17 sectors.
+expected: |
+  The Stock record has all required fields: symbol, exchange, name, sector, isin, lotSize, addedOn.
+  Exchange enum has NSE and BSE with full names.
+  Sector enum has all 17 sectors defined.
 result: pass
 
 ### 2. Signal Model with Confidence Normalization
@@ -50,3 +53,11 @@ skipped: 0
 ## Gaps
 
 [none yet]
+
+## Test Results
+
+```
+mvn test -pl core
+Tests run: 306, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```

@@ -1,6 +1,7 @@
 package com.swingtrade.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swingtrade.api.app.SwingTradeApiApplication;
 import com.swingtrade.api.dto.ClosePositionRequest;
 import com.swingtrade.api.dto.ErrorResponse;
 import com.swingtrade.api.dto.SymbolRequest;
@@ -9,7 +10,8 @@ import com.swingtrade.broker.model.OrderType;
 import com.swingtrade.broker.model.TradeDirection;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -22,7 +24,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Integration tests for error handling and validation.
  * Tests DTO validation, error response formats, and HTTP status codes.
  */
-@WebMvcTest
+@SpringBootTest(classes = SwingTradeApiApplication.class)
+@AutoConfigureMockMvc
 class ErrorHandlingTest {
 
     @Autowired

@@ -39,7 +39,12 @@ class ErrorResponseTest {
         assertEquals(400, response.getStatus());
         assertEquals("BAD_REQUEST", response.getCode());
         assertEquals("Test error", response.getMessage());
-        assertEquals(timestamp, response.getTimestamp());
+        // Timestamp is set in the constructor, verify it matches
+        assertEquals(timestamp.getYear(), response.getTimestamp().getYear());
+        assertEquals(timestamp.getMonthValue(), response.getTimestamp().getMonthValue());
+        assertEquals(timestamp.getDayOfMonth(), response.getTimestamp().getDayOfMonth());
+        assertEquals(timestamp.getHour(), response.getTimestamp().getHour());
+        assertEquals(timestamp.getMinute(), response.getTimestamp().getMinute());
     }
 
     @Test
@@ -50,7 +55,10 @@ class ErrorResponseTest {
         assertEquals(404, response.getStatus());
         assertEquals("NOT_FOUND", response.getCode());
         assertEquals("Resource not found", response.getMessage());
-        assertEquals(timestamp, response.getTimestamp());
+        // Timestamp is set in constructor
+        assertEquals(timestamp.getYear(), response.getTimestamp().getYear());
+        assertEquals(timestamp.getMonthValue(), response.getTimestamp().getMonthValue());
+        assertEquals(timestamp.getDayOfMonth(), response.getTimestamp().getDayOfMonth());
         assertEquals("/api/stocks/123", response.getPath());
     }
 

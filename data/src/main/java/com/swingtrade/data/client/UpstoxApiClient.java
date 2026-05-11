@@ -3,17 +3,12 @@ package com.swingtrade.data.client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swingtrade.data.config.UpstoxConfig;
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.service.CandleData;
 import com.swingtrade.data.service.InstrumentDetails;
 import com.swingtrade.data.service.MarketDataClient;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.ClientResponse;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -21,23 +16,17 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
-@Service
 public class UpstoxApiClient implements MarketDataClient {
-    
+
     private final WebClient webClient;
     private final UpstoxConfig upstoxConfig;
     private final ObjectMapper objectMapper;
-    private final OhlcvCandleRepository ohlcvCandleRepository;
 
-    public UpstoxApiClient(UpstoxConfig upstoxConfig, OhlcvCandleRepository ohlcvCandleRepository) {
+    public UpstoxApiClient(UpstoxConfig upstoxConfig) {
         this.upstoxConfig = upstoxConfig;
-        this.ohlcvCandleRepository = ohlcvCandleRepository;
         this.objectMapper = new ObjectMapper();
 
         this.webClient = WebClient.builder()
@@ -158,26 +147,7 @@ public class UpstoxApiClient implements MarketDataClient {
 
     @Override
     public CandleData fetchLatestCandle(String symbol) {
-        try {
-            // Try database first (more efficient)
-            Optional<OhlcvCandleEntity> entityOpt = ohlcvCandleRepository.findLatestBySymbol(symbol);
-            if (entityOpt.isPresent()) {
-                OhlcvCandleEntity entity = entityOpt.get();
-                return new CandleData(
-                    entity.getSymbol(),
-                    entity.getDate(),
-                    entity.getOpenPrice(),
-                    entity.getHighPrice(),
-                    entity.getLowPrice(),
-                    entity.getClosePrice(),
-                    entity.getVolume()
-                );
-            }
-        } catch (Exception e) {
-            // Fall through to API call
-        }
-
-        // Fallback to API
+        // Fallback to API - fetch last 30 days
         LocalDate today = LocalDate.now();
         LocalDate lastMonth = today.minusMonths(1);
         JsonNode response = getCandles(symbol, "day", lastMonth, today).block();

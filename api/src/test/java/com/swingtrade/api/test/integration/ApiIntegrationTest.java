@@ -1,6 +1,7 @@
 package com.swingtrade.api.test.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swingtrade.api.app.SwingTradeApiApplication;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
@@ -41,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * }
  * </pre>
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = SwingTradeApiApplication.class)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @DisplayName("API Integration Tests")

@@ -5,7 +5,9 @@ import com.swingtrade.api.dto.PaginatedResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import com.swingtrade.api.app.SwingTradeApiApplication;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -21,7 +23,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Integration tests for PositionController REST endpoints.
  * Tests all position-related API endpoints including retrieval, filtering, and closure.
  */
-@WebMvcTest(PositionController.class)
+@SpringBootTest(classes = SwingTradeApiApplication.class)
+@AutoConfigureMockMvc
 class PositionControllerTest {
 
     @Autowired

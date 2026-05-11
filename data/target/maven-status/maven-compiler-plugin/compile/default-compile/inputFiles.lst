@@ -1,5 +1,7 @@
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/Application.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/client/UpstoxApiClient.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/client/YahooFinanceClient.java
+/Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/config/MarketDataClientConfig.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/config/SchedulingConfig.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/config/UpstoxConfig.java
 /Users/kayisrahman/Documents/workspace/ideas/swing-trade/data/src/main/java/com/swingtrade/data/entity/OhlcvCandleEntity.java

@@ -1,5 +1,6 @@
 package com.swingtrade.api;
 
+import com.swingtrade.api.app.SwingTradeApiApplication;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * Test class for SwingTradeController
  */
 @ExtendWith(SpringExtension.class)
-@SpringBootTest
+@SpringBootTest(classes = SwingTradeApiApplication.class)
 class SwingTradeControllerTest {
 
     @Autowired

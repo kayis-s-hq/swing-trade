@@ -24,7 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.ta4j.core.*;
-import org.ta4j.core.backtest.BacktestResult;
+import org.ta4j.core.rules.AbstractRule;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.num.DoubleNum;
 
@@ -477,7 +477,9 @@ class DefaultBacktestEngineTest {
             double low = Math.min(open, close) - Math.random();
             long volume = (long) (1000000 + Math.random() * 500000);
 
-            series.addBar(java.time.ZonedDateTime.of(2024, 1, i + 1, 0, 0, 0, 0, java.time.ZoneId.of("Asia/Kolkata")), open, high, low, close, volume);
+            // Use a fixed starting date and increment days to avoid invalid dates like day 32
+            java.time.ZonedDateTime date = java.time.ZonedDateTime.of(2024, 1, 1, 0, 0, 0, 0, java.time.ZoneId.of("Asia/Kolkata")).plusDays(i);
+            series.addBar(date, open, high, low, close, volume);
             price = close;
         }
 
@@ -494,18 +496,22 @@ class DefaultBacktestEngineTest {
         return backtestEngine.runBacktest(strategy, series);
     }
 
-    // Helper rules for testing
-    private static class AlwaysEnterRule extends Rule {
+    // Helper rules for testing - Rule is now an interface in TA4J 0.16
+    private static class AlwaysEnterRule implements Rule {
         @Override
-        public boolean isMet(int barIndex, BarSeries series, TradingRecord tradingRecord) {
-            return true;
+        public boolean isSatisfied(int index, TradingRecord tradingRecord) {
+            // Enter a new trade only if there's no open position
+            // TA4J 0.16: getCurrentPosition() returns null if no position is open
+            return tradingRecord == null || tradingRecord.getCurrentPosition() == null;
         }
     }
 
-    private static class AlwaysExitRule extends Rule {
+    private static class AlwaysExitRule implements Rule {
         @Override
-        public boolean isMet(int barIndex, BarSeries series, TradingRecord tradingRecord) {
-            return false;
+        public boolean isSatisfied(int index, TradingRecord tradingRecord) {
+            // Exit if there's an open position
+            // TA4J 0.16: getCurrentPosition() returns the current open position
+            return tradingRecord != null && tradingRecord.getCurrentPosition() != null;
         }
     }
 }

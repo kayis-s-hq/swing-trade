@@ -1,4 +1,5 @@
 com/swingtrade/llm/LlmService.class
+com/swingtrade/llm/service/NewsIngestionService$NewsArticle$NewsArticleBuilder.class
 com/swingtrade/llm/service/NewsIngestionService.class
 com/swingtrade/llm/client/VLLMClient$Message.class
 com/swingtrade/llm/service/SentimentAnalysisService$CachedSentiment.class
@@ -23,7 +24,6 @@ com/swingtrade/llm/client/VLLMClient$Choice.class
 com/swingtrade/llm/service/SentimentCacheService$CacheStatistics.class
 com/swingtrade/llm/config/LlmConfig.class
 com/swingtrade/llm/service/SentimentAnalysisService.class
-com/swingtrade/llm/service/NewsIngestionService$NewsArticle$Builder.class
 com/swingtrade/llm/service/SentimentAnalysisService$1.class
 com/swingtrade/llm/service/NewsIngestionService$NewsArticle.class
 com/swingtrade/llm/client/VLLMClient$CompletionResponse.class

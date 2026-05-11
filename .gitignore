@@ -54,13 +54,17 @@ reports/
 # Environment files
 # .env - Production secrets (never commit)
 # .env.local - Local overrides (never commit)
-# .env.dev - Development credentials (may or may not commit based on content)
+# .env.dev - Development credentials (contains sandbox keys, do not commit)
 # .env.example - Reference template (always commit)
 # .env.dev.example - Development reference template (always commit)
 .env
 .env.local
 .env.*.local
 .env.dev
+
+# Environment files with real credentials (add .example versions for reference)
+.env.*.real
+.env.*.prod
 
 # Database files (if any local DBs)
 *.db

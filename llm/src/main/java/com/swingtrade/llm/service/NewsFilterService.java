@@ -138,7 +138,7 @@ public class NewsFilterService {
         }
 
         // Check recency
-        long ageHours = calculateAgeHours(article.getPublishedDate());
+        long ageHours = calculateAgeHours(article.publishedDate());
         if (ageHours > MAX_HOURS) {
             logger.trace("Article filtered out: too old ({} hours)", ageHours);
             return null;
@@ -179,7 +179,7 @@ public class NewsFilterService {
         }
 
         // Source quality factor
-        if (isHighQualitySource(article.getSource())) {
+        if (isHighQualitySource(article.source())) {
             score *= 1.2; // Boost from high-quality source
         }
 
@@ -252,14 +252,14 @@ public class NewsFilterService {
      */
     private String getArticleContent(NewsIngestionService.NewsArticle article) {
         StringBuilder sb = new StringBuilder();
-        if (article.getTitle() != null) {
-            sb.append(article.getTitle()).append(" ");
+        if (article.title() != null) {
+            sb.append(article.title()).append(" ");
         }
-        if (article.getDescription() != null) {
-            sb.append(article.getDescription()).append(" ");
+        if (article.description() != null) {
+            sb.append(article.description()).append(" ");
         }
-        if (article.getRawContent() != null) {
-            sb.append(article.getRawContent());
+        if (article.rawContent() != null) {
+            sb.append(article.rawContent());
         }
         return sb.toString();
     }

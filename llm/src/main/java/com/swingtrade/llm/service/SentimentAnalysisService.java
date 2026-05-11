@@ -352,7 +352,7 @@ public class SentimentAnalysisService {
 
         // Combine article content as raw content
         String rawContent = articles.stream()
-                .map(NewsIngestionService.NewsArticle::getRawContent)
+                .map(NewsIngestionService.NewsArticle::rawContent)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.joining("\n\n"));
 
@@ -955,4 +955,16 @@ public class SentimentAnalysisService {
             boolean isEnabled,
             long expiryMinutes
     ) {}
+
+    // ============ Test Accessor Methods ============
+
+    /**
+     * Gets the news ingestion service for testing purposes.
+     * This method is intended for test access only.
+     *
+     * @return the newsIngestionService
+     */
+    NewsIngestionService getNewsIngestionService() {
+        return newsIngestionService;
+    }
 }

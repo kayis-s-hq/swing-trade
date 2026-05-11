@@ -29,15 +29,12 @@ public class ErrorResponse {
         this.status = status;
         this.code = code;
         this.message = message;
+        this.timestamp = timestamp;
     }
 
     // Constructor with path
     public ErrorResponse(int status, String code, String message, LocalDateTime timestamp, String path) {
-        this();
-        this.status = status;
-        this.code = code;
-        this.message = message;
-        this.timestamp = timestamp;
+        this(status, code, message, timestamp);
         this.path = path;
     }
 

@@ -15,11 +15,13 @@ com/swingtrade/data/service/UpstoxServiceClient.class
 com/swingtrade/data/entity/PositionEntity.class
 com/swingtrade/data/service/UpstoxServiceClient$InstrumentsResponse.class
 com/swingtrade/data/entity/TradeLabel.class
+com/swingtrade/data/client/YahooFinanceClient.class
 com/swingtrade/data/repository/PositionRepository.class
 com/swingtrade/data/service/UpstoxServiceClient$OhlcResponse.class
 com/swingtrade/data/service/DataIngestionService.class
 com/swingtrade/data/service/TradeLabelService.class
 com/swingtrade/data/config/UpstoxConfig.class
+com/swingtrade/data/config/MarketDataClientConfig.class
 com/swingtrade/data/repository/SignalRepository.class
 com/swingtrade/data/service/CandleData.class
 com/swingtrade/data/service/InstrumentDetails.class

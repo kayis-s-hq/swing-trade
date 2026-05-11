@@ -1,24 +1,28 @@
 package com.swingtrade.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swingtrade.api.SignalService;
+import com.swingtrade.api.ScanService;
 import com.swingtrade.api.dto.SignalResponse;
 import com.swingtrade.api.dto.ScanResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * Integration tests for SignalController REST endpoints.
+ * Unit tests for SignalController REST endpoints using MockMvc.
  * Tests all signal-related API endpoints including retrieval, filtering, generation, and analysis.
  */
 @WebMvcTest(SignalController.class)
@@ -27,8 +31,11 @@ class SignalControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    @MockBean
+    private SignalService signalService;
+
+    @MockBean
+    private ScanService scanService;
 
     private SignalResponse testSignal;
 

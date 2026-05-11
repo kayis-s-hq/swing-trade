@@ -21,8 +21,8 @@ class ApiTradeMetricsTest {
 
     @Test
     void testRecordTradeOpen_IncrementsCounter() {
-        // Arrange
-        Counter before = meterRegistry.counter("trades.open");
+        // Arrange - use same tags as the constructor
+        Counter before = meterRegistry.counter("trades.open", "broker", "paper");
         assertEquals(0, before.count());
 
         // Act

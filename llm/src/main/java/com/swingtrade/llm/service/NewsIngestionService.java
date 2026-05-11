@@ -246,15 +246,14 @@ public class NewsIngestionService {
             for (int i = 0; i < itemsList.getLength(); i++) {
                 Element itemElement = (Element) itemsList.item(i);
 
-                NewsItem newsItem = new NewsItem();
-                newsItem.title = getChildText(itemElement, "title");
-                newsItem.link = getChildText(itemElement, "link");
-                newsItem.description = getChildText(itemElement, "description");
-                newsItem.pubDate = parsePubDate(getChildText(itemElement, "pubDate"));
-                newsItem.content = getChildText(itemElement, "content:encoded");
+                String title = getChildText(itemElement, "title");
+                String link = getChildText(itemElement, "link");
+                String description = getChildText(itemElement, "description");
+                ZonedDateTime pubDate = parsePubDate(getChildText(itemElement, "pubDate"));
+                String content = getChildText(itemElement, "content:encoded");
 
-                if (newsItem.title != null && !newsItem.title.trim().isEmpty()) {
-                    items.add(newsItem);
+                if (title != null && !title.trim().isEmpty()) {
+                    items.add(new NewsItem(title, link, description, pubDate, content));
                 }
             }
 
@@ -349,9 +348,9 @@ public class NewsIngestionService {
      * @return true if the stock symbol is found in the article
      */
     private boolean containsStockSymbol(NewsArticle article, String stockSymbol) {
-        String content = (article.getTitle() != null ? article.getTitle() : "") +
-                        " " + (article.getDescription() != null ? article.getDescription() : "") +
-                        " " + (article.getRawContent() != null ? article.getRawContent() : "");
+        String content = (article.title() != null ? article.title() : "") +
+                        " " + (article.description() != null ? article.description() : "") +
+                        " " + (article.rawContent() != null ? article.rawContent() : "");
 
         return content.toUpperCase().contains(stockSymbol.toUpperCase());
     }
@@ -398,8 +397,8 @@ public class NewsIngestionService {
      * @return true if it's market-wide news
      */
     private boolean isMarketWideNews(NewsArticle article) {
-        String content = (article.getTitle() != null ? article.getTitle() : "") +
-                        " " + (article.getDescription() != null ? article.getDescription() : "");
+        String content = (article.title() != null ? article.title() : "") +
+                        " " + (article.description() != null ? article.description() : "");
 
         String lowerContent = content.toLowerCase();
 
@@ -427,18 +426,18 @@ public class NewsIngestionService {
         StringBuilder cleanedText = new StringBuilder();
 
         // Add title
-        if (article.getTitle() != null && !article.getTitle().isEmpty()) {
-            cleanedText.append(article.getTitle()).append(" ");
+        if (article.title() != null && !article.title().isEmpty()) {
+            cleanedText.append(article.title()).append(" ");
         }
 
         // Add description
-        if (article.getDescription() != null && !article.getDescription().isEmpty()) {
-            cleanedText.append(article.getDescription()).append(" ");
+        if (article.description() != null && !article.description().isEmpty()) {
+            cleanedText.append(article.description()).append(" ");
         }
 
         // Add raw content if available
-        if (article.getRawContent() != null && !article.getRawContent().isEmpty()) {
-            cleanedText.append(article.getRawContent()).append(" ");
+        if (article.rawContent() != null && !article.rawContent().isEmpty()) {
+            cleanedText.append(article.rawContent()).append(" ");
         }
 
         // Remove extra whitespace and normalize
@@ -501,126 +500,73 @@ public class NewsIngestionService {
 
     /**
      * Represents a news article from RSS feed or other sources.
+     * Public record for test access and JSON serialization.
      */
-    public static class NewsArticle {
-        private String title;
-        private String link;
-        private String description;
-        private ZonedDateTime publishedDate;
-        private String source;
-        private String rawContent;
-
-        public String getTitle() {
-            return title;
+    public record NewsArticle(
+        String title,
+        String link,
+        String description,
+        ZonedDateTime publishedDate,
+        String source,
+        String rawContent
+    ) {
+        public static NewsArticleBuilder builder() {
+            return new NewsArticleBuilder();
         }
 
-        public void setTitle(String title) {
-            this.title = title;
-        }
+        public static class NewsArticleBuilder {
+            private String title;
+            private String link;
+            private String description;
+            private ZonedDateTime publishedDate;
+            private String source;
+            private String rawContent;
 
-        public String getLink() {
-            return link;
-        }
-
-        public void setLink(String link) {
-            this.link = link;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
-
-        public ZonedDateTime getPublishedDate() {
-            return publishedDate;
-        }
-
-        public void setPublishedDate(ZonedDateTime publishedDate) {
-            this.publishedDate = publishedDate;
-        }
-
-        public String getSource() {
-            return source;
-        }
-
-        public void setSource(String source) {
-            this.source = source;
-        }
-
-        public String getRawContent() {
-            return rawContent;
-        }
-
-        public void setRawContent(String rawContent) {
-            this.rawContent = rawContent;
-        }
-
-        public static Builder builder() {
-            return new Builder();
-        }
-
-        public static class Builder {
-            private final NewsArticle article = new NewsArticle();
-
-            public Builder title(String title) {
-                article.setTitle(title);
+            public NewsArticleBuilder title(String title) {
+                this.title = title;
                 return this;
             }
 
-            public Builder link(String link) {
-                article.setLink(link);
+            public NewsArticleBuilder link(String link) {
+                this.link = link;
                 return this;
             }
 
-            public Builder description(String description) {
-                article.setDescription(description);
+            public NewsArticleBuilder description(String description) {
+                this.description = description;
                 return this;
             }
 
-            public Builder publishedDate(ZonedDateTime publishedDate) {
-                article.setPublishedDate(publishedDate);
+            public NewsArticleBuilder publishedDate(ZonedDateTime publishedDate) {
+                this.publishedDate = publishedDate;
                 return this;
             }
 
-            public Builder source(String source) {
-                article.setSource(source);
+            public NewsArticleBuilder source(String source) {
+                this.source = source;
                 return this;
             }
 
-            public Builder rawContent(String rawContent) {
-                article.setRawContent(rawContent);
+            public NewsArticleBuilder rawContent(String rawContent) {
+                this.rawContent = rawContent;
                 return this;
             }
 
             public NewsArticle build() {
-                return article;
+                return new NewsArticle(title, link, description, publishedDate, source, rawContent);
             }
-        }
-
-        @Override
-        public String toString() {
-            return "NewsArticle{" +
-                    "title='" + title + '\'' +
-                    ", link='" + link + '\'' +
-                    ", source='" + source + '\'' +
-                    ", publishedDate=" + publishedDate +
-                    '}';
         }
     }
 
     /**
-     * Simple class for storing parsed RSS item data.
+     * Simple record for storing parsed RSS item data.
+     * Public for test access and JSON serialization.
      */
-    private static class NewsItem {
-        String title;
-        String link;
-        String description;
-        ZonedDateTime pubDate;
-        String content;
-
-        NewsItem() {}
-    }
+    public record NewsItem(
+        String title,
+        String link,
+        String description,
+        ZonedDateTime pubDate,
+        String content
+    ) {}
 }
