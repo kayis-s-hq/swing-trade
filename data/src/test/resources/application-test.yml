@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    database-platform: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+
+upstox:
+  api:
+    base-url: ${UPSTOX_API_URL:https://api.upstox.com}
+  client-id: ${UPSTOX_CLIENT_ID:test-client-id}
+  client-secret: ${UPSTOX_CLIENT_SECRET:test-client-secret}
+  redirect-uri: ${UPSTOX_REDIRECT_URI:http://localhost:8080/api/auth/upstox/callback}
+  access-token: ${UPSTOX_ACCESS_TOKEN:}
+  token-store-path: /tmp/upstox-test-tokens.json
+
+logging:
+  level:
+    com.swingtrade.data: DEBUG
+    org.springframework.web: DEBUG
