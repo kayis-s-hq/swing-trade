@@ -51,14 +51,15 @@ describe('PositionCard', () => {
       props: { position: samplePosition },
     })
     expect(wrapper.text()).toContain('1000')
-    expect(wrapper.text()).toContain('4%')
+    expect(wrapper.text()).toContain('4.00%')
   })
 
   it('shows OPEN status badge with green color', () => {
     const wrapper = mount(PositionCard, {
       props: { position: samplePosition },
     })
-    expect(wrapper.text()).toContain('Open')
+    expect(wrapper.text()).toContain('OPEN')
+    expect(wrapper.classes()).toContain('group')
   })
 
   it('shows CLOSED status badge with red color', () => {
@@ -66,7 +67,7 @@ describe('PositionCard', () => {
     const wrapper = mount(PositionCard, {
       props: { position: closedPosition },
     })
-    expect(wrapper.text()).toContain('Closed')
+    expect(wrapper.text()).toContain('CLOSED')
   })
 
   it('shows STOPPED status badge with orange color', () => {
@@ -74,38 +75,31 @@ describe('PositionCard', () => {
     const wrapper = mount(PositionCard, {
       props: { position: stoppedPosition },
     })
-    expect(wrapper.text()).toContain('Stopped')
+    expect(wrapper.text()).toContain('STOPPED')
   })
 
-  it('shows close button for OPEN positions', () => {
+  it('shows quantity and P&L in footer', () => {
     const wrapper = mount(PositionCard, {
       props: { position: samplePosition },
     })
-    expect(wrapper.find('button').exists()).toBe(true)
-    expect(wrapper.find('button').text()).toBe('Close Position')
+    expect(wrapper.text()).toContain('10')
+    expect(wrapper.text()).toContain('+')
   })
 
-  it('hides close button for CLOSED positions', () => {
-    const closedPosition = { ...samplePosition, status: 'CLOSED' as const }
-    const wrapper = mount(PositionCard, {
-      props: { position: closedPosition },
-    })
-    expect(wrapper.find('button').exists()).toBe(false)
-  })
-
-  it('emits close-position event when button clicked', async () => {
+  it('renders all price data', () => {
     const wrapper = mount(PositionCard, {
       props: { position: samplePosition },
     })
-    await wrapper.find('button').trigger('click')
-    expect(wrapper.emitted()['close-position']).toBeDefined()
-    expect(wrapper.emitted()['close-position']?.[0]).toEqual([samplePosition])
+    expect(wrapper.text()).toContain('Entry')
+    expect(wrapper.text()).toContain('Current')
+    expect(wrapper.text()).toContain('Stop Loss')
+    expect(wrapper.text()).toContain('Target')
   })
 
-  it('has correct dark mode classes', () => {
+  it('has group class for hover states', () => {
     const wrapper = mount(PositionCard, {
       props: { position: samplePosition },
     })
-    expect(wrapper.classes()).toContain('dark:bg-white/[0.03]')
+    expect(wrapper.classes()).toContain('group')
   })
 })

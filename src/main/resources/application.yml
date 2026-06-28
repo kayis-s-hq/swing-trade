@@ -1,0 +1,48 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: swing-trade
+  
+  # PostgreSQL Configuration
+  datasource:
+    url: jdbc:postgresql://piworm.local:5434/swingtrade
+    username: swingtrade
+    password: swingtrade123
+    driver-class-name: org.postgresql.Driver
+  
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  
+  # Redis Configuration
+  data:
+    redis:
+      host: piworm.local
+      port: 6379
+      # password: changeme  # Uncomment if Redis requires auth
+      timeout: 5000ms
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# Logging
+logging:
+  level:
+    com.swingtrade: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE

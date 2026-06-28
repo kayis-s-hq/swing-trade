@@ -52,8 +52,78 @@ export interface EquityPoint {
   value: number
 }
 
+export interface HealthStatus {
+  status: string
+  components: Record<string, HealthComponent>
+}
+
+export interface HealthComponent {
+  name: string
+  status: string
+  description: string
+  details?: Record<string, unknown>
+}
+
+export interface FyersStatus {
+  connected: boolean
+  clientId: string
+}
+
+export interface FyersLoginUrl {
+  url: string
+  message: string
+}
+
+export type BrokerType = 'fyers' | 'upstox' | 'yahoo' | 'none'
+
 export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
+}
+
+// ---------------------------------------------------------------------------
+// Watchlist
+// ---------------------------------------------------------------------------
+
+export interface WatchlistEntry {
+  id?: number
+  symbol: string
+  name: string
+  exchange: string
+  isActive: boolean
+  addedAt?: string
+  lastSyncedAt?: string
+  candleCount?: number
+}
+
+// ---------------------------------------------------------------------------
+// Data Ingestion Status
+// ---------------------------------------------------------------------------
+
+export interface IngestionStatus {
+  symbol: string
+  name: string
+  exchange: string
+  isActive: boolean
+  candleCount: number
+  lastCandleDate: string | null
+  earliestCandleDate: string | null
+  lastSyncedAt: string | null
+  hasData: boolean
+  dataQuality: string
+}
+
+// ---------------------------------------------------------------------------
+// Data Pull Progress
+// ---------------------------------------------------------------------------
+
+export interface PullProgress {
+  pullId: string
+  status: string
+  total: number
+  completed: number
+  failed: number
+  currentSymbol: string
+  percentComplete: number
 }

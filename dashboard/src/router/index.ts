@@ -25,6 +25,21 @@ const router = createRouter({
       component: () => import('../views/PortfolioView.vue'),
     },
     {
+      path: '/watchlist',
+      name: 'Watchlist',
+      component: () => import('../views/WatchlistView.vue'),
+    },
+    {
+      path: '/data',
+      name: 'Data Ingestion',
+      component: () => import('../views/DataIngestionView.vue'),
+    },
+    {
+      path: '/settings',
+      name: 'Settings',
+      component: () => import('../views/SettingsView.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
       component: () => import('../views/NotFoundView.vue'),

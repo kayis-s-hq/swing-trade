@@ -1,8 +1,22 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
+const STORAGE_KEY = 'swingtrade_theme'
+
+function loadTheme(): boolean {
+  const raw = localStorage.getItem(STORAGE_KEY)
+  if (raw !== null) return raw === 'true'
+  // Detect system preference
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
 export const useThemeStore = defineStore('theme', () => {
-  const isDark = ref(true)
+  const isDark = ref(loadTheme())
+
+  // Persist theme
+  watch(isDark, (dark) => {
+    localStorage.setItem(STORAGE_KEY, String(dark))
+  })
 
   // Apply theme to document
   watch(isDark, (dark) => {

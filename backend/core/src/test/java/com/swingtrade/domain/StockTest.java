@@ -57,6 +57,9 @@ class StockTest {
             Stock.Exchange.NSE,
             NAME,
             Stock.Sector.OIL_GAS,
+            "Oil & Gas",
+            1700000000000L,
+            java.math.BigDecimal.valueOf(25.5),
             ISIN,
             LOT_SIZE,
             ADDED_ON
@@ -67,8 +70,9 @@ class StockTest {
      * Helper method to create a valid Stock instance with custom parameters.
      */
     private Stock createStock(String symbol, Stock.Exchange exchange, String name,
-                              Stock.Sector sector, String isin, Integer lotSize, LocalDate addedOn) {
-        return new Stock(symbol, exchange, name, sector, isin, lotSize, addedOn);
+                              Stock.Sector sector, String industry, Long marketCap, java.math.BigDecimal peRatio,
+                              String isin, Integer lotSize, LocalDate addedOn) {
+        return new Stock(symbol, exchange, name, sector, industry, marketCap, peRatio, isin, lotSize, addedOn);
     }
 
     @Nested
@@ -90,19 +94,17 @@ class StockTest {
         @Test
         void shouldCreateStockWithNullFields() {
             Stock stock = new Stock(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
+                null, null, null, null, null,
+                null, null, null, null, null
             );
 
             assertThat(stock.symbol()).isNull();
             assertThat(stock.exchange()).isNull();
             assertThat(stock.name()).isNull();
             assertThat(stock.sector()).isNull();
+            assertThat(stock.industry()).isNull();
+            assertThat(stock.marketCap()).isNull();
+            assertThat(stock.peRatio()).isNull();
             assertThat(stock.isin()).isNull();
             assertThat(stock.lotSize()).isNull();
             assertThat(stock.addedOn()).isNull();
@@ -111,13 +113,9 @@ class StockTest {
         @Test
         void shouldCreateStockWithDifferentExchange() {
             Stock stock = createStock(
-                "TCS",
-                Stock.Exchange.BSE,
-                "Tata Consultancy Services",
-                Stock.Sector.IT,
-                "INE467B01029",
-                1,
-                LocalDate.of(2024, 2, 1)
+                "TCS", Stock.Exchange.BSE, "Tata Consultancy Services",
+                Stock.Sector.IT, "IT", 1200000000000L, java.math.BigDecimal.valueOf(30.0),
+                "INE467B01029", 1, LocalDate.of(2024, 2, 1)
             );
 
             assertThat(stock.symbol()).isEqualTo("TCS");
@@ -257,7 +255,7 @@ class StockTest {
         @Test
         void shouldReturnFalseWhenSymbolsDiffer() {
             stock1 = createValidStock();
-            stock2 = createStock("TCS", Stock.Exchange.NSE, "TCS", Stock.Sector.IT, "INE467B01029", 1, ADDED_ON);
+            stock2 = createStock("TCS", Stock.Exchange.NSE, "TCS", Stock.Sector.IT, "IT", 1200000000000L, java.math.BigDecimal.valueOf(30.0), "INE467B01029", 1, ADDED_ON);
 
             assertThat(stock1).isNotEqualTo(stock2);
             assertThat(stock1).isNotEqualTo("RELIANCE");
@@ -265,8 +263,8 @@ class StockTest {
 
         @Test
         void shouldReturnFalseWhenExchangesDiffer() {
-            stock1 = createStock("RELIANCE", Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, ADDED_ON);
-            stock2 = createStock("RELIANCE", Stock.Exchange.BSE, NAME, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, ADDED_ON);
+            stock1 = createStock("RELIANCE", Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, ADDED_ON);
+            stock2 = createStock("RELIANCE", Stock.Exchange.BSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, ADDED_ON);
 
             assertThat(stock1).isNotEqualTo(stock2);
         }
@@ -274,15 +272,15 @@ class StockTest {
         @Test
         void shouldReturnFalseWhenNamesDiffer() {
             stock1 = createValidStock();
-            stock2 = createStock(SYMBOL, Stock.Exchange.NSE, "Different Name", Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, ADDED_ON);
+            stock2 = createStock(SYMBOL, Stock.Exchange.NSE, "Different Name", Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, ADDED_ON);
 
             assertThat(stock1).isNotEqualTo(stock2);
         }
 
         @Test
         void shouldReturnFalseWhenSectorsDiffer() {
-            stock1 = createStock("RELIANCE", Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, ADDED_ON);
-            stock2 = createStock("RELIANCE", Stock.Exchange.NSE, NAME, Stock.Sector.ENERGY, ISIN, LOT_SIZE, ADDED_ON);
+            stock1 = createStock("RELIANCE", Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, ADDED_ON);
+            stock2 = createStock("RELIANCE", Stock.Exchange.NSE, NAME, Stock.Sector.ENERGY, "Energy", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, ADDED_ON);
 
             assertThat(stock1).isNotEqualTo(stock2);
         }
@@ -290,7 +288,7 @@ class StockTest {
         @Test
         void shouldReturnFalseWhenISINDiffer() {
             stock1 = createValidStock();
-            stock2 = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "INE002A01099", LOT_SIZE, ADDED_ON);
+            stock2 = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), "INE002A01099", LOT_SIZE, ADDED_ON);
 
             assertThat(stock1).isNotEqualTo(stock2);
         }
@@ -298,7 +296,7 @@ class StockTest {
         @Test
         void shouldReturnFalseWhenLotSizesDiffer() {
             stock1 = createValidStock();
-            stock2 = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, 10, ADDED_ON);
+            stock2 = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, 10, ADDED_ON);
 
             assertThat(stock1).isNotEqualTo(stock2);
         }
@@ -306,15 +304,15 @@ class StockTest {
         @Test
         void shouldReturnFalseWhenAddedOnDatesDiffer() {
             stock1 = createValidStock();
-            stock2 = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, LocalDate.of(2024, 3, 1));
+            stock2 = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, LocalDate.of(2024, 3, 1));
 
             assertThat(stock1).isNotEqualTo(stock2);
         }
 
         @Test
         void shouldReturnTrueWhenAllFieldsAreNull() {
-            stock1 = new Stock(null, null, null, null, null, null, null);
-            stock2 = new Stock(null, null, null, null, null, null, null);
+            stock1 = new Stock(null, null, null, null, null, null, null, null, null, null);
+            stock2 = new Stock(null, null, null, null, null, null, null, null, null, null);
 
             assertThat(stock1).isEqualTo(stock2);
             assertThat(stock1.hashCode()).isEqualTo(stock2.hashCode());
@@ -349,7 +347,7 @@ class StockTest {
 
         @Test
         void shouldHandleNullFieldsInToString() {
-            Stock stock = new Stock(null, null, null, null, null, null, null);
+            Stock stock = new Stock(null, null, null, null, null, null, null, null, null, null);
             String stockString = stock.toString();
 
             assertThat(stockString).startsWith("Stock[");
@@ -360,7 +358,7 @@ class StockTest {
         @Test
         void shouldFormatToStringProperly() {
             Stock stock = createStock("TCS", Stock.Exchange.BSE, "Tata Consultancy Services",
-                Stock.Sector.IT, "INE467B01029", 1, LocalDate.of(2024, 2, 1));
+                Stock.Sector.IT, "IT", 1200000000000L, java.math.BigDecimal.valueOf(30.0), "INE467B01029", 1, LocalDate.of(2024, 2, 1));
 
             String stockString = stock.toString();
 
@@ -381,7 +379,7 @@ class StockTest {
 
         @Test
         void shouldHandleEmptyStringSymbol() {
-            Stock stock = new Stock("", Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, ADDED_ON);
+            Stock stock = new Stock("", Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, ADDED_ON);
 
             assertThat(stock.symbol()).isEmpty();
         }
@@ -389,21 +387,21 @@ class StockTest {
         @Test
         void shouldHandleVeryLongName() {
             String veryLongName = "This is a very long company name that exceeds normal length limits for testing purposes";
-            Stock stock = new Stock(SYMBOL, Stock.Exchange.NSE, veryLongName, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, ADDED_ON);
+            Stock stock = new Stock(SYMBOL, Stock.Exchange.NSE, veryLongName, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, ADDED_ON);
 
             assertThat(stock.name()).isEqualTo(veryLongName);
         }
 
         @Test
         void shouldHandleZeroLotSize() {
-            Stock stock = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, 0, ADDED_ON);
+            Stock stock = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, 0, ADDED_ON);
 
             assertThat(stock.lotSize()).isEqualTo(0);
         }
 
         @Test
         void shouldHandleNegativeLotSize() {
-            Stock stock = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, -1, ADDED_ON);
+            Stock stock = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, -1, ADDED_ON);
 
             assertThat(stock.lotSize()).isEqualTo(-1);
         }
@@ -411,7 +409,7 @@ class StockTest {
         @Test
         void shouldHandleFutureAddedOnDate() {
             LocalDate futureDate = LocalDate.of(2030, 12, 31);
-            Stock stock = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, futureDate);
+            Stock stock = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, futureDate);
 
             assertThat(stock.addedOn()).isEqualTo(futureDate);
         }
@@ -419,7 +417,7 @@ class StockTest {
         @Test
         void shouldHandlePastAddedOnDate() {
             LocalDate pastDate = LocalDate.of(1990, 1, 1);
-            Stock stock = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, pastDate);
+            Stock stock = createStock(SYMBOL, Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, pastDate);
 
             assertThat(stock.addedOn()).isEqualTo(pastDate);
         }
@@ -431,7 +429,7 @@ class StockTest {
         @Test
         void shouldCreateStockWithAUTO() {
             Stock stock = createStock("MARUTI", Stock.Exchange.NSE, "Maruti Suzuki India Limited",
-                Stock.Sector.AUTO, "INE585B01010", 1, ADDED_ON);
+                Stock.Sector.AUTO, "Auto", 300000000000L, java.math.BigDecimal.valueOf(28.0), "INE585B01010", 1, ADDED_ON);
 
             assertThat(stock.sector()).isEqualTo(Stock.Sector.AUTO);
         }
@@ -439,7 +437,7 @@ class StockTest {
         @Test
         void shouldCreateStockWithBANK() {
             Stock stock = createStock("HDFCBANK", Stock.Exchange.NSE, "HDFC Bank Limited",
-                Stock.Sector.BANK, "INE040A01034", 1, ADDED_ON);
+                Stock.Sector.BANK, "Banking", 1100000000000L, java.math.BigDecimal.valueOf(20.0), "INE040A01034", 1, ADDED_ON);
 
             assertThat(stock.sector()).isEqualTo(Stock.Sector.BANK);
         }
@@ -447,7 +445,7 @@ class StockTest {
         @Test
         void shouldCreateStockWithCHEMICAL() {
             Stock stock = createStock("URJA", Stock.Exchange.NSE, "Ujala Energy Ventures Limited",
-                Stock.Sector.CHEMICAL, "INE876B01010", 1, ADDED_ON);
+                Stock.Sector.CHEMICAL, "Chemical", 5000000000L, java.math.BigDecimal.valueOf(15.0), "INE876B01010", 1, ADDED_ON);
 
             assertThat(stock.sector()).isEqualTo(Stock.Sector.CHEMICAL);
         }
@@ -455,7 +453,7 @@ class StockTest {
         @Test
         void shouldCreateStockWithFMCG() {
             Stock stock = createStock("HINDUNILVR", Stock.Exchange.NSE, "Hindustan Unilever Limited",
-                Stock.Sector.FMCG, "INE030A01027", 1, ADDED_ON);
+                Stock.Sector.FMCG, "FMCG", 550000000000L, java.math.BigDecimal.valueOf(55.0), "INE030A01027", 1, ADDED_ON);
 
             assertThat(stock.sector()).isEqualTo(Stock.Sector.FMCG);
         }
@@ -463,7 +461,7 @@ class StockTest {
         @Test
         void shouldCreateStockWithIT() {
             Stock stock = createStock("INFY", Stock.Exchange.NSE, "Infosys Limited",
-                Stock.Sector.IT, "INE018A01030", 1, ADDED_ON);
+                Stock.Sector.IT, "IT", 600000000000L, java.math.BigDecimal.valueOf(27.0), "INE018A01030", 1, ADDED_ON);
 
             assertThat(stock.sector()).isEqualTo(Stock.Sector.IT);
         }
@@ -471,7 +469,7 @@ class StockTest {
         @Test
         void shouldCreateStockWithPHARMA() {
             Stock stock = createStock("DRREDDY", Stock.Exchange.NSE, "Dr. Reddy's Laboratories Limited",
-                Stock.Sector.PHARMA, "INE081A01020", 1, ADDED_ON);
+                Stock.Sector.PHARMA, "Pharma", 120000000000L, java.math.BigDecimal.valueOf(32.0), "INE081A01020", 1, ADDED_ON);
 
             assertThat(stock.sector()).isEqualTo(Stock.Sector.PHARMA);
         }
@@ -479,7 +477,7 @@ class StockTest {
         @Test
         void shouldCreateStockWithOTHERS() {
             Stock stock = createStock("VARI", Stock.Exchange.NSE, "Various Company",
-                Stock.Sector.OTHERS, "INE123B01010", 1, ADDED_ON);
+                Stock.Sector.OTHERS, "Others", 1000000000L, java.math.BigDecimal.valueOf(10.0), "INE123B01010", 1, ADDED_ON);
 
             assertThat(stock.sector()).isEqualTo(Stock.Sector.OTHERS);
         }
@@ -491,7 +489,7 @@ class StockTest {
         @Test
         void shouldCreateStockWithNSE() {
             Stock stock = createStock("TCS", Stock.Exchange.NSE, "Tata Consultancy Services",
-                Stock.Sector.IT, "INE467B01029", 1, ADDED_ON);
+                Stock.Sector.IT, "IT", 1200000000000L, java.math.BigDecimal.valueOf(30.0), "INE467B01029", 1, ADDED_ON);
 
             assertThat(stock.exchange()).isEqualTo(Stock.Exchange.NSE);
             assertThat(stock.exchange().getFullName()).isEqualTo("National Stock Exchange of India");
@@ -500,7 +498,7 @@ class StockTest {
         @Test
         void shouldCreateStockWithBSE() {
             Stock stock = createStock("RELIANCE", Stock.Exchange.BSE, "Reliance Industries Limited",
-                Stock.Sector.OIL_GAS, "INE002A01018", 1, ADDED_ON);
+                Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), "INE002A01018", 1, ADDED_ON);
 
             assertThat(stock.exchange()).isEqualTo(Stock.Exchange.BSE);
             assertThat(stock.exchange().getFullName()).isEqualTo("Bombay Stock Exchange");
@@ -508,8 +506,8 @@ class StockTest {
 
         @Test
         void shouldCompareStocksWithDifferentExchanges() {
-            Stock nseStock = createStock("RELIANCE", Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, ADDED_ON);
-            Stock bseStock = createStock("RELIANCE", Stock.Exchange.BSE, NAME, Stock.Sector.OIL_GAS, ISIN, LOT_SIZE, ADDED_ON);
+            Stock nseStock = createStock("RELIANCE", Stock.Exchange.NSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, ADDED_ON);
+            Stock bseStock = createStock("RELIANCE", Stock.Exchange.BSE, NAME, Stock.Sector.OIL_GAS, "Oil & Gas", 1700000000000L, java.math.BigDecimal.valueOf(25.5), ISIN, LOT_SIZE, ADDED_ON);
 
             assertThat(nseStock).isNotEqualTo(bseStock);
             assertThat(nseStock.exchange()).isNotEqualTo(bseStock.exchange());

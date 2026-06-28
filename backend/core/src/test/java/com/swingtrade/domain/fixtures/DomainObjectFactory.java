@@ -17,6 +17,9 @@ public class DomainObjectFactory {
             exchange,
             symbol + " Industries Limited",
             sector,
+            sector.name(),
+            1000000000L,
+            BigDecimal.valueOf(20.0),
             "INE" + symbol.substring(0, 5) + "0000",
             100,
             LocalDate.of(2020, 1, 1)

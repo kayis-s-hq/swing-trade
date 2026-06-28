@@ -1,0 +1,46 @@
+- generic [ref=e2]:
+  - generic [ref=e6]:
+    - img "Fyers_logo" [ref=e9]
+    - heading "Bar Replay on FYERS is now LIVE" [level=2] [ref=e10]
+    - paragraph
+    - img "login-web" [ref=e11]
+    - generic [ref=e12]:
+      - link "Get it on Google Play" [ref=e13] [cursor=pointer]:
+        - /url: https://play.google.com/store/apps/details?id=com.fyers.trader
+        - img "Get it on Google Play" [ref=e14]
+      - link "Download on the App Store" [ref=e15] [cursor=pointer]:
+        - /url: https://apps.apple.com/us/app/fyers/id1526652184
+        - img "Download on the App Store" [ref=e16]
+  - generic [ref=e17]:
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - heading "Login to FYERS" [level=4] [ref=e23]
+        - generic [ref=e24]:
+          - generic [ref=e25]:
+            - radio "Mobile number" [checked] [ref=e26]
+            - paragraph [ref=e27]: Mobile number
+          - generic [ref=e28]:
+            - radio "Client ID" [ref=e29]
+            - paragraph [ref=e30]: Client ID
+        - generic [ref=e31]:
+          - generic [ref=e33]:
+            - 'combobox "India (भारत): +91" [ref=e35]':
+              - generic [ref=e37]: "+91"
+            - textbox "Mobile number" [active] [ref=e39]
+          - button "Continue . ." [disabled] [ref=e40]:
+            - text: Continue
+            - generic:
+              - generic: .
+              - generic: .
+      - generic [ref=e41]:
+        - separator [ref=e42]
+        - generic [ref=e43]: OR
+      - generic [ref=e44]: Don't have an account? Open account
+    - paragraph [ref=e47]:
+      - text: By proceeding, you agree to the
+      - link "T&C" [ref=e48] [cursor=pointer]:
+        - /url: https://fyers.in/terms-and-conditions/
+      - text: and
+      - link "Privacy Policy" [ref=e49] [cursor=pointer]:
+        - /url: https://fyers.in/privacy-policy/
+      - text: of FYERS Securities Pvt. Ltd.

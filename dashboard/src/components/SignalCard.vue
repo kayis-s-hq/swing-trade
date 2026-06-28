@@ -24,22 +24,22 @@
       <div class="grid grid-cols-3 gap-3 text-xs">
         <div>
           <p class="text-text-muted">Entry</p>
-          <p class="mt-0.5 font-semibold text-text-primary">${{ signal.entryPrice }}</p>
+          <p class="mt-0.5 font-semibold text-text-primary">{{ signal.entryPrice ? '$' + signal.entryPrice : '—' }}</p>
         </div>
         <div>
           <p class="text-text-muted">Stop Loss</p>
-          <p class="mt-0.5 font-semibold text-danger">${{ signal.stopLoss }}</p>
+          <p class="mt-0.5 font-semibold text-danger">{{ signal.stopLoss ? '$' + signal.stopLoss : '—' }}</p>
         </div>
         <div>
           <p class="text-text-muted">Target</p>
-          <p class="mt-0.5 font-semibold text-success">${{ signal.target }}</p>
+          <p class="mt-0.5 font-semibold text-success">{{ signal.target ? '$' + signal.target : '—' }}</p>
         </div>
       </div>
 
       <!-- R:R -->
       <div class="mt-3 flex items-center justify-between border-t border-border-subtle/50 pt-3">
         <span class="text-xs font-medium text-text-muted">Risk:Reward</span>
-        <span class="text-sm font-bold" :class="signal.riskReward >= 2 ? 'text-brand' : 'text-text-primary'">1:{{ signal.riskReward.toFixed(2) }}</span>
+        <span class="text-sm font-bold" :class="signal.riskReward >= 2 ? 'text-brand' : 'text-text-primary'">{{ signal.riskReward ? '1:' + signal.riskReward.toFixed(2) : '—' }}</span>
       </div>
     </div>
 

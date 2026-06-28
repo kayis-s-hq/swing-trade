@@ -1,0 +1,29 @@
+# E2E test configuration - connects to local PostgreSQL
+spring:
+  datasource:
+    url: jdbc:postgresql://${TEST_DB_HOST:localhost}:${TEST_DB_PORT:5432}/${TEST_DB_NAME:swingtrade_test}
+    driver-class-name: org.postgresql.Driver
+    username: ${TEST_DB_USER:kayisrahman}
+    password: ${TEST_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/test-migration
+    baseline-on-migrate: true
+    clean-on-validation-error: true
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.upstox.UpstoxAutoConfiguration
+
+logging:
+  level:
+    com.swingtrade.data: DEBUG
+    org.springframework.jdbc.core: DEBUG

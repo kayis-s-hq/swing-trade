@@ -1,0 +1,130 @@
+package com.swingtrade.api.controller;
+
+import com.swingtrade.data.config.FyersConfig;
+import com.swingtrade.data.service.FyersAuthService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.io.IOException;
+import java.util.Map;
+
+/**
+ * Controller for Fyers authentication flow.
+ */
+@RestController
+@RequestMapping("/api/fyers")
+@Profile("fyers")
+public class FyersAuthController {
+
+    private static final Logger logger = LoggerFactory.getLogger(FyersAuthController.class);
+
+    private final FyersAuthService authService;
+    private final FyersConfig fyersConfig;
+
+    public FyersAuthController(FyersAuthService authService, FyersConfig fyersConfig) {
+        this.authService = authService;
+        this.fyersConfig = fyersConfig;
+    }
+
+    /**
+     * GET /api/fyers/login
+     * Returns the Fyers authorization URL for the user to start the login process.
+     */
+    @GetMapping("/login")
+    public ResponseEntity<Map<String, String>> getLoginUrl() {
+        if (fyersConfig.getClientId() == null || fyersConfig.getClientId().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "FYERS_CLIENT_ID not configured"));
+        }
+        if (fyersConfig.getSecretKey() == null || fyersConfig.getSecretKey().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "FYERS_SECRET_KEY not configured"));
+        }
+        return ResponseEntity.ok(Map.of(
+            "url", authService.getAuthorizationUrl(),
+            "message", "Please visit the URL to authenticate with Fyers"
+        ));
+    }
+
+    /**
+     * GET /api/fyers/callback
+     * Fyers OAuth2 callback. Exchanges auth code for tokens, sends postMessage to popup, then closes.
+     * Frontend polls /api/fyers/status to detect successful auth — no token in URL.
+     */
+    @GetMapping("/callback")
+    public void handleCallback(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String params = request.getQueryString();
+        logger.info("Fyers callback received, query={}", params);
+
+        // Fyers v3 sends "auth_code" as param name
+        String authCode = request.getParameter("auth_code");
+
+        logger.info("Fyers callback, extracted authcode={}", authCode);
+        if (authCode == null || authCode.isBlank()) {
+            logger.warn("Fyers callback without authcode — sending error");
+            sendCallbackHtml(response, false);
+            return;
+        }
+        authService.exchangeAuthCodeForTokens(authCode);
+        boolean success = authService.validateToken();
+        logger.info("Fyers auth result: {}", success ? "success" : "failed");
+
+        sendCallbackHtml(response, success);
+    }
+
+    private void sendCallbackHtml(HttpServletResponse response, boolean success) throws IOException {
+        String status = success ? "success" : "error";
+        String msg = success ? "Fyers connected!" : "Authentication failed.";
+        String origin = fyersConfig.getFrontendUrl();
+        response.setContentType("text/html;charset=UTF-8");
+        response.getWriter().write(String.format(
+            "<!DOCTYPE html><html><body>"
+            + "<p>%s</p>"
+            + "<script>"
+            + "if(window.opener){"
+            + "  window.opener.postMessage({type:'fyers_auth_%s'},'%s');"
+            + "  setTimeout(()=>window.close(),500);"
+            + "}else{"
+            + "  window.location='%s/settings?auth=%s';"
+            + "}"
+            + "</script></body></html>",
+            msg, status, origin, origin, status
+        ));
+    }
+
+    /**
+     * POST /api/fyers/auth
+     * Manual token exchange for API clients.
+     * Body: { "authCode": "..." }
+     */
+    @PostMapping("/auth")
+    public ResponseEntity<Map<String, String>> authenticate(@RequestBody Map<String, String> payload) {
+        String authCode = payload.get("authCode");
+        if (authCode == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Missing authCode"));
+        }
+
+        authService.exchangeAuthCodeForTokens(authCode);
+        boolean success = authService.validateToken();
+
+        return ResponseEntity.ok(Map.of(
+            "status", success ? "success" : "failed",
+            "message", success ? "Tokens generated and stored" : "Token exchange failed"
+        ));
+    }
+
+    /**
+     * GET /api/fyers/status
+     * Returns current token status.
+     */
+    @GetMapping("/status")
+    public ResponseEntity<Map<String, Object>> getStatus() {
+        return ResponseEntity.ok(Map.of(
+            "connected", authService.validateToken(),
+            "clientId", authService.getClientId()
+        ));
+    }
+}

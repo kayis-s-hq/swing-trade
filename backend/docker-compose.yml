@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: swing_trade_postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: swingtrade_db
+      POSTGRES_USER: swingtrade_user
+      POSTGRES_PASSWORD: swingtrade_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5435:5432"
+    networks:
+      - swingtrade-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swingtrade_user -d swingtrade_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:alpine
+    container_name: swing_trade_redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    networks:
+      - swingtrade-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api-dev:
+    image: swing-trade-api:dev
+    container_name: swing_trade_api-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime-jar
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,fyers
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/swingtrade_db
+      - SPRING_DATASOURCE_USERNAME=swingtrade_user
+      - SPRING_DATASOURCE_PASSWORD=swingtrade_password
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PORT=6379
+      - FYERS_CLIENT_ID=D2G7EJJ89Z-100
+      - FYERS_SECRET_KEY=27XMU78XXK
+      - FYERS_REDIRECT_URL=http://piworm.local:8080/api/fyers/callback
+      - LANGCHAIN4J_OPEN_AI_API_KEY=${LANGCHAIN4J_OPEN_AI_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks:
+      - swingtrade-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  swingtrade-network:
+    driver: bridge

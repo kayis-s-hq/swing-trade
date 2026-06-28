@@ -1,0 +1,40 @@
+# Test configuration for LLM module
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    hikari:
+      auto-commit: true
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+  flyway:
+    enabled: false
+
+llm:
+  vllm:
+    base-url: https://u425-af79-4d7d6139.singapore-a.gpuhub.com:8443/v1
+    model-name: claude-sonnet-4-6
+  sentiment:
+    cache:
+      enabled: false
+    default-confidence: 0.75
+
+news:
+  rss:
+    feeds: https://feeds.economictimes.indiatimes.com/stocks
+    max-articles-per-feed: 5
+
+logging:
+  level:
+    com.swingtrade.llm: DEBUG
+    com.swingtrade.data: DEBUG
+    org.springframework: INFO
+    org.springframework.test: DEBUG

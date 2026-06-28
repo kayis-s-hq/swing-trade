@@ -38,6 +38,12 @@
         <span class="text-xs font-medium" :class="marketStatus === 'OPEN' ? 'text-success' : 'text-danger'">{{ marketStatus }}</span>
       </div>
 
+      <!-- Broker Connection Status -->
+      <div v-if="brokerConnected" class="flex items-center gap-1.5 rounded-md bg-success-bg px-2.5 py-1">
+        <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+        <span class="text-[11px] font-medium text-success">{{ brokerName }}</span>
+      </div>
+
       <!-- Clock -->
       <div class="hidden text-xs text-text-muted lg:block">{{ currentTime }}</div>
 
@@ -56,6 +62,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useThemeStore } from '../stores/theme'
+import { getSettings, brokerLabels } from '../stores/settings'
+import { getFyersStatus } from '../api/client'
+
 
 defineProps<{ sidebarCollapsed: boolean }>()
 defineEmits<{ 'toggle-sidebar': [] }>()
@@ -63,6 +72,9 @@ defineEmits<{ 'toggle-sidebar': [] }>()
 const route = useRoute()
 const currentTime = ref('')
 const themeStore = useThemeStore()
+const settings = getSettings()
+const brokerConnected = ref(false)
+const brokerName = computed(() => brokerLabels[settings.selectedBroker] || 'Trader')
 
 const currentPage = computed(() => {
   const name = route.name as string | undefined
@@ -81,6 +93,17 @@ const updateTime = () => {
   })
 }
 
-onMounted(() => { updateTime(); timer = window.setInterval(updateTime, 1000) })
+const checkBroker = async () => {
+  if (settings.selectedBroker !== 'fyers') {
+    brokerConnected.value = true
+    return
+  }
+  const res = await getFyersStatus()
+  if (res.success && res.data) {
+    brokerConnected.value = res.data.connected
+  }
+}
+
+onMounted(() => { updateTime(); timer = window.setInterval(updateTime, 1000); checkBroker() })
 onUnmounted(() => { clearInterval(timer) })
 </script>

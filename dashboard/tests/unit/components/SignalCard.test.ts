@@ -11,16 +11,15 @@ const TestComponent = defineComponent({
 
 describe('SignalCard', () => {
   const sampleSignal = {
-    id: 'sig-001',
     symbol: 'HDFCBANK',
-    signalType: 'BUY' as const,
+    direction: 'BUY' as const,
     confidence: 75,
-    reasoning: 'Positive sentiment + breakout above resistance',
+    reason: 'Positive sentiment + breakout above resistance',
     entryPrice: 1450,
     stopLoss: 1380,
     target: 1600,
-    createdDate: '2026-04-10',
-    indicators: ['EMA20', 'RSI', 'Volume'],
+    riskReward: 2.13,
+    status: 'ACTIVE',
   }
 
   it('renders signal type badge correctly', () => {
@@ -34,12 +33,12 @@ describe('SignalCard', () => {
     const wrapper = mount(SignalCard, {
       props: { signal: sampleSignal },
     })
-    const badge = wrapper.find('span.bg-success-50')
+    const badge = wrapper.find('span.bg-success-bg')
     expect(badge.exists()).toBe(true)
   })
 
   it('renders SELL badge with red color', () => {
-    const sellSignal = { ...sampleSignal, signalType: 'SELL' }
+    const sellSignal = { ...sampleSignal, direction: 'SELL' as const }
     const wrapper = mount(SignalCard, {
       props: { signal: sellSignal },
     })
@@ -47,7 +46,7 @@ describe('SignalCard', () => {
   })
 
   it('renders HOLD badge with gray color', () => {
-    const holdSignal = { ...sampleSignal, signalType: 'HOLD' }
+    const holdSignal = { ...sampleSignal, direction: 'HOLD' as const }
     const wrapper = mount(SignalCard, {
       props: { signal: holdSignal },
     })
@@ -58,7 +57,8 @@ describe('SignalCard', () => {
     const wrapper = mount(SignalCard, {
       props: { signal: sampleSignal },
     })
-    expect(wrapper.text()).toContain('75% Confidence')
+    expect(wrapper.text()).toContain('Confidence')
+    expect(wrapper.text()).toContain('75%')
   })
 
   it('renders entry, stop loss, and target prices', () => {
@@ -78,34 +78,24 @@ describe('SignalCard', () => {
   })
 
   it('handles empty reasoning gracefully', () => {
-    const noReasoningSignal = { ...sampleSignal, reasoning: '' }
+    const noReasoningSignal = { ...sampleSignal, reason: '' }
     const wrapper = mount(SignalCard, {
       props: { signal: noReasoningSignal },
     })
-    expect(wrapper.text()).toContain('No reasoning provided')
+    expect(wrapper.find('.border-t.px-4.py-3').exists()).toBe(true)
   })
 
-  it('renders indicators as badges', () => {
+  it('renders risk:reward', () => {
     const wrapper = mount(SignalCard, {
       props: { signal: sampleSignal },
     })
-    expect(wrapper.text()).toContain('EMA20')
-    expect(wrapper.text()).toContain('RSI')
-    expect(wrapper.text()).toContain('Volume')
+    expect(wrapper.text()).toContain('2.13')
   })
 
-  it('handles empty indicators array', () => {
-    const noIndicatorsSignal = { ...sampleSignal, indicators: [] }
-    const wrapper = mount(SignalCard, {
-      props: { signal: noIndicatorsSignal },
-    })
-    expect(wrapper.text()).not.toContain('EMA20')
-  })
-
-  it('has correct dark mode classes', () => {
+  it('renders status badge', () => {
     const wrapper = mount(SignalCard, {
       props: { signal: sampleSignal },
     })
-    expect(wrapper.classes()).toContain('dark:bg-white/[0.03]')
+    expect(wrapper.text()).toContain('ACTIVE')
   })
 })

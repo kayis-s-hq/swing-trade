@@ -1,0 +1,94 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]: S
+      - generic [ref=e9]: SwingTrade
+    - navigation [ref=e10]:
+      - link "Dashboard" [ref=e11] [cursor=pointer]:
+        - /url: /
+        - img [ref=e12]
+        - generic [ref=e14]: Dashboard
+      - link "Positions" [ref=e15] [cursor=pointer]:
+        - /url: /positions
+        - img [ref=e16]
+        - generic [ref=e18]: Positions
+      - link "Signals 6" [ref=e19] [cursor=pointer]:
+        - /url: /signals
+        - img [ref=e20]
+        - generic [ref=e22]: Signals
+        - generic [ref=e23]: "6"
+      - link "Portfolio" [ref=e24] [cursor=pointer]:
+        - /url: /portfolio
+        - img [ref=e25]
+        - generic [ref=e27]: Portfolio
+      - link "Watchlist" [ref=e28] [cursor=pointer]:
+        - /url: /watchlist
+        - img [ref=e29]
+        - generic [ref=e31]: Watchlist
+      - link "Data" [ref=e32] [cursor=pointer]:
+        - /url: /data
+        - img [ref=e33]
+        - generic [ref=e35]: Data
+      - link "Settings" [ref=e36] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=e37]
+        - generic [ref=e39]: Settings
+    - generic [ref=e41]:
+      - generic [ref=e44]: System Status
+      - generic [ref=e45]: Degraded
+      - generic [ref=e46]: Sync 23:52:14
+    - button [ref=e47]:
+      - img [ref=e48]
+  - generic [ref=e50]:
+    - generic [ref=e51]:
+      - generic [ref=e52]:
+        - img [ref=e53]
+        - generic [ref=e55]: Backend unreachable
+        - generic [ref=e56]: Server responded with status 500
+      - generic [ref=e57]:
+        - button "Retry" [ref=e58]
+        - button [ref=e59]:
+          - img [ref=e60]
+    - banner [ref=e62]:
+      - generic [ref=e63]:
+        - button [ref=e64]:
+          - img [ref=e65]
+        - navigation [ref=e67]:
+          - generic [ref=e68]: Home
+          - img [ref=e69]
+          - generic [ref=e71]: Dashboard
+      - generic [ref=e72]:
+        - button "Dark" [ref=e73]:
+          - img [ref=e74]
+          - generic [ref=e76]: Dark
+        - generic [ref=e79]: CLOSED
+        - generic [ref=e80]: 23:52:14
+        - button "KT Trader" [ref=e81]:
+          - generic [ref=e83]: KT
+          - generic [ref=e84]: Trader
+    - main [ref=e85]:
+      - generic [ref=e86]:
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - heading "Dashboard" [level=1] [ref=e89]
+            - paragraph [ref=e90]: Market overview and active positions
+          - button "Refresh" [ref=e91]:
+            - img [ref=e92]
+            - text: Refresh
+        - generic [ref=e94]:
+          - img [ref=e95]
+          - paragraph [ref=e97]: Server responded with status 500
+          - button "Retry" [ref=e98]
+    - generic [ref=e99]:
+      - generic [ref=e100]:
+        - generic [ref=e103]: Degraded
+        - generic [ref=e104]: │
+        - generic [ref=e105]: NSE/BSE
+        - generic [ref=e106]: │
+        - generic [ref=e107]: Paper Trading
+      - generic [ref=e108]:
+        - generic [ref=e109]: Market CLOSED
+        - generic [ref=e110]: │
+        - generic [ref=e111]: 23:52:14
+        - generic [ref=e112]: │
+        - generic [ref=e113]: v1.0.0

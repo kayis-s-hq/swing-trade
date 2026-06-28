@@ -41,10 +41,13 @@
               </span>
             </div>
           </div>
-          <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-brand/10">
-            <svg class="h-6 w-6 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
+          <div class="flex items-center gap-4">
+            <HealthStatus v-if="healthData" :health="healthData" />
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-brand/10">
+              <svg class="h-6 w-6 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </div>
           </div>
         </div>
       </div>
@@ -107,10 +110,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getMarketOverview, getPositions, getPortfolioSummary } from '../api/client'
-import type { MarketOverview, Position, PortfolioSummary } from '../api/types'
+import { getMarketOverview, getPositions, getPortfolioSummary, getHealthStatus } from '../api/client'
+import type { MarketOverview, Position, PortfolioSummary, HealthStatus as HealthStatusType } from '../api/types'
 import ErrorMessage from '../components/ErrorMessage.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import HealthStatus from '../components/HealthStatus.vue'
 
 const loading = ref(true)
 const error = ref(false)
@@ -118,6 +122,7 @@ const errorMessage = ref('')
 const marketOverview = ref<MarketOverview | null>(null)
 const positions = ref<Position[]>([])
 const portfolioSummary = ref<PortfolioSummary | null>(null)
+const healthData = ref<HealthStatusType | null>(null)
 
 const metrics = computed(() => [
   { title: 'Positions', value: marketOverview.value?.totalPositions ?? 0, trend: { value: `${marketOverview.value?.openPositions ?? 0} open`, isPositive: true } },
@@ -132,10 +137,11 @@ const refreshDashboard = async () => {
   error.value = false
   errorMessage.value = ''
   try {
-    const [overviewRes, posRes, summaryRes] = await Promise.all([getMarketOverview(), getPositions(), getPortfolioSummary()])
+    const [overviewRes, posRes, summaryRes, healthRes] = await Promise.all([getMarketOverview(), getPositions(), getPortfolioSummary(), getHealthStatus()])
     if (overviewRes.success && overviewRes.data) marketOverview.value = overviewRes.data
     if (posRes.success && posRes.data) positions.value = posRes.data
     if (summaryRes.success && summaryRes.data) portfolioSummary.value = summaryRes.data
+    if (healthRes.success && healthRes.data) healthData.value = healthRes.data
     if (overviewRes.error || posRes.error || summaryRes.error) throw new Error(overviewRes.error ?? posRes.error ?? summaryRes.error)
   } catch (err: unknown) {
     errorMessage.value = err instanceof Error ? err.message : 'Failed to load dashboard data'

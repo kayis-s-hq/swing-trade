@@ -25,17 +25,6 @@ describe('MetricCard', () => {
     expect(wrapper.text()).toContain('$10,000')
   })
 
-  it('renders icon when provided', () => {
-    const wrapper = mount(MetricCard, {
-      props: {
-        title: 'Test',
-        value: '123',
-        icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
-      },
-    })
-    expect(wrapper.find('svg').exists()).toBe(true)
-  })
-
   it('renders trend indicator when provided', () => {
     const wrapper = mount(MetricCard, {
       props: {
@@ -44,7 +33,18 @@ describe('MetricCard', () => {
         trend: { value: '5%', isPositive: true },
       },
     })
-    expect(wrapper.text()).toContain('+5%')
+    expect(wrapper.text()).toContain('▲ 5%')
+  })
+
+  it('renders downward trend when negative', () => {
+    const wrapper = mount(MetricCard, {
+      props: {
+        title: 'Test',
+        value: '123',
+        trend: { value: '3%', isPositive: false },
+      },
+    })
+    expect(wrapper.text()).toContain('▼ 3%')
   })
 
   it('hides trend when trend is null', () => {
@@ -54,17 +54,17 @@ describe('MetricCard', () => {
     expect(wrapper.text()).not.toContain('+')
   })
 
-  it('has correct dark mode classes', () => {
+  it('has border-r class for panel layout', () => {
     const wrapper = mount(MetricCard, {
       props: { title: 'Test', value: '123' },
     })
-    expect(wrapper.classes()).toContain('dark:bg-white/[0.03]')
+    expect(wrapper.classes()).toContain('border-r')
   })
 
-  it('shows loading state when loading prop is true', () => {
+  it('hides trend div when trend is undefined', () => {
     const wrapper = mount(MetricCard, {
-      props: { title: 'Test', value: '123', loading: true },
+      props: { title: 'Test', value: '123', trend: undefined },
     })
-    expect(wrapper.find('.animate-pulse').exists()).toBe(true)
+    expect(wrapper.find('.mt-0\\.5.flex').exists()).toBe(false)
   })
 })

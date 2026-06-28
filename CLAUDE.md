@@ -2,167 +2,227 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Dual Backend Architecture
+
+This repo has **two** backend implementations — know which one you're working in:
+
+1. **`src/` (root)** — Standalone Spring Boot 3.4.2 monolith. Simple app with basic stock/signal controllers. Use this for quick prototypes or simple changes. Built with `mvn` at repo root.
+2. **`backend/`** — Multi-module Maven project (6 modules: core, data, strategy, llm, broker, api) with Spring Boot 3.3.1. Full-featured architecture with separate data ingestion, TA, LLM sentiment, paper trading, and REST API. Use this for real feature work.
+
+When in doubt, `backend/` is the active development target.
+
+## Project Structure
+
+```
+swing-trade/
+├── src/                    # Root monolith (Spring Boot 3.4.2, standalone)
+│   └── main/java/com/swingtrade/
+│       ├── controller/     # StockController, TradeSignalController
+│       ├── model/          # Stock, TradeSignal, TradeSignalRequest
+│       ├── repository/     # JPA repositories
+│       ├── service/        # Business logic
+│       └── config/         # RedisConfig
+│
+├── backend/                # Multi-module Maven project (Spring Boot 3.3.1)
+│   ├── pom.xml             # Parent POM (6 modules)
+│   ├── core/               # Domain models (Stock, OhlcvCandle, Signal, Position, Trade, SentimentResult)
+│   ├── data/               # Data ingestion & storage (Upstox client, JPA entities, repositories, Flyway migrations)
+│   ├── strategy/           # TA with TA4j, signal generation, backtesting engine
+│   ├── llm/                # LLM client (vLLM/OpenAI-compatible), sentiment analysis, news ingestion
+│   ├── broker/             # Paper trading engine, order/position management, risk controls
+│   └── api/                # REST endpoints (Health, Signal, Trade, Position, Scan, Performance), scheduled jobs
+│
+├── dashboard/              # Vue 3 + TypeScript frontend
+│   ├── src/
+│   │   ├── api/            # API client, types, config
+│   │   ├── components/     # PositionCard, SignalCard, MetricCard, HealthStatus, PerformanceMetrics
+│   │   ├── views/          # Dashboard, Positions, Signals, Portfolio, Watchlist, DataIngestion, Settings
+│   │   ├── router/         # Vue Router
+│   │   └── stores/         # Pinia stores (theme)
+│   └── tests/              # Vitest unit tests + Playwright E2E tests
+│
+├── docs/                   # Project documentation
+└── dev-stack.sh            # Dev stack orchestration script
+```
+
 ## Project Overview
 
-This is a swing trading system built with Java 21 and Spring Boot 3.x. It's designed for automated trading of NSE/BSE Indian equities with a multi-factor technical approach enhanced by LLM sentiment analysis.
+Automated swing trading system for NSE/BSE Indian equities. Implements 1-4 week hold periods on Nifty 500 stocks using:
+- **Technical Analysis**: EMA crossovers, RSI, MACD, ATR-based stops (TA4j)
+- **LLM Sentiment**: vLLM-powered sentiment on financial news (LangChain4j)
+- **Paper Trading**: Full order management with risk controls
+- **Market Data**: Upstox API (OAuth2 token management)
 
-## Architecture
+## Backend Module Dependencies
 
-The system is organized into 6 core modules:
-- `core`: Domain models (Stock, OhlcvCandle, Signal, Position, Trade, SentimentResult)
-- `data`: Data ingestion, storage, and scheduling with PostgreSQL + TimescaleDB
-- `strategy`: Technical analysis with TA4J integration and signal generation
-- `llm`: LLM client with sentiment analysis pipeline using LangChain4j
-- `broker`: Paper trading engine with order management
-- `api`: REST endpoints for system interaction
+```
+api → strategy, llm, broker, data, core
+broker → data, core
+strategy → data, core
+llm → core
+data → core
+core → (none)
+```
 
 ## Key Technologies
 
-- Java 21 with Spring Boot 3.x
-- PostgreSQL with TimescaleDB for time-series data
-- TA4J for technical analysis
-- LangChain4j for LLM integration
-- Docker with docker-compose for infrastructure
-- Maven multi-module build system
+### Backend
+- Java 21 (MUST use Java 21, NOT Java 25 — Spring Boot 3.4.2 incompatible with Lombok 1.18.38)
+- Spring Boot 3.3.1 (backend/) / 3.4.2 (root src/)
+- Maven multi-module build
+- PostgreSQL + TimescaleDB (time-series)
+- Redis (caching)
+- TA4j 0.16 (technical analysis)
+- LangChain4j 0.34.0 (LLM integration)
+- Flyway (DB migrations)
+- Lombok 1.18.34/1.18.38
+
+### Frontend
+- Vue 3.5 + TypeScript + Composition API
+- Tailwind CSS v4
+- Vite 6
+- Pinia + Vue Router
+- Vitest + Playwright for testing
 
 ## Development Commands
 
-### Build
+### Dev Stack (Recommended — runs infra on pi-node, app locally on Mac)
 ```bash
-mvn clean install
+./dev-stack.sh start    # Start infra on pi-node + local Spring Boot (profiles: local,fyers)
+./dev-stack.sh status   # Check infra + local API health
+./dev-stack.sh stop     # Stop local app + infra on pi-node
+./dev-stack.sh logs     # View infra logs
+./dev-stack.sh infra <cmd>  # Pass any docker compose command to pi-node infra
 ```
 
-### Run
-```bash
-# Start database services
-docker-compose up -d
+Notes: `start` loads `backend/.env` automatically. Infra takes ~15s to become healthy after `up`.
 
-# Run the API module
-java -jar api/target/api-1.0.0.jar
+### Backend (multi-module)
+```bash
+cd backend
+mvn clean install              # Build all modules
+mvn test                       # Run all tests
+mvn test -Dtest=SomeTest       # Run specific test class
+
+# Run API module locally (after starting infra)
+cd api
+mvn spring-boot:run -Dspring-boot.run.profiles=local,fyers
 ```
 
-### Testing
+### Backend (root monolith)
 ```bash
-# Run all tests
-mvn test
-
-# Run a specific test class
-mvn test -Dtest=DataIngestionServiceTest
-
-# Run a specific test method
-mvn test -Dtest=DataIngestionServiceTest#testIngestData
+mvn clean install              # Build
+mvn test                       # Run tests
+mvn spring-boot:run            # Run locally
 ```
 
-## Infrastructure
-
-The system requires PostgreSQL with TimescaleDB extension and Redis for caching. These are managed via docker-compose.yml:
+### Frontend
 ```bash
-docker-compose up -d
+cd dashboard
+npm install
+npm run dev                    # Start dev server (localhost:5173)
+npm run build                  # Production build
+npm run typecheck              # TypeScript type check
+npm test                       # Vitest unit tests
+npx playwright test            # E2E tests
 ```
 
-## Database Schema
+## Infrastructure & Configuration
 
-The database schema is managed with Flyway migrations in `data/src/main/resources/db/migration/V1__swing_trade_schema.sql`. This includes:
-- TimescaleDB hypertable for ohlcv_candles
-- Tables for stocks, signals, positions, trades, sentiment_results
-- Proper indexing for performance
+### Dev Stack (pi-node infra + local app)
+The dev stack runs infrastructure on a Raspberry Pi (pi-node) via SSH, with Spring Boot and the dashboard running locally on Mac.
 
-## Documentation Rules
+**Infrastructure containers** (on `piworm.local` via `docker context pi-node`):
+| Service | Image | Local Port | Container | Notes |
+|---------|-------|------------|-----------|-------|
+| PostgreSQL 16 | `postgres:16` | `5435` | `swing_trade_postgres` | TimescaleDB, trust auth |
+| Redis | `redis:alpine` | `6379` | `swing_trade_redis` | AOF enabled |
 
-All documentation files must be written in Markdown format and placed in the `docs/` folder.
+Network: `swingtrade-network` (bridge). Volumes: `postgres_data`, `redis_data`.
 
-## Planning Directory
+**Local services**:
+| Service | Port | Profile |
+|---------|------|---------|
+| Spring Boot API | `8080` | `local,fyers` |
+| Vue Dashboard | `5173` | — |
 
-The GSD planning folder is located at `.planning/` (root of the swing-trade repository, NOT in this worktree directory). Always reference planning artifacts (SUMMARY.md, PLAN.md, UAT.md, etc.) from `/Users/kayisrahman/Documents/workspace/ideas/swing-trade/.planning/`. This includes:
-- System architecture documentation
-- API documentation
-- User guides
-- Technical specifications
-- Development guidelines
-
-Each Markdown file should follow these conventions:
-- Use proper heading hierarchy (#, ##, ###)
-- Include code blocks with appropriate language syntax highlighting
-- Use consistent terminology throughout the documentation
-- Link to related documents and code sections where relevant
-
-## Session Memory
-
-At the start of every session, read all `.md` files in `.claude/memory/` for accumulated project context (decisions, trade-offs, session summaries). Start with `MEMORY.md` as the index, then read files listed there.
-
-When saving session memories (via session-wrap), write to `.claude/memory/` in this project directory — NOT to `~/.claude/projects/…/memory/`. Use descriptive filenames:
-- Memory files: `{type}_{slug}.md` (e.g., `project_phase9_notification_migration.md`)
-- Session summaries: `session-YYYY-MM-DD-{slug}.md` (e.g., `session-2026-03-22-phase9-plan.md`)
-
-### Loading relevant context
-
-Use the `read-project-memory` skill to load only the memory files relevant to your current task, avoiding context bloat:
-
+### Docker Compose Infra
+Located at `backend/docker-compose.infra.yml`. Manage directly:
 ```bash
-# Load memory for a specific topic
-read-project-memory
-
-# Or phrase it naturally:
-# "what do we know about Phase 9?"
-# "did we decide how to handle notifications?"
-# "check memory for the data pipeline"
+./dev-stack.sh infra up -d      # Start
+./dev-stack.sh infra down       # Stop
+./dev-stack.sh infra restart    # Restart
+./dev-stack.sh logs             # View logs
 ```
 
-The skill reads `.claude/memory/MEMORY.md`, filters for matching files, and reports key context compactly. This keeps sessions focused without reading unnecessary files.
+### Spring Profiles
+- `local` — dev config, verbose logging, paper trading only, no Telegram, connects to pi-node infra
+- `dev` — development mode
+- `fyers` — Fyers broker integration
+- `test` — test configuration (H2 in-memory DB in some modules)
 
-## Custom Skills
+### Environment
+- `backend/.env` — loaded by `dev-stack.sh start`; contains DB, Redis, Upstox, LLM, and broker credentials
+- Spring Boot does NOT auto-load `.env`; the script sources it explicitly
 
-This project includes 16 domain-specific skills in `.claude/skills/`. See `.claude/SKILLS.md` for the complete index with trigger conditions.
+### DB Migrations
+Located in `backend/data/src/main/resources/db/migration/`:
+- `V1__swing_trade_schema.sql` — base schema (TimescaleDB hypertable, stocks, signals, positions, trades, sentiment)
+- `V2__add_ohlcv_adj_close.sql` — adjusted close column
+- `V3__add_watchlist.sql` — watchlist table
 
-**Common triggers to invoke skills proactively:**
-- **Data quality issues** → `swing-trade-data-quality-audit` (signal drops, ingestion errors, anomalies)
-- **Signal analysis** → `swing-trade-signal-suppression-analyzer` (when signals drop unexpectedly)
-- **Before auto-trade** → `swing-trade-risk-control-validator` (validate risk parameters)
-- **Strategy changes** → `swing-trade-signal-backtest-runner` (backtest new indicators or rules)
-- **Performance reports** → `swing-trade-performance-report-generator` (EOD/weekly reviews)
-- **Prompt tuning** → `swing-trade-llm-prompt-optimizer` (if sentiment accuracy drops)
-- **Build issues** → `swing-trade-maven-multi-module-build` (Maven build or dependency errors)
-- **System health** → `swing-trade-health-check-monitor` (pre-trade status checks)
-- **Infrastructure** → `swing-trade-docker-compose-deployer` (Docker/deployment changes)
-- **Debugging** → `swing-trade-systematic-debugging` (bugs, test failures)
+### Known Issues
+- `LocalDateTime` needs custom Jackson serializer (not serializable by default)
+- Remove explicit `hibernate.dialect` — auto-detected in Hibernate 6.6+
+- Set `spring.jpa.open-in-view: false` to avoid lazy-loading warnings
+- Set `spring.data.redis.host=piworm.local` for remote Redis
 
-Invoke skills using the `Skill` tool: `Skill("swing-trade-{skill-name}")`
+## API Endpoints
 
-## Worktree & Planning Workflow
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | System health (DB/Redis/Upstox connection states) |
+| `GET /api/signals[/symbol]` | Latest signals or for a specific stock |
+| `GET /api/scan` | Scan multiple stocks (`?days=30&marketCap=min`) |
+| `POST /api/trade` | Execute market order (paper mode) |
+| `GET /api/positions[/symbol]` | View positions |
+| `POST /api/positions/{symbol}/close` | Close a position |
+| `GET /api/performance` | P&L, win rate, trade stats |
+| `GET /actuator/health` | Spring Boot actuator |
 
-This project uses git worktrees for parallel phase development. Each worktree gets its own copy of `.planning/`, but the **root `.planning/` is the source of truth**.
+## Testing
 
-### Planning Document Locations
+```bash
+# Backend — all modules
+cd backend && mvn test
 
-When working in a worktree (e.g., `.claude/worktrees/phase-05/`):
-- **Worktree `.planning/`** (editable): `/Users/kayisrahman/Documents/workspace/ideas/swing-trade/.claude/worktrees/phase-05/.planning/`
-- **Root `.planning/` (source of truth)**: `/Users/kayisrahman/Documents/workspace/ideas/swing-trade/.planning/`
+# Backend — specific module
+cd backend/data && mvn test
 
-### Workflow
+# Backend — with coverage
+mvn clean test jacoco:report
 
-1. **Start worktree:** You have a git worktree branch (e.g., `worktree-phase-05`) with its own `.planning/` copy
-2. **Edit planning docs:** Update `.planning/` files in the worktree freely (STATE.md, phase plans, verification artifacts)
-3. **Sync to root:** Periodically run `Skill("superpowers:gsd-worktree-workflow --sync-to-root")` to copy changes back to root `.planning/`
-4. **Verify phase:** Run `gsd:verify` to validate phase goal achievement
-5. **Post-verify merge:** Run `Skill("superpowers:gsd-worktree-workflow --post-verify")` for merge guidance
-6. **Merge to main:** Merge worktree branch back to main with updated planning docs
-7. **Clean up:** Remove worktree via `gsd:remove-workspace` or `git worktree remove .claude/worktrees/phase-X`
+# Frontend unit tests
+cd dashboard && npm test
 
-### Key Rules
+# Frontend E2E tests
+cd dashboard && npx playwright test
+```
 
-- **Root `.planning/` on main is authoritative** — don't edit it directly from main, wait for worktree merge
-- **Worktree `.planning/` is your working copy** — update freely, sync to root before merging
-- **Always sync before merging** — run `--sync-to-root` before `git merge` to avoid conflicts
-- **Verify before merge** — `gsd:verify` must complete before merging worktree to main
-- **Planning conflicts may occur** — resolve manually if root and worktree diverged during parallel work
-- **Commit everything before merge** — worktree must have no uncommitted changes
+Test resources include `application-test.properties`, `application-e2e.yml`, and test-specific Flyway schemas.
 
-### Worktree Management Skill
+## Documentation
 
-Use `Skill("superpowers:gsd-worktree-workflow")` to:
-- Detect current branch and show planning locations
-- Sync `.planning/` changes from worktree to root (`--sync-to-root`)
-- Get merge guidance after `gsd:verify` passes (`--post-verify`)
-- Track worktree verification status and sync history (`--show-state`)
+All project documentation goes in `docs/` as Markdown files.
 
-See the skill documentation for detailed usage and examples.
+### External API References
+
+- [docs/yahoo-finance-api.md](docs/yahoo-finance-api.md) — Yahoo Finance unofficial API endpoints (v8/chart, v7/quote, v1/search), response formats, parameters, and reliability notes. Based on [yahoo-finance2](https://github.com/gadicc/yahoo-finance2) reverse-engineered docs.
+
+## Market Data Clients
+
+| Client | Module | Auth | Endpoint | Status |
+|--------|--------|------|----------|--------|
+| `YahooFinanceClient` | data | None | Yahoo v8 chart (unofficial) | Active default |
+| `UpstoxServiceClient` | data | OAuth2 token | Upstox v2 API | Active |
+| `FyersServiceClient` | data | API key+secret | Fyers v3 API | Fyers profile |

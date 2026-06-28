@@ -1,5 +1,7 @@
 // API Configuration
-export const API_BASE_URL = 'http://localhost:8080/api'
+// When running with Vite dev server, /api is proxied to backend (see vite.config.ts)
+// In production, set this to the actual backend URL
+export const API_BASE_URL = '/api'
 export const REQUEST_TIMEOUT = 30000 // 30 seconds
 
 // Default headers
