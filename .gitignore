@@ -97,3 +97,6 @@ data/target/
 core/target/
 llm/target/
 api/target/
+
+# Playwright MCP artifacts
+.playwright-mcp/
