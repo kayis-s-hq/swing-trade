@@ -145,6 +145,17 @@ class YahooFinanceClientTest {
     }
 
     @Test
+    void fetchCandleReturnsNullForZeroVolumeCandle() {
+        mockWebServer.enqueue(new MockResponse()
+                .setBody("{\"chart\":{\"result\":[{\"indicators\":{\"quote\":[{\"open\":[100.0],\"high\":[105.0],\"low\":[99.0],\"close\":[104.0],\"volume\":[0]}],\"adjclose\":[{\"adjclose\":[104.0]}]},\"timestamp\":[1705276800]}],\"error\":null}}")
+                .addHeader("Content-Type", "application/json")
+        );
+
+        CandleData candle = client.fetchCandle("RELIANCE", LocalDate.of(2024, 1, 15));
+        assertThat(candle).isNull();
+    }
+
+    @Test
     void fetchCandlesReturnsMultipleCandles() {
         List<Object[]> rows = new ArrayList<>();
         rows.add(new Object[]{
@@ -265,9 +276,16 @@ class YahooFinanceClientTest {
     }
 
     @Test
-    void isConnectedReturnsTrueWhenCandleFetched() {
+    void isConnectedReturnsTrueWhenMetaFetched() {
+        String metaResponse = "{\"chart\":{\"result\":[{\"meta\":{\"symbol\":\"RELIANCE.NS\"," +
+            "\"fullExchangeName\":\"NSE\",\"instrumentType\":\"EQUITY\",\"currency\":\"INR\"," +
+            "\"longName\":\"Reliance Industries Limited\",\"shortName\":\"RELIANCE INDUSTRIES LTD\"," +
+            "\"regularMarketPrice\":1316.5,\"fiftyTwoWeekHigh\":1611.8,\"fiftyTwoWeekLow\":1253.2," +
+            "\"chartPreviousClose\":1356.3,\"regularMarketTime\":1782381599," +
+            "\"firstTradeDate\":820467900,\"timezone\":\"IST\",\"gmtoffset\":19800}}],\"error\":null}}";
+
         mockWebServer.enqueue(new MockResponse()
-                .setBody(yahooResponse(LocalDate.of(2024, 1, 15), 100.0, 105.0, 99.0, 104.0, 5000000))
+                .setBody(metaResponse)
                 .addHeader("Content-Type", "application/json")
         );
 

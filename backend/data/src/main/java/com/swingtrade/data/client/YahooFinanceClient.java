@@ -76,7 +76,7 @@ public class YahooFinanceClient implements MarketDataClient {
             long timestamp = date.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
             long nextDay = date.plusDays(1).atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
 
-            String uri = String.format("/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d&events=history",
+            String uri = String.format("/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d&events=history&includePrePost=false",
                     yfinanceSymbol, timestamp, nextDay);
 
             String response = webClient.get()
@@ -121,11 +121,17 @@ public class YahooFinanceClient implements MarketDataClient {
                 return null;
             }
 
+            long volume = volumeArr.isNull() ? 0 : volumeArr.get(0).asLong(0);
+
+            // Skip pre-market placeholder candles with zero volume
+            if (volume == 0) {
+                return null;
+            }
+
             BigDecimal open = parseBigDecimal(openArr.get(0));
             BigDecimal high = parseBigDecimal(highArr.get(0));
             BigDecimal low = parseBigDecimal(lowArr.get(0));
             BigDecimal close = parseBigDecimal(closeArr.get(0));
-            long volume = volumeArr.isNull() ? 0 : volumeArr.get(0).asLong(0);
             BigDecimal adjClose = (adjArr != null && !adjArr.isNull() && adjArr.size() > 0)
                 ? parseBigDecimal(adjArr.get(0))
                 : close;
@@ -165,7 +171,7 @@ public class YahooFinanceClient implements MarketDataClient {
             long period1 = startDate.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
             long period2 = endDate.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC) + 86400;
 
-            String uri = String.format("/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d&events=history",
+            String uri = String.format("/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d&events=history&includePrePost=false",
                     yfinanceSymbol, period1, period2);
 
             String response = webClient.get()
@@ -362,9 +368,9 @@ public class YahooFinanceClient implements MarketDataClient {
     @Override
     public boolean isConnected() {
         try {
-            // Test connection by fetching a known stock (RELIANCE)
-            CandleData candle = fetchCandle("RELIANCE", LocalDate.now().minusDays(1));
-            return candle != null;
+            // Lightweight check: fetch chart meta for a common symbol (no date params needed)
+            ChartMeta meta = fetchChartMeta("RELIANCE.NS");
+            return meta != null && meta.symbol() != null;
         } catch (Exception e) {
             return false;
         }
