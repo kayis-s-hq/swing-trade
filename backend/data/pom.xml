@@ -80,6 +80,19 @@
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
+        <!-- Fyers Java SDK -->
+        <dependency>
+            <groupId>com.tts.in</groupId>
+            <artifactId>fyersjavasdk</artifactId>
+            <version>1.9.0</version>
+        </dependency>
+        <!-- org.json required by Fyers SDK -->
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20231013</version>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
