@@ -120,7 +120,7 @@ mvn spring-boot:run            # Run locally
 ```bash
 cd dashboard
 npm install
-npm run dev                    # Start dev server (localhost:5173)
+npm run dev                    # Start dev server (localhost:3003)
 npm run build                  # Production build
 npm run typecheck              # TypeScript type check
 npm test                       # Vitest unit tests
@@ -144,7 +144,7 @@ Network: `swingtrade-network` (bridge). Volumes: `postgres_data`, `redis_data`.
 | Service | Port | Profile |
 |---------|------|---------|
 | Spring Boot API | `8080` | `local,fyers` |
-| Vue Dashboard | `5173` | — |
+| Vue Dashboard | `3003` | — |
 
 ### Docker Compose Infra
 Located at `backend/docker-compose.infra.yml`. Manage directly:

@@ -100,3 +100,7 @@ api/target/
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+# Backend runtime artifacts
+backend/api/logs/
+backend/api/data/fyers-tokens.json
