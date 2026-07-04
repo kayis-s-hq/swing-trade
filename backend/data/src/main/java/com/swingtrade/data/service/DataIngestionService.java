@@ -1,13 +1,11 @@
 package com.swingtrade.data.service;
 
 import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.data.repository.WatchlistRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -46,46 +44,6 @@ public class DataIngestionService {
         this.watchlistRepository = watchlistRepository;
         this.marketDataClientProvider = marketDataClientProvider;
         this.txTemplate = txTemplate;
-    }
-
-    /**
-     * Scheduled job to auto-ingest EOD data at 16:30 IST on weekdays.
-     * Fetches yesterday's candles for all active watchlist stocks.
-     */
-    @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Kolkata")
-    @Transactional
-    public void autoIngestData() {
-        logger.info("Starting scheduled data ingestion at {}", LocalDateTime.now());
-
-        try {
-            LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
-            LocalDate yesterday = today.minusDays(1);
-
-            List<WatchlistEntity> watchlist = watchlistRepository.findByIsActiveTrueOrderBySymbolAsc();
-            if (watchlist.isEmpty()) {
-                logger.info("Watchlist is empty — skipping scheduled ingestion");
-                return;
-            }
-
-            int successCount = 0;
-            int failureCount = 0;
-
-            for (WatchlistEntity entry : watchlist) {
-                try {
-                    processSingleStock(entry.getSymbol(), yesterday);
-                    entry.setLastSyncedAt(LocalDateTime.now());
-                    watchlistRepository.save(entry);
-                    successCount++;
-                } catch (Exception e) {
-                    logger.error("Error processing {}: {}", entry.getSymbol(), e.getMessage());
-                    failureCount++;
-                }
-            }
-
-            logger.info("Scheduled ingestion completed: {} successful, {} failed", successCount, failureCount);
-        } catch (Exception e) {
-            logger.error("Error during scheduled data ingestion: {}", e.getMessage(), e);
-        }
     }
 
     /**

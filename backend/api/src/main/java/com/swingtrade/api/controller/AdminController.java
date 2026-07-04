@@ -4,6 +4,7 @@ import com.swingtrade.api.dto.ApiResponse;
 import com.swingtrade.api.dto.KillSwitchRequest;
 import com.swingtrade.broker.risk.KillSwitchService;
 import com.swingtrade.data.service.DataIngestionService;
+import com.swingtrade.data.service.FyersSymbolMasterService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,11 +31,50 @@ public class AdminController {
 
     private final DataIngestionService dataIngestionService;
 
+    private final FyersSymbolMasterService symbolMasterService;
+
     @Autowired
-    public AdminController(KillSwitchService killSwitchService, DataIngestionService dataIngestionService) {
+    public AdminController(KillSwitchService killSwitchService, DataIngestionService dataIngestionService,
+                            FyersSymbolMasterService symbolMasterService) {
         this.killSwitchService = killSwitchService;
         this.dataIngestionService = dataIngestionService;
+        this.symbolMasterService = symbolMasterService;
         logger.info("AdminController initialized with kill switch and data ingestion services");
+    }
+
+    /**
+     * Refresh the Fyers symbol master table from the public NSE_CM.csv feed.
+     *
+     * @return API response with the number of symbols loaded
+     */
+    @PostMapping("/symbols/refresh")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> refreshSymbolMaster() {
+        try {
+            int count = symbolMasterService.refresh();
+            return ResponseEntity.ok(ApiResponse.ok(Map.of("count", count)));
+        } catch (Exception e) {
+            logger.error("Failed to refresh Fyers symbol master: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                .body(ApiResponse.error("Failed to refresh symbol master: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get current Fyers symbol master status (row count).
+     *
+     * @return API response with symbol count
+     */
+    @GetMapping("/symbols/status")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSymbolMasterStatus() {
+        try {
+            Map<String, Object> data = new HashMap<>();
+            data.put("count", symbolMasterService.count());
+            return ResponseEntity.ok(ApiResponse.ok(data));
+        } catch (Exception e) {
+            logger.error("Failed to get symbol master status: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                .body(ApiResponse.error("Failed to get symbol master status: " + e.getMessage()));
+        }
     }
 
     /**
