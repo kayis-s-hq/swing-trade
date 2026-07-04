@@ -7,12 +7,22 @@
 ## Host
 
 ```
-query2.finance.yahoo.com   (primary)
-query1.finance.yahoo.com   (fallback, rarely used)
+query1.finance.yahoo.com   (primary — query2 aggressively blocks automated requests with 429)
+query2.finance.yahoo.com   (fallback — works for browser clients)
 ```
 
-No authentication, crumb, or cookie required for v8/chart and v7/quote endpoints.
-The v1/search endpoint also works without auth.
+No authentication, crumb, or cookie required for v8/chart and v1/search endpoints.
+The v7/finance/quote endpoint is dead (401).
+
+---
+
+### 429 Blocking
+
+`query2.finance.yahoo.com` aggressively blocks non-browser clients with HTTP 429 (Too Many Requests).
+This happens even with a browser User-Agent header. `query1` is more permissive and should be used
+as the primary host for automated clients. If you get 429, switch to `query1` or add delays between
+requests. The Yahoo Finance client in this project defaults to `query2` — consider switching to
+`query1` to avoid blocking.
 
 ---
 
@@ -86,73 +96,31 @@ The v1/search endpoint also works without auth.
 
 ---
 
-## 2. Quote (Real-Time Price)
+## 2. Quote (Real-Time Price) — **DEAD**
 
 **Endpoint**: `GET https://query2.finance.yahoo.com/v7/finance/quote?symbols={symbol}`
 
-**Reference**: [yahoo-finance2 quote module](https://github.com/gadicc/yahoo-finance2/blob/dev/docs/modules/quote.md)
-
-### Query Parameters
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `symbols` | string | Yes | — | Single symbol or comma-separated list |
-| `fields` | string | No | all | Comma-separated list of fields to return. Options: `symbol`, `regularMarketPrice`, `currency`, `regularMarketVolume`, `marketState`, `quoteType`, `shortName`, `longName`, `fiftyTwoWeekHigh`, `fiftyTwoWeekLow`, `regularMarketTime`, `chartPreviousClose`, `averageDailyVolume3Month`, `averageDailyVolume10Day`, etc. |
-
-### Response Structure
+**Status**: **Shut off by Yahoo — returns 401 Unauthorized**
 
 ```json
 {
   "finance": {
-    "result": [{
-      "symbol": "RELIANCE.NS",
-      "shortName": "RELIANCE INDUSTRIES LTD",
-      "longName": "Reliance Industries Limited",
-      "regularMarketPrice": 1316.50,
-      "regularMarketChange": 12.30,
-      "regularMarketChangePercent": 0.94,
-      "regularMarketTime": "4:00PM IST",
-      "regularMarketDayHigh": 1325.00,
-      "regularMarketDayLow": 1305.00,
-      "regularMarketVolume": 5432100,
-      "regularMarketPreviousClose": 1304.20,
-      "fiftyTwoWeekLow": 1253.20,
-      "fiftyTwoWeekHigh": 1611.80,
-      "fiftyDayAverage": 1290.45,
-      "twoHundredDayAverage": 1350.60,
-      "currency": "INR",
-      "currencySymbol": "₹",
-      "quoteType": "EQUITY",
-      "exchange": "NMS",
-      "exchangeName": "NSE",
-      "exchangeDataDelayedBy": 0,
-      "marketState": "CLOSED",
-      "fullExchangeName": "NSE",
-      "esgPoppedExchange": "",
-      "averageDailyVolume3Month": 4500000,
-      "averageDailyVolume10Day": 5100000,
-      "language": "en-US",
-      "region": "IN",
-      "quoteSourceName": "Delayed Quote",
-      "priceHint": 2,
-      "sourceInterval": 15,
-      "tradeable": false,
-      "triggerable": false,
-      "firstTradeDateEpoch": 820467900
-    }],
-    "error": null
+    "result": null,
+    "error": {
+      "code": "Unauthorized",
+      "description": "User is unable to access this feature - https://bit.ly/yahoo-finance-api-feedback"
+    }
   }
 }
 ```
 
-### Key Notes
+Yahoo killed this endpoint without notice. Both `query1` and `query2` return 401. This is part of Yahoo's broader restriction of undocumented API access.
 
-- Supports batch queries: `?symbols=AAPL,GOOGL,TSLA`
-- `fields` parameter lets you request only specific fields (reduces payload)
-- `tradeable: false` for delayed data (Indian markets)
-- `marketState`: `PRE`, `REGULAR`, `POST`, `CLOSED`, `CLOSED`
-- Delisted symbols return `quoteType: "NONE"` — filter these out
-- Some fields only appear during market hours (e.g., `regularMarketPrice` updates)
+**Replacement**: Use the chart endpoint's `meta` field (Section 1) which already provides most quote data:
+`regularMarketPrice`, `regularMarketDayHigh`, `regularMarketDayLow`, `regularMarketVolume`,
+`fiftyTwoWeekHigh`, `fiftyTwoWeekLow`, `chartPreviousClose`.
+
+Or use your broker API (Fyers v3 `GetStockQuotes` or Upstox historical data) for real-time quotes.
 
 ---
 
@@ -184,14 +152,20 @@ The v1/search endpoint also works without auth.
     "symbol": "RELIANCE.NS",
     "shortname": "Reliance Industries Limited",
     "quoteType": "EQUITY",
-    "exchange": "NSE",
-    "exchangeName": "NSE",
-    "index": "quote",
-    "isYahooFinance": true
+    "exchange": "NSI",
+    "longname": "Reliance Industries Limited",
+    "index": "quotes",
+    "score": 20018.0,
+    "typeDisp": "Equity",
+    "isYahooFinance": true,
+    "exchDisp": "NSE",
+    "sector": "Energy",
+    "industry": "Oil & Gas Refining & Marketing"
   },
   ...],
   "news": [...],
-  "warnings": [...],
+  "count": 13,
+  "explains": [],
   "totalTime": 123,
   "timeTakenForQuotes": 50,
   "timeTakenForNews": 30,
@@ -206,7 +180,10 @@ The v1/search endpoint also works without auth.
 - Returns both Yahoo Finance symbols AND non-Yahoo entities (Crunchbase companies)
 - Filter by `isYahooFinance: true` for valid trading symbols
 - `quoteType` distinguishes EQUITY, ETF, MUTUALFUND, CRYPTOCURRENCY, etc.
-- `exchange` field indicates the trading venue (NSE, BSE, NASDAQ, etc.)
+- `exchange` field indicates the trading venue (NSI for NSE, NYQ for NYSE, etc.)
+- `exchDisp` is the display-friendly exchange name (NSE, NASDAQ, etc.)
+- Additional fields: `score`, `sector`, `industry`, `typeDisp`, `longname`
+- **Note**: `exchangeName` does NOT exist in the response — use `exchange` or `exchDisp`
 - Useful for discovering symbols before fetching chart/quote data
 
 ---
@@ -249,17 +226,23 @@ HTTP-level errors return the status text as the error message.
 
 | Feature | Yahoo API | YahooFinanceClient |
 |---------|-----------|-------------------|
-| Base URL | `query2.finance.yahoo.com` | `query1.finance.yahoo.com` |
+| Base URL | `query1.finance.yahoo.com` | `query2.finance.yahoo.com` ⚠️ |
 | Chart endpoint | `/v8/finance/chart/{symbol}` | `/v8/finance/chart/{symbol}` |
-| Quote endpoint | `/v7/finance/quote?symbols=X` | Not implemented |
-| Search endpoint | `/v1/finance/search?q=X` | Not implemented |
+| Quote endpoint | **DEAD (401)** | `/v7/finance/quote?symbols=X` ⚠️ |
+| Search endpoint | `/v1/finance/search?q=X` | `/v1/finance/search?q=X` |
 | Date format | Epoch seconds | Epoch seconds |
 | adjClose parsing | `indicators.adjclose[0].adjclose` | Implemented |
 | Pre-market filtering | `volume == 0` candles | Implemented |
 | Meta extraction | `chart.result[0].meta` | Implemented |
-| Crumb auth | Not needed for v8/v7 | N/A |
-| Rate limiting | Unknown, aggressive blocking | No rate limiting logic |
-| Retry/backoff | Not built in | No retry logic |
+| Rate limiting | Aggressive 429 on query2 | 1s minimum between requests |
+| Retry/backoff | Not built in | Not implemented |
+| Search filtering | `isYahooFinance` field | Filters non-Yahoo + non-EQUITY |
+| Search `exchange` field | `exchange` (not `exchangeName`) | Reads `exchangeName` ⚠️ |
+
+**Issues**:
+- Client defaults to `query2` which blocks automated requests with 429 — should use `query1` as primary
+- Quote endpoint (`/v7/finance/quote`) is dead (401) — `fetchQuote`/`fetchQuotes` always return null
+- Search reads `exchangeName` but API returns `exchange` — search results get null exchange
 
 ---
 
@@ -273,7 +256,17 @@ From the yahoo-finance2 library:
 - **Validation errors**: Yahoo returns data that doesn't match expected schema
 - **Delisted stocks**: queries that worked previously begin to throw errors, including historical data from before delisting
 - **No SLA**: endpoints can and do change without notice
-- **Blocking**: Yahoo aggressively blocks automated requests; consider adding delays between requests
+- **Blocking**: Yahoo aggressively blocks automated requests with 429 on `query2`; use `query1` as primary
+- **Endpoint rot**: `/v7/finance/quote` was killed without notice (401); chart and search still work
+
+## Alternatives for Quote Data
+
+Since the quote endpoint is dead, use these for real-time quote data:
+
+1. **Fyers v3 `GetStockQuotes`** — Already implemented in `FyersServiceClient`. Provides price, change, change%, high, low, prev close, volume. Requires Fyers broker account.
+2. **Upstox historical candle data** — Provides OHLCV but not real-time quotes. Use `fetchCandles` for recent data.
+3. **Chart endpoint `meta` field** — Already extracted from `/v8/finance/chart`. Provides price, day high/low, volume, 52w range, previous close. Missing: change, change%, avg volume.
+4. **NSE/BSE official APIs** — NSE India (nseindia.com) has public APIs but aggressive anti-bot measures.
 
 ---
 

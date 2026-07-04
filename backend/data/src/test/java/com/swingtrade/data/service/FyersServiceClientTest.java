@@ -11,15 +11,18 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class FyersServiceClientTest {
 
     private MockWebServer mockWebServer;
     private FyersAuthService mockAuthService;
+    private FyersSymbolMasterService mockSymbolMaster;
     private FyersServiceClient client;
 
     @BeforeEach
@@ -29,16 +32,23 @@ class FyersServiceClientTest {
 
         mockAuthService = mock(FyersAuthService.class);
         when(mockAuthService.getAccessToken()).thenReturn("test-fyers-token");
+        when(mockAuthService.getClientId()).thenReturn("TESTAPP-100");
+
+        mockSymbolMaster = mock(FyersSymbolMasterService.class);
 
         String baseUrl = mockWebServer.url("/").toString().replaceAll("/$", "");
         WebClient.Builder builder = WebClient.builder().baseUrl(baseUrl);
-        client = new FyersServiceClient(builder, mockAuthService);
+        client = new FyersServiceClient(builder, mockAuthService, mockSymbolMaster, baseUrl);
     }
 
     @AfterEach
     void tearDown() throws IOException {
         mockWebServer.shutdown();
     }
+
+    // -----------------------------------------------------------------------
+    // Candles
+    // -----------------------------------------------------------------------
 
     @Test
     void parsesCandleArrayResponse() {
@@ -132,7 +142,7 @@ class FyersServiceClientTest {
         client.fetchCandle("RELIANCE", LocalDate.of(2024, 1, 15));
 
         var recordedRequest = mockWebServer.takeRequest();
-        assertThat(recordedRequest.getHeader("Authorization")).isEqualTo("token test-fyers-token");
+        assertThat(recordedRequest.getHeader("Authorization")).isEqualTo("TESTAPP-100:test-fyers-token");
     }
 
     @Test
@@ -180,15 +190,205 @@ class FyersServiceClientTest {
     }
 
     @Test
-    void fetchInstrumentDetailsReturnsFallback() {
+    void fetchInstrumentDetailsUsesSymbolMasterWhenAvailable() {
+        when(mockSymbolMaster.findByTradingSymbol("RELIANCE"))
+            .thenReturn(Optional.of(symbolEntity("RELIANCE", "Reliance Industries", "INE002A01018")));
+
         InstrumentDetails details = client.fetchInstrumentDetails("RELIANCE");
 
         assertThat(details).isNotNull();
         assertThat(details.symbol()).isEqualTo("RELIANCE");
+        assertThat(details.name()).isEqualTo("Reliance Industries");
+        assertThat(details.isin()).isEqualTo("INE002A01018");
     }
 
     @Test
-    void fetchAllStockSymbolsReturnsEmpty() {
-        assertThat(client.fetchAllStockSymbols()).isEmpty();
+    void fetchInstrumentDetailsFallsBackWhenNotInSymbolMaster() {
+        when(mockSymbolMaster.findByTradingSymbol("UNKNOWN")).thenReturn(Optional.empty());
+
+        InstrumentDetails details = client.fetchInstrumentDetails("UNKNOWN");
+
+        assertThat(details).isNotNull();
+        assertThat(details.symbol()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void fetchAllStockSymbolsDelegatesToSymbolMaster() {
+        when(mockSymbolMaster.allTradingSymbols()).thenReturn(List.of("RELIANCE", "TCS"));
+
+        assertThat(client.fetchAllStockSymbols()).containsExactly("RELIANCE", "TCS");
+    }
+
+    @Test
+    void searchSymbolsDelegatesToSymbolMaster() {
+        when(mockSymbolMaster.search("TCS", 20))
+            .thenReturn(List.of(symbolEntity("TCS", "Tata Consultancy Services", "INE467B01029")));
+
+        List<SearchResult> results = client.searchSymbols("TCS");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).symbol()).isEqualTo("TCS");
+    }
+
+    // -----------------------------------------------------------------------
+    // 401 / auth-error retry behavior
+    // -----------------------------------------------------------------------
+
+    @Test
+    void refreshesTokenOnceThenSucceedsAfter401() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(401));
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("{\"s\":\"success\",\"candles\":[[1705272600,100.0,110.0,90.0,105.0,1000]]}")
+            .addHeader("Content-Type", "application/json")
+        );
+
+        when(mockAuthService.getAccessToken())
+            .thenReturn("expired-token")
+            .thenReturn("refreshed-token");
+
+        List<CandleData> candles = client.fetchCandlesList("RELIANCE",
+            LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 15));
+
+        assertThat(candles).hasSize(1);
+        verify(mockAuthService).refreshToken();
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
+    }
+
+    @Test
+    void doesNotRetryInfinitelyOnRepeated401() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(401));
+        mockWebServer.enqueue(new MockResponse().setResponseCode(401));
+
+        List<CandleData> candles = client.fetchCandlesList("RELIANCE",
+            LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 15));
+
+        assertThat(candles).isEmpty();
+        verify(mockAuthService).refreshToken();
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
+    }
+
+    @Test
+    void refreshesOnBodyErrorCodeEvenWithHttp200() {
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("{\"s\":\"error\",\"code\":-16,\"message\":\"Could not authenticate the user\"}")
+            .addHeader("Content-Type", "application/json")
+        );
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("{\"s\":\"success\",\"candles\":[[1705272600,100.0,110.0,90.0,105.0,1000]]}")
+            .addHeader("Content-Type", "application/json")
+        );
+
+        List<CandleData> candles = client.fetchCandlesList("RELIANCE",
+            LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 15));
+
+        assertThat(candles).hasSize(1);
+        verify(mockAuthService).refreshToken();
+    }
+
+    // -----------------------------------------------------------------------
+    // Chunking
+    // -----------------------------------------------------------------------
+
+    @Test
+    void chunksRangesLongerThanOneYearIntoMultipleRequests() {
+        for (int i = 0; i < 3; i++) {
+            mockWebServer.enqueue(new MockResponse()
+                .setBody("{\"s\":\"success\",\"candles\":[]}")
+                .addHeader("Content-Type", "application/json"));
+        }
+
+        // ~800 days -> 365 + 365 + 70 -> 3 chunked requests
+        client.fetchCandlesList("RELIANCE", LocalDate.of(2022, 1, 1), LocalDate.of(2024, 3, 10));
+
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(3);
+    }
+
+    // -----------------------------------------------------------------------
+    // Quotes
+    // -----------------------------------------------------------------------
+
+    @Test
+    void fetchQuoteUsesCorrectPathAndParsesNumericFields() throws InterruptedException {
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("""
+                {
+                  "s": "success",
+                  "d": [
+                    {
+                      "n": "NSE:RELIANCE-EQ",
+                      "s": "ok",
+                      "v": {
+                        "ch": 12.30, "chp": 0.94, "lp": 1316.50,
+                        "high_price": 1325.00, "low_price": 1300.00,
+                        "prev_close_price": 1304.20, "volume": 5432100,
+                        "short_name": "RELIANCE", "symbol": "RELIANCE-EQ"
+                      }
+                    }
+                  ]
+                }
+                """)
+            .addHeader("Content-Type", "application/json")
+        );
+
+        QuoteData quote = client.fetchQuote("RELIANCE");
+
+        assertThat(quote).isNotNull();
+        assertThat(quote.symbol()).isEqualTo("RELIANCE");
+        assertThat(quote.regularMarketPrice()).isEqualByComparingTo(new BigDecimal("1316.50"));
+        assertThat(quote.regularMarketChange()).isEqualByComparingTo(new BigDecimal("12.30"));
+        assertThat(quote.regularMarketVolume()).isEqualTo(5432100L);
+
+        var request = mockWebServer.takeRequest();
+        assertThat(request.getPath()).contains("/data/quotes");
+        assertThat(request.getPath()).contains("symbols=NSE:RELIANCE-EQ");
+    }
+
+    @Test
+    void fetchQuotesBatchMapsOrderAndStripsSymbolFormat() {
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("""
+                {
+                  "s": "success",
+                  "d": [
+                    { "n": "NSE:RELIANCE-EQ", "v": { "lp": 1300.0, "symbol": "RELIANCE-EQ", "short_name": "RELIANCE" } },
+                    { "n": "NSE:TCS-EQ", "v": { "lp": 3500.0, "symbol": "TCS-EQ", "short_name": "TCS" } },
+                    { "n": "NSE:INFY-EQ", "v": { "lp": 1450.0, "symbol": "INFY-EQ", "short_name": "INFY" } }
+                  ]
+                }
+                """)
+            .addHeader("Content-Type", "application/json")
+        );
+
+        List<QuoteData> quotes = client.fetchQuotes(List.of("RELIANCE", "TCS", "INFY"));
+
+        assertThat(quotes).hasSize(3);
+        assertThat(quotes.get(0).symbol()).isEqualTo("RELIANCE");
+        assertThat(quotes.get(1).symbol()).isEqualTo("TCS");
+        assertThat(quotes.get(2).symbol()).isEqualTo("INFY");
+    }
+
+    @Test
+    void fetchQuotesReturnsEmptyOnErrorBody() {
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("{\"s\":\"error\"}")
+            .addHeader("Content-Type", "application/json")
+        );
+
+        List<QuoteData> quotes = client.fetchQuotes(List.of("RELIANCE"));
+
+        assertThat(quotes).isEmpty();
+    }
+
+    private static com.swingtrade.data.entity.FyersSymbolEntity symbolEntity(
+            String tradingSymbol, String name, String isin) {
+        com.swingtrade.data.entity.FyersSymbolEntity e = new com.swingtrade.data.entity.FyersSymbolEntity();
+        e.setFyToken("1");
+        e.setFyersSymbol("NSE:" + tradingSymbol + "-EQ");
+        e.setTradingSymbol(tradingSymbol);
+        e.setName(name);
+        e.setLotSize(1);
+        e.setTickSize(new BigDecimal("0.05"));
+        e.setIsin(isin);
+        return e;
     }
 }

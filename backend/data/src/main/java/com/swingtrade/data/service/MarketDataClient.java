@@ -1,6 +1,7 @@
 package com.swingtrade.data.service;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Interface for market data clients.
@@ -50,6 +51,33 @@ public interface MarketDataClient {
      * @return chart metadata or null if not found
      */
     ChartMeta fetchChartMeta(String symbol);
+
+    /**
+     * Fetches real-time quote data for a stock.
+     * Implementation-dependent: Yahoo Finance uses chart meta field (v7/quote endpoint is dead).
+     * Fyers implementation uses GetStockQuotes SDK call.
+     *
+     * @param symbol the stock symbol
+     * @return quote data or null if not found
+     */
+    QuoteData fetchQuote(String symbol);
+
+    /**
+     * Fetches real-time quote data for multiple stocks in a single request.
+     *
+     * @param symbols list of stock symbols
+     * @return list of quote data (may contain nulls for failed symbols)
+     */
+    List<QuoteData> fetchQuotes(List<String> symbols);
+
+    /**
+     * Searches for stock symbols by name or ticker.
+     * Uses the v1/finance/search endpoint.
+     *
+     * @param query search term (company name or symbol)
+     * @return list of matching symbols
+     */
+    List<SearchResult> searchSymbols(String query);
 
     /**
      * Fetches a list of all available stocks.

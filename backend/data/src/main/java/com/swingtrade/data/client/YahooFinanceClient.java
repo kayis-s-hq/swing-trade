@@ -6,6 +6,8 @@ import com.swingtrade.data.service.CandleData;
 import com.swingtrade.data.service.ChartMeta;
 import com.swingtrade.data.service.InstrumentDetails;
 import com.swingtrade.data.service.MarketDataClient;
+import com.swingtrade.data.service.QuoteData;
+import com.swingtrade.data.service.SearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -20,6 +22,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -35,17 +38,27 @@ public class YahooFinanceClient implements MarketDataClient {
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final java.time.Clock clock;
+
+    // Rate limiter: minimum 1s between requests to avoid Yahoo blocking
+    private volatile long lastRequestTime = 0;
+    private static final long RATE_LIMIT_MS = 1000;
 
     // Yahoo Finance API endpoints
     public YahooFinanceClient() {
-        this.objectMapper = new ObjectMapper();
+        this(new ObjectMapper(), java.time.Clock.systemUTC());
+    }
+
+    public YahooFinanceClient(ObjectMapper objectMapper, java.time.Clock clock) {
+        this.objectMapper = objectMapper;
+        this.clock = clock;
 
         HttpClient httpClient = HttpClient.create()
                 .option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000);
 
         this.webClient = WebClient.builder()
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
-                .baseUrl("https://query2.finance.yahoo.com")
+                .baseUrl("https://query1.finance.yahoo.com")
                 .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build();
     }
@@ -53,9 +66,32 @@ public class YahooFinanceClient implements MarketDataClient {
     // Package-private constructor for testing with MockWebServer
     YahooFinanceClient(String baseUrl) {
         this.objectMapper = new ObjectMapper();
+        this.clock = java.time.Clock.systemUTC();
+
+        // Strip scheme and trailing slash for WebClient baseUrl
+        String cleanUrl = baseUrl.replaceAll("^https?://", "").replaceAll("/$", "");
 
         this.webClient = WebClient.builder()
-                .baseUrl(baseUrl)
+                .baseUrl(cleanUrl)
+                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build();
+    }
+
+    // Package-private constructor for testing with MockWebServer
+    // Uses daemon-thread event loops so MockWebServer tests don't hang on exit
+    YahooFinanceClient(String baseUrl, reactor.netty.resources.LoopResources loop) {
+        this(baseUrl, ObjectMapper::new, java.time.Clock.systemUTC(), loop);
+    }
+
+    // Full package-private constructor for testing with custom clock
+    YahooFinanceClient(String baseUrl, java.util.function.Supplier<ObjectMapper> mapperSupplier,
+                       java.time.Clock clock, reactor.netty.resources.LoopResources loop) {
+        this.objectMapper = mapperSupplier.get();
+        this.clock = clock;
+
+        this.webClient = WebClient.builder()
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
+                        HttpClient.create().baseUrl(baseUrl).runOn(loop)))
                 .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build();
     }
@@ -373,6 +409,196 @@ public class YahooFinanceClient implements MarketDataClient {
             return meta != null && meta.symbol() != null;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /**
+     * Enforces rate limiting between requests to avoid Yahoo blocking.
+     * Sleeps if the last request was less than RATE_LIMIT_MS ago.
+     */
+    private void enforceRateLimit() {
+        long now = clock.millis();
+        long elapsed = now - lastRequestTime;
+        if (elapsed < RATE_LIMIT_MS && lastRequestTime > 0) {
+            try {
+                Thread.sleep(RATE_LIMIT_MS - elapsed);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        lastRequestTime = clock.millis();
+    }
+
+    /**
+     * Fetches real-time quote data for a single stock.
+     * Uses the v7/finance/quote endpoint.
+     *
+     * @param symbol the stock symbol
+     * @return quote data or null if not found
+     */
+    @Override
+    public QuoteData fetchQuote(String symbol) {
+        List<String> symbols = List.of(symbol);
+        List<QuoteData> quotes = fetchQuotes(symbols);
+        return quotes.isEmpty() ? null : quotes.get(0);
+    }
+
+    /**
+     * Fetches real-time quote data for multiple stocks in a single request.
+     *
+     * @param symbols list of stock symbols
+     * @return list of quote data (may contain nulls for failed symbols)
+     */
+    @Override
+    public List<QuoteData> fetchQuotes(List<String> symbols) {
+        if (symbols == null || symbols.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        try {
+            // Format symbols for Yahoo (add .NS suffix if needed)
+            String yahooSymbols = symbols.stream()
+                    .map(this::formatSymbolForYahoo)
+                    .collect(java.util.stream.Collectors.joining(","));
+
+            enforceRateLimit();
+
+            String uri = String.format("/v7/finance/quote?symbols=%s", yahooSymbols);
+
+            String response = webClient.get()
+                    .uri(URI.create(uri))
+                    .retrieve()
+                    .onStatus(status -> status.value() >= 400, r -> Mono.empty())
+                    .bodyToMono(String.class)
+                    .block();
+
+            if (response == null || response.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode result = root.path("finance").path("result");
+
+            if (!result.isArray()) {
+                return Collections.emptyList();
+            }
+
+            List<QuoteData> quotes = new ArrayList<>();
+            for (JsonNode item : result) {
+                QuoteData quote = parseQuote(item);
+                quotes.add(quote);
+            }
+
+            logger.info("Fetched {} quotes for symbols: {}", quotes.size(), yahooSymbols);
+            return quotes;
+
+        } catch (Exception e) {
+            logger.error("Error fetching quotes for {}: {}", symbols, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Parses a single quote JSON node into a QuoteData record.
+     */
+    private QuoteData parseQuote(JsonNode node) {
+        String symbol = node.path("symbol").asText(null);
+        if (symbol == null) return null;
+
+        // Skip delisted symbols
+        if ("NONE".equals(node.path("quoteType").asText(null))) {
+            return null;
+        }
+
+        return QuoteData.of(
+            symbol,
+            node.path("shortName").asText(null),
+            node.path("longName").asText(null),
+            parseBigDecimalOrNull(node.path("regularMarketPrice")),
+            parseBigDecimalOrNull(node.path("regularMarketChange")),
+            parseBigDecimalOrNull(node.path("regularMarketChangePercent")),
+            parseBigDecimalOrNull(node.path("regularMarketDayHigh")),
+            parseBigDecimalOrNull(node.path("regularMarketDayLow")),
+            parseBigDecimalOrNull(node.path("regularMarketPreviousClose")),
+            parseBigDecimalOrNull(node.path("fiftyTwoWeekHigh")),
+            parseBigDecimalOrNull(node.path("fiftyTwoWeekLow")),
+            node.has("regularMarketVolume") && !node.path("regularMarketVolume").isNull()
+                ? node.path("regularMarketVolume").asLong(0) : null,
+            node.path("currency").asText(null),
+            node.path("marketState").asText(null),
+            parseBigDecimalOrNull(node.path("fiftyDayAverage")),
+            parseBigDecimalOrNull(node.path("twoHundredDayAverage"))
+        );
+    }
+
+    /**
+     * Searches for stock symbols by name or ticker.
+     * Uses the v1/finance/search endpoint.
+     *
+     * @param query search term
+     * @return list of matching search results
+     */
+    @Override
+    public List<SearchResult> searchSymbols(String query) {
+        if (query == null || query.isBlank()) {
+            return Collections.emptyList();
+        }
+
+        try {
+            enforceRateLimit();
+
+            String uri = String.format("/v1/finance/search?q=%s&quotesCount=6&enableFuzzyQuery=true",
+                    query.trim());
+
+            String response = webClient.get()
+                    .uri(URI.create(uri))
+                    .retrieve()
+                    .onStatus(status -> status.value() >= 400, r -> Mono.empty())
+                    .bodyToMono(String.class)
+                    .block();
+
+            if (response == null || response.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode quotes = root.path("quotes");
+
+            if (!quotes.isArray()) {
+                return Collections.emptyList();
+            }
+
+            List<SearchResult> results = new ArrayList<>();
+            for (JsonNode quote : quotes) {
+                // Only include valid Yahoo Finance results
+                if (!quote.path("isYahooFinance").asBoolean(false)) {
+                    continue;
+                }
+
+                String exchange = quote.path("exchange").asText(null);
+                // Skip non-equity types
+                String quoteType = quote.path("quoteType").asText(null);
+                if (!"EQUITY".equals(quoteType)) {
+                    continue;
+                }
+
+                SearchResult result = SearchResult.of(
+                    quote.path("symbol").asText(null),
+                    quote.path("shortname").asText(null),
+                    quote.path("longname").asText(null),
+                    quoteType,
+                    exchange,
+                    quote.path("exchangeName").asText(null)
+                );
+                results.add(result);
+            }
+
+            logger.info("Search for '{}' returned {} results", query, results.size());
+            return results;
+
+        } catch (Exception e) {
+            logger.error("Error searching symbols for '{}': {}", query, e.getMessage());
+            return Collections.emptyList();
         }
     }
 

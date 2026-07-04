@@ -136,6 +136,21 @@ public class UpstoxServiceClient implements MarketDataClient {
     }
 
     @Override
+    public QuoteData fetchQuote(String symbol) {
+        return null;
+    }
+
+    @Override
+    public java.util.List<QuoteData> fetchQuotes(java.util.List<String> symbols) {
+        return java.util.Collections.emptyList();
+    }
+
+    @Override
+    public java.util.List<SearchResult> searchSymbols(String query) {
+        return java.util.Collections.emptyList();
+    }
+
+    @Override
     public boolean isConnected() {
         return authService.validateToken();
     }
