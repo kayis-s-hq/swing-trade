@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swingtrade.data.config.FyersConfig;
+import com.tts.in.utilities.Utility;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,8 +14,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -25,7 +24,9 @@ import java.util.concurrent.atomic.AtomicReference;
 public class FyersAuthService {
     private static final Logger logger = LoggerFactory.getLogger(FyersAuthService.class);
     private static final String BASE_URL = "https://api-t1.fyers.in";
-    private static final String TOKEN_PATH = "/api/v3/token";
+    private static final String VALIDATE_AUTHCODE_PATH = "/api/v3/validate-authcode";
+    private static final String VALIDATE_REFRESH_PATH = "/api/v3/validate-refresh-token";
+    private static final String LOGOUT_PATH = "/api/v3/logout";
 
     private final FyersConfig fyersConfig;
     private final WebClient webClient;
@@ -62,23 +63,11 @@ public class FyersAuthService {
     }
 
     /**
-     * Computes appIdHash = SHA-256(client_id:secret_key) as hex string.
+     * Computes appIdHash = SHA-256("{appId}:{appSecret}") as hex string.
+     * Uses SDK's Utility.GenerateAppHashID for correctness.
      */
     private String computeAppIdHash() {
-        String input = fyersConfig.getClientId() + ":" + fyersConfig.getSecretKey();
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(digest);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to compute appIdHash", e);
-        }
-    }
-
-    private String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) sb.append(String.format("%02x", b));
-        return sb.toString();
+        return Utility.GenerateAppHashID(fyersConfig.getClientId(), fyersConfig.getSecretKey());
     }
 
     /**
@@ -116,7 +105,7 @@ public class FyersAuthService {
                 "appIdHash", computeAppIdHash()
             ));
 
-            String response = postTokenRequest(body);
+            String response = postTokenRequest(VALIDATE_AUTHCODE_PATH, body);
             updateTokensFromResponse(response);
             logger.info("Successfully exchanged auth code for tokens.");
         } catch (Exception e) {
@@ -141,7 +130,7 @@ public class FyersAuthService {
                 "appIdHash", computeAppIdHash()
             ));
 
-            String response = postTokenRequest(body);
+            String response = postTokenRequest(VALIDATE_REFRESH_PATH, body);
             updateTokensFromResponse(response);
             logger.info("Successfully refreshed access token.");
         } catch (WebClientResponseException e) {
@@ -156,15 +145,37 @@ public class FyersAuthService {
         }
     }
 
-    private String postTokenRequest(String body) {
+    private String postTokenRequest(String path, String body) {
         return webClient.post()
-            .uri(TOKEN_PATH)
+            .uri(path)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .bodyValue(body)
             .retrieve()
             .bodyToMono(String.class)
             .block();
+    }
+
+    /**
+     * Logout — invalidates the current access token.
+     */
+    public void logout() {
+        String token = accessTokenRef.get();
+        if (token == null) return;
+        try {
+            String appId = fyersConfig.getClientId();
+            webClient.delete()
+                .uri(LOGOUT_PATH)
+                .header("Authorization", appId + ":" + token)
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+            accessTokenRef.set(null);
+            refreshTokenRef.set(null);
+            logger.info("Fyers logout successful. Tokens cleared.");
+        } catch (Exception e) {
+            logger.error("Fyers logout failed: {}", e.getMessage());
+        }
     }
 
     private void updateTokensFromResponse(String response) throws Exception {
