@@ -11,6 +11,7 @@ public class FyersConfig {
     private String accessToken;
     private String refreshToken;
     private String redirectUrl;
+    private String pin;
     private String tokenStorePath = "data/fyers-tokens.json";
     private String frontendUrl = "http://localhost:3003";
 
@@ -28,6 +29,9 @@ public class FyersConfig {
 
     public String getRedirectUrl() { return redirectUrl; }
     public void setRedirectUrl(String redirectUrl) { this.redirectUrl = redirectUrl; }
+
+    public String getPin() { return pin; }
+    public void setPin(String pin) { this.pin = pin; }
 
     public String getTokenStorePath() { return tokenStorePath; }
     public void setTokenStorePath(String tokenStorePath) { this.tokenStorePath = tokenStorePath; }

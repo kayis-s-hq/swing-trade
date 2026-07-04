@@ -123,11 +123,18 @@ public class FyersAuthService {
             return;
         }
 
+        String pin = fyersConfig.getPin();
+        if (pin == null || pin.isBlank()) {
+            logger.error("fyers.pin required for token refresh — set FYERS_PIN. Skipping refresh request.");
+            return;
+        }
+
         try {
             String body = objectMapper.writeValueAsString(Map.of(
                 "grant_type", "refresh_token",
                 "refresh_token", refreshToken,
-                "appIdHash", computeAppIdHash()
+                "appIdHash", computeAppIdHash(),
+                "pin", pin
             ));
 
             String response = postTokenRequest(VALIDATE_REFRESH_PATH, body);

@@ -124,6 +124,7 @@ class FyersAuthServiceTest {
     void refreshesTokenWhenExpired() {
         // First set a refresh token
         config.setRefreshToken("valid-refresh-token");
+        config.setPin("1234");
 
         mockWebServer.enqueue(new MockResponse()
             .setBody("{\"s\":\"success\",\"access_token\":\"refreshed-access\",\"refresh_token\":\"new-refresh\"}")
@@ -135,6 +136,39 @@ class FyersAuthServiceTest {
         service.refreshToken();
 
         assertThat(service.getAccessToken()).isEqualTo("refreshed-access");
+    }
+
+    @Test
+    void refreshRequestBodyContainsPin() throws InterruptedException {
+        config.setRefreshToken("valid-refresh-token");
+        config.setPin("1234");
+
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("{\"s\":\"success\",\"access_token\":\"refreshed-access\",\"refresh_token\":\"new-refresh\"}")
+            .addHeader("Content-Type", "application/json")
+        );
+
+        FyersAuthService service = createService();
+        service.init();
+        service.refreshToken();
+
+        var request = mockWebServer.takeRequest();
+        String body = request.getBody().readUtf8();
+        assertThat(body).contains("\"pin\":\"1234\"");
+    }
+
+    @Test
+    void refreshSkippedWithWarningWhenPinMissing() {
+        config.setRefreshToken("valid-refresh-token");
+        config.setPin(null);
+
+        FyersAuthService service = createService();
+        service.init();
+        service.refreshToken();
+
+        // No request should have been made — access token stays null
+        assertThat(mockWebServer.getRequestCount()).isZero();
+        assertThat(service.getAccessToken()).isNull();
     }
 
     @Test
