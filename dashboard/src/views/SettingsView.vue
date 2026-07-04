@@ -210,6 +210,25 @@ const refreshFyersStatus = async () => {
   if (res.success && res.data) fyersStatus.value = res.data
 }
 
+const pollFyersStatus = () => {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  pollTimer = window.setInterval(async () => {
+    try {
+      const res = await getFyersStatus()
+      if (res.success && res.data && res.data.connected) {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+        authResultBanner.value = 'success'
+        showAuthCodeInput.value = false
+        fyersStatus.value = res.data
+        // Try to close the popup
+        // (may not work due to CORS, but the user can close it manually)
+      }
+    } catch {
+      // ignore polling errors
+    }
+  }, 2000) as unknown as number
+}
+
 const refreshHealth = async () => {
   const { getHealthStatus } = await import('../api/client')
   const res = await getHealthStatus()
@@ -221,7 +240,20 @@ const startFyersAuth = async () => {
   try {
     const res = await getFyersLoginUrl()
     if (!res.success || !res.data) throw new Error(res.error ?? 'Failed to get login URL')
-    window.location.href = res.data.url
+
+    const popup = window.open(res.data.url, 'fyers-auth', 'width=600,height=700,left=' + Math.round(window.screen.width / 2 - 300) + ',top=' + Math.round(window.screen.height / 2 - 350))
+    if (!popup) {
+      authResultBanner.value = 'error'
+      authing.value = false
+      throw new Error('Popup blocked. Please allow popups for this site.')
+    }
+
+    // Fallback: poll for status in case postMessage is blocked by CORS
+    pollFyersStatus()
+
+    popup.addEventListener('load', () => {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+    })
   } catch (err: unknown) {
     authResultBanner.value = 'error'
   } finally {

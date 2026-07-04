@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,10 +14,11 @@ import java.util.Map;
 
 /**
  * Controller for Fyers authentication flow.
+ * Available in all profiles — the UI controls the active broker at runtime,
+ * so the auth endpoints must be reachable regardless of which profile started the app.
  */
 @RestController
 @RequestMapping("/api/fyers")
-@Profile("fyers")
 public class FyersAuthController {
 
     private static final Logger logger = LoggerFactory.getLogger(FyersAuthController.class);

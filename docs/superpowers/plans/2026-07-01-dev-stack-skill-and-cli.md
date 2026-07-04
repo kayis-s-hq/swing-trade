@@ -315,13 +315,13 @@ except: print('no')
     c_bold "Starting Vue dev server..."
     cd "$PROJECT_ROOT/dashboard"
     npm run dev &
-    c_green "Dashboard running at http://localhost:5173"
+    c_green "Dashboard running at http://localhost:3003"
   fi
 
   echo ""
   c_green "Dev stack started. Profile: $profile"
   echo "  API: $API_URL"
-  echo "  Dashboard: http://localhost:5173 (if --dashboard)"
+  echo "  Dashboard: http://localhost:3003 (if --dashboard)"
   echo "  Logs: swingdev logs --follow"
 }
 
