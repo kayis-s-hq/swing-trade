@@ -55,7 +55,8 @@ class YahooFinanceClientTest {
     }
 
     private String multiCandleResponseWithAdj(List<Object[]> rows, boolean includeAdj) {
-        StringBuilder sb = new StringBuilder("{\"chart\":{\"result\":[{\"indicators\":{\"quote\":[{");
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\"chart\":{\"result\":[{\"indicators\":{\"quote\":[{");
         sb.append("\"open\":[");
         for (int i = 0; i < rows.size(); i++) {
             if (i > 0) sb.append(",");
@@ -81,23 +82,21 @@ class YahooFinanceClientTest {
             if (i > 0) sb.append(",");
             sb.append(rows.get(i)[5]);
         }
+        sb.append("]}]}");
         if (includeAdj) {
-            sb.append("],\"adjclose\":[{");
-            sb.append("\"adjclose\":[");
+            sb.append(",\"adjclose\":[{\"adjclose\":[");
             for (int i = 0; i < rows.size(); i++) {
                 if (i > 0) sb.append(",");
                 sb.append(rows.get(i)[6]);
             }
-            sb.append("]}]}]}");
-        } else {
-            sb.append("]}]}]");
+            sb.append("]}]}");
         }
-        sb.append("\"timestamp\":[");
+        sb.append(",\"timestamp\":[");
         for (int i = 0; i < rows.size(); i++) {
             if (i > 0) sb.append(",");
             sb.append(rows.get(i)[0]);
         }
-        sb.append("],\"error\":null}}");
+        sb.append("}]}],\"error\":null}}");
         return sb.toString();
     }
 

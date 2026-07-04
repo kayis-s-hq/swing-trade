@@ -68,11 +68,9 @@ public class YahooFinanceClient implements MarketDataClient {
         this.objectMapper = new ObjectMapper();
         this.clock = java.time.Clock.systemUTC();
 
-        // Strip scheme and trailing slash for WebClient baseUrl
-        String cleanUrl = baseUrl.replaceAll("^https?://", "").replaceAll("/$", "");
-
         this.webClient = WebClient.builder()
-                .baseUrl(cleanUrl)
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
+                        HttpClient.create().baseUrl(baseUrl)))
                 .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build();
     }
