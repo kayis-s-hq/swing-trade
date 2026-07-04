@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
@@ -16,7 +15,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-@Profile("fyers")
 public class FyersServiceClient implements MarketDataClient {
 
     private static final Logger logger = LoggerFactory.getLogger(FyersServiceClient.class);
@@ -155,6 +153,21 @@ public class FyersServiceClient implements MarketDataClient {
     @Override
     public Iterable<String> fetchAllStockSymbols() {
         return Collections.emptyList();
+    }
+
+    @Override
+    public QuoteData fetchQuote(String symbol) {
+        return null;
+    }
+
+    @Override
+    public java.util.List<QuoteData> fetchQuotes(java.util.List<String> symbols) {
+        return java.util.Collections.emptyList();
+    }
+
+    @Override
+    public java.util.List<SearchResult> searchSymbols(String query) {
+        return java.util.Collections.emptyList();
     }
 
     @Override

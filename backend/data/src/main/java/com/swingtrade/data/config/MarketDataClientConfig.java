@@ -32,7 +32,6 @@ public class MarketDataClientConfig {
     }
 
     @Bean
-    @Profile("fyers")
     public MarketDataClient fyersServiceClient(
             WebClient.Builder webClientBuilder,
             FyersAuthService authService) {
