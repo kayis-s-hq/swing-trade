@@ -61,35 +61,62 @@ do_deploy() {
         exit 1
     fi
 
-    log "Deploying $env_label to $PI_NODE_HOST..."
-
-    # Create remote directory
-    ssh "$PI_USER@$PI_NODE_HOST" "mkdir -p $REMOTE_APP_DIR/$env_label"
-
-    # Copy JAR
-    local jar_path="api/target/api-1.0.0.jar"
-    scp "$jar_path" "$PI_USER@$PI_NODE_HOST:$REMOTE_APP_DIR/$env_label/$JAR_NAME"
-    log "Copied JAR to $PI_NODE_HOST:$REMOTE_APP_DIR/$env_label/$JAR_NAME"
-
-    # Copy env file if exists
-    if [ -f "$BACKEND_DIR/.env" ]; then
-        scp "$BACKEND_DIR/.env" "$PI_USER@$PI_NODE_HOST:$REMOTE_APP_DIR/$env_label/.env"
-        log "Copied .env"
+    # Detect if running on the target machine (GitHub Actions runner on pi-node)
+    CURRENT_HOST=$(hostname 2>/dev/null || echo "")
+    IS_LOCAL=false
+    if echo "$CURRENT_HOST" | grep -qi "piworm"; then
+        IS_LOCAL=true
     fi
 
-    # Deploy remote service via SSH
-    ssh "$PI_USER@$PI_NODE_HOST" <<'REMOTE_EOF'
+    local jar_path="api/target/api-1.0.0.jar"
+    local APP_DIR="$REMOTE_APP_DIR/$env_label"
+
+    if [ "$IS_LOCAL" = true ]; then
+        log "Deploying $env_label locally (on $CURRENT_HOST)..."
+
+        # Create local directory
+        mkdir -p "$APP_DIR"
+
+        # Copy JAR locally
+        cp "$jar_path" "$APP_DIR/$JAR_NAME"
+        log "Copied JAR to $APP_DIR/$JAR_NAME"
+
+        # Copy env file if exists
+        if [ -f "$BACKEND_DIR/.env" ]; then
+            cp "$BACKEND_DIR/.env" "$APP_DIR/.env"
+            log "Copied .env"
+        fi
+
+        # Deploy via systemd
+        deploy_systemd "$env_label" "$APP_DIR"
+    else
+        log "Deploying $env_label to $PI_NODE_HOST..."
+
+        # Create remote directory
+        ssh "$PI_USER@$PI_NODE_HOST" "mkdir -p $REMOTE_APP_DIR/$env_label"
+
+        # Copy JAR
+        scp "$jar_path" "$PI_USER@$PI_NODE_HOST:$REMOTE_APP_DIR/$env_label/$JAR_NAME"
+        log "Copied JAR to $PI_NODE_HOST:$REMOTE_APP_DIR/$env_label/$JAR_NAME"
+
+        # Copy env file if exists
+        if [ -f "$BACKEND_DIR/.env" ]; then
+            scp "$BACKEND_DIR/.env" "$PI_USER@$PI_NODE_HOST:$REMOTE_APP_DIR/$env_label/.env"
+            log "Copied .env"
+        fi
+
+        # Deploy remote service via SSH
+        ssh "$PI_USER@$PI_NODE_HOST" <<'REMOTE_EOF'
 set -e
 ENV_LABEL="$1"
-APP_DIR="$REMOTE_APP_DIR/$ENV_LABEL"
+APP_DIR="$2"
 JAR="$APP_DIR/$JAR_NAME"
 PROFILE_NAME="$ENV_LABEL"
+PORT=$([ "$ENV_LABEL" = "stage" ] && echo 8081 || echo 8080)
 
-# Stop existing service
 systemctl --user stop "swing-trade-$ENV_LABEL" 2>/dev/null || true
 systemctl --user disable "swing-trade-$ENV_LABEL" 2>/dev/null || true
 
-# Create systemd service file
 cat > "$HOME/.config/systemd/user/swing-trade-$ENV_LABEL.service" <<EOF
 [Unit]
 Description=Swing Trade API ($ENV_LABEL)
@@ -100,11 +127,7 @@ Wants=network-online.target
 Type=simple
 User=$USER
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/java \
-  -jar $JAR \
-  -Dspring.profiles.active=$PROFILE_NAME \
-  -Dserver.port=$([ "$ENV_LABEL" = "stage" ] && echo 8081 || echo 8080) \
-  -Dlogging.file.name=/var/log/swing-trade/$ENV_LABEL.log
+ExecStart=/usr/bin/java -jar $JAR -Dspring.profiles.active=$PROFILE_NAME -Dserver.port=$PORT -Dlogging.file.name=/var/log/swing-trade/$ENV_LABEL.log
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -117,10 +140,10 @@ EOF
 systemctl --user daemon-reload
 systemctl --user enable "swing-trade-$ENV_LABEL"
 systemctl --user start "swing-trade-$ENV_LABEL"
-
 echo "Service swing-trade-$ENV_LABEL started"
 systemctl --user status "swing-trade-$ENV_LABEL" --no-pager -l
 REMOTE_EOF
+    fi
 
     log "Waiting for health check..."
     sleep 15
@@ -135,6 +158,50 @@ REMOTE_EOF
     fi
 }
 
+deploy_systemd() {
+    local env_label="$1"
+    local app_dir="$2"
+    local jar="$app_dir/$JAR_NAME"
+    local profile_name="$env_label"
+    local port=$([ "$env_label" = "stage" ] && echo 8081 || echo 8080)
+
+    # Stop existing service
+    systemctl --user stop "swing-trade-$env_label" 2>/dev/null || true
+    systemctl --user disable "swing-trade-$env_label" 2>/dev/null || true
+
+    # Create systemd service file
+    cat > "$HOME/.config/systemd/user/swing-trade-$env_label.service" <<EOF
+[Unit]
+Description=Swing Trade API ($env_label)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=$app_dir
+ExecStart=/usr/bin/java \
+  -jar $jar \
+  -Dspring.profiles.active=$profile_name \
+  -Dserver.port=$port \
+  -Dlogging.file.name=/var/log/swing-trade/$env_label.log
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+EOF
+
+    systemctl --user daemon-reload
+    systemctl --user enable "swing-trade-$env_label"
+    systemctl --user start "swing-trade-$env_label"
+
+    echo "Service swing-trade-$env_label started"
+    systemctl --user status "swing-trade-$env_label" --no-pager -l
+}
+
 # ---------------------------------------------------------------------------
 # Redeploy (rebuild + deploy)
 # ---------------------------------------------------------------------------
@@ -145,9 +212,19 @@ do_redeploy() {
 # ---------------------------------------------------------------------------
 # Stop
 # ---------------------------------------------------------------------------
+is_local_host() {
+    local h
+    h=$(hostname 2>/dev/null || echo "")
+    echo "$h" | grep -qi "piworm"
+}
+
 do_stop() {
     log "Stopping $PROFILE..."
-    ssh "$PI_USER@$PI_NODE_HOST" "systemctl --user stop \"swing-trade-$PROFILE\"" 2>/dev/null || warn "Service not running"
+    if is_local_host; then
+        systemctl --user stop "swing-trade-$PROFILE" 2>/dev/null || warn "Service not running"
+    else
+        ssh "$PI_USER@$PI_NODE_HOST" "systemctl --user stop \"swing-trade-$PROFILE\"" 2>/dev/null || warn "Service not running"
+    fi
     log "Stopped $PROFILE"
 }
 
@@ -157,7 +234,11 @@ do_stop() {
 do_restart() {
     do_stop
     sleep 3
-    ssh "$PI_USER@$PI_NODE_HOST" "systemctl --user start \"swing-trade-$PROFILE\""
+    if is_local_host; then
+        systemctl --user start "swing-trade-$PROFILE"
+    else
+        ssh "$PI_USER@$PI_NODE_HOST" "systemctl --user start \"swing-trade-$PROFILE\""
+    fi
     log "Restarted $PROFILE"
 }
 
@@ -166,7 +247,11 @@ do_restart() {
 # ---------------------------------------------------------------------------
 do_logs() {
     local follow="${2:---no-follow}"
-    ssh "$PI_USER@$PI_NODE_HOST" "journalctl -u swing-trade-$PROFILE -f --no-pager"
+    if is_local_host; then
+        journalctl -u "swing-trade-$PROFILE" $follow --no-pager
+    else
+        ssh "$PI_USER@$PI_NODE_HOST" "journalctl -u swing-trade-$PROFILE $follow --no-pager"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -193,8 +278,12 @@ do_status() {
     done
     echo ""
 
-    echo "=== Remote Services ==="
-    ssh "$PI_USER@$PI_NODE_HOST" "systemctl --user list-units 'swing-trade-*' --no-pager" 2>/dev/null || warn "Cannot reach pi-node"
+    echo "=== Services ==="
+    if is_local_host; then
+        systemctl --user list-units 'swing-trade-*' --no-pager 2>/dev/null || warn "No swing-trade services found"
+    else
+        ssh "$PI_USER@$PI_NODE_HOST" "systemctl --user list-units 'swing-trade-*' --no-pager" 2>/dev/null || warn "Cannot reach pi-node"
+    fi
 }
 
 # ---------------------------------------------------------------------------

@@ -19,7 +19,6 @@ concurrency:
 
 env:
   JAVA_VERSION: 21
-  PI_USER: pi
 
 jobs:
   build-and-deploy:
@@ -39,50 +38,28 @@ jobs:
         working-directory: backend
         run: mvn clean package -Dpmd.skip=true -DskipTests -Dcheckstyle.skip=true -B
 
-      - name: Deploy to pi-node
+      - name: Verify JAR
+        working-directory: backend/api/target
+        run: ls -la api-1.0.0.jar
+
+      - name: Write .env for deployment
+        working-directory: backend
         run: |
-          PI_NODE="piworm.local"
-          REMOTE_DIR="/home/pi/swing-trade/dev"
-          JAR="backend/api/target/api-1.0.0.jar"
-
-          ssh "$PI_USER@$PI_NODE" "mkdir -p $REMOTE_DIR"
-          scp "$JAR" "$PI_USER@$PI_NODE:$REMOTE_DIR/swing-trade-api.jar"
-
-          ssh "$PI_USER@$PI_NODE" <<'EOF'
-          set -e
-          APP_DIR="/home/pi/swing-trade/dev"
-          JAR="$APP_DIR/swing-trade-api.jar"
-          PROFILES="${{ github.event.inputs.profile || 'local,fyers' }}"
-
-          systemctl --user stop swing-trade-dev 2>/dev/null || true
-
-          cat > "$HOME/.config/systemd/user/swing-trade-dev.service" <<SVCEOF
-          [Unit]
-          Description=Swing Trade API (Dev)
-          After=network-online.target
-          Wants=network-online.target
-
-          [Service]
-          Type=simple
-          User=pi
-          WorkingDirectory=$APP_DIR
-          ExecStart=/usr/bin/java -jar $JAR -Dspring.profiles.active=$PROFILES -Dlogging.file.name=/var/log/swing-trade/dev.log
-          Restart=on-failure
-          RestartSec=10
-          StandardOutput=journal
-          StandardError=journal
-
-          [Install]
-          WantedBy=default.target
-          SVCEOF
-
-          systemctl --user daemon-reload
-          systemctl --user enable swing-trade-dev
-          systemctl --user start swing-trade-dev
-
-          sleep 15
-          systemctl --user status swing-trade-dev --no-pager -l
+          cat > .env <<EOF
+          SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}
+          SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}
+          SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          SPRING_REDIS_HOST=${{ secrets.SPRING_REDIS_HOST }}
+          SPRING_REDIS_PORT=${{ secrets.SPRING_REDIS_PORT }}
+          SPRING_PROFILES_ACTIVE=local
+          SERVER_PORT=8080
           EOF
+
+      - name: Deploy to pi-node (local)
+        working-directory: backend
+        run: |
+          chmod +x deploy.sh
+          ./deploy.sh deploy dev
 
       - name: Health check
         run: |
