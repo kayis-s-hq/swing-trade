@@ -100,6 +100,7 @@ const navItems = [
   { path: '/signals', label: 'Signals', icon: iconPaths.signals, badge: '6' },
   { path: '/portfolio', label: 'Portfolio', icon: iconPaths.portfolio, badge: undefined },
   { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
+  { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
   { path: '/data', label: 'Data', icon: iconPaths.data, badge: undefined },
   { path: '/settings', label: 'Settings', icon: iconPaths.settings, badge: undefined },
 ]

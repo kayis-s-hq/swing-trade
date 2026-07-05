@@ -30,6 +30,11 @@ const router = createRouter({
       component: () => import('../views/WatchlistView.vue'),
     },
     {
+      path: '/backtest',
+      name: 'Backtest',
+      component: () => import('../views/BacktestView.vue'),
+    },
+    {
       path: '/data',
       name: 'Data Ingestion',
       component: () => import('../views/DataIngestionView.vue'),

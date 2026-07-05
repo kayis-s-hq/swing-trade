@@ -45,6 +45,8 @@ export interface Signal {
   riskReward: number
   timestamp: string
   status: 'PENDING' | 'ACTIVE' | 'EXECUTED' | 'EXPIRED'
+  strategy?: string
+  indicators?: string[]
 }
 
 export interface EquityPoint {
@@ -126,4 +128,48 @@ export interface PullProgress {
   failed: number
   currentSymbol: string
   percentComplete: number
+}
+
+// ---------------------------------------------------------------------------
+// Backtest
+// ---------------------------------------------------------------------------
+
+export interface BacktestTrade {
+  symbol: string
+  entryDate: string
+  exitDate: string
+  entryPrice: number
+  exitPrice: number
+  stopLoss: number
+  target: number
+  quantity: number
+  exitReason: string
+  pnl: number
+  pnlPct: number
+  holdingDays: number
+}
+
+export interface BacktestResult {
+  symbol: string
+  totalTrades: number
+  winningTrades: number
+  losingTrades: number
+  winRate: number
+  avgGainPct: number
+  avgLossPct: number
+  maxDrawdownPct: number
+  sharpeRatio: number
+  totalReturn: number
+  expectancy: number
+  trades: BacktestTrade[]
+}
+
+export interface BacktestReportSummary {
+  generatedAt: string
+  symbolsBacktested: number
+  top10ByWinRate: BacktestResult[]
+  top10ByTotalReturn: BacktestResult[]
+  overallWinRate: number
+  overallSharpeRatio: number
+  results: BacktestResult[]
 }

@@ -12,6 +12,8 @@ import type {
   WatchlistEntry,
   IngestionStatus,
   PullProgress,
+  BacktestResult,
+  BacktestReportSummary,
 } from './types'
 
 // ---------------------------------------------------------------------------
@@ -108,6 +110,7 @@ interface BackendSignal {
   riskRewardRatio: number | string
   indicators?: string[]
   generatedAt: string
+  strategy?: string
 }
 
 interface BackendPerformance {
@@ -180,6 +183,8 @@ const mapSignal = (s: BackendSignal): Signal => ({
   riskReward: toNum(s.riskRewardRatio),
   timestamp: s.generatedAt,
   status: 'ACTIVE',
+  strategy: s.strategy,
+  indicators: s.indicators,
 })
 
 // ---------------------------------------------------------------------------
@@ -290,6 +295,12 @@ export async function closePosition(symbol: string, exitReason?: string): Promis
   return { success: true, data: mapPosition(raw.data as BackendPosition) }
 }
 
+export async function generatePriceActionSignal(symbol: string): Promise<ApiResponse<Signal>> {
+  const raw = await rawFetch(`/signals/price-action/${symbol}/generate`, { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: mapSignal(raw.data as BackendSignal) }
+}
+
 export async function triggerScan(): Promise<ApiResponse<{ signalsFound: number; status: string }>> {
   const raw = await rawFetch('/signals/scan', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
@@ -334,6 +345,12 @@ export async function fyersAuthCode(authCode: string): Promise<ApiResponse<Fyers
 
 export async function getFyersStatus(): Promise<ApiResponse<FyersStatus>> {
   const raw = await rawFetch('/fyers/status')
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as unknown as FyersStatus }
+}
+
+export async function fyersLogout(): Promise<ApiResponse<FyersStatus>> {
+  const raw = await rawFetch('/fyers/logout', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as unknown as FyersStatus }
 }
@@ -446,4 +463,33 @@ export async function setBroker(broker: string): Promise<ApiResponse<{ selectedB
   })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: (raw.data as any).data as { selectedBroker: string } }
+}
+
+// ---------------------------------------------------------------------------
+// Backtest
+// ---------------------------------------------------------------------------
+
+export async function runBacktest(symbol: string, exchange: string = 'NSE'): Promise<ApiResponse<BacktestResult>> {
+  const params = new URLSearchParams({ symbol: symbol.toUpperCase().trim(), exchange })
+  const raw = await rawFetch(`/backtest/run?${params}`, { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as BacktestResult }
+}
+
+export async function runBacktestAll(exchange: string = 'NSE'): Promise<ApiResponse<BacktestReportSummary>> {
+  const raw = await rawFetch(`/backtest/run-all?exchange=${exchange}`, { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as BacktestReportSummary }
+}
+
+export async function listBacktestReports(): Promise<ApiResponse<string[]>> {
+  const raw = await rawFetch('/backtest/reports')
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as string[] }
+}
+
+export async function getBacktestReport(filename: string): Promise<ApiResponse<BacktestReportSummary>> {
+  const raw = await rawFetch(`/backtest/reports/${filename}`)
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as BacktestReportSummary }
 }
