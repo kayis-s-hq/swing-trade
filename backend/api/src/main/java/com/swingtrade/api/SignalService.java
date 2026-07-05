@@ -3,7 +3,12 @@ package com.swingtrade.api;
 import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.strategy.SignalEngine;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.swingtrade.api.dto.SignalQueryResult;
+import com.swingtrade.api.dto.SignalQueryResult.CombinedSignal;
+import com.swingtrade.api.dto.SignalQueryResult.SentimentAnalysis;
+import com.swingtrade.api.dto.SignalQueryResult.Signal;
+import com.swingtrade.api.dto.SignalQueryResult.SignalType;
+import com.swingtrade.api.dto.SignalQueryResult.TechnicalAnalysis;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -21,7 +26,6 @@ public class SignalService {
     private final SignalRepository signalRepository;
     private final SignalEngine signalEngine;
 
-    @Autowired
     public SignalService(SignalRepository signalRepository, SignalEngine signalEngine) {
         this.signalRepository = signalRepository;
         this.signalEngine = signalEngine;
@@ -233,27 +237,5 @@ public class SignalService {
             domainSignal.date(),
             domainSignal.reasoning()
         );
-    }
-
-    // DTO classes for API responses
-
-    public record Signal(String symbol, SignalType type, Double confidence, LocalDate date, String reasoning) {
-            public Signal(String symbol, String type, Double confidence, LocalDate date, String reasoning) {
-                this(symbol, SignalType.valueOf(type), confidence, date, reasoning);
-            }
-        }
-
-    public enum SignalType {
-        BUY, SELL, HOLD
-    }
-
-    public record TechnicalAnalysis(String symbol, LocalDate date, List<String> indicators, double strength) {
-    }
-
-    public record SentimentAnalysis(String symbol, LocalDate date, String score, String summary) {
-    }
-
-    public record CombinedSignal(String symbol, LocalDate date, Signal technicalSignal, SentimentAnalysis sentiment,
-                                 SignalType finalSignal) {
     }
 }

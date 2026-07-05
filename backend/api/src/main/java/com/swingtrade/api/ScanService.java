@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
@@ -26,7 +25,6 @@ public class ScanService {
     private final StockRepository stockRepository;
     private final SignalRepository signalRepository;
 
-    @Autowired
     public ScanService(SignalEngine signalEngine, StockRepository stockRepository, SignalRepository signalRepository) {
         this.signalEngine = signalEngine;
         this.stockRepository = stockRepository;

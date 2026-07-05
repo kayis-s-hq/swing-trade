@@ -1,6 +1,9 @@
 package com.swingtrade.api;
 
 import com.swingtrade.api.dto.PositionResponse;
+import com.swingtrade.api.dto.PositionStats;
+import com.swingtrade.api.dto.RiskSummary;
+import com.swingtrade.api.dto.SectorAllocation;
 import com.swingtrade.api.dto.TradeRequest;
 import com.swingtrade.api.dto.TradeResponse;
 import com.swingtrade.broker.engine.PaperTradingEngine;
@@ -13,7 +16,6 @@ import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -39,7 +41,6 @@ public class PositionService {
     private final OrderManager orderManager;
     private final PositionManager positionManager;
 
-    @Autowired
     public PositionService(PositionRepository positionRepository, PaperTradingEngine paperTradingEngine,
                            OrderManager orderManager, PositionManager positionManager) {
         this.positionRepository = positionRepository;
@@ -134,11 +135,11 @@ public class PositionService {
      * Get position statistics.
      * @return Position statistics
      */
-    public PositionService.PositionStats getPositionStats() {
+    public PositionStats getPositionStats() {
         List<PositionEntity> allPositions = positionRepository.findAll();
         List<PositionEntity> openPositions = positionRepository.findAllOpenPositions();
 
-        PositionService.PositionStats stats = new PositionService.PositionStats();
+        PositionStats stats = new PositionStats();
         stats.setTotalPositions(allPositions.size());
         stats.setOpenPositions(openPositions.size());
         stats.setClosedPositions(allPositions.size() - openPositions.size());
@@ -184,8 +185,8 @@ public class PositionService {
      * Get sector allocation.
      * @return Sector allocation data (currently empty - sector data not yet available)
      */
-    public PositionService.SectorAllocation getSectorAllocation() {
-        PositionService.SectorAllocation allocation = new PositionService.SectorAllocation();
+    public SectorAllocation getSectorAllocation() {
+        SectorAllocation allocation = new SectorAllocation();
         allocation.setNumberOfSectors(0);
         allocation.setTotalExposure(BigDecimal.ZERO);
         allocation.setAllocation(Collections.emptyMap());
@@ -289,9 +290,9 @@ public class PositionService {
      * Get risk summary for current positions.
      * @return Risk summary
      */
-    public PositionService.RiskSummary getRiskSummary() {
+    public RiskSummary getRiskSummary() {
         List<PositionEntity> openPositions = positionRepository.findAllOpenPositions();
-        PositionService.RiskSummary summary = new PositionService.RiskSummary();
+        RiskSummary summary = new RiskSummary();
 
         BigDecimal totalExposure = openPositions.stream()
                 .filter(p -> p.getCurrentPrice() != null && p.getQuantity() != null)
@@ -337,129 +338,5 @@ public class PositionService {
 
     public PositionManager getPositionManager() {
         return positionManager;
-    }
-
-    /**
-     * Position statistics DTO.
-     */
-    public static class PositionStats {
-        private Integer totalPositions;
-        private Integer openPositions;
-        private Integer closedPositions;
-        private Integer stoppedOut;
-        private Integer targetHit;
-        private java.math.BigDecimal totalPnL;
-        private java.math.BigDecimal unrealizedPnL;
-        private Double winRate;
-        private Double averageHoldingPeriod;
-        private String message;
-
-        public PositionStats() {}
-
-        public PositionStats(Integer totalPositions, Integer openPositions, Integer closedPositions,
-                            Integer stoppedOut, Integer targetHit, java.math.BigDecimal totalPnL,
-                            java.math.BigDecimal unrealizedPnL, Double winRate, Double averageHoldingPeriod) {
-            this.totalPositions = totalPositions;
-            this.openPositions = openPositions;
-            this.closedPositions = closedPositions;
-            this.stoppedOut = stoppedOut;
-            this.targetHit = targetHit;
-            this.totalPnL = totalPnL;
-            this.unrealizedPnL = unrealizedPnL;
-            this.winRate = winRate;
-            this.averageHoldingPeriod = averageHoldingPeriod;
-        }
-
-        public Integer getTotalPositions() { return totalPositions; }
-        public void setTotalPositions(Integer totalPositions) { this.totalPositions = totalPositions; }
-
-        public Integer getOpenPositions() { return openPositions; }
-        public void setOpenPositions(Integer openPositions) { this.openPositions = openPositions; }
-
-        public Integer getClosedPositions() { return closedPositions; }
-        public void setClosedPositions(Integer closedPositions) { this.closedPositions = closedPositions; }
-
-        public Integer getStoppedOut() { return stoppedOut; }
-        public void setStoppedOut(Integer stoppedOut) { this.stoppedOut = stoppedOut; }
-
-        public Integer getTargetHit() { return targetHit; }
-        public void setTargetHit(Integer targetHit) { this.targetHit = targetHit; }
-
-        public java.math.BigDecimal getTotalPnL() { return totalPnL; }
-        public void setTotalPnL(java.math.BigDecimal totalPnL) { this.totalPnL = totalPnL; }
-
-        public java.math.BigDecimal getUnrealizedPnL() { return unrealizedPnL; }
-        public void setUnrealizedPnL(java.math.BigDecimal unrealizedPnL) { this.unrealizedPnL = unrealizedPnL; }
-
-        public Double getWinRate() { return winRate; }
-        public void setWinRate(Double winRate) { this.winRate = winRate; }
-
-        public Double getAverageHoldingPeriod() { return averageHoldingPeriod; }
-        public void setAverageHoldingPeriod(Double averageHoldingPeriod) { this.averageHoldingPeriod = averageHoldingPeriod; }
-
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
-    }
-
-    /**
-     * Sector allocation DTO.
-     */
-    public static class SectorAllocation {
-        private java.util.Map<String, Double> allocation;
-        private java.math.BigDecimal totalExposure;
-        private Integer numberOfSectors;
-        private String message;
-
-        public SectorAllocation() {}
-
-        public SectorAllocation(java.util.Map<String, Double> allocation, java.math.BigDecimal totalExposure, Integer numberOfSectors) {
-            this.allocation = allocation;
-            this.totalExposure = totalExposure;
-            this.numberOfSectors = numberOfSectors;
-        }
-
-        public java.util.Map<String, Double> getAllocation() { return allocation; }
-        public void setAllocation(java.util.Map<String, Double> allocation) { this.allocation = allocation; }
-
-        public java.math.BigDecimal getTotalExposure() { return totalExposure; }
-        public void setTotalExposure(java.math.BigDecimal totalExposure) { this.totalExposure = totalExposure; }
-
-        public Integer getNumberOfSectors() { return numberOfSectors; }
-        public void setNumberOfSectors(Integer numberOfSectors) { this.numberOfSectors = numberOfSectors; }
-
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
-    }
-
-    /**
-     * Risk summary DTO.
-     */
-    public static class RiskSummary {
-        private java.math.BigDecimal totalExposure;
-        private java.math.BigDecimal availableCapital;
-        private java.math.BigDecimal usedCapital;
-        private java.math.BigDecimal stopLossExposure;
-        private Integer numberOfPositions;
-        private java.util.Map<String, Integer> sectorExposure;
-
-        public RiskSummary() {}
-
-        public java.math.BigDecimal getTotalExposure() { return totalExposure; }
-        public void setTotalExposure(java.math.BigDecimal totalExposure) { this.totalExposure = totalExposure; }
-
-        public java.math.BigDecimal getAvailableCapital() { return availableCapital; }
-        public void setAvailableCapital(java.math.BigDecimal availableCapital) { this.availableCapital = availableCapital; }
-
-        public java.math.BigDecimal getUsedCapital() { return usedCapital; }
-        public void setUsedCapital(java.math.BigDecimal usedCapital) { this.usedCapital = usedCapital; }
-
-        public java.math.BigDecimal getStopLossExposure() { return stopLossExposure; }
-        public void setStopLossExposure(java.math.BigDecimal stopLossExposure) { this.stopLossExposure = stopLossExposure; }
-
-        public Integer getNumberOfPositions() { return numberOfPositions; }
-        public void setNumberOfPositions(Integer numberOfPositions) { this.numberOfPositions = numberOfPositions; }
-
-        public java.util.Map<String, Integer> getSectorExposure() { return sectorExposure; }
-        public void setSectorExposure(java.util.Map<String, Integer> sectorExposure) { this.sectorExposure = sectorExposure; }
     }
 }
