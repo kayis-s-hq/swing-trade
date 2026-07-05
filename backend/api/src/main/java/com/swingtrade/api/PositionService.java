@@ -4,6 +4,10 @@ import com.swingtrade.api.dto.PositionResponse;
 import com.swingtrade.api.dto.TradeRequest;
 import com.swingtrade.api.dto.TradeResponse;
 import com.swingtrade.broker.engine.PaperTradingEngine;
+import com.swingtrade.broker.manager.OrderManager;
+import com.swingtrade.broker.manager.PositionManager;
+import com.swingtrade.broker.model.Order;
+import com.swingtrade.broker.model.OrderStatus;
 import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.Position;
@@ -32,11 +36,16 @@ public class PositionService {
 
     private final PositionRepository positionRepository;
     private final PaperTradingEngine paperTradingEngine;
+    private final OrderManager orderManager;
+    private final PositionManager positionManager;
 
     @Autowired
-    public PositionService(PositionRepository positionRepository, PaperTradingEngine paperTradingEngine) {
+    public PositionService(PositionRepository positionRepository, PaperTradingEngine paperTradingEngine,
+                           OrderManager orderManager, PositionManager positionManager) {
         this.positionRepository = positionRepository;
         this.paperTradingEngine = paperTradingEngine;
+        this.orderManager = orderManager;
+        this.positionManager = positionManager;
     }
 
     /**
@@ -156,10 +165,14 @@ public class PositionService {
         stats.setStoppedOut((int) stoppedCount);
         stats.setTargetHit((int) targetHitCount);
 
-        // Win rate
+        // Win rate: count all closed positions where PnL > 0
         long closedCount = allPositions.size() - openPositions.size();
+        long winCount = allPositions.stream()
+            .filter(p -> !"OPEN".equals(p.getStatus()))
+            .filter(p -> p.getPnl() != null && p.getPnl().compareTo(BigDecimal.ZERO) > 0)
+            .count();
         if (closedCount > 0) {
-            stats.setWinRate((double) targetHitCount / closedCount * 100.0);
+            stats.setWinRate((double) winCount / closedCount * 100.0);
         } else {
             stats.setWinRate(0.0);
         }
@@ -192,20 +205,19 @@ public class PositionService {
         }
 
         PositionEntity entity = entityOpt.get();
-
-        // Close position in paper trading engine using symbol-based close
         BigDecimal exitPrice = entity.getCurrentPrice() != null ? entity.getCurrentPrice() : entity.getEntryPrice();
         String reason = exitReason != null ? exitReason : "manual_close";
 
+        // Close in engine first (updates portfolio capital, calculates P&L)
         try {
-            // Attempt to close via PaperTradingEngine if position exists there
             paperTradingEngine.closePosition("POS_" + entity.getId(), exitPrice, reason);
         } catch (Exception e) {
-            logger.warn("Could not close position in PaperTradingEngine: {}", e.getMessage());
+            logger.warn("Position {} not found in PaperTradingEngine: {}", symbol, e.getMessage());
         }
 
-        // Update entity status
+        // Then update DB entity
         entity.setStatus("CLOSED");
+        entity.setCurrentPrice(exitPrice);
         entity.setUpdatedAt(LocalDateTime.now());
         positionRepository.save(entity);
 
@@ -224,6 +236,18 @@ public class PositionService {
 
         BigDecimal entryPrice = request.getPrice() != null ? request.getPrice() : BigDecimal.ZERO;
 
+        // Create position in engine via order pipeline
+        String positionId = null;
+        Order order = orderManager.createBuyOrder(
+            request.getSymbol(), request.getQuantity(), entryPrice);
+        order = paperTradingEngine.executePendingOrder(order.getOrderId(), entryPrice);
+        if (order.getStatus() == OrderStatus.FILLED) {
+            com.swingtrade.broker.model.Position pos = paperTradingEngine.createPositionFromOrder(order);
+            positionId = pos.getPositionId();
+        } else {
+            throw new RuntimeException("Order not filled for symbol " + request.getSymbol() + ": status=" + order.getStatus());
+        }
+
         PositionEntity entity = new PositionEntity();
         entity.setSymbol(request.getSymbol());
         entity.setEntryPrice(entryPrice);
@@ -240,7 +264,8 @@ public class PositionService {
         }
 
         PositionEntity savedEntity = positionRepository.save(entity);
-        logger.info("Created new position for symbol: {} at price: {}", request.getSymbol(), entryPrice);
+        logger.info("Created new position for symbol: {} at price: {} (engine position: {})",
+            request.getSymbol(), entryPrice, positionId);
 
         return convertToResponse(savedEntity);
     }
@@ -306,6 +331,10 @@ public class PositionService {
         response.setQuantity(entity.getQuantity());
         response.setExitReason(entity.getEntryReason());
         return response;
+    }
+
+    public PositionManager getPositionManager() {
+        return positionManager;
     }
 
     /**
