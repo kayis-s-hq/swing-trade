@@ -42,7 +42,10 @@ class DataIngestionIntegrationTest {
     @Autowired
     private StockRepository stockRepository;
 
-    @MockBean
+    // Named to match MarketDataClientConfig's "yahoo" bean, the provider's default active broker
+    // (MarketDataClientProvider). Both "yahoo" and "fyers" implement MarketDataClient, so an
+    // unqualified @MockBean can no longer resolve to a single candidate.
+    @MockBean(name = "yahoo")
     private MarketDataClient marketDataClient;
 
     @BeforeEach
@@ -59,6 +62,22 @@ class DataIngestionIntegrationTest {
         );
         when(marketDataClient.fetchCandle(anyString(), any(LocalDate.class)))
             .thenReturn(mockCandle);
+
+        // processStockData(symbol, from, to) calls fetchCandles (range), not fetchCandle (single
+        // day) - without this stub it silently returns an empty Iterable and no candles are saved.
+        when(marketDataClient.fetchCandles(anyString(), any(LocalDate.class), any(LocalDate.class)))
+            .thenAnswer(invocation -> {
+                String symbol = invocation.getArgument(0);
+                LocalDate from = invocation.getArgument(1);
+                LocalDate to = invocation.getArgument(2);
+                List<CandleData> candles = new java.util.ArrayList<>();
+                for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+                    candles.add(CandleData.of(symbol, d,
+                        new BigDecimal("2500.00"), new BigDecimal("2520.00"),
+                        new BigDecimal("2490.00"), new BigDecimal("2510.00"), 1500000L));
+                }
+                return candles;
+            });
     }
 
     @Test

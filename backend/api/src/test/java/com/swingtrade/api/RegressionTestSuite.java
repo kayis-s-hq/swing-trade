@@ -35,9 +35,6 @@ class RegressionTestSuite {
     @Autowired
     private ObjectMapper objectMapper;
 
-    private PositionResponse createdPosition;
-    private SignalResponse generatedSignal;
-
     @BeforeEach
     void setUp() throws Exception {
         // Clear any existing state by triggering a scan first
@@ -65,7 +62,7 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
-        generatedSignal = objectMapper.readValue(signalJson, SignalResponse.class);
+        SignalResponse generatedSignal = objectMapper.readValue(signalJson, SignalResponse.class);
 
         // Step 2: Create position based on signal
         TradeRequest tradeRequest = new TradeRequest();
@@ -89,7 +86,7 @@ class RegressionTestSuite {
                 .getResponse()
                 .getContentAsString();
 
-        createdPosition = objectMapper.readValue(positionJson, PositionResponse.class);
+        PositionResponse createdPosition = objectMapper.readValue(positionJson, PositionResponse.class);
 
         // Step 3: Verify position is in open positions list
         mockMvc.perform(get("/api/trades")

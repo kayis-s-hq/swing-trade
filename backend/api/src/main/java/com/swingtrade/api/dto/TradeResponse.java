@@ -3,6 +3,7 @@ package com.swingtrade.api.dto;
 import com.swingtrade.domain.Trade;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 
 /**
@@ -45,7 +46,7 @@ public class TradeResponse {
         if (entryPrice != null && exitPrice != null && entryPrice.compareTo(java.math.BigDecimal.ZERO) > 0) {
             this.pnlPercent = exitPrice.subtract(entryPrice)
                 .multiply(java.math.BigDecimal.valueOf(100))
-                .divide(entryPrice, 4, java.math.BigDecimal.ROUND_HALF_UP);
+                .divide(entryPrice, 4, RoundingMode.HALF_UP);
         }
 
         this.durationDays = trade.durationDays();

@@ -9,9 +9,23 @@ interface TradingConfig {
   takeProfit: number
 }
 
+interface LlmSettings {
+  vllmBaseUrl: string
+  model: string
+  pdfBaseUrl: string
+  pdfModel: string
+}
+
+interface DiscordSettings {
+  webhookUrl: string
+  enabled: boolean
+}
+
 interface SettingsState {
   selectedBroker: 'fyers' | 'upstox' | 'yahoo' | 'none'
   tradingConfig: TradingConfig
+  llmSettings: LlmSettings
+  discordSettings: DiscordSettings
 }
 
 const defaults: SettingsState = {
@@ -21,6 +35,16 @@ const defaults: SettingsState = {
     maxPositionSize: 10,
     stopLoss: 5,
     takeProfit: 15,
+  },
+  llmSettings: {
+    vllmBaseUrl: 'https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1',
+    model: 'Qwen3-30B-AWQ',
+    pdfBaseUrl: '',
+    pdfModel: 'gemma-4-E2B',
+  },
+  discordSettings: {
+    webhookUrl: '',
+    enabled: false,
   },
 }
 

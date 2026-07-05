@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -92,7 +93,7 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
      * @param symbol the stock symbol
      * @return optional containing the earliest candle
      */
-    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol ORDER BY c.date ASC")
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol ORDER BY c.date ASC LIMIT 1")
     Optional<OhlcvCandleEntity> findEarliestBySymbol(@Param("symbol") String symbol);
 
     /**
@@ -124,5 +125,18 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
         @Param("startDate") LocalDate startDate,
         @Param("endDate") LocalDate endDate,
         Pageable pageable
+    );
+
+    /**
+     * Finds the latest candle for a symbol before a given date/time.
+     *
+     * @param symbol the trading symbol
+     * @param before the cutoff date/time
+     * @return optional containing the latest candle before the cutoff
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol AND c.date < :before ORDER BY c.date DESC LIMIT 1")
+    Optional<OhlcvCandleEntity> findLatestBySymbolBeforeDate(
+        @Param("symbol") String symbol,
+        @Param("before") LocalDateTime before
     );
 }

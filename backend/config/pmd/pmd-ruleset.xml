@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<ruleset name="swing-trade"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+  <description>Swing Trade PMD rules — Google + Oracle categories, noisy rules excluded</description>
+
+  <rule ref="category/java/bestpractices.xml">
+    <exclude name="JUnitTestContainsTooManyAsserts"/>
+    <exclude name="AtLeastOneConstructor"/>
+    <exclude name="LocalVariableCouldBeFinal"/>
+    <exclude name="MethodArgumentCouldBeFinal"/>
+    <exclude name="UseUtilityClass"/>
+  </rule>
+
+  <rule ref="category/java/codestyle.xml">
+    <exclude name="CommentDefaultAccessModifier"/>
+    <exclude name="UseUnderscoresInNumericLiterals"/>
+    <exclude name="SingularField"/>
+    <exclude name="LongVariable"/>
+    <exclude name="ShortVariable"/>
+    <exclude name="OnlyOneReturn"/>
+    <exclude name="FieldNamingConventions"/>
+  </rule>
+
+  <rule ref="category/java/design.xml">
+    <exclude name="DataClass"/>
+  </rule>
+
+  <rule ref="category/java/errorprone.xml"/>
+  <rule ref="category/java/multithreading.xml"/>
+  <rule ref="category/java/performance.xml"/>
+  <rule ref="category/java/security.xml"/>
+</ruleset>

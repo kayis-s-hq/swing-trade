@@ -1,6 +1,8 @@
 package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.*;
+import com.swingtrade.data.entity.SentimentResultEntity;
+import com.swingtrade.data.repository.SentimentResultRepository;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +35,9 @@ public class SignalController {
 
     @Autowired
     private com.swingtrade.data.repository.SignalRepository signalRepository;
+
+    @Autowired
+    private SentimentResultRepository sentimentResultRepository;
 
     /**
      * Get the latest trading signals for today.
@@ -133,6 +140,21 @@ public class SignalController {
     }
 
     /**
+     * Generate a price-action signal for a symbol (Phase 2 strategy engine).
+     *
+     * @param symbol Stock symbol
+     * @return Generated price-action signal, or 404 if there isn't enough candle history
+     */
+    @PostMapping("/price-action/{symbol}/generate")
+    public ResponseEntity<SignalResponse> generatePriceActionSignal(@PathVariable String symbol) {
+        logger.info("Generating price-action signal for symbol: {}", symbol);
+
+        return signalService.generatePriceActionSignal(symbol)
+                .map(entity -> ResponseEntity.ok(entityToResponse(entity)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
      * Trigger a full market scan.
      *
      * @param request Scan request (optional parameters)
@@ -191,13 +213,17 @@ public class SignalController {
     @GetMapping("/sentiment/{symbol}")
     public ResponseEntity<SentimentAnalysisResponse> getSentimentAnalysis(@PathVariable String symbol) {
         logger.debug("Fetching sentiment analysis for symbol: {}", symbol);
-        SentimentAnalysisResponse sentiment = convertSentimentAnalysis(signalService.getSentimentAnalysis(symbol));
-
-        if (sentiment == null) {
+        Optional<SentimentResultEntity> opt = sentimentResultRepository.findLatestBySymbol(symbol);
+        if (opt.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-
-        return ResponseEntity.ok(sentiment);
+        SentimentResultEntity entity = opt.get();
+        SentimentAnalysisResponse response = new SentimentAnalysisResponse();
+        response.setSymbol(entity.getSymbol());
+        response.setAnalyzedAt(entity.getAnalyzedAt());
+        response.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(entity.getSentimentScore()));
+        response.setSummary(entity.getSummary());
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -209,10 +235,19 @@ public class SignalController {
     @GetMapping("/combined/{symbol}")
     public ResponseEntity<CombinedSignalResponse> getCombinedSignal(@PathVariable String symbol) {
         logger.debug("Fetching combined signal for symbol: {}", symbol);
-        CombinedSignalResponse combined = convertCombinedSignal(signalService.getCombinedSignal(symbol));
+        CombinedSignalResponse combined = new CombinedSignalResponse();
+        combined.setSymbol(symbol);
+        combined.setAnalysisDate(LocalDate.now());
 
-        if (combined == null) {
-            return ResponseEntity.notFound().build();
+        Optional<SentimentResultEntity> sentimentOpt = sentimentResultRepository.findLatestBySymbol(symbol);
+        if (sentimentOpt.isPresent()) {
+            SentimentResultEntity entity = sentimentOpt.get();
+            SentimentAnalysisResponse sa = new SentimentAnalysisResponse();
+            sa.setSymbol(entity.getSymbol());
+            sa.setAnalyzedAt(entity.getAnalyzedAt());
+            sa.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(entity.getSentimentScore()));
+            sa.setSummary(entity.getSummary());
+            combined.setSentimentAnalysis(sa);
         }
 
         return ResponseEntity.ok(combined);
@@ -221,16 +256,16 @@ public class SignalController {
     /**
      * Convert SignalService.Signal to SignalResponse DTO
      */
-    private SignalResponse convertSignalToResponse(com.swingtrade.api.SignalService.Signal signal) {
+    private SignalResponse convertSignalToResponse(com.swingtrade.api.dto.SignalQueryResult.Signal signal) {
         if (signal == null) {
             return null;
         }
         SignalResponse response = new SignalResponse();
-        response.setSymbol(signal.getSymbol());
-        response.setSignalType(SignalResponse.SignalType.valueOf(signal.getType().toString()));
-        response.setConfidence(signal.getConfidence() != null ? BigDecimal.valueOf(signal.getConfidence()) : null);
-        response.setGeneratedAt(signal.getDate());
-        response.setReasoning(signal.getReasoning());
+        response.setSymbol(signal.symbol());
+        response.setSignalType(SignalResponse.SignalType.valueOf(signal.type().toString()));
+        response.setConfidence(signal.confidence() != null ? BigDecimal.valueOf(signal.confidence()) : null);
+        response.setGeneratedAt(signal.date());
+        response.setReasoning(signal.reasoning());
         return response;
     }
 
@@ -253,34 +288,34 @@ public class SignalController {
             response.setIndicators(java.util.List.of(entity.getIndicators().split(",")));
         }
         response.setGeneratedAt(entity.getGeneratedAt());
+        response.setStrategy(entity.getStrategy());
         return response;
     }
 
     /**
      * Convert list of SignalService.Signal to SignalResponse DTOs
      */
-    private List<SignalResponse> convertSignalsToResponses(List<com.swingtrade.api.SignalService.Signal> signals) {
+    private List<SignalResponse> convertSignalsToResponses(List<com.swingtrade.api.dto.SignalQueryResult.Signal> signals) {
         if (signals == null) {
             return List.of();
         }
-        List<SignalResponse> responses = List.copyOf(signals).stream()
+        return List.copyOf(signals).stream()
                 .map(this::convertSignalToResponse)
-                .filter(r -> r != null)
+                .filter(Objects::nonNull)
                 .toList();
-        return responses;
     }
 
     /**
      * Convert SignalService.TechnicalAnalysis to TechnicalAnalysisResponse DTO
      */
-    private TechnicalAnalysisResponse convertTechnicalAnalysis(com.swingtrade.api.SignalService.TechnicalAnalysis analysis) {
+    private TechnicalAnalysisResponse convertTechnicalAnalysis(com.swingtrade.api.dto.SignalQueryResult.TechnicalAnalysis analysis) {
         if (analysis == null) {
             return null;
         }
         TechnicalAnalysisResponse response = new TechnicalAnalysisResponse();
-        response.setSymbol(analysis.getSymbol());
-        response.setAnalysisDate(analysis.getDate());
-        response.setIndicators(analysis.getIndicators());
+        response.setSymbol(analysis.symbol());
+        response.setAnalysisDate(analysis.date());
+        response.setIndicators(analysis.indicators());
         response.setSignal("TECHNICAL");
         return response;
     }
@@ -288,31 +323,31 @@ public class SignalController {
     /**
      * Convert SignalService.SentimentAnalysis to SentimentAnalysisResponse DTO
      */
-    private SentimentAnalysisResponse convertSentimentAnalysis(com.swingtrade.api.SignalService.SentimentAnalysis sentiment) {
+    private SentimentAnalysisResponse convertSentimentAnalysis(com.swingtrade.api.dto.SignalQueryResult.SentimentAnalysis sentiment) {
         if (sentiment == null) {
             return null;
         }
         SentimentAnalysisResponse response = new SentimentAnalysisResponse();
-        response.setSymbol(sentiment.getSymbol());
-        response.setAnalyzedAt(sentiment.getDate());
-        response.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(sentiment.getScore()));
-        response.setSummary(sentiment.getSummary());
+        response.setSymbol(sentiment.symbol());
+        response.setAnalyzedAt(sentiment.date());
+        response.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(sentiment.score()));
+        response.setSummary(sentiment.summary());
         return response;
     }
 
     /**
      * Convert SignalService.CombinedSignal to CombinedSignalResponse DTO
      */
-    private CombinedSignalResponse convertCombinedSignal(com.swingtrade.api.SignalService.CombinedSignal combined) {
+    private CombinedSignalResponse convertCombinedSignal(com.swingtrade.api.dto.SignalQueryResult.CombinedSignal combined) {
         if (combined == null) {
             return null;
         }
         CombinedSignalResponse response = new CombinedSignalResponse();
-        response.setSymbol(combined.getSymbol());
-        response.setAnalysisDate(combined.getDate());
-        response.setSignalType(SignalResponse.SignalType.valueOf(combined.getFinalSignal().toString()));
+        response.setSymbol(combined.symbol());
+        response.setAnalysisDate(combined.date());
+        response.setSignalType(SignalResponse.SignalType.valueOf(combined.finalSignal().toString()));
         response.setTechnicalAnalysis(convertTechnicalAnalysis(null)); // Placeholder
-        response.setSentimentAnalysis(convertSentimentAnalysis(combined.getSentiment()));
+        response.setSentimentAnalysis(convertSentimentAnalysis(combined.sentiment()));
         return response;
     }
 }

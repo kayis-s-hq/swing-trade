@@ -1,0 +1,105 @@
+name: Deploy Stage
+
+on:
+  push:
+    branches: [stage]
+    paths:
+      - backend/**
+      - .github/workflows/**
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Spring profile'
+        default: stage
+        required: false
+
+concurrency:
+  group: deploy-stage
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: 21
+  PI_USER: pi
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build backend
+        working-directory: backend
+        run: mvn clean package -Dpmd.skip=true -DskipTests -Dcheckstyle.skip=true -B
+
+      - name: Verify JAR
+        working-directory: backend/api/target
+        run: ls -la api-1.0.0.jar
+
+      - name: Deploy to pi-node
+        run: |
+          PI_NODE="piworm.local"
+          REMOTE_DIR="/home/pi/swing-trade/stage"
+          JAR="backend/api/target/api-1.0.0.jar"
+
+          # Create remote directory
+          ssh "$PI_USER@$PI_NODE" "mkdir -p $REMOTE_DIR"
+
+          # Copy JAR
+          scp "$JAR" "$PI_USER@$PI_NODE:$REMOTE_DIR/swing-trade-api.jar"
+
+          # Deploy via systemd
+          ssh "$PI_USER@$PI_NODE" <<'EOF'
+          set -e
+          APP_DIR="/home/pi/swing-trade/stage"
+          JAR="$APP_DIR/swing-trade-api.jar"
+
+          systemctl --user stop swing-trade-stage 2>/dev/null || true
+
+          cat > "$HOME/.config/systemd/user/swing-trade-stage.service" <<SVCEOF
+          [Unit]
+          Description=Swing Trade API (Stage)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=pi
+          WorkingDirectory=$APP_DIR
+          ExecStart=/usr/bin/java -jar $JAR -Dspring.profiles.active=stage,fyers -Dlogging.file.name=/var/log/swing-trade/stage.log
+          Restart=on-failure
+          RestartSec=10
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=default.target
+          SVCEOF
+
+          systemctl --user daemon-reload
+          systemctl --user enable swing-trade-stage
+          systemctl --user start swing-trade-stage
+
+          sleep 15
+          systemctl --user status swing-trade-stage --no-pager -l
+          EOF
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:8081/actuator/health | grep -q '"UP"'; then
+              echo "Stage is UP on port 8081"
+              exit 0
+            fi
+            echo "Waiting... ($i/10)"
+            sleep 6
+          done
+          echo "Health check failed"
+          exit 1

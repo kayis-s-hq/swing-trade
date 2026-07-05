@@ -5,6 +5,7 @@
       <div class="flex items-center gap-2">
         <span class="text-sm font-bold text-text-primary">{{ signal.symbol }}</span>
         <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold" :class="signal.direction === 'BUY' ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'">{{ signal.direction }}</span>
+        <span v-if="strategyLabel" class="inline-flex items-center rounded-full bg-brand-subtle px-2 py-0.5 text-xs font-medium text-brand">{{ strategyLabel }}</span>
       </div>
       <span class="text-xs font-medium" :class="statusColor">{{ signal.status }}</span>
     </div>
@@ -43,6 +44,11 @@
       </div>
     </div>
 
+    <!-- Indicators -->
+    <div v-if="signal.indicators?.length" class="flex flex-wrap gap-1.5 border-t border-border-subtle/50 px-4 py-2.5">
+      <span v-for="indicator in signal.indicators" :key="indicator" class="rounded bg-bg-primary/50 px-1.5 py-0.5 text-[11px] font-medium text-text-muted">{{ indicator }}</span>
+    </div>
+
     <!-- Reason -->
     <div class="border-t border-border-subtle/50 px-4 py-3">
       <p class="text-xs leading-relaxed text-text-muted">{{ signal.reason }}</p>
@@ -64,6 +70,8 @@ const props = defineProps<{
     target: number
     riskReward: number
     status: string
+    strategy?: string
+    indicators?: string[]
   }
 }>()
 
@@ -75,5 +83,13 @@ const statusColor = computed(() => {
     EXPIRED: 'text-text-muted',
   }
   return colors[props.signal.status] ?? 'text-text-muted'
+})
+
+const strategyLabel = computed(() => {
+  const labels: Record<string, string> = {
+    PRICE_ACTION: 'Price Action',
+    DEFAULT: 'Technical',
+  }
+  return props.signal.strategy ? (labels[props.signal.strategy] ?? props.signal.strategy) : ''
 })
 </script>

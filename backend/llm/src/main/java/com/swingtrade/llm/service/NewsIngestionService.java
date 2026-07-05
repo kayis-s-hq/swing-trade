@@ -15,12 +15,19 @@ import org.w3c.dom.NodeList;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.ZonedDateTime;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -481,10 +488,182 @@ public class NewsIngestionService {
      */
     public List<NewsArticle> fetchNewsWithCache(String cacheKey, int maxAgeMinutes) {
         logger.debug("Fetching news with cache key: {}", cacheKey);
-
-        // In production, this would use Redis or other cache
-        // For now, always fetch fresh
         return fetchNewsFromFeeds();
+    }
+
+    // ===== Symbol-specific news sources =====
+
+    /**
+     * Fetches Google News RSS for a symbol using DOM parsing.
+     */
+    public List<NewsArticle> fetchGoogleNews(String symbol) {
+        logger.debug("Fetching Google News for {}", symbol);
+        try {
+            String url = "https://news.google.com/rss/search?q=" +
+                    symbol + "+NSE+stock&hl=en-IN&gl=IN&ceid=IN:en";
+            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setRequestProperty("User-Agent", "SwingTrade/1.0");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(30000);
+
+            if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                logger.warn("Google News HTTP {} for {}", conn.getResponseCode(), symbol);
+                return List.of();
+            }
+
+            List<NewsArticle> articles = new ArrayList<>();
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new ByteArrayInputStream(
+                    conn.getInputStream().readAllBytes()));
+            doc.getDocumentElement().normalize();
+
+            NodeList items = doc.getElementsByTagName("item");
+            for (int i = 0; i < items.getLength(); i++) {
+                Element item = (Element) items.item(i);
+                String title = getChildText(item, "title");
+                String link = getChildText(item, "link");
+                String desc = getChildText(item, "description");
+                String pubDateStr = getChildText(item, "pubDate");
+                ZonedDateTime pubDate = parsePubDate(pubDateStr);
+                if (title != null && !title.isBlank()) {
+                    if (pubDate == null) pubDate = ZonedDateTime.now();
+                    articles.add(new NewsArticle(title, link, desc, pubDate, "google_news", desc));
+                }
+            }
+            logger.info("Fetched {} articles from Google News for {}", articles.size(), symbol);
+            return articles;
+        } catch (Exception e) {
+            logger.warn("Google News fetch failed for {}: {}", symbol, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Fetches NSE corporate announcements for a symbol.
+     */
+    public List<NewsArticle> fetchNseAnnouncements(String symbol) {
+        logger.debug("Fetching NSE announcements for {}", symbol);
+        int retries = 3;
+        for (int i = 0; i < retries; i++) {
+            try {
+                String url = "https://www.nseindia.com/api/corp-info?symbol=" + symbol;
+                HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+                conn.setRequestProperty("User-Agent", "SwingTrade/1.0");
+                conn.setRequestProperty("Accept", "application/json");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(30000);
+
+                int code = conn.getResponseCode();
+                if (code == HttpURLConnection.HTTP_OK) {
+                    BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) sb.append(line);
+                    reader.close();
+
+                    String body = sb.toString();
+                    if (body.startsWith("<") || body.startsWith("<!")) {
+                        logger.warn("NSE blocked request for {} (returned HTML)", symbol);
+                        return List.of();
+                    }
+
+                    // Simple JSON parsing for NSE announcement array
+                    List<NewsArticle> articles = new ArrayList<>();
+                    // NSE returns: [{"subject":"...","description":"...","date":"..."}]
+                    if (body.startsWith("[")) {
+                        body = body.replace("}{", "};{").replace("[", "").replace("]", "");
+                        String[] items = body.split(";");
+                        for (String item : items) {
+                            try {
+                                String subject = extractJsonField(item, "subject");
+                                String date = extractJsonField(item, "date");
+                                String desc = extractJsonField(item, "description");
+                                if (subject != null && !subject.isBlank()) {
+                                    ZonedDateTime pubDate = parseNseDate(date);
+                                    articles.add(new NewsArticle(subject, null, desc,
+                                            pubDate != null ? pubDate : ZonedDateTime.now(), "nse", desc));
+                                }
+                            } catch (Exception e) {
+                                // skip malformed items
+                            }
+                        }
+                    }
+                    logger.info("Fetched {} announcements from NSE for {}", articles.size(), symbol);
+                    return articles;
+                }
+                logger.warn("NSE HTTP {} for {}", code, symbol);
+                return List.of();
+            } catch (Exception e) {
+                long backoff = (long) Math.pow(2, i) * 1000;
+                logger.warn("NSE fetch attempt {} failed for {}: {} (retry in {}ms)",
+                        i + 1, symbol, e.getMessage(), backoff);
+                try { Thread.sleep(backoff); } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return List.of();
+                }
+            }
+        }
+        return List.of();
+    }
+
+    /**
+     * Unified fetch with parallel NSE + Google News, dedup, 7-day filter.
+     */
+    public List<NewsArticle> fetchAllNews(String symbol) {
+        logger.debug("Fetching all news for {}", symbol);
+        ZoneId ist = ZoneId.of("Asia/Kolkata");
+        LocalDateTime sevenDaysAgo = LocalDateTime.now(ist).minusDays(7);
+
+        CompletableFuture<List<NewsArticle>> nseFut = CompletableFuture.supplyAsync(() -> fetchNseAnnouncements(symbol));
+        CompletableFuture<List<NewsArticle>> googleFut = CompletableFuture.supplyAsync(() -> fetchGoogleNews(symbol));
+
+        List<NewsArticle> all = new ArrayList<>();
+        all.addAll(nseFut.join());
+        all.addAll(googleFut.join());
+
+        // Dedup by normalized headline + date within 1 hour
+        Set<String> seen = new HashSet<>();
+        List<NewsArticle> deduped = new ArrayList<>();
+        for (NewsArticle a : all) {
+            if (a.publishedDate() == null) continue;
+            if (a.publishedDate().toLocalDateTime().isBefore(sevenDaysAgo)) continue;
+            String key = a.title().toLowerCase().trim();
+            if (seen.add(key)) {
+                deduped.add(a);
+            }
+        }
+
+        deduped.sort((a, b) -> {
+            if (a.publishedDate() == null) return 1;
+            if (b.publishedDate() == null) return -1;
+            return b.publishedDate().compareTo(a.publishedDate());
+        });
+
+        logger.info("Fetched {} unique headlines for {}", deduped.size(), symbol);
+        return deduped;
+    }
+
+    private String extractJsonField(String json, String field) {
+        String pattern = "\"" + field + "\"\\s*:\\s*\"";
+        int start = json.indexOf(pattern);
+        if (start == -1) return null;
+        start += pattern.length();
+        int end = json.indexOf("\"", start);
+        if (end == -1) return null;
+        return json.substring(start, end).replace("\\\"", "\"");
+    }
+
+    private ZonedDateTime parseNseDate(String dateStr) {
+        if (dateStr == null) return null;
+        try {
+            return ZonedDateTime.parse(dateStr.trim(),
+                    DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm:ss"));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

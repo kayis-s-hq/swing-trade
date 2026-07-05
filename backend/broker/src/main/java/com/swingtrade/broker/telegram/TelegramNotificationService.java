@@ -3,6 +3,7 @@ package com.swingtrade.broker.telegram;
 import com.swingtrade.broker.model.Order;
 import com.swingtrade.broker.model.Position;
 import com.swingtrade.broker.risk.RiskControlsService;
+import com.swingtrade.domain.NotificationService;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Trade;
 import jakarta.annotation.PostConstruct;
@@ -33,7 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author SwingTrade Team
  */
 @Service
-public class TelegramNotificationService {
+public class TelegramNotificationService implements NotificationService {
 
     private static final Logger log = LoggerFactory.getLogger(TelegramNotificationService.class);
 

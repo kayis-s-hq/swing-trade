@@ -14,6 +14,9 @@ import type {
   PullProgress,
   BacktestResult,
   BacktestReportSummary,
+  SentimentResult,
+  SentimentAccuracyStats,
+  NewsArticle,
 } from './types'
 
 // ---------------------------------------------------------------------------
@@ -463,6 +466,83 @@ export async function setBroker(broker: string): Promise<ApiResponse<{ selectedB
   })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: (raw.data as any).data as { selectedBroker: string } }
+}
+
+export async function getLlmSettings(): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/llm')
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: (raw.data as any).data as Record<string, string> }
+}
+
+export async function setLlmSettings(settings: Record<string, string>): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/llm', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: (raw.data as any).data as Record<string, string> }
+}
+
+export async function getDiscordSettings(): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/discord')
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: (raw.data as any).data as Record<string, string> }
+}
+
+export async function setDiscordSettings(settings: Record<string, string>): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/discord', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: (raw.data as any).data as Record<string, string> }
+}
+
+export async function testDiscordWebhook(): Promise<ApiResponse<{ success: boolean }>> {
+  const raw = await rawFetch('/settings/test/discord', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: (raw.data as any).data as { success: boolean } }
+}
+
+// ---------------------------------------------------------------------------
+// Sentiment
+// ---------------------------------------------------------------------------
+
+export async function getSentimentLatest(symbol: string): Promise<ApiResponse<SentimentResult>> {
+  const raw = await rawFetch(`/sentiment/${symbol}/latest`)
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: SentimentResult; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getSentimentHistory(symbol: string, page = 0, size = 20): Promise<ApiResponse<SentimentResult[]>> {
+  const raw = await rawFetch(`/sentiment/${symbol}/history?page=${page}&size=${size}`)
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: SentimentResult[]; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getAccuracyStats(): Promise<ApiResponse<SentimentAccuracyStats>> {
+  const raw = await rawFetch('/sentiment/accuracy')
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: SentimentAccuracyStats; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function triggerSentimentAnalysis(symbol: string): Promise<ApiResponse<SentimentResult>> {
+  const raw = await rawFetch(`/sentiment/${symbol}/analyse`, { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: SentimentResult; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getLatestNews(symbol: string): Promise<ApiResponse<NewsArticle[]>> {
+  const raw = await rawFetch(`/news/${symbol}/latest`)
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: NewsArticle[]; error?: string }
+  return { success: true, data: resp.data }
 }
 
 // ---------------------------------------------------------------------------

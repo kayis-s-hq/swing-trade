@@ -1,7 +1,7 @@
 package com.swingtrade.llm.impl;
 
 import com.swingtrade.llm.LlmClient;
-import com.swingtrade.llm.SentimentAnalysisResult;
+import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
 import com.swingtrade.llm.TechnicalSignal;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -45,7 +45,7 @@ public class LangChain4jLlmClient implements LlmClient {
     }
     
     @Override
-    public SentimentAnalysisResult analyzeSentiment(String inputText) {
+    public SentimentOutput analyzeSentiment(String inputText) {
         // Create a prompt that forces structured output
         String prompt = """
             Analyze the sentiment of the following financial news text and respond with exactly 
@@ -64,10 +64,10 @@ public class LangChain4jLlmClient implements LlmClient {
             String reasoning = extractReasoning(response);
             Double confidence = extractConfidence(response);
             
-            return new SentimentAnalysisResult(sentiment, reasoning, confidence);
+            return new SentimentOutput(sentiment, reasoning, confidence);
         } catch (Exception e) {
             // Fallback to neutral sentiment if parsing fails
-            return new SentimentAnalysisResult(
+            return new SentimentOutput(
                 SentimentType.NEUTRAL, 
                 "Unable to parse sentiment from LLM response: " + e.getMessage(), 
                 0.5
@@ -81,7 +81,7 @@ public class LangChain4jLlmClient implements LlmClient {
         
         for (String article : newsArticles) {
             // Analyze each article for technical signals
-            SentimentAnalysisResult sentimentResult = analyzeSentiment(article);
+            SentimentOutput sentimentResult = analyzeSentiment(article);
             
             // Convert sentiment to technical signal based on rules
             if (sentimentResult.getSentiment() == SentimentType.POSITIVE) {

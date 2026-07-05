@@ -77,4 +77,7 @@ public interface SentimentResultRepository extends JpaRepository<SentimentResult
      */
     @Query("SELECT DISTINCT s.symbol FROM SentimentResultEntity s ORDER BY s.symbol")
     List<String> findAllDistinctSymbols();
+
+    @Query("SELECT s FROM SentimentResultEntity s WHERE s.symbol = :symbol ORDER BY s.date DESC LIMIT 1")
+    Optional<SentimentResultEntity> findLatestBySymbol(@Param("symbol") String symbol);
 }

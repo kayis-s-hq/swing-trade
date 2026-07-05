@@ -57,15 +57,25 @@ public class SignalEntity {
     @Column(name = "generated_at")
     private LocalDate generatedAt;
 
+    @Column(name = "strategy", nullable = false, length = 30)
+    private String strategy = STRATEGY_DEFAULT;
+
     // Warning flag constants
     public static final String WARNING_NONE = "";
     public static final String WARNING_NEUTRAL_SENTIMENT = "NEUTRAL_SENTIMENT";
+
+    // Strategy constants identifying which engine produced this signal
+    public static final String STRATEGY_DEFAULT = "DEFAULT";
+    public static final String STRATEGY_PRICE_ACTION = "PRICE_ACTION";
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "processed", nullable = false)
+    private Boolean processed = false;
 
     public SignalEntity() {
     }
@@ -246,5 +256,21 @@ public class SignalEntity {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getStrategy() {
+        return strategy;
+    }
+
+    public void setStrategy(String strategy) {
+        this.strategy = strategy;
+    }
+
+    public Boolean getProcessed() {
+        return processed;
+    }
+
+    public void setProcessed(Boolean processed) {
+        this.processed = processed;
     }
 }

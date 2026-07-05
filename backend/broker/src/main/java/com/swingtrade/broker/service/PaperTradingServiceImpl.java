@@ -1,10 +1,12 @@
 package com.swingtrade.broker.service;
 
-import com.swingtrade.broker.engine.PaperTradeEngine;
+import com.swingtrade.broker.engine.PaperTradingEngine;
+import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.model.Order;
 import com.swingtrade.broker.model.Portfolio;
 import com.swingtrade.broker.model.Position;
-import org.springframework.context.annotation.Primary;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -13,121 +15,72 @@ import java.util.Optional;
 
 /**
  * Implementation of the broker service for paper trading operations.
- * This service coordinates with the paper trading engine to provide trading functionality.
+ * Coordinates with the PaperTradingEngine to provide trading functionality.
  */
-@Primary
 @Service
 public class PaperTradingServiceImpl implements BrokerService {
-    
-    private final PaperTradeEngine paperTradeEngine;
-    
-    /**
-     * Creates a new paper trading service implementation.
-     * 
-     * @param paperTradeEngine the underlying paper trading engine
-     */
-    public PaperTradingServiceImpl(PaperTradeEngine paperTradeEngine) {
-        this.paperTradeEngine = paperTradeEngine;
+
+    private static final Logger logger = LoggerFactory.getLogger(PaperTradingServiceImpl.class);
+
+    private final PaperTradingEngine paperTradingEngine;
+    private final OrderManager orderManager;
+
+    public PaperTradingServiceImpl(PaperTradingEngine paperTradingEngine,
+                                   OrderManager orderManager) {
+        this.paperTradingEngine = paperTradingEngine;
+        this.orderManager = orderManager;
     }
-    
-    /**
-     * Places a new order for a security.
-     * This method validates the order and delegates to the paper trading engine.
-     * 
-     * @param order the order to place
-     * @return the placed order with updated status
-     * @throws IllegalArgumentException if order is null
-     * @throws IllegalStateException if order validation fails
-     */
+
     @Override
     public Order placeOrder(Order order) {
         if (order == null) {
             throw new IllegalArgumentException("Order cannot be null");
         }
-        
-        return paperTradeEngine.placeOrder(order);
+        // Paper mode: create order in engine and execute immediately
+        Order engineOrder = orderManager.createBuyOrder(
+            order.getSymbol(), order.getQuantity().intValue(), order.getPrice());
+        engineOrder = paperTradingEngine.executePendingOrder(engineOrder.getOrderId(), order.getPrice());
+        return engineOrder;
     }
-    
-    /**
-     * Cancels an existing order.
-     * 
-     * @param orderId the ID of the order to cancel
-     * @return true if order was successfully cancelled, false otherwise
-     */
+
     @Override
     public boolean cancelOrder(String orderId) {
         if (orderId == null || orderId.isEmpty()) {
             return false;
         }
-        
-        return paperTradeEngine.cancelOrder(orderId);
+        return paperTradingEngine.cancelOrder(orderId);
     }
-    
-    /**
-     * Gets the current portfolio.
-     * 
-     * @return the portfolio object
-     */
+
     @Override
     public Portfolio getPortfolio() {
-        return paperTradeEngine.getPortfolio();
+        return paperTradingEngine.getPortfolio();
     }
-    
-    /**
-     * Gets all open positions.
-     * 
-     * @return list of open positions
-     */
+
     @Override
     public List<Position> getOpenPositions() {
-        return paperTradeEngine.getOpenPositions();
+        return paperTradingEngine.getOpenPositions();
     }
-    
-    /**
-     * Gets a specific position by ID.
-     * 
-     * @param positionId the ID of the position to retrieve
-     * @return the position if found, Optional.empty() otherwise
-     */
+
     @Override
     public Optional<Position> getPosition(String positionId) {
-        Position position = paperTradeEngine.getPosition(positionId);
-        return Optional.ofNullable(position);
+        return paperTradingEngine.getPosition(positionId);
     }
-    
-    /**
-     * Calculates the current profit and loss for a position.
-     * 
-     * @param position the position to calculate P&L for
-     * @return the calculated profit and loss
-     * @throws IllegalArgumentException if position is null
-     */
+
     @Override
     public BigDecimal calculateProfitLoss(Position position) {
         if (position == null) {
             throw new IllegalArgumentException("Position cannot be null");
         }
-        
-        return paperTradeEngine.calculateProfitLoss(position);
+        return position.getProfitLoss() != null ? position.getProfitLoss() : BigDecimal.ZERO;
     }
-    
-    /**
-     * Gets the maximum number of concurrent positions allowed.
-     * 
-     * @return maximum number of concurrent positions
-     */
+
     @Override
     public int getMaxConcurrentPositions() {
-        return paperTradeEngine.getMaxConcurrentPositions();
+        return paperTradingEngine.getMaxConcurrentPositions();
     }
-    
-    /**
-     * Gets the maximum percentage of capital allowed per position.
-     * 
-     * @return maximum percentage of capital per position
-     */
+
     @Override
     public BigDecimal getMaxCapitalPerPosition() {
-        return paperTradeEngine.getMaxCapitalPerPosition();
+        return paperTradingEngine.getMaxCapitalPerPosition();
     }
 }

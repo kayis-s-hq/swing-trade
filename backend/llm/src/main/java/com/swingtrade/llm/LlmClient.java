@@ -14,7 +14,7 @@ public interface LlmClient {
      * @param inputText The text to analyze for sentiment
      * @return Structured sentiment analysis result
      */
-    SentimentAnalysisResult analyzeSentiment(String inputText);
+    SentimentOutput analyzeSentiment(String inputText);
     
     /**
      * Processes news articles for technical trading signals.

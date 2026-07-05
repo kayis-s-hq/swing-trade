@@ -81,7 +81,7 @@ class FyersAuthServiceTest {
     @Test
     void exchangesAuthCodeForTokens() throws InterruptedException {
         mockWebServer.enqueue(new MockResponse()
-            .setBody("{\"s\":\"success\",\"access_token\":\"new-access-123\",\"refresh_token\":\"new-refresh-456\"}")
+            .setBody("{\"s\":\"ok\",\"access_token\":\"new-access-123\",\"refresh_token\":\"new-refresh-456\"}")
             .addHeader("Content-Type", "application/json")
         );
 
@@ -102,7 +102,7 @@ class FyersAuthServiceTest {
     @Test
     void persistsTokensToFileAndLoadsOnRestart() {
         mockWebServer.enqueue(new MockResponse()
-            .setBody("{\"s\":\"success\",\"access_token\":\"persisted-access\",\"refresh_token\":\"persisted-refresh\"}")
+            .setBody("{\"s\":\"ok\",\"access_token\":\"persisted-access\",\"refresh_token\":\"persisted-refresh\"}")
             .addHeader("Content-Type", "application/json")
         );
 
@@ -127,7 +127,7 @@ class FyersAuthServiceTest {
         config.setPin("1234");
 
         mockWebServer.enqueue(new MockResponse()
-            .setBody("{\"s\":\"success\",\"access_token\":\"refreshed-access\",\"refresh_token\":\"new-refresh\"}")
+            .setBody("{\"s\":\"ok\",\"access_token\":\"refreshed-access\",\"refresh_token\":\"new-refresh\"}")
             .addHeader("Content-Type", "application/json")
         );
 
@@ -144,7 +144,7 @@ class FyersAuthServiceTest {
         config.setPin("1234");
 
         mockWebServer.enqueue(new MockResponse()
-            .setBody("{\"s\":\"success\",\"access_token\":\"refreshed-access\",\"refresh_token\":\"new-refresh\"}")
+            .setBody("{\"s\":\"ok\",\"access_token\":\"refreshed-access\",\"refresh_token\":\"new-refresh\"}")
             .addHeader("Content-Type", "application/json")
         );
 

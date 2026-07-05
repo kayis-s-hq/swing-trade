@@ -35,6 +35,16 @@ const router = createRouter({
       component: () => import('../views/BacktestView.vue'),
     },
     {
+      path: '/sentiment',
+      name: 'Sentiment',
+      component: () => import('../views/SentimentView.vue'),
+    },
+    {
+      path: '/monitoring',
+      name: 'Monitoring',
+      component: () => import('../views/MonitoringView.vue'),
+    },
+    {
       path: '/data',
       name: 'Data Ingestion',
       component: () => import('../views/DataIngestionView.vue'),

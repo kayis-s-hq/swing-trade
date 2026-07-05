@@ -4,6 +4,7 @@ import com.swingtrade.domain.SentimentResult;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * JPA entity for the SentimentResult domain model.
@@ -39,6 +40,12 @@ public class SentimentResultEntity {
     @Column(name = "analyzed_at")
     private LocalDate analyzedAt;
 
+    @Column(name = "red_flags", columnDefinition = "TEXT[]")
+    private String[] redFlags;
+
+    @Column(name = "catalysts", columnDefinition = "TEXT[]")
+    private String[] catalysts;
+
     @Column(name = "created_at", updatable = false)
     private java.time.LocalDateTime createdAt;
 
@@ -67,6 +74,8 @@ public class SentimentResultEntity {
         entity.setRawContent(result.rawContent());
         entity.setConfidence(result.confidence());
         entity.setAnalyzedAt(result.analyzedAt());
+        entity.setRedFlags(result.redFlags() != null ? result.redFlags().toArray(new String[0]) : null);
+        entity.setCatalysts(result.catalysts() != null ? result.catalysts().toArray(new String[0]) : null);
         return entity;
     }
 
@@ -84,7 +93,9 @@ public class SentimentResultEntity {
             summary,
             rawContent,
             confidence,
-            analyzedAt
+            analyzedAt,
+            redFlags != null ? List.of(redFlags) : List.of(),
+            catalysts != null ? List.of(catalysts) : List.of()
         );
     }
 
@@ -152,6 +163,22 @@ public class SentimentResultEntity {
 
     public void setAnalyzedAt(LocalDate analyzedAt) {
         this.analyzedAt = analyzedAt;
+    }
+
+    public String[] getRedFlags() {
+        return redFlags;
+    }
+
+    public void setRedFlags(String[] redFlags) {
+        this.redFlags = redFlags;
+    }
+
+    public String[] getCatalysts() {
+        return catalysts;
+    }
+
+    public void setCatalysts(String[] catalysts) {
+        this.catalysts = catalysts;
     }
 
     public java.time.LocalDateTime getCreatedAt() {

@@ -51,6 +51,17 @@ GET https://api-t1.fyers.in/api/v3/generate-authcode?client_id={appId}&redirect_
 }
 ```
 
+**Response** (verified against live API 2026-07-04 — success value is `"ok"`, not `"success"` as elsewhere in this doc):
+```json
+{
+  "s": "ok",
+  "code": 200,
+  "message": "",
+  "access_token": "eyJhbGci...",
+  "refresh_token": "eyJhbGci..."
+}
+```
+
 ### 3. Refresh Access Token
 
 **Endpoint**: `POST https://api-t1.fyers.in/api/v3/validate-refresh-token`

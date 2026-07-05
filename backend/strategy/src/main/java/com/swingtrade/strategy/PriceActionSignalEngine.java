@@ -57,19 +57,21 @@ public class PriceActionSignalEngine {
 
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
 
-    private static final int EMA_FAST_PERIOD = 20;
-    private static final int EMA_SLOW_PERIOD = 50;
-    private static final int RSI_PERIOD = 14;
-    private static final int ATR_PERIOD = 14;
-    private static final int VOLUME_MA_PERIOD = 20;
-    private static final int FIFTY_TWO_WEEK_TRADING_DAYS = 252;
+    // Package-private (not private): reused directly by BacktestEngine so the backtest's
+    // entry rules can never drift from the live signal engine's thresholds.
+    static final int EMA_FAST_PERIOD = 20;
+    static final int EMA_SLOW_PERIOD = 50;
+    static final int RSI_PERIOD = 14;
+    static final int ATR_PERIOD = 14;
+    static final int VOLUME_MA_PERIOD = 20;
+    static final int FIFTY_TWO_WEEK_TRADING_DAYS = 252;
 
-    private static final BigDecimal RSI_LOWER_BOUND = BigDecimal.valueOf(50);
-    private static final BigDecimal RSI_UPPER_BOUND = BigDecimal.valueOf(65);
-    private static final BigDecimal VOLUME_MULTIPLIER = BigDecimal.valueOf(1.5);
-    private static final BigDecimal HIGH_PROXIMITY_THRESHOLD = BigDecimal.valueOf(0.97);
+    static final BigDecimal RSI_LOWER_BOUND = BigDecimal.valueOf(50);
+    static final BigDecimal RSI_UPPER_BOUND = BigDecimal.valueOf(65);
+    static final BigDecimal VOLUME_MULTIPLIER = BigDecimal.valueOf(1.5);
+    static final BigDecimal HIGH_PROXIMITY_THRESHOLD = BigDecimal.valueOf(0.97);
 
-    private static final int MIN_REQUIRED_CANDLES = EMA_SLOW_PERIOD;
+    static final int MIN_REQUIRED_CANDLES = EMA_SLOW_PERIOD;
 
     private final OhlcvCandleRepository candleRepository;
 
@@ -178,7 +180,7 @@ public class PriceActionSignalEngine {
         }
     }
 
-    private BarSeries buildBarSeries(String symbol, List<OhlcvCandleEntity> chronologicalCandles) {
+    BarSeries buildBarSeries(String symbol, List<OhlcvCandleEntity> chronologicalCandles) {
         BarSeries series = new BaseBarSeries(symbol);
         for (OhlcvCandleEntity candle : chronologicalCandles) {
             ZonedDateTime endTime = candle.getDate().atStartOfDay(MARKET_ZONE);

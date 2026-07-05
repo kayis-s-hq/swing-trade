@@ -1,5 +1,6 @@
 package com.swingtrade.llm.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swingtrade.llm.SentimentType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ class SentimentAnalyzerTest {
 
     @BeforeEach
     void setUp() {
-        sentimentAnalyzer = new SentimentAnalyzer();
+        sentimentAnalyzer = new SentimentAnalyzer(new ObjectMapper());
     }
 
     // ===== Prompt Creation Tests =====
@@ -74,8 +75,7 @@ class SentimentAnalyzerTest {
 
         // Assert
         String userMessage = messages.get(1).get("content");
-        assertThat(userMessage).contains("NSE/BSE");
-        assertThat(userMessage).contains("Indian Equities");
+        assertThat(userMessage).contains("swing trade");
     }
 
     @Test
@@ -90,10 +90,11 @@ class SentimentAnalyzerTest {
 
         // Assert - verify prompt asks for JSON with required fields
         String userMessage = messages.get(1).get("content");
-        assertThat(userMessage).contains("\"sentiment\"");
+        assertThat(userMessage).contains("\"score\"");
         assertThat(userMessage).contains("\"confidence\"");
-        assertThat(userMessage).contains("\"reasoning\"");
-        assertThat(userMessage).contains("\"keyFactors\"");
+        assertThat(userMessage).contains("\"summary\"");
+        assertThat(userMessage).contains("\"red_flags\"");
+        assertThat(userMessage).contains("\"catalysts\"");
     }
 
     @Test
@@ -125,8 +126,8 @@ class SentimentAnalyzerTest {
 
         // Assert
         String systemMessage = messages.get(0).get("content");
-        assertThat(systemMessage).contains("expert financial analyst");
-        assertThat(systemMessage).contains("NSE/BSE");
+        assertThat(systemMessage).contains("financial analyst");
+        assertThat(systemMessage).contains("Indian equity");
         assertThat(systemMessage).contains("POSITIVE");
         assertThat(systemMessage).contains("NEGATIVE");
         assertThat(systemMessage).contains("NEUTRAL");
@@ -145,8 +146,8 @@ class SentimentAnalyzerTest {
         // Assert - should define what constitutes each sentiment
         String systemMessage = messages.get(0).get("content");
         assertThat(systemMessage).contains("earnings");
-        assertThat(systemMessage).contains("revenue");
-        assertThat(systemMessage).contains("growth");
+        assertThat(systemMessage).contains("sector");
+        assertThat(systemMessage).contains("FII");
     }
 
     // ===== Response Parsing Tests =====
@@ -376,12 +377,12 @@ class SentimentAnalyzerTest {
         // Arrange
         String validResponse = """
                 {
-                    "sentiment": "POSITIVE",
+                    "score": "POSITIVE",
                     "confidence": 0.85,
-                    "reasoning": "Good"
+                    "summary": "Good"
                 }
                 """;
-        List<String> requiredFields = List.of("sentiment", "confidence", "reasoning");
+        List<String> requiredFields = List.of("score", "confidence", "summary");
 
         // Act
         boolean isValid = sentimentAnalyzer.validateSentimentResponse(validResponse, requiredFields);
@@ -395,10 +396,10 @@ class SentimentAnalyzerTest {
         // Arrange
         String invalidResponse = """
                 {
-                    "sentiment": "POSITIVE"
+                    "score": "POSITIVE"
                 }
                 """;
-        List<String> requiredFields = List.of("sentiment", "confidence", "reasoning");
+        List<String> requiredFields = List.of("score", "confidence", "summary");
 
         // Act
         boolean isValid = sentimentAnalyzer.validateSentimentResponse(invalidResponse, requiredFields);

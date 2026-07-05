@@ -22,7 +22,7 @@ import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
-import com.swingtrade.llm.service.SentimentAnalysisService;
+import com.swingtrade.llm.service.SentimentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,7 +42,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Integration test for SignalEngine with SentimentAnalysisService.
+ * Integration test for SignalEngine with SentimentService.
  * Tests the actual signal filtering logic where sentiment checks suppress or flag signals.
  *
  * Test coverage:
@@ -67,7 +67,10 @@ class SignalEngineIntegrationTest {
     private SwingTradingStrategy strategy;
 
     @Mock
-    private SentimentAnalysisService sentimentAnalysisService;
+    private SentimentService sentimentAnalysisService;
+
+    @Mock
+    private PriceActionSignalEngine priceActionSignalEngine;
 
     @BeforeEach
     void setUp() {
@@ -76,7 +79,8 @@ class SignalEngineIntegrationTest {
                 candleRepository,
                 signalRepository,
                 strategy,
-                sentimentAnalysisService
+                sentimentAnalysisService,
+                priceActionSignalEngine
         );
     }
 

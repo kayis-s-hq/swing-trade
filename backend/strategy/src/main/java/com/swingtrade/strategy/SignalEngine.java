@@ -6,7 +6,7 @@ import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
-import com.swingtrade.llm.service.SentimentAnalysisService;
+import com.swingtrade.llm.service.SentimentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -33,7 +33,8 @@ public class SignalEngine {
     private final OhlcvCandleRepository candleRepository;
     private final SignalRepository signalRepository;
     private final SwingTradingStrategy strategy;
-    private final SentimentAnalysisService sentimentAnalysisService;
+    private final SentimentService sentimentService;
+    private final PriceActionSignalEngine priceActionSignalEngine;
 
     /**
      * Constructs SignalEngine with required dependencies.
@@ -41,11 +42,13 @@ public class SignalEngine {
     public SignalEngine(OhlcvCandleRepository candleRepository,
                         SignalRepository signalRepository,
                         SwingTradingStrategy strategy,
-                        SentimentAnalysisService sentimentAnalysisService) {
+                        SentimentService sentimentService,
+                        PriceActionSignalEngine priceActionSignalEngine) {
         this.candleRepository = candleRepository;
         this.signalRepository = signalRepository;
         this.strategy = strategy;
-        this.sentimentAnalysisService = sentimentAnalysisService;
+        this.sentimentService = sentimentService;
+        this.priceActionSignalEngine = priceActionSignalEngine;
     }
 
     /**
@@ -74,6 +77,13 @@ public class SignalEngine {
                     logger.error("Error generating signals for {}: {}", symbol, e.getMessage());
                     failures++;
                 }
+
+                try {
+                    generatePriceActionSignalForSymbol(symbol);
+                } catch (Exception e) {
+                    logger.error("Error generating price-action signal for {}: {}", symbol, e.getMessage());
+                }
+
                 processed++;
 
                 // Progress logging
@@ -136,7 +146,7 @@ public class SignalEngine {
         String warningFlag = SignalEntity.WARNING_NONE;
         try {
             if (signal.type() == Signal.SignalType.BUY) {
-                SentimentResult sentiment = sentimentAnalysisService.analyzeStockSentiment(symbol, latestDate);
+                SentimentResult sentiment = sentimentService.analyzeStockSentiment(symbol, latestDate);
 
                 if (sentiment.isNegative()) {
                     logger.info("Suppressing BUY signal for {} on {} due to NEGATIVE sentiment (reasoning: {})",
@@ -169,6 +179,70 @@ public class SignalEngine {
 
         logger.info("Generated {} signal for {} on {} (confidence: {:.2%}, warning: {})",
                     signal.type(), symbol, latestDate, signal.confidence(), warningFlag);
+    }
+
+    /**
+     * Generates a price-action signal for a specific stock using {@link PriceActionSignalEngine}
+     * and persists it alongside the default strategy's signals, tagged with
+     * {@link SignalEntity#STRATEGY_PRICE_ACTION}.
+     *
+     * @param symbol the stock symbol
+     */
+    @CacheEvict(value = {"latestSignal", "signals"}, key = "#symbol")
+    @Transactional
+    public void generatePriceActionSignalForSymbol(String symbol) {
+        logger.debug("Generating price-action signal for {}", symbol);
+
+        SignalResult result;
+        try {
+            result = priceActionSignalEngine.generateSignal(symbol);
+        } catch (IllegalStateException e) {
+            logger.debug("Not enough candles for price-action signal on {}: {}", symbol, e.getMessage());
+            return;
+        }
+
+        List<SignalEntity> existingSignals = signalRepository.findBySymbolAndDateAndStrategy(
+                symbol, result.date(), SignalEntity.STRATEGY_PRICE_ACTION);
+        if (!existingSignals.isEmpty()) {
+            logger.debug("Price-action signal already exists for {} on {}", symbol, result.date());
+            return;
+        }
+
+        SignalEntity signalEntity = new SignalEntity();
+        signalEntity.setSymbol(result.symbol());
+        signalEntity.setDate(result.date());
+        signalEntity.setSignalType(result.type().toString());
+        signalEntity.setConfidenceScore(result.type() == Signal.SignalType.BUY ? java.math.BigDecimal.ONE : java.math.BigDecimal.valueOf(0.5));
+        signalEntity.setReasoning(result.reasoning());
+        signalEntity.setIndicators(buildPriceActionIndicators(result));
+        signalEntity.setWarningFlag(SignalEntity.WARNING_NONE);
+        signalEntity.setStrategy(SignalEntity.STRATEGY_PRICE_ACTION);
+
+        signalRepository.save(signalEntity);
+
+        logger.info("Generated {} price-action signal for {} on {}", result.type(), symbol, result.date());
+    }
+
+    /**
+     * Builds the comma-separated indicators string persisted alongside a price-action signal.
+     *
+     * @param result the price-action signal result
+     * @return comma-separated "NAME=value" indicator readings
+     */
+    private String buildPriceActionIndicators(SignalResult result) {
+        return String.format(java.util.Locale.ROOT, "RSI=%.2f,EMA20=%.2f,EMA50=%.2f,ATR=%.2f",
+                result.rsi(), result.ema20(), result.ema50(), result.atr());
+    }
+
+    /**
+     * Manually triggers price-action signal generation for a specific symbol.
+     *
+     * @param symbol the stock symbol
+     */
+    @Transactional
+    public void generatePriceActionSignalForSymbolNow(String symbol) {
+        logger.info("Manually generating price-action signal for {}", symbol);
+        generatePriceActionSignalForSymbol(symbol);
     }
 
     /**

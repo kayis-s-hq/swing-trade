@@ -130,9 +130,9 @@ public class TradingController {
      * @return Risk summary
      */
     @GetMapping("/risk-summary")
-    public ResponseEntity<com.swingtrade.api.PositionService.RiskSummary> getRiskSummary() {
+    public ResponseEntity<com.swingtrade.api.dto.RiskSummary> getRiskSummary() {
         logger.debug("Fetching risk summary");
-        com.swingtrade.api.PositionService.RiskSummary riskSummary = positionService.getRiskSummary();
+        com.swingtrade.api.dto.RiskSummary riskSummary = positionService.getRiskSummary();
         return ResponseEntity.ok(riskSummary);
     }
 }

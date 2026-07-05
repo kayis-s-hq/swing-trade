@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 /**
- * Enhanced unit tests for SentimentAnalysisService sector digest functionality.
+ * Enhanced unit tests for SentimentService sector digest functionality.
  * Tests the actual service methods that group sentiment results by sector and identify top sectors.
  *
  * Test coverage:
@@ -34,7 +34,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class SectorDigestTest {
 
-    private SentimentAnalysisService sentimentAnalysisService;
+    private SentimentService sentimentAnalysisService;
 
     @Mock
     private SentimentResultRepository sentimentResultRepository;
@@ -44,8 +44,8 @@ class SectorDigestTest {
 
     @BeforeEach
     void setUp() {
-        // Create real SentimentAnalysisService with mocked repositories
-        sentimentAnalysisService = new SentimentAnalysisService(
+        // Create real SentimentService with mocked repositories
+        sentimentAnalysisService = new SentimentService(
                 null,  // vllmClient not needed for sector digest tests
                 null,  // sentimentAnalyzer not needed
                 null,  // newsIngestionService not needed

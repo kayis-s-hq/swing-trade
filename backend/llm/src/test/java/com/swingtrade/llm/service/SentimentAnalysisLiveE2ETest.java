@@ -29,7 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
- * Live E2E tests for SentimentAnalysisService that make real API calls to vLLM.
+ * Live E2E tests for SentimentService that make real API calls to vLLM.
  *
  * These tests verify the complete pipeline:
  * 1. News ingestion from RSS feeds (mocked for reliability)
@@ -54,7 +54,7 @@ class SentimentAnalysisLiveE2ETest {
     private NewsIngestionService newsIngestionService;
 
     @Autowired
-    private SentimentAnalysisService sentimentAnalysisService;
+    private SentimentService sentimentAnalysisService;
 
     @Autowired
     private SentimentResultRepository sentimentResultRepository;

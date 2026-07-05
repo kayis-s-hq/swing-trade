@@ -6,8 +6,9 @@ import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.repository.SentimentResultRepository;
 import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.domain.Stock;
-import com.swingtrade.llm.service.SentimentAnalysisService;
+import com.swingtrade.llm.service.SentimentService;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +25,7 @@ import java.time.LocalDate;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * E2E tests for Weekly Sector Digest generation with SentimentAnalysisService,
+ * E2E tests for Weekly Sector Digest generation with SentimentService,
  * formatting, date range calculation (Sunday-Saturday IST), and error handling.
  *
  * Test coverage:
@@ -40,11 +41,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("test")
 @Testcontainers
 @DisplayName("Weekly Sector Digest E2E Tests")
-@org.junit.jupiter.api.Disabled("E2E test - requires Docker and full infrastructure")
+@Disabled("E2E test - requires Docker and full infrastructure")
 class WeeklyDigestE2ETest {
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
+    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
             .withDatabaseName("swingtrade_test")
             .withUsername("test")
             .withPassword("test");
@@ -58,7 +59,7 @@ class WeeklyDigestE2ETest {
     }
 
     @Autowired
-    private SentimentAnalysisService sentimentAnalysisService;
+    private SentimentService sentimentAnalysisService;
 
     @Autowired
     private SentimentResultRepository sentimentResultRepository;

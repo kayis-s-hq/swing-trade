@@ -127,4 +127,14 @@ public class FyersAuthController {
             "clientId", authService.getClientId()
         ));
     }
+
+    /**
+     * POST /api/fyers/logout
+     * Invalidates and clears the stored access/refresh tokens.
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, Object>> logout() {
+        authService.logout();
+        return ResponseEntity.ok(Map.of("connected", authService.validateToken()));
+    }
 }

@@ -173,3 +173,37 @@ export interface BacktestReportSummary {
   overallSharpeRatio: number
   results: BacktestResult[]
 }
+
+// ---------------------------------------------------------------------------
+// Sentiment
+// ---------------------------------------------------------------------------
+
+export interface SentimentResult {
+  id: number
+  symbol: string
+  date: string
+  score: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE'
+  summary: string
+  rawContent: string
+  confidence: number
+  analyzedAt: string
+  redFlags: string[]
+  catalysts: string[]
+}
+
+export interface SentimentAccuracyStats {
+  total: number
+  correct: number
+  accuracy_pct: number
+  by_sentiment: Record<string, number>
+  by_symbol: Record<string, number>
+}
+
+export interface NewsArticle {
+  title: string
+  link: string
+  description: string
+  publishedDate: string
+  source: string
+  rawContent: string
+}

@@ -1,6 +1,7 @@
 package com.swingtrade.domain;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Represents the sentiment analysis result for a stock on a specific date.
@@ -24,7 +25,9 @@ public record SentimentResult(
     String summary,
     String rawContent,
     Double confidence,
-    LocalDate analyzedAt
+    LocalDate analyzedAt,
+    List<String> redFlags,
+    List<String> catalysts
 ) {
     /**
      * Enum representing the different sentiment scores.
@@ -64,6 +67,19 @@ public record SentimentResult(
         String rawContent,
         Double confidence
     ) {
+        return create(symbol, date, score, summary, rawContent, confidence, List.of(), List.of());
+    }
+
+    public static SentimentResult create(
+        String symbol,
+        LocalDate date,
+        SentimentScore score,
+        String summary,
+        String rawContent,
+        Double confidence,
+        List<String> redFlags,
+        List<String> catalysts
+    ) {
         Double normalizedConfidence = confidence != null ?
             Math.max(0.0, Math.min(1.0, confidence)) : null;
 
@@ -75,7 +91,9 @@ public record SentimentResult(
             summary,
             rawContent,
             normalizedConfidence,
-            LocalDate.now()
+            LocalDate.now(),
+            redFlags != null ? redFlags : List.of(),
+            catalysts != null ? catalysts : List.of()
         );
     }
 

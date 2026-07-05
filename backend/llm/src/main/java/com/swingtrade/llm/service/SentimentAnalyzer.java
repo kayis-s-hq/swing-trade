@@ -1,10 +1,14 @@
 package com.swingtrade.llm.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -17,48 +21,55 @@ public class SentimentAnalyzer {
 
     private static final Logger logger = LoggerFactory.getLogger(SentimentAnalyzer.class);
 
+    private final ObjectMapper objectMapper;
+
+    public SentimentAnalyzer(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
+
     /**
      * System prompt that establishes the role and task for sentiment analysis.
      */
     private static final String SYSTEM_PROMPT = """
-            You are an expert financial analyst specializing in stock market sentiment analysis.
-            Your task is to analyze news articles and corporate announcements about Indian stocks (NSE/BSE)
-            and determine the overall sentiment: POSITIVE, NEUTRAL, or NEGATIVE.
+            You are a financial analyst specialising in Indian equity markets.
+            Analyse the following for a swing trade entry decision on {symbol}.
+            Consider: earnings momentum, regulatory news, management changes,
+            sector tailwinds, FII/DII activity, promoter actions.
 
-            Guidelines:
-            - POSITIVE: Strong earnings, revenue growth, new contracts, analyst upgrades, positive market outlook,
-              successful product launches, expansion plans, favorable regulatory changes
-            - NEGATIVE: Poor earnings, revenue decline, losses, analyst downgrades, legal issues, management changes,
-              unfavorable regulatory changes, market headwinds
-            - NEUTRAL: Mixed signals, routine announcements, no material impact, stable performance
+            Respond in this exact JSON format only, no other text:
+            {
+              "score": "POSITIVE|NEUTRAL|NEGATIVE",
+              "confidence": 0.0-1.0,
+              "summary": "2 sentence max reasoning",
+              "red_flags": ["list any specific risks"],
+              "catalysts": ["list any upcoming catalysts"]
+            }
 
-            Provide a clear classification with supporting reasoning.
+            Examples:
+            POSITIVE: Strong quarterly results, FII buying, sector tailwind
+            NEUTRAL: Mixed results, no major news
+            NEGATIVE: Promoter pledge, SEBI action, earnings miss
             """;
 
     /**
      * Creates a chat message list for sentiment analysis.
-     *
-     * @param stockSymbol the stock symbol being analyzed
-     * @param newsContent the news content to analyze
-     * @return list of chat messages
      */
     public List<Map<String, String>> createSentimentAnalysisPrompt(String stockSymbol, String newsContent) {
         String userMessage = """
-                Analyze the sentiment for the following stock news:
+                Analyse the following for a swing trade entry decision on %s.
 
-                Stock Symbol: %s
-                Market: NSE/BSE (Indian Equities)
-
-                News Content:
+                Recent news headlines (last 7 days):
                 %s
 
-                Please provide your analysis in the following JSON format:
+                Task: Determine if news sentiment supports a 1-4 week swing trade entry.
+
+                Respond in this exact JSON format only, no other text:
                 {
-                    "sentiment": "POSITIVE|NEUTRAL|NEGATIVE",
-                    "confidence": 0.0-1.0,
-                    "reasoning": "Brief explanation of the sentiment classification (max 200 words)",
-                    "keyFactors": ["factor1", "factor2"],
-                    "tradingImplication": "Brief note on how this sentiment might affect trading decisions"
+                  "score": "POSITIVE|NEUTRAL|NEGATIVE",
+                  "confidence": 0.0-1.0,
+                  "summary": "2 sentence max reasoning",
+                  "red_flags": ["list any specific risks"],
+                  "catalysts": ["list any upcoming catalysts"]
                 }
                 """;
 
@@ -68,6 +79,79 @@ public class SentimentAnalyzer {
         Map<String, String> userMessageObj = Map.of("role", "user", "content", formattedMessage);
 
         return List.of(systemMessage, userMessageObj);
+    }
+
+    /**
+     * Creates a prompt for multi-article sentiment analysis with earnings data.
+     */
+    public List<Map<String, String>> createSentimentAnalysisPrompt(
+            String stockSymbol, List<String> headlines, String earningsSummary) {
+        String userMessage = """
+                Analyse the following for a swing trade entry decision on %s.
+
+                Recent news headlines (last 7 days):
+                %s
+
+                Latest earnings summary:
+                %s
+
+                Task: Determine if news sentiment supports a 1-4 week swing trade entry.
+
+                Respond in this exact JSON format only, no other text:
+                {
+                  "score": "POSITIVE|NEUTRAL|NEGATIVE",
+                  "confidence": 0.0-1.0,
+                  "summary": "2 sentence max reasoning",
+                  "red_flags": ["list any specific risks"],
+                  "catalysts": ["list any upcoming catalysts"]
+                }
+                """;
+
+        String earningsText = earningsSummary != null && !earningsSummary.isBlank()
+                ? earningsSummary
+                : "No earnings data available";
+
+        String formattedMessage = String.format(userMessage, stockSymbol,
+                String.join("\n", headlines), earningsText);
+
+        Map<String, String> systemMessage = Map.of("role", "system", "content", SYSTEM_PROMPT);
+        Map<String, String> userMessageObj = Map.of("role", "user", "content", formattedMessage);
+
+        return List.of(systemMessage, userMessageObj);
+    }
+
+    /**
+     * Parses LLM JSON response into SentimentOutput using Jackson.
+     */
+    public SentimentOutput parseResponse(String jsonResponse) {
+        try {
+            JsonNode root = objectMapper.readTree(jsonResponse);
+            String score = root.get("score").asText();
+            double confidence = root.get("confidence").asDouble();
+            String summary = root.get("summary").asText();
+
+            List<String> redFlags = new ArrayList<>();
+            if (root.has("red_flags") && root.get("red_flags").isArray()) {
+                root.get("red_flags").forEach(node -> redFlags.add(node.asText()));
+            }
+
+            List<String> catalysts = new ArrayList<>();
+            if (root.has("catalysts") && root.get("catalysts").isArray()) {
+                root.get("catalysts").forEach(node -> catalysts.add(node.asText()));
+            }
+
+            return new SentimentOutput(
+                    SentimentType.valueOf(score.toUpperCase()),
+                    summary,
+                    confidence,
+                    redFlags,
+                    catalysts
+            );
+        } catch (Exception e) {
+            logger.warn("Failed to parse LLM response: {}", e.getMessage());
+            return new SentimentOutput(
+                    SentimentType.NEUTRAL, "Parse failed", 0.3, List.of(), List.of());
+        }
     }
 
     /**

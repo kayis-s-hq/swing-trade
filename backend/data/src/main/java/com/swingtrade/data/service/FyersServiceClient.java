@@ -336,8 +336,11 @@ public class FyersServiceClient implements MarketDataClient {
     }
 
     private String doGet(URI uri, String appId, String token) {
+        // uri(URI) bypasses the client's configured base URL and treats the URI as absolute,
+        // which breaks since callers build a scheme/host-less URI via UriComponentsBuilder.
+        // uri(Function<UriBuilder,URI>) resolves relative to the configured base URL instead.
         return webClient.get()
-            .uri(uri)
+            .uri(uriBuilder -> uriBuilder.replacePath(uri.getRawPath()).replaceQuery(uri.getRawQuery()).build())
             .header("Authorization", appId + ":" + token)
             .retrieve()
             .bodyToMono(String.class)

@@ -6,25 +6,10 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-      </profile>
-      <profile name="Annotation profile for swing-trade" enabled="true">
-        <sourceOutputDir name="target/generated-sources/annotations" />
-        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
-        <outputRelativeToContentRoot value="true" />
-        <processorPath useClasspath="false">
-          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.38/lombok-1.18.38.jar" />
-        </processorPath>
-        <module name="swing-trade" />
+        <module name="core" />
+        <module name="api" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="api" target="21" />
-      <module name="broker" target="21" />
-      <module name="core" target="21" />
-      <module name="data" target="21" />
-      <module name="llm" target="21" />
-      <module name="strategy" target="21" />
-    </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
@@ -34,7 +19,7 @@
       <module name="data" options="-parameters" />
       <module name="llm" options="-parameters" />
       <module name="strategy" options="-parameters" />
-      <module name="swing-trade" options="-parameters" />
+      <module name="swing-trade" options="" />
     </option>
   </component>
 </project>

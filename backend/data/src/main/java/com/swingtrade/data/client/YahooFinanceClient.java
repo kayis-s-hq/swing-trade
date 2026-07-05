@@ -16,7 +16,6 @@ import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 import java.math.BigDecimal;
-import java.net.URI;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -114,7 +113,7 @@ public class YahooFinanceClient implements MarketDataClient {
                     yfinanceSymbol, timestamp, nextDay);
 
             String response = webClient.get()
-                    .uri(URI.create(uri))
+                    .uri(uri)
                     .retrieve()
                     .onStatus(status -> status.value() == 404, r -> Mono.empty())
                     .onStatus(status -> status.value() >= 400, r -> Mono.empty())
@@ -209,7 +208,7 @@ public class YahooFinanceClient implements MarketDataClient {
                     yfinanceSymbol, period1, period2);
 
             String response = webClient.get()
-                    .uri(URI.create(uri))
+                    .uri(uri)
                     .retrieve()
                     .onStatus(status -> status.value() >= 400, r -> Mono.empty())
                     .bodyToMono(String.class)
@@ -336,7 +335,7 @@ public class YahooFinanceClient implements MarketDataClient {
             String uri = "/v8/finance/chart/" + yfinanceSymbol + "?range=1mo&interval=1d";
 
             String response = webClient.get()
-                    .uri(URI.create(uri))
+                    .uri(uri)
                     .retrieve()
                     .onStatus(status -> status.value() >= 400, r -> Mono.empty())
                     .bodyToMono(String.class)
@@ -464,7 +463,7 @@ public class YahooFinanceClient implements MarketDataClient {
             String uri = String.format("/v7/finance/quote?symbols=%s", yahooSymbols);
 
             String response = webClient.get()
-                    .uri(URI.create(uri))
+                    .uri(uri)
                     .retrieve()
                     .onStatus(status -> status.value() >= 400, r -> Mono.empty())
                     .bodyToMono(String.class)
@@ -549,7 +548,7 @@ public class YahooFinanceClient implements MarketDataClient {
                     query.trim());
 
             String response = webClient.get()
-                    .uri(URI.create(uri))
+                    .uri(uri)
                     .retrieve()
                     .onStatus(status -> status.value() >= 400, r -> Mono.empty())
                     .bodyToMono(String.class)

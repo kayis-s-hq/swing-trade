@@ -189,6 +189,9 @@ Located in `backend/data/src/main/resources/db/migration/`:
 | `POST /api/positions/{symbol}/close` | Close a position |
 | `GET /api/performance` | P&L, win rate, trade stats |
 | `GET /actuator/health` | Spring Boot actuator |
+| `POST /api/backtest/run` | Backtest one symbol (`?symbol=X&exchange=NSE`) |
+| `POST /api/backtest/run-all` | Backtest the active watchlist, saves a report |
+| `GET /api/backtest/reports[/{filename}]` | List or fetch saved backtest reports |
 
 ## Testing
 
@@ -218,6 +221,26 @@ All project documentation goes in `docs/` as Markdown files.
 ### External API References
 
 - [docs/yahoo-finance-api.md](docs/yahoo-finance-api.md) — Yahoo Finance unofficial API endpoints (v8/chart, v7/quote, v1/search), response formats, parameters, and reliability notes. Based on [yahoo-finance2](https://github.com/gadicc/yahoo-finance2) reverse-engineered docs.
+
+### Backtesting
+
+- [docs/backtesting.md](docs/backtesting.md) — `BacktestEngine` entry/exit rules, how to trigger a backtest via curl, and how to interpret `BacktestResult` fields.
+
+## Planning Artifacts
+
+When a multi-step implementation plan is decided (after research and clarification), write it to `claude/plans/<slug>.md`. This file serves as a handoff — paste its contents into a new Claude Code session to continue work after a context cutoff or session restart.
+
+**Structure:**
+- Section 1: "What's already done" — list completed backend renames, refactors, or changes
+- Section 2: "What needs to be done" — numbered steps with file paths and exact code to add/modify
+- Section 3: "Style guide" — patterns to follow (existing components, API client pattern, empty/loading states)
+- Section 4: "Verification" — commands to run to confirm the work
+
+**Rules:**
+- Include exact file paths for every change
+- Include the full code to add (not "add X to Y")
+- Reference existing patterns from the codebase (don't invent new patterns)
+- Keep the file under 300 lines so it fits in a new session's context
 
 ## Market Data Clients
 

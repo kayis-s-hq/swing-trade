@@ -7,7 +7,7 @@ package com.swingtrade.broker.config;
 public enum BrokerMode {
     /**
      * Paper trading mode - simulates orders without real execution.
-     * Uses the existing PaperTradeEngine for simulation.
+     * Uses the unified PaperTradingEngine for simulation.
      */
     PAPER,
 

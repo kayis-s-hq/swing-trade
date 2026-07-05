@@ -25,8 +25,8 @@ public class LlmModuleTest {
     }
     
     @Test
-    void testSentimentAnalysisResultCreation() {
-        SentimentAnalysisResult result = new SentimentAnalysisResult(
+    void testSentimentOutputCreation() {
+        SentimentOutput result = new SentimentOutput(
             SentimentType.POSITIVE, 
             "Test reasoning", 
             0.85
@@ -67,7 +67,7 @@ public class LlmModuleTest {
     void testSentimentAnalysis() {
         // Test basic sentiment analysis functionality
         String sampleNews = "Company reports strong earnings growth and positive market outlook.";
-        SentimentAnalysisResult result = llmClient.analyzeSentiment(sampleNews);
+        SentimentOutput result = llmClient.analyzeSentiment(sampleNews);
 
         assertNotNull(result);
         assertNotNull(result.getSentiment());

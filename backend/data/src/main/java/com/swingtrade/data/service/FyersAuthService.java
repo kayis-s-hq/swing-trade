@@ -106,6 +106,7 @@ public class FyersAuthService {
             ));
 
             String response = postTokenRequest(VALIDATE_AUTHCODE_PATH, body);
+            logger.info("Fyers validate-authcode raw response: {}", response);
             updateTokensFromResponse(response);
             logger.info("Successfully exchanged auth code for tokens.");
         } catch (Exception e) {
@@ -177,17 +178,30 @@ public class FyersAuthService {
                 .retrieve()
                 .bodyToMono(String.class)
                 .block();
-            accessTokenRef.set(null);
-            refreshTokenRef.set(null);
+            clearTokens();
             logger.info("Fyers logout successful. Tokens cleared.");
         } catch (Exception e) {
             logger.error("Fyers logout failed: {}", e.getMessage());
         }
     }
 
+    private void clearTokens() {
+        accessTokenRef.set(null);
+        refreshTokenRef.set(null);
+        fyersConfig.setAccessToken(null);
+        fyersConfig.setRefreshToken(null);
+        String path = fyersConfig.getTokenStorePath();
+        if (path != null && !path.isEmpty()) {
+            File file = new File(path);
+            if (file.exists() && !file.delete()) {
+                logger.warn("Failed to delete persisted Fyers token file at {}", path);
+            }
+        }
+    }
+
     private void updateTokensFromResponse(String response) throws Exception {
         JsonNode root = objectMapper.readTree(response);
-        if (!"success".equals(root.get("s").asText())) {
+        if (!"ok".equals(root.get("s").asText())) {
             throw new RuntimeException("Fyers token API error: " + root.get("message"));
         }
 

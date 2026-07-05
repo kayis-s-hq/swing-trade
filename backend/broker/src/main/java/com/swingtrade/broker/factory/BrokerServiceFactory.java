@@ -1,8 +1,11 @@
 package com.swingtrade.broker.factory;
 
 import com.swingtrade.broker.config.BrokerMode;
-import com.swingtrade.broker.engine.PaperTradeEngine;
+import com.swingtrade.broker.engine.PaperTradingEngine;
+import com.swingtrade.broker.factory.DryRunService;
+import com.swingtrade.broker.factory.LiveTradingService;
 import com.swingtrade.broker.kite.BrokerClient;
+import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.risk.KillSwitchService;
 import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.broker.service.BrokerService;
@@ -23,7 +26,8 @@ public class BrokerServiceFactory {
 
     private static final Logger logger = LoggerFactory.getLogger(BrokerServiceFactory.class);
 
-    private final PaperTradeEngine paperTradeEngine;
+    private final PaperTradingEngine paperTradingEngine;
+    private final OrderManager orderManager;
     private final BrokerClient brokerClient;
     private final RiskControls riskControlsService;
     private final KillSwitchService killSwitchService;
@@ -35,11 +39,13 @@ public class BrokerServiceFactory {
     private BrokerService currentService;
 
     @Autowired
-    public BrokerServiceFactory(PaperTradeEngine paperTradeEngine,
+    public BrokerServiceFactory(PaperTradingEngine paperTradingEngine,
+                                OrderManager orderManager,
                                 org.springframework.beans.factory.ObjectProvider<BrokerClient> brokerClientProvider,
                                 RiskControls riskControlsService,
                                 KillSwitchService killSwitchService) {
-        this.paperTradeEngine = paperTradeEngine;
+        this.paperTradingEngine = paperTradingEngine;
+        this.orderManager = orderManager;
         this.brokerClient = brokerClientProvider.getIfAvailable();
         this.riskControlsService = riskControlsService;
         this.killSwitchService = killSwitchService;
@@ -71,7 +77,7 @@ public class BrokerServiceFactory {
         switch (mode) {
             case PAPER:
                 logger.info("Using Paper Trading Service");
-                return new PaperTradingServiceImpl(paperTradeEngine);
+                return new PaperTradingServiceImpl(paperTradingEngine, orderManager);
 
             case LIVE:
                 logger.info("Using Kite Connect Live Trading Service");
@@ -83,7 +89,7 @@ public class BrokerServiceFactory {
 
             default:
                 logger.warn("Unknown mode {}, defaulting to PAPER", mode);
-                return new PaperTradingServiceImpl(paperTradeEngine);
+                return new PaperTradingServiceImpl(paperTradingEngine, orderManager);
         }
     }
 

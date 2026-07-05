@@ -5,7 +5,7 @@ import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.llm.client.VLLMClient;
 import com.swingtrade.llm.service.NewsFilterService;
 import com.swingtrade.llm.service.NewsIngestionService;
-import com.swingtrade.llm.service.SentimentAnalysisService;
+import com.swingtrade.llm.service.SentimentService;
 import com.swingtrade.llm.service.SentimentCacheService;
 import com.swingtrade.llm.service.SentimentAnalyzer;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -62,7 +62,7 @@ public class TestLlmConfig {
     @Primary
     @Bean
     public SentimentAnalyzer sentimentAnalyzer() {
-        return new SentimentAnalyzer();
+        return new SentimentAnalyzer(new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     @Primary
@@ -135,14 +135,14 @@ public class TestLlmConfig {
 
     @Primary
     @Bean
-    public SentimentAnalysisService sentimentAnalysisService(
+    public SentimentService sentimentAnalysisService(
             VLLMClient vllmClient,
             SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService,
             SentimentCacheService sentimentCacheService,
             SentimentResultRepository sentimentResultRepository,
             StockRepository stockRepository) {
-        return new SentimentAnalysisService(
+        return new SentimentService(
                 vllmClient,
                 sentimentAnalyzer,
                 newsIngestionService,

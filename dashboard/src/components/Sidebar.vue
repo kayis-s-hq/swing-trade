@@ -98,6 +98,8 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: iconPaths.dashboard, badge: undefined },
   { path: '/positions', label: 'Positions', icon: iconPaths.positions, badge: undefined },
   { path: '/signals', label: 'Signals', icon: iconPaths.signals, badge: '6' },
+  { path: '/sentiment', label: 'Sentiment', icon: iconPaths.intelligence, badge: undefined },
+  { path: '/monitoring', label: 'Monitoring', icon: iconPaths.intelligence, badge: undefined },
   { path: '/portfolio', label: 'Portfolio', icon: iconPaths.portfolio, badge: undefined },
   { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
   { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },

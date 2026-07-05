@@ -33,8 +33,8 @@ public class VLLMClient {
      * @param modelName Model name to use (e.g., claude-sonnet-4-6)
      */
     public VLLMClient(WebClient.Builder webClientBuilder,
-                      @Value("${llm.vllm.base-url:https://u425-af79-4d7d6139.singapore-a.gpuhub.com:8443/v1}") String vllmBaseUrl,
-                      @Value("${llm.vllm.model-name:claude-sonnet-4-6}") String modelName) {
+                      @Value("${llm.vllm.base-url:https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1}") String vllmBaseUrl,
+                      @Value("${llm.vllm.model-name:Qwen3-30B-AWQ}") String modelName) {
 
         this.baseUrl = vllmBaseUrl;
         this.modelName = modelName;
@@ -104,7 +104,8 @@ public class VLLMClient {
                 "temperature", temperature,
                 "top_p", 0.9,
                 "n", 1,
-                "stream", false
+                "stream", false,
+                "response_format", Map.of("type", "json_object")
         );
 
         return webClient.post()

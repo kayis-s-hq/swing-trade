@@ -1,0 +1,878 @@
+package com.swingtrade.llm.service;
+
+import com.swingtrade.data.entity.SentimentResultEntity;
+import com.swingtrade.data.entity.StockEntity;
+import com.swingtrade.data.repository.SentimentResultRepository;
+import com.swingtrade.data.repository.StockRepository;
+import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.Stock;
+import com.swingtrade.llm.SentimentOutput;
+import com.swingtrade.llm.SentimentType;
+import com.swingtrade.llm.client.VLLMClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
+
+/**
+ * Main service for sentiment analysis of stocks using LLM.
+ * Orchestrates news ingestion, sentiment analysis, caching, and signal generation.
+ */
+@Service
+public class SentimentService {
+
+    private static final Logger logger = LoggerFactory.getLogger(SentimentService.class);
+
+    // Cache configuration
+    private static final int DEFAULT_CACHE_MAX_SIZE = 100;
+    private static final long DEFAULT_CACHE_EXPIRY_MINUTES = 60;
+    private static final long ANALYSIS_TIMEOUT_SECONDS = 120;
+
+    // Thread pool for async operations
+    private final ExecutorService analysisExecutor;
+
+    private final VLLMClient vllmClient;
+    private final SentimentAnalyzer sentimentAnalyzer;
+    private final NewsIngestionService newsIngestionService;
+    private final SentimentCacheService sentimentCacheService;
+    private final SentimentResultRepository sentimentResultRepository;
+    private final StockRepository stockRepository;
+
+    private final int maxCacheSize;
+    private final long cacheExpiryMinutes;
+    private final boolean enableCaching;
+    private final double defaultConfidence;
+
+    /**
+     * Constructs SentimentService with required dependencies.
+     */
+    @Autowired
+    public SentimentService(
+            VLLMClient vllmClient,
+            SentimentAnalyzer sentimentAnalyzer,
+            NewsIngestionService newsIngestionService,
+            SentimentCacheService sentimentCacheService,
+            SentimentResultRepository sentimentResultRepository,
+            StockRepository stockRepository,
+            @Value("${llm.sentiment.cache.max-size:100}") int maxCacheSize,
+            @Value("${llm.sentiment.cache.expiry-minutes:60}") long cacheExpiryMinutes,
+            @Value("${llm.sentiment.cache.enabled:true}") boolean enableCaching,
+            @Value("${llm.sentiment.default-confidence:0.75}") double defaultConfidence) {
+
+        this.vllmClient = vllmClient;
+        this.sentimentAnalyzer = sentimentAnalyzer;
+        this.newsIngestionService = newsIngestionService;
+        this.sentimentCacheService = sentimentCacheService;
+        this.sentimentResultRepository = sentimentResultRepository;
+        this.stockRepository = stockRepository;
+
+        this.maxCacheSize = maxCacheSize;
+        this.cacheExpiryMinutes = cacheExpiryMinutes;
+        this.enableCaching = enableCaching;
+        this.defaultConfidence = defaultConfidence;
+
+        // Initialize thread pool with bounded capacity
+        this.analysisExecutor = new ThreadPoolExecutor(
+                2,  // 2 core threads
+                5,  // 5 max threads
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(10),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+    }
+
+    /**
+     * Analyzes sentiment for a single stock using news from RSS feeds.
+     *
+     * @param stockSymbol the stock symbol (e.g., "RELIANCE", "TCS")
+     * @param date the date of analysis
+     * @return SentimentResult with analysis findings
+     */
+    public SentimentResult analyzeStockSentiment(String stockSymbol, LocalDate date) {
+        logger.info("Starting sentiment analysis for stock: {} on date: {}", stockSymbol, date);
+
+        // Check cache first
+        String cacheKey = generateCacheKey(stockSymbol, date);
+        if (enableCaching && sentimentCacheService.isCached(cacheKey)) {
+            logger.debug("Cache hit for {}: {}", stockSymbol, cacheKey);
+            var cached = sentimentCacheService.getValue(cacheKey);
+            if (cached.isPresent()) {
+                CachedSentiment sentimentData = (CachedSentiment) cached.get();
+                return buildSentimentResultFromCache(stockSymbol, date, sentimentData);
+            }
+        }
+
+        try {
+            // Fetch news articles
+            List<NewsIngestionService.NewsArticle> articles =
+                    newsIngestionService.fetchStockNews(stockSymbol);
+
+            if (articles.isEmpty()) {
+                logger.warn("No news articles found for stock: {}", stockSymbol);
+                return createDefaultSentimentResult(stockSymbol, date, SentimentType.NEUTRAL);
+            }
+
+            logger.info("Found {} articles for {}: {}", articles.size(), stockSymbol, stockSymbol);
+
+            // Clean and prepare news content
+            List<String> newsContent = articles.stream()
+                    .map(newsIngestionService::cleanNewsText)
+                    .filter(StringUtils::hasText)
+                    .collect(Collectors.toList());
+
+            if (newsContent.isEmpty()) {
+                logger.warn("No valid news content after cleaning for stock: {}", stockSymbol);
+                return createDefaultSentimentResult(stockSymbol, date, SentimentType.NEUTRAL);
+            }
+
+            // Perform sentiment analysis
+            SentimentOutput analysisResult =
+                    performSentimentAnalysis(stockSymbol, newsContent);
+
+            // Build and cache result
+            SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult);
+
+            // Persist to database
+            try {
+                SentimentResultEntity entity = SentimentResultEntity.fromDomain(result);
+                sentimentResultRepository.save(entity);
+                logger.debug("Persisted sentiment result for {} on {}", stockSymbol, date);
+            } catch (Exception e) {
+                logger.warn("Failed to persist sentiment result for {}: {}", stockSymbol, e.getMessage());
+                // Don't fail the analysis if persistence fails
+            }
+
+            // Cache the result
+            if (enableCaching) {
+                cacheSentimentResult(cacheKey, result, analysisResult);
+            }
+
+            logger.info("Sentiment analysis complete for {}: {} (confidence: {})",
+                    stockSymbol, analysisResult.getSentiment(), analysisResult.getConfidence());
+
+            return result;
+
+        } catch (Exception e) {
+            logger.error("Error analyzing sentiment for {}: {}", stockSymbol, e.getMessage(), e);
+            // Return default neutral result on error
+            return createDefaultSentimentResult(stockSymbol, date, SentimentType.NEUTRAL);
+        }
+    }
+
+    /**
+     * Performs LLM-based sentiment analysis on news content.
+     *
+     * @param stockSymbol the stock symbol
+     * @param newsContent list of cleaned news texts
+     * @return sentiment analysis result
+     */
+    private SentimentOutput performSentimentAnalysis(String stockSymbol, List<String> newsContent) {
+        logger.debug("Performing LLM sentiment analysis for {} with {} articles", stockSymbol, newsContent.size());
+
+        if (newsContent.isEmpty()) {
+            return new SentimentOutput(
+                    SentimentType.NEUTRAL,
+                    "No news content available for analysis",
+                    0.0
+            );
+        }
+
+        // Combine all news content into a single prompt for comprehensive analysis
+        String combinedContent = String.join("\n\n---\n\n", newsContent);
+
+        // Create prompt using SentimentAnalyzer
+        List<Map<String, String>> messages =
+                sentimentAnalyzer.createSentimentAnalysisPrompt(stockSymbol, combinedContent);
+
+        // Call LLM for sentiment analysis
+        String llmResponse;
+        try {
+            llmResponse = vllmClient.generateChatCompletion(messages, 512, 0.3)
+                    .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+        } catch (Exception e) {
+            if (e.getMessage() != null && e.getMessage().contains("timeout")) {
+                logger.error("Timeout analyzing sentiment for {}: analysis took more than {} seconds",
+                        stockSymbol, ANALYSIS_TIMEOUT_SECONDS);
+                return new SentimentOutput(
+                        SentimentType.NEUTRAL,
+                        "Analysis timed out - unable to process news content",
+                        0.2
+                );
+            }
+            logger.error("Error during LLM sentiment analysis: {}", e.getMessage(), e);
+            throw e;
+        }
+
+        if (llmResponse == null || llmResponse.isBlank()) {
+            logger.warn("Empty LLM response for stock: {}", stockSymbol);
+            return new SentimentOutput(
+                    SentimentType.NEUTRAL,
+                    "No valid response from LLM",
+                    0.1
+            );
+        }
+
+        logger.debug("LLM response for {}: {} chars", stockSymbol, llmResponse.length());
+
+        // Parse LLM response using Jackson
+        return sentimentAnalyzer.parseResponse(llmResponse);
+    }
+
+    /**
+     * Builds SentimentResult from analysis result.
+     */
+    private SentimentResult buildSentimentResult(
+            String stockSymbol,
+            LocalDate date,
+            SentimentOutput analysisResult) {
+
+        SentimentResult.SentimentScore score;
+        switch (analysisResult.getSentiment()) {
+            case POSITIVE:
+                score = SentimentResult.SentimentScore.POSITIVE;
+                break;
+            case NEGATIVE:
+                score = SentimentResult.SentimentScore.NEGATIVE;
+                break;
+            default:
+                score = SentimentResult.SentimentScore.NEUTRAL;
+        }
+
+        return SentimentResult.create(
+                stockSymbol,
+                date,
+                score,
+                analysisResult.getReasoning(),
+                "",
+                analysisResult.getConfidence(),
+                analysisResult.getRedFlags(),
+                analysisResult.getCatalysts()
+        );
+    }
+
+    /**
+     * Creates default sentiment result with neutral sentiment.
+     *
+     * @param stockSymbol the stock symbol
+     * @param date the date
+     * @param sentimentType the sentiment type
+     * @return default sentiment result
+     */
+    private SentimentResult createDefaultSentimentResult(
+            String stockSymbol,
+            LocalDate date,
+            SentimentType sentimentType) {
+
+        String defaultReasoning = switch (sentimentType) {
+            case POSITIVE -> "No negative news found - potentially positive outlook";
+            case NEGATIVE -> "No significant news found - potentially neutral to negative";
+            default -> "No news articles available for analysis - defaulting to neutral";
+        };
+
+        return SentimentResult.create(
+                stockSymbol,
+                date,
+                sentimentType == SentimentType.POSITIVE ?
+                        SentimentResult.SentimentScore.POSITIVE :
+                        sentimentType == SentimentType.NEGATIVE ?
+                                SentimentResult.SentimentScore.NEGATIVE :
+                                SentimentResult.SentimentScore.NEUTRAL,
+                defaultReasoning,
+                "",
+                0.3,
+                List.of(),
+                List.of()
+        );
+    }
+
+    /**
+     * Builds SentimentResult from cached sentiment data.
+     *
+     * @param stockSymbol the stock symbol
+     * @param date the analysis date
+     * @param cached the cached sentiment data
+     * @return built sentiment result
+     */
+    private SentimentResult buildSentimentResultFromCache(
+            String stockSymbol,
+            LocalDate date,
+            CachedSentiment cached) {
+
+        SentimentResult.SentimentScore score;
+        switch (cached.sentimentType()) {
+            case POSITIVE:
+                score = SentimentResult.SentimentScore.POSITIVE;
+                break;
+            case NEGATIVE:
+                score = SentimentResult.SentimentScore.NEGATIVE;
+                break;
+            default:
+                score = SentimentResult.SentimentScore.NEUTRAL;
+        }
+
+        return new SentimentResult(
+                cached.resultId(),
+                stockSymbol,
+                date,
+                score,
+                cached.reasoning(),
+                "",
+                cached.confidence(),
+                LocalDate.now(),
+                cached.redFlags(),
+                cached.catalysts()
+        );
+    }
+
+    /**
+     * Caches sentiment result for future retrieval.
+     *
+     * @param cacheKey the cache key
+     * @param result the sentiment result
+     * @param analysisResult the LLM analysis result
+     */
+    private void cacheSentimentResult(
+            String cacheKey,
+            SentimentResult result,
+            SentimentOutput analysisResult) {
+
+        if (sentimentCacheService.isCacheFull()) {
+            logger.debug("Cache is full, pruning oldest entry");
+            sentimentCacheService.pruneOldest();
+        }
+
+        CachedSentiment cached = new CachedSentiment(
+                result.id(),
+                analysisResult.getSentiment(),
+                analysisResult.getReasoning(),
+                analysisResult.getRedFlags(),
+                analysisResult.getCatalysts(),
+                analysisResult.getConfidence()
+        );
+
+        sentimentCacheService.cache(cacheKey, cached, cacheExpiryMinutes);
+    }
+
+    /**
+     * Generates cache key for sentiment analysis result.
+     *
+     * @param stockSymbol the stock symbol
+     * @param date the analysis date
+     * @return cache key
+     */
+    private String generateCacheKey(String stockSymbol, LocalDate date) {
+        return String.format("%s_%s", stockSymbol.toUpperCase(), date);
+    }
+
+    /**
+     * Clears cache entry for a specific stock and date.
+     *
+     * @param stockSymbol the stock symbol
+     * @param date the date
+     */
+    public void clearCache(String stockSymbol, LocalDate date) {
+        String cacheKey = generateCacheKey(stockSymbol, date);
+        sentimentCacheService.remove(cacheKey);
+        logger.debug("Cleared cache for {}", cacheKey);
+    }
+
+    /**
+     * Clears all cached sentiment results.
+     */
+    public void clearAllCache() {
+        sentimentCacheService.clearAll();
+        logger.info("Cleared all sentiment cache entries");
+    }
+
+    /**
+     * Analyzes sentiment for multiple stocks asynchronously.
+     *
+     * @param stockSymbols list of stock symbols
+     * @param date the analysis date
+     * @return map of stock symbol to sentiment result
+     */
+    public Map<String, SentimentResult> analyzeMultipleStocks(
+            List<String> stockSymbols,
+            LocalDate date) {
+
+        logger.info("Starting batch sentiment analysis for {} stocks", stockSymbols.size());
+
+        Map<String, Future<SentimentResult>> futures = new ConcurrentHashMap<>();
+
+        // Submit all analysis tasks
+        for (String symbol : stockSymbols) {
+            Future<SentimentResult> future = analysisExecutor.submit(() ->
+                    analyzeStockSentiment(symbol, date));
+            futures.put(symbol, future);
+        }
+
+        // Collect results
+        Map<String, SentimentResult> results = new HashMap<>();
+        List<String> failedSymbols = new ArrayList<>();
+
+        for (Map.Entry<String, Future<SentimentResult>> entry : futures.entrySet()) {
+            try {
+                SentimentResult result = entry.getValue().get(ANALYSIS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                results.put(entry.getKey(), result);
+            } catch (Exception e) {
+                logger.error("Error analyzing sentiment for {}: {}", entry.getKey(), e.getMessage());
+                failedSymbols.add(entry.getKey());
+                // Add default result for failed analysis
+                results.put(entry.getKey(), createDefaultSentimentResult(
+                        entry.getKey(),
+                        date,
+                        SentimentType.NEUTRAL
+                ));
+            }
+        }
+
+        logger.info("Batch analysis complete: {} successful, {} failed",
+                results.size() - failedSymbols.size(), failedSymbols.size());
+
+        return results;
+    }
+
+    /**
+     * Gets cached sentiment results for a stock.
+     *
+     * @param stockSymbol the stock symbol
+     * @return map of date to cached sentiment
+     */
+    public Map<LocalDate, CachedSentiment> getCachedSentiments(String stockSymbol) {
+        return sentimentCacheService.getCacheForSymbol(stockSymbol.toUpperCase());
+    }
+
+    /**
+     * Checks if sentiment is cached for a specific stock and date.
+     *
+     * @param stockSymbol the stock symbol
+     * @param date the date
+     * @return true if cached
+     */
+    public boolean isSentimentCached(String stockSymbol, LocalDate date) {
+        return enableCaching && sentimentCacheService.isCached(
+                generateCacheKey(stockSymbol, date));
+    }
+
+    /**
+     * Refreshes cached sentiment for a stock (forces re-analysis).
+     *
+     * @param stockSymbol the stock symbol
+     * @param date the date
+     * @return refreshed sentiment result
+     */
+    public SentimentResult refreshSentiment(String stockSymbol, LocalDate date) {
+        // Remove from cache first
+        clearCache(stockSymbol, date);
+
+        // Re-analyze
+        return analyzeStockSentiment(stockSymbol, date);
+    }
+
+    /**
+     * Gets statistics about cached sentiment data.
+     *
+     * @return cache statistics
+     */
+    public CacheStatistics getCacheStatistics() {
+        return new CacheStatistics(
+                sentimentCacheService.getCacheSize(),
+                maxCacheSize,
+                enableCaching,
+                cacheExpiryMinutes
+        );
+    }
+
+    /**
+     * Gracefully shuts down the service and thread pool.
+     */
+    public void shutdown() {
+        logger.info("Shutting down sentiment analysis service");
+        analysisExecutor.shutdown();
+        try {
+            if (!analysisExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                analysisExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            analysisExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Public method to analyse sentiment for a symbol with provided headlines.
+     */
+    public SentimentResult analyseSentiment(String symbol, List<String> headlines, Object earningsData) {
+        if (headlines == null || headlines.isEmpty()) {
+            logger.warn("No headlines provided for {}", symbol);
+            return SentimentResult.create(symbol, LocalDate.now(),
+                    SentimentResult.SentimentScore.NEUTRAL, "No headlines", "", 0.0, List.of(), List.of());
+        }
+
+        String cacheKey = generateCacheKey(symbol, LocalDate.now());
+        if (enableCaching && sentimentCacheService.isCached(cacheKey)) {
+            var cached = sentimentCacheService.getValue(cacheKey);
+            if (cached.isPresent()) {
+                CachedSentiment cs = (CachedSentiment) cached.get();
+                return new SentimentResult(
+                        cs.resultId(), symbol, LocalDate.now(),
+                        cs.sentimentType() == SentimentType.POSITIVE ? SentimentResult.SentimentScore.POSITIVE :
+                        cs.sentimentType() == SentimentType.NEGATIVE ? SentimentResult.SentimentScore.NEGATIVE :
+                        SentimentResult.SentimentScore.NEUTRAL,
+                        cs.reasoning(), "", cs.confidence(),
+                        LocalDate.now(), cs.redFlags(), cs.catalysts());
+            }
+        }
+
+        try {
+            List<Map<String, String>> messages = sentimentAnalyzer.createSentimentAnalysisPrompt(
+                    symbol, headlines, earningsData != null ? earningsData.toString() : null);
+
+            String llmResponse = vllmClient.generateChatCompletion(messages, 512, 0.3)
+                    .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+
+            if (llmResponse == null || llmResponse.isBlank()) {
+                return SentimentResult.create(symbol, LocalDate.now(),
+                        SentimentResult.SentimentScore.NEUTRAL, "Empty LLM response", "", 0.1, List.of(), List.of());
+            }
+
+            SentimentOutput result = sentimentAnalyzer.parseResponse(llmResponse);
+            SentimentResult sr = buildSentimentResult(symbol, LocalDate.now(), result);
+
+            // Persist
+            try {
+                SentimentResultEntity entity = SentimentResultEntity.fromDomain(sr);
+                sentimentResultRepository.save(entity);
+            } catch (Exception e) {
+                logger.warn("Failed to persist sentiment for {}: {}", symbol, e.getMessage());
+            }
+
+            // Cache
+            if (enableCaching) {
+                cacheSentimentResult(cacheKey, sr, result);
+            }
+
+            return sr;
+        } catch (Exception e) {
+            logger.error("Error analysing sentiment for {}: {}", symbol, e.getMessage());
+            return SentimentResult.create(symbol, LocalDate.now(),
+                    SentimentResult.SentimentScore.NEUTRAL, "Analysis error", "", 0.2, List.of(), List.of());
+        }
+    }
+
+    // ============ Weekly Sector Digest Methods ============
+
+    /**
+     * Generates a weekly sector sentiment digest.
+     * Groups sentiment results by stock sector and identifies top positive/negative sectors.
+     *
+     * @param startDate the start date of the date range (inclusive)
+     * @param endDate the end date of the date range (inclusive)
+     * @return formatted digest string ready for Discord
+     */
+    public String generateSectorDigest(LocalDate startDate, LocalDate endDate) {
+        logger.info("Generating sector digest for date range: {} to {}", startDate, endDate);
+
+        // Fetch all sentiment results in date range
+        List<SentimentResultEntity> results = sentimentResultRepository
+                .findAllByDateBetween(startDate, endDate);
+
+        if (results.isEmpty()) {
+            return formatEmptyDigest(startDate, endDate);
+        }
+
+        // Convert to domain objects
+        List<SentimentResult> domainResults = results.stream()
+                .map(SentimentResultEntity::toDomain)
+                .collect(Collectors.toList());
+
+        // Group by sector and count sentiment
+        Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> sectorCounts =
+                groupBySectorAndSentiment(domainResults);
+
+        // Get sector names for each symbol
+        Map<String, Stock.Sector> symbolToSector = buildSymbolToSectorMap(domainResults);
+
+        // Identify top sectors
+        List<Stock.Sector> topPositiveSectors = getTopSectors(sectorCounts, 3, true);
+        List<Stock.Sector> topNegativeSectors = getTopSectors(sectorCounts, 3, false);
+
+        // Calculate totals
+        long totalStocks = symbolToSector.size();
+        long totalPositive = sectorCounts.values().stream()
+                .map(m -> m.get(SentimentResult.SentimentScore.POSITIVE))
+                .filter(Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .sum();
+        long totalNeutral = sectorCounts.values().stream()
+                .map(m -> m.get(SentimentResult.SentimentScore.NEUTRAL))
+                .filter(Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .sum();
+        long totalNegative = sectorCounts.values().stream()
+                .map(m -> m.get(SentimentResult.SentimentScore.NEGATIVE))
+                .filter(Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .sum();
+
+        return formatSectorDigest(
+                startDate, endDate, sectorCounts, topPositiveSectors,
+                topNegativeSectors, totalStocks, totalPositive, totalNeutral, totalNegative,
+                symbolToSector
+        );
+    }
+
+    /**
+     * Groups sentiment results by stock sector and sentiment score.
+     *
+     * @param results list of sentiment results
+     * @return map of sector -> (sentiment score -> count)
+     */
+    public Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> groupBySectorAndSentiment(
+            List<SentimentResult> results) {
+
+        Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> sectorMap = new HashMap<>();
+
+        for (SentimentResult result : results) {
+            Stock.Sector sector = getSectorForSymbol(result.symbol());
+            if (sector == null) {
+                sector = Stock.Sector.OTHERS;
+            }
+
+            SentimentResult.SentimentScore score = result.score();
+
+            sectorMap.computeIfAbsent(sector, k -> new HashMap<>());
+            sectorMap.get(sector).merge(score, 1L, Long::sum);
+        }
+
+        return sectorMap;
+    }
+
+    /**
+     * Gets sector for a symbol by looking up in the database.
+     *
+     * @param symbol stock symbol
+     * @return the sector for the stock, or null if not found
+     */
+    public Stock.Sector getSectorForSymbol(String symbol) {
+        Optional<StockEntity> stock = stockRepository.findBySymbol(symbol);
+        return stock.map(StockEntity::toDomain)
+                .map(Stock::sector)
+                .orElse(null);
+    }
+
+    /**
+     * Builds a map of symbol to sector from sentiment results.
+     *
+     * @param results list of sentiment results
+     * @return map of symbol -> sector
+     */
+    private Map<String, Stock.Sector> buildSymbolToSectorMap(List<SentimentResult> results) {
+        Map<String, Stock.Sector> map = new HashMap<>();
+
+        for (SentimentResult result : results) {
+            if (!map.containsKey(result.symbol().toUpperCase())) {
+                Stock.Sector sector = getSectorForSymbol(result.symbol().toUpperCase());
+                map.put(result.symbol().toUpperCase(), sector != null ? sector : Stock.Sector.OTHERS);
+            }
+        }
+
+        return map;
+    }
+
+    /**
+     * Gets top sectors by a specific sentiment score.
+     *
+     * @param sectorCounts map of sector -> (sentiment score -> count)
+     * @param count number of top sectors to return
+     * @param positive if true, get top positive sectors; if false, get top negative
+     * @return list of top sectors
+     */
+    public List<Stock.Sector> getTopSectors(
+            Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> sectorCounts,
+            int count, boolean positive) {
+
+        return sectorCounts.entrySet().stream()
+                .sorted(Map.Entry.<Stock.Sector, Map<SentimentResult.SentimentScore, Long>>comparingByValue(
+                        (m1, m2) -> {
+                            Long v1 = positive ?
+                                    m1.getOrDefault(SentimentResult.SentimentScore.POSITIVE, 0L) :
+                                    m1.getOrDefault(SentimentResult.SentimentScore.NEGATIVE, 0L);
+                            Long v2 = positive ?
+                                    m2.getOrDefault(SentimentResult.SentimentScore.POSITIVE, 0L) :
+                                    m2.getOrDefault(SentimentResult.SentimentScore.NEGATIVE, 0L);
+                            return Long.compare(v2, v1); // Descending order
+                        }
+                ))
+                .limit(count)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Formats the sector digest output string for Telegram.
+     *
+     * @param startDate start date of the range
+     * @param endDate end date of the range
+     * @param sectorCounts map of sector sentiment counts
+     * @param topPositiveSectors list of top positive sectors
+     * @param topNegativeSectors list of top negative sectors
+     * @param totalStocks total number of stocks analyzed
+     * @param totalPositive total positive signals
+     * @param totalNeutral total neutral signals
+     * @param totalNegative total negative signals
+     * @param symbolToSector map of symbol to sector
+     * @return formatted digest string
+     */
+    private String formatSectorDigest(
+            LocalDate startDate, LocalDate endDate,
+            Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> sectorCounts,
+            List<Stock.Sector> topPositiveSectors,
+            List<Stock.Sector> topNegativeSectors,
+            long totalStocks, long totalPositive, long totalNeutral, long totalNegative,
+            Map<String, Stock.Sector> symbolToSector) {
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("📊 Weekly Sector Sentiment Digest\n");
+        sb.append(String.format("Week of: %s to %s\n\n", startDate, endDate));
+
+        // Top Positive Sectors
+        sb.append("*Top Positive Sectors:*\n");
+        int posIndex = 1;
+        for (Stock.Sector sector : topPositiveSectors) {
+            Map<SentimentResult.SentimentScore, Long> counts = sectorCounts.get(sector);
+            String posCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.POSITIVE, 0L).toString() : "0";
+            String neuCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.NEUTRAL, 0L).toString() : "0";
+            String negCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.NEGATIVE, 0L).toString() : "0";
+
+            sb.append(String.format("%d. %s - %s POS, %s NEU, %s NEG\n",
+                    posIndex++, sector.name(), posCount, neuCount, negCount));
+        }
+
+        if (topPositiveSectors.isEmpty()) {
+            sb.append("No positive sectors data available\n");
+        }
+
+        sb.append("\n*Top Negative Sectors:*\n");
+        int negIndex = 1;
+        for (Stock.Sector sector : topNegativeSectors) {
+            Map<SentimentResult.SentimentScore, Long> counts = sectorCounts.get(sector);
+            String posCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.POSITIVE, 0L).toString() : "0";
+            String neuCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.NEUTRAL, 0L).toString() : "0";
+            String negCount = counts != null ?
+                    counts.getOrDefault(SentimentResult.SentimentScore.NEGATIVE, 0L).toString() : "0";
+
+            sb.append(String.format("%d. %s - %s POS, %s NEU, %s NEG\n",
+                    negIndex++, sector.name(), posCount, neuCount, negCount));
+        }
+
+        if (topNegativeSectors.isEmpty()) {
+            sb.append("No negative sectors data available\n");
+        }
+
+        // Summary stats
+        sb.append("\n*Summary Statistics*:\n");
+        sb.append(String.format("Total stocks analyzed: %d\n", totalStocks));
+        sb.append(String.format("Positive signals: %d | Neutral: %d | Negative: %d\n",
+                totalPositive, totalNeutral, totalNegative));
+
+        return sb.toString();
+    }
+
+    /**
+     * Formats an empty digest when no sentiment data is available.
+     *
+     * @param startDate start date of the range
+     * @param endDate end date of the range
+     * @return formatted empty digest string
+     */
+    private String formatEmptyDigest(LocalDate startDate, LocalDate endDate) {
+        return String.format(
+                "📊 Weekly Sector Sentiment Digest\n" +
+                "Week of: %s to %s\n\n" +
+                "No sentiment data available for the specified date range.\n\n" +
+                "*Summary Statistics*:\n" +
+                "Total stocks analyzed: 0\n" +
+                "Positive signals: 0 | Neutral: 0 | Negative: 0",
+                startDate, endDate
+        );
+    }
+
+    /**
+     * Generates sector digest for the last calendar week (Sunday to Saturday).
+     * This is called by the scheduled job.
+     *
+     * @return formatted digest string ready for Discord
+     */
+    public String generateSectorDigestForLastWeek() {
+        ZoneId ist = ZoneId.of("Asia/Kolkata");
+        LocalDate today = LocalDate.now(ist);
+
+        // Get last Sunday (or today if today is Sunday)
+        LocalDate endDate = today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.SUNDAY));
+
+        // If today is Sunday, use today as end, otherwise use Saturday of this week
+        if (!today.equals(endDate)) {
+            endDate = today.minusDays(1).with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.SUNDAY));
+        }
+
+        // Get start date (previous Monday, or 7 days before end date)
+        LocalDate startDate = endDate.minusDays(6);
+
+        logger.info("Generating sector digest for week: {} to {}", startDate, endDate);
+        return generateSectorDigest(startDate, endDate);
+    }
+
+    // ============ Inner Classes ============
+
+    /**
+     * Record representing cached sentiment data.
+     */
+    public record CachedSentiment(
+            Long resultId,
+            SentimentType sentimentType,
+            String reasoning,
+            List<String> redFlags,
+            List<String> catalysts,
+            Double confidence
+    ) {}
+
+    /**
+     * Record representing cache statistics.
+     */
+    public record CacheStatistics(
+            int currentSize,
+            int maxSize,
+            boolean isEnabled,
+            long expiryMinutes
+    ) {}
+
+    // ============ Test Accessor Methods ============
+
+    /**
+     * Gets the news ingestion service for testing purposes.
+     * This method is intended for test access only.
+     *
+     * @return the newsIngestionService
+     */
+    NewsIngestionService getNewsIngestionService() {
+        return newsIngestionService;
+    }
+}

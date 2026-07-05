@@ -141,11 +141,7 @@ public class TradeRequest {
         }
 
         // For STOP and STOP_LIMIT orders, stopPrice is required
-        if ((orderType == OrderType.STOP || orderType == OrderType.STOP_LIMIT) && stopPrice == null) {
-            return false;
-        }
-
-        return true;
+        return (orderType != OrderType.STOP && orderType != OrderType.STOP_LIMIT) || stopPrice != null;
     }
 
     private boolean isValidSymbol() {

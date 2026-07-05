@@ -172,12 +172,22 @@ public class WatchlistService {
         if (progress == null) return;
 
         LocalDate toDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
-        LocalDate fromDate = toDate.minusYears(yearsBack);
+        LocalDate backfillFromDate = toDate.minusYears(yearsBack);
 
         for (WatchlistEntity entry : watchlist) {
             progress.updateCurrent(entry.getSymbol());
             try {
-                dataIngestionService.processStockData(entry.getSymbol(), fromDate, toDate);
+                // Only fetch what's missing since the last pull — full range is just for
+                // symbols that have never been pulled before.
+                Optional<com.swingtrade.data.entity.OhlcvCandleEntity> latest =
+                        candleRepository.findLatestBySymbol(entry.getSymbol());
+                LocalDate fromDate = latest.map(c -> c.getDate().plusDays(1)).orElse(backfillFromDate);
+
+                if (!fromDate.isAfter(toDate)) {
+                    dataIngestionService.processStockData(entry.getSymbol(), fromDate, toDate);
+                } else {
+                    logger.info("Skipping {}: already up to date (latest candle {})", entry.getSymbol(), latest.get().getDate());
+                }
 
                 // Update watchlist entry
                 entry.setLastSyncedAt(LocalDateTime.now());

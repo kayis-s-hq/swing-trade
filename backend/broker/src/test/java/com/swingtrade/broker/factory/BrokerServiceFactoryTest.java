@@ -1,8 +1,9 @@
 package com.swingtrade.broker.factory;
 
 import com.swingtrade.broker.config.BrokerMode;
-import com.swingtrade.broker.engine.PaperTradeEngine;
+import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.kite.BrokerClient;
+import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.risk.KillSwitchService;
 import com.swingtrade.broker.risk.RiskControls;
 import org.junit.jupiter.api.Test;
@@ -31,14 +32,16 @@ class BrokerServiceFactoryTest {
     private RiskControls mockRisk;
 
     @Mock
-    private PaperTradeEngine mockPaperEngine;
+    private PaperTradingEngine mockPaperEngine;
+
+    @Mock
+    private OrderManager mockOrderManager;
 
     @Mock
     private KillSwitchService mockKillSwitch;
 
     private BrokerServiceFactory createFactory(String mode) {
-        when(mockClientProvider.getIfAvailable()).thenReturn(mockClient);
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClientProvider, mockRisk, mockKillSwitch);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch);
         factory.setModeString(mode);
         factory.initialize();
         return factory;
@@ -65,13 +68,14 @@ class BrokerServiceFactoryTest {
     }
 
     @Test
-    void testBrokerMode_Live_WithoutConfig() {
+    void testSwitchToLive_WithoutConfig_throws() {
         // Given
         when(mockClient.isConfigured()).thenReturn(false);
-        BrokerServiceFactory factory = createFactory("live");
+        when(mockClientProvider.getIfAvailable()).thenReturn(mockClient);
+        BrokerServiceFactory factory = createFactory("paper");
 
-        // When/Then
-        assertThatThrownBy(() -> factory.initialize())
+        // When/Then — switching to live without configured broker throws
+        assertThatThrownBy(() -> factory.switchMode(BrokerMode.LIVE))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Broker API key not configured");
     }
@@ -80,6 +84,7 @@ class BrokerServiceFactoryTest {
     void testSwitchMode() {
         // Given
         when(mockClient.isConfigured()).thenReturn(true);
+        when(mockClientProvider.getIfAvailable()).thenReturn(mockClient);
         BrokerServiceFactory factory = createFactory("paper");
 
         // When
@@ -93,6 +98,7 @@ class BrokerServiceFactoryTest {
     void testSwitchMode_String() {
         // Given
         when(mockClient.isConfigured()).thenReturn(true);
+        when(mockClientProvider.getIfAvailable()).thenReturn(mockClient);
         BrokerServiceFactory factory = createFactory("paper");
 
         // When
@@ -118,6 +124,7 @@ class BrokerServiceFactoryTest {
     void testAllowsExecution_Live() {
         // Given
         when(mockClient.isConfigured()).thenReturn(true);
+        when(mockClientProvider.getIfAvailable()).thenReturn(mockClient);
         BrokerServiceFactory factory = createFactory("paper");
         factory.switchMode(BrokerMode.LIVE);
 
@@ -156,6 +163,7 @@ class BrokerServiceFactoryTest {
     void testIsSafeMode_Live() {
         // Given
         when(mockClient.isConfigured()).thenReturn(true);
+        when(mockClientProvider.getIfAvailable()).thenReturn(mockClient);
         BrokerServiceFactory factory = createFactory("paper");
         factory.switchMode(BrokerMode.LIVE);
 
@@ -170,7 +178,7 @@ class BrokerServiceFactoryTest {
     void testGetModeString() {
         // Given
         when(mockClientProvider.getIfAvailable()).thenReturn(mockClient);
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockClientProvider, mockRisk, mockKillSwitch);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch);
         factory.setModeString("live");
 
         // When

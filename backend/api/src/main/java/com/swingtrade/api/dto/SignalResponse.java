@@ -24,6 +24,7 @@ public class SignalResponse {
     private BigDecimal riskRewardRatio;
     private List<String> indicators;
     private LocalDate generatedAt;
+    private String strategy;
 
     public SignalResponse() {
     }
@@ -155,6 +156,14 @@ public class SignalResponse {
 
     public void setGeneratedAt(LocalDate generatedAt) {
         this.generatedAt = generatedAt;
+    }
+
+    public String getStrategy() {
+        return strategy;
+    }
+
+    public void setStrategy(String strategy) {
+        this.strategy = strategy;
     }
 
     /**

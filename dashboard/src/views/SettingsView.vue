@@ -98,6 +98,74 @@
         </div>
       </div>
 
+      <!-- LLM & Intelligence Settings -->
+      <div class="card-panel p-5">
+        <h2 class="mb-4 text-base font-semibold text-text-primary">LLM & Intelligence</h2>
+
+        <!-- vLLM Configuration -->
+        <div class="space-y-4 mb-6">
+          <h3 class="text-sm font-medium text-text-secondary">vLLM Endpoint</h3>
+          <div class="flex gap-2">
+            <input v-model="llmSettings.vllmBaseUrl" placeholder="https://gpuhub:8443/v1"
+              class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none" />
+            <button @click="testLlmConnection" :disabled="testingLlm"
+              class="rounded-md border border-brand bg-brand-subtle px-4 py-2 text-sm font-medium text-brand transition-colors hover:bg-brand/20 disabled:opacity-50">
+              {{ testingLlm ? 'Testing...' : 'Test' }}
+            </button>
+          </div>
+
+          <div class="flex gap-2">
+            <input v-model="llmSettings.model" placeholder="Qwen3-30B-AWQ"
+              class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none" />
+            <span class="self-center text-xs text-text-muted">Model name</span>
+          </div>
+        </div>
+
+        <!-- PDF Extraction -->
+        <div class="space-y-4 mb-6">
+          <h3 class="text-sm font-medium text-text-secondary">PDF Extraction (Pi 5)</h3>
+          <div class="flex gap-2">
+            <input v-model="llmSettings.pdfBaseUrl" placeholder="http://pi5-ip:8080"
+              class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none" />
+            <button @click="testPdfExtraction" :disabled="testingPdf"
+              class="rounded-md border border-brand bg-brand-subtle px-4 py-2 text-sm font-medium text-brand transition-colors hover:bg-brand/20 disabled:opacity-50">
+              {{ testingPdf ? 'Testing...' : 'Test' }}
+            </button>
+          </div>
+
+          <div class="flex gap-2">
+            <input v-model="llmSettings.pdfModel" placeholder="gemma-4-E2B"
+              class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none" />
+            <span class="self-center text-xs text-text-muted">Model name</span>
+          </div>
+        </div>
+
+        <!-- Discord Configuration -->
+        <div class="space-y-4">
+          <h3 class="text-sm font-medium text-text-secondary">Discord Notifications</h3>
+          <div class="flex items-center justify-between rounded-lg border border-border-subtle p-3">
+            <span class="text-sm">Enable Discord</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="discordSettings.enabled"
+                @change="saveDiscordSettings" class="sr-only peer" />
+              <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer
+                peer-checked:after:translate-x-full peer-checked:after:border-white
+                after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all
+                peer-checked:bg-brand"></div>
+            </label>
+          </div>
+          <div class="flex gap-2">
+            <input v-model="discordSettings.webhookUrl" placeholder="https://discord.com/api/webhooks/..."
+              class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none" />
+            <button @click="testDiscordWebhook" :disabled="testingDiscord"
+              class="rounded-md border border-brand bg-brand-subtle px-4 py-2 text-sm font-medium text-brand transition-colors hover:bg-brand/20 disabled:opacity-50">
+              {{ testingDiscord ? 'Testing...' : 'Test' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Trading Configuration -->
       <div class="card-panel p-5">
         <h2 class="mb-4 text-base font-semibold text-text-primary">Trading Configuration</h2>
@@ -162,12 +230,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getFyersLoginUrl, getFyersStatus, fyersAuthCode } from '../api/client'
+import { getFyersLoginUrl, getFyersStatus, fyersAuthCode, fyersLogout, getLlmSettings, setLlmSettings, getDiscordSettings, setDiscordSettings, testDiscordWebhook as apiTestDiscordWebhook } from '../api/client'
 import type { FyersStatus, HealthStatus } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { getSettings } from '../stores/settings'
 
 const settings = getSettings()
+const llmSettings = settings.llmSettings
+const discordSettings = settings.discordSettings
 const fyersStatus = ref<FyersStatus | null>(null)
 const fyersConnected = computed(() => fyersStatus.value?.connected ?? false)
 const healthStatus = ref<HealthStatus | null>(null)
@@ -176,6 +246,9 @@ const authResultBanner = ref<'success' | 'error' | null>(null)
 const authing = ref(false)
 const showAuthCodeInput = ref(false)
 const authCodeInput = ref('')
+const testingLlm = ref(false)
+const testingPdf = ref(false)
+const testingDiscord = ref(false)
 let pollTimer: number | null = null
 
 const brokers = [
@@ -277,8 +350,69 @@ const submitAuthCode = async () => {
   }
 }
 
-const disconnectFyers = () => {
-  fyersStatus.value = null
+const disconnectFyers = async () => {
+  const res = await fyersLogout()
+  fyersStatus.value = res.success && res.data ? res.data : null
+}
+
+const saveLlmSettings = async () => {
+  const settings: Record<string, string> = {
+    'llm.vllm.base_url': llmSettings.vllmBaseUrl,
+    'llm.vllm.model': llmSettings.model,
+    'llm.pdf.base_url': llmSettings.pdfBaseUrl,
+    'llm.pdf.model': llmSettings.pdfModel,
+  }
+  await setLlmSettings(settings)
+}
+
+const saveDiscordSettings = async () => {
+  const settings: Record<string, string> = {
+    'discord.webhook.url': discordSettings.webhookUrl,
+    'discord.webhook.enabled': String(discordSettings.enabled),
+  }
+  await setDiscordSettings(settings)
+}
+
+const testLlmConnection = async () => {
+  testingLlm.value = true
+  try {
+    await saveLlmSettings()
+    // Trigger a test analysis on a dummy symbol
+    alert('LLM settings saved. Test analysis will run on next signal.')
+  } catch (err: unknown) {
+    alert(err instanceof Error ? err.message : 'Failed to save LLM settings')
+  } finally {
+    testingLlm.value = false
+  }
+}
+
+const testPdfExtraction = async () => {
+  testingPdf.value = true
+  try {
+    await saveLlmSettings()
+    alert('PDF extraction settings saved.')
+  } catch (err: unknown) {
+    alert(err instanceof Error ? err.message : 'Failed to save PDF settings')
+  } finally {
+    testingPdf.value = false
+  }
+}
+
+const testDiscordWebhook = async () => {
+  await saveDiscordSettings()
+  testingDiscord.value = true
+  try {
+    const res = await apiTestDiscordWebhook()
+    if (res.success && res.data?.success) {
+      alert('Discord webhook test successful!')
+    } else {
+      alert(res.error ?? 'Discord webhook test failed')
+    }
+  } catch (err: unknown) {
+    alert(err instanceof Error ? err.message : 'Discord webhook test failed')
+  } finally {
+    testingDiscord.value = false
+  }
 }
 
 const handleMessage = (event: MessageEvent) => {
@@ -301,12 +435,35 @@ onMounted(() => {
   const authParam = route.query.auth as string
   if (authParam === 'success' || authParam === 'error') {
     authResultBanner.value = authParam
-    refreshFyersStatus()
     router.replace({ query: {} })
   }
+  refreshFyersStatus()
   refreshHealth()
+  loadBackendSettings()
   window.addEventListener('message', handleMessage)
 })
+
+const loadBackendSettings = async () => {
+  try {
+    const llmRes = await getLlmSettings()
+    if (llmRes.success && llmRes.data) {
+      Object.assign(llmSettings, {
+        vllmBaseUrl: llmRes.data['llm.vllm.base_url'] || llmSettings.vllmBaseUrl,
+        model: llmRes.data['llm.vllm.model'] || llmSettings.model,
+        pdfBaseUrl: llmRes.data['llm.pdf.base_url'] || llmSettings.pdfBaseUrl,
+        pdfModel: llmRes.data['llm.pdf.model'] || llmSettings.pdfModel,
+      })
+    }
+  } catch { /* ignore */ }
+
+  try {
+    const discordRes = await getDiscordSettings()
+    if (discordRes.success && discordRes.data) {
+      discordSettings.webhookUrl = discordRes.data['discord.webhook.url'] || discordSettings.webhookUrl
+      discordSettings.enabled = discordRes.data['discord.webhook.enabled'] === 'true'
+    }
+  } catch { /* ignore */ }
+}
 onUnmounted(() => {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   window.removeEventListener('message', handleMessage)

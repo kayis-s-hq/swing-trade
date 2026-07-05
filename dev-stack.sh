@@ -13,6 +13,25 @@ echo "  Swing Trade - Dev Stack Manager"
 echo "=========================================="
 echo ""
 
+# Stage infra on pi-node (separate from dev infra)
+do_stage_infra() {
+    local cmd="${2:-up}"
+    case "$cmd" in
+        up|down|restart|ps|logs)
+            docker context use pi-node
+            cd "$BACKEND_DIR"
+            docker compose -f docker-compose.infra-stage.yml "$cmd"
+            docker context use desktop-linux
+            ;;
+        *)
+            docker context use pi-node
+            cd "$BACKEND_DIR"
+            docker compose -f docker-compose.infra-stage.yml "$cmd"
+            docker context use desktop-linux
+            ;;
+    esac
+}
+
 case "${1:-help}" in
   start)
     echo "🚀 Starting Dev Stack..."
@@ -22,13 +41,13 @@ case "${1:-help}" in
     echo "📦 Starting infrastructure on pi-node..."
     docker context use pi-node
     cd "$BACKEND_DIR"
-    docker compose -f docker-compose.infra.yml up -d
+    docker compose -f docker-compose.infra-dev.yml up -d
     echo ""
 
     # Wait for services to be healthy
     echo "⏳ Waiting for services to be ready..."
     sleep 15
-    docker compose -f docker-compose.infra.yml ps
+    docker compose -f docker-compose.infra-dev.yml ps
     echo ""
 
     # Switch back to local context
@@ -45,10 +64,7 @@ case "${1:-help}" in
         echo "✓ Loaded environment from $BACKEND_DIR/.env"
     fi
     cd "$BACKEND_DIR/api"
-    # Data profile: $2 (e.g. "./dev-stack.sh start yahoo" or "./dev-stack.sh start fyers")
-    DATA_PROFILE="${2:-fyers}"
-    echo "✓ Using data profile: $DATA_PROFILE"
-    mvn spring-boot:run -Dspring-boot.run.profiles=local,$DATA_PROFILE
+    mvn spring-boot:run -Dspring-boot.run.profiles=local
     ;;
     
   stop)
@@ -64,7 +80,7 @@ case "${1:-help}" in
     echo "📦 Stopping infrastructure on pi-node..."
     docker context use pi-node
     cd "$BACKEND_DIR"
-    docker compose -f docker-compose.infra.yml down
+    docker compose -f docker-compose.infra-dev.yml down
     echo ""
     
     # Switch back to local context
@@ -77,7 +93,7 @@ case "${1:-help}" in
     echo "📦 Managing infrastructure on pi-node..."
     docker context use pi-node
     cd "$BACKEND_DIR"
-    docker compose -f docker-compose.infra.yml "${@:2}"
+    docker compose -f docker-compose.infra-dev.yml "${@:2}"
     ;;
     
   status)
@@ -86,7 +102,7 @@ case "${1:-help}" in
     echo "Infrastructure (pi-node):"
     docker context use pi-node
     cd "$BACKEND_DIR"
-    docker compose -f docker-compose.infra.yml ps
+    docker compose -f docker-compose.infra-dev.yml ps
     echo ""
     
     echo "Local Spring Boot:"
@@ -103,21 +119,48 @@ case "${1:-help}" in
     echo "=== Infrastructure Logs ==="
     docker context use pi-node
     cd "$BACKEND_DIR"
-    docker compose -f docker-compose.infra.yml logs "${@:2}"
+    docker compose -f docker-compose.infra-dev.yml logs "${@:2}"
     ;;
     
+  stage)
+    echo "🚀 Starting Stage Dev Stack..."
+    echo ""
+
+    # Start stage infrastructure on pi-node
+    echo "📦 Starting stage infrastructure on pi-node..."
+    do_stage_infra up -d
+    echo ""
+
+    # Wait for services to be healthy
+    echo "⏳ Waiting for stage services to be ready..."
+    sleep 15
+    docker context use pi-node
+    cd "$BACKEND_DIR"
+    docker compose -f docker-compose.infra-stage.yml ps
+    docker context use desktop-linux
+    echo ""
+
+    # Start Spring Boot locally with stage profile
+    # NOTE: .env has dev values (192.168.0.100:5435), skip it — application-stage.properties
+    # already has correct defaults (piworm.local:5436/swingtrade_stage)
+    cd "$BACKEND_DIR/api"
+    mvn spring-boot:run -Dspring-boot.run.profiles=stage
+    ;;
+
   *)
-    echo "Usage: $0 {start|stop|infra|status|logs}"
+    echo "Usage: $0 {start|stage|stop|infra|status|logs}"
     echo ""
     echo "Commands:"
-    echo "  start   - Start infrastructure on pi-node and run Spring Boot locally"
+    echo "  start   - Start dev infra on pi-node and run Spring Boot locally"
+    echo "  stage   - Start stage infra on pi-node and run Spring Boot locally"
     echo "  stop    - Stop everything"
-    echo "  infra   - Manage infrastructure (pass docker compose commands)"
+    echo "  infra   - Manage dev infrastructure (pass docker compose commands)"
     echo "  status  - Check status of all services"
     echo "  logs    - View logs"
     echo ""
     echo "Examples:"
     echo "  $0 start"
+    echo "  $0 stage"
     echo "  $0 infra up -d"
     echo "  $0 status"
     echo "  $0 logs --tail=100"

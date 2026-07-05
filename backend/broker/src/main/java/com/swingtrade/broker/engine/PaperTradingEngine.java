@@ -258,7 +258,9 @@ public class PaperTradingEngine {
             order.getQuantity().intValue(),
             order.getPrice(),
             atr,
-            (String) order.getAdditionalProperties().get("signalReason")
+            order.getAdditionalProperties() != null
+                ? (String) order.getAdditionalProperties().get("signalReason")
+                : null
         );
     }
 

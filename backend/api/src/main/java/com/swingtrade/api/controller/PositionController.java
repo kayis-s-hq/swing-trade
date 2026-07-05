@@ -136,9 +136,9 @@ public class PositionController {
      * @return Position statistics
      */
     @GetMapping("/stats")
-    public ResponseEntity<com.swingtrade.api.PositionService.PositionStats> getPositionStats() {
+    public ResponseEntity<com.swingtrade.api.dto.PositionStats> getPositionStats() {
         logger.debug("Fetching position statistics");
-        com.swingtrade.api.PositionService.PositionStats stats = positionService.getPositionStats();
+        com.swingtrade.api.dto.PositionStats stats = positionService.getPositionStats();
         return ResponseEntity.ok(stats);
     }
 
@@ -148,9 +148,9 @@ public class PositionController {
      * @return Sector allocation percentages
      */
     @GetMapping("/sector-allocation")
-    public ResponseEntity<com.swingtrade.api.PositionService.SectorAllocation> getSectorAllocation() {
+    public ResponseEntity<com.swingtrade.api.dto.SectorAllocation> getSectorAllocation() {
         logger.debug("Fetching sector allocation");
-        com.swingtrade.api.PositionService.SectorAllocation allocation = positionService.getSectorAllocation();
+        com.swingtrade.api.dto.SectorAllocation allocation = positionService.getSectorAllocation();
         return ResponseEntity.ok(allocation);
     }
 

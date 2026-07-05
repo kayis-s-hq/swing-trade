@@ -28,7 +28,6 @@ public class MonthlyReportService {
     private final PositionRepository positionRepository;
     private final SignalRepository signalRepository;
     private final TelegramConfig telegramConfig;
-    private final TelegramMessageFormatter telegramMessageFormatter;
 
     private final ZoneId istZone = ZoneId.of("Asia/Kolkata");
 
@@ -40,7 +39,6 @@ public class MonthlyReportService {
         this.positionRepository = positionRepository;
         this.signalRepository = signalRepository;
         this.telegramConfig = telegramConfig;
-        this.telegramMessageFormatter = telegramMessageFormatter;
     }
 
     @PostConstruct

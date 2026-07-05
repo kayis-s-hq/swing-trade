@@ -215,8 +215,8 @@ public class DailyLossCircuitBreaker {
     }
 
     private BigDecimal calculateTotalRealizedPnL() {
-        // For now, return zero. Can be enhanced to track realized P&L from closed positions.
-        return BigDecimal.ZERO;
+        BigDecimal pnl = positionManager.getTotalRealizedPnL();
+        return pnl != null ? pnl : BigDecimal.ZERO;
     }
 
     private BigDecimal calculateLossPercent() {

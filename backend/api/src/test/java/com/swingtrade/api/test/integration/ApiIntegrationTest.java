@@ -83,8 +83,8 @@ public abstract class ApiIntegrationTest {
     /**
      * Perform a GET request with JSON content type.
      */
-    protected RequestBuilder getJsonRequest(String url) {
-        return get(url)
+    protected RequestBuilder getJsonRequest() {
+        return get("/api/health")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON);
     }
@@ -103,7 +103,7 @@ public abstract class ApiIntegrationTest {
     @Tag("integration")
     @DisplayName("Health endpoint returns OK")
     void testHealthEndpoint() throws Exception {
-        mockMvc.perform(getJsonRequest("/api/health"))
+        mockMvc.perform(getJsonRequest())
                 .andExpect(status().isOk());
     }
 }

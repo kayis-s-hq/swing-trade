@@ -227,12 +227,12 @@ public class SentimentCacheService {
      * @param symbol the stock symbol
      * @return map of date to cached sentiment
      */
-    public Map<LocalDate, SentimentAnalysisService.CachedSentiment> getCacheForSymbol(String symbol) {
-        Map<LocalDate, SentimentAnalysisService.CachedSentiment> results = new HashMap<>();
+    public Map<LocalDate, SentimentService.CachedSentiment> getCacheForSymbol(String symbol) {
+        Map<LocalDate, SentimentService.CachedSentiment> results = new HashMap<>();
 
         for (Map.Entry<String, CacheEntry<?>> entry : cache.entrySet()) {
             if (entry.getKey().toUpperCase().startsWith(symbol.toUpperCase())) {
-                if (entry.getValue().value instanceof SentimentAnalysisService.CachedSentiment cached) {
+                if (entry.getValue().value instanceof SentimentService.CachedSentiment cached) {
                     // Parse date from key (format: SYMBOL_YYYY-MM-DD)
                     String keyDate = entry.getKey().substring(symbol.length() + 1);
                     try {
