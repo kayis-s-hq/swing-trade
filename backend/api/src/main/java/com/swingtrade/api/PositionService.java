@@ -144,39 +144,40 @@ public class PositionService {
         stats.setOpenPositions(openPositions.size());
         stats.setClosedPositions(allPositions.size() - openPositions.size());
 
-        // Calculate total P&L from closed positions
-        BigDecimal totalPnL = allPositions.stream()
-                .filter(p -> !"OPEN".equals(p.getStatus()) && p.getCurrentPrice() != null && p.getEntryPrice() != null)
-                .map(p -> p.getCurrentPrice().subtract(p.getEntryPrice())
-                        .multiply(BigDecimal.valueOf(p.getQuantity() != null ? p.getQuantity() : 0)))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Single-pass calculation of all stats
+        BigDecimal totalPnL = BigDecimal.ZERO;
+        BigDecimal unrealizedPnL = BigDecimal.ZERO;
+        long stoppedCount = 0;
+        long targetHitCount = 0;
+        long winCount = 0;
+        long closedCount = 0;
+
+        for (PositionEntity p : allPositions) {
+            String status = p.getStatus();
+            if ("OPEN".equals(status)) {
+                if (p.getCurrentPrice() != null && p.getEntryPrice() != null && p.getQuantity() != null) {
+                    unrealizedPnL = unrealizedPnL.add(
+                        p.getCurrentPrice().subtract(p.getEntryPrice())
+                            .multiply(BigDecimal.valueOf(p.getQuantity())));
+                }
+            } else {
+                closedCount++;
+                if ("STOPPED".equals(status)) stoppedCount++;
+                if ("TARGET_HIT".equals(status)) targetHitCount++;
+                if (p.getPnl() != null && p.getPnl().compareTo(BigDecimal.ZERO) > 0) winCount++;
+                if (p.getCurrentPrice() != null && p.getEntryPrice() != null && p.getQuantity() != null) {
+                    totalPnL = totalPnL.add(
+                        p.getCurrentPrice().subtract(p.getEntryPrice())
+                            .multiply(BigDecimal.valueOf(p.getQuantity())));
+                }
+            }
+        }
+
         stats.setTotalPnL(totalPnL);
-
-        // Calculate unrealized P&L from open positions
-        BigDecimal unrealizedPnL = openPositions.stream()
-                .filter(p -> p.getCurrentPrice() != null && p.getEntryPrice() != null)
-                .map(p -> p.getCurrentPrice().subtract(p.getEntryPrice())
-                        .multiply(BigDecimal.valueOf(p.getQuantity() != null ? p.getQuantity() : 0)))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
         stats.setUnrealizedPnL(unrealizedPnL);
-
-        // Count stopped and target-hit positions
-        long stoppedCount = allPositions.stream().filter(p -> "STOPPED".equals(p.getStatus())).count();
-        long targetHitCount = allPositions.stream().filter(p -> "TARGET_HIT".equals(p.getStatus())).count();
         stats.setStoppedOut((int) stoppedCount);
         stats.setTargetHit((int) targetHitCount);
-
-        // Win rate: count all closed positions where PnL > 0
-        long closedCount = allPositions.size() - openPositions.size();
-        long winCount = allPositions.stream()
-            .filter(p -> !"OPEN".equals(p.getStatus()))
-            .filter(p -> p.getPnl() != null && p.getPnl().compareTo(BigDecimal.ZERO) > 0)
-            .count();
-        if (closedCount > 0) {
-            stats.setWinRate((double) winCount / closedCount * 100.0);
-        } else {
-            stats.setWinRate(0.0);
-        }
+        stats.setWinRate(closedCount > 0 ? (double) winCount / closedCount * 100.0 : 0.0);
 
         return stats;
     }
