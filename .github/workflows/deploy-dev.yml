@@ -36,7 +36,9 @@ jobs:
 
       - name: Install Fyers SDK
         run: |
-          JAR=$(pwd)/backend/data/libs/fyersjavasdk-1.9.0.jar
+          JAR=$(find "$PWD" -name fyersjavasdk-1.9.0.jar 2>/dev/null | head -1)
+          if [ -z "$JAR" ]; then echo "FYERS SDK not found"; exit 1; fi
+          echo "Found: $JAR"
           mvn install:install-file -Dfile="$JAR" -DgroupId=com.tts.in -DartifactId=fyersjavasdk -Dversion=1.9.0 -Dpackaging=jar
 
       - name: Build backend
