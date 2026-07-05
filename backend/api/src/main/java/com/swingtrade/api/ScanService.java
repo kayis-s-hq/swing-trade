@@ -1,16 +1,20 @@
 package com.swingtrade.api;
 
 import com.swingtrade.api.dto.ScanResponse;
+import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.strategy.SignalEngine;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
 
 /**
  * Service for triggering manual scans
@@ -37,21 +41,18 @@ public class ScanService {
      * @return Scan result
      */
     public ScanResult triggerManualScan() {
-        // Get all stock symbols
         List<String> symbols = new ArrayList<>();
         stockRepository.findAll().forEach(stock -> symbols.add(stock.getSymbol()));
 
-        // Generate signals for each stock (void method - saves to DB)
         for (String symbol : symbols) {
             signalEngine.generateSignalForSymbolNow(symbol);
         }
 
-        // Query today's BUY signals from the repository
         LocalDate today = LocalDate.now();
         List<String> opportunities = new ArrayList<>();
         for (String symbol : symbols) {
-            var signals = signalRepository.findBySymbolAndDate(symbol, today);
-            for (var signal : signals) {
+            List<SignalEntity> signals = signalRepository.findBySymbolAndDate(symbol, today);
+            for (SignalEntity signal : signals) {
                 if ("BUY".equals(signal.getSignalType())) {
                     opportunities.add(symbol);
                     break;
@@ -77,28 +78,46 @@ public class ScanService {
     }
 
     /**
-     * Get scan history
-     * @return List of previous scan results as ScanResponse DTOs
+     * Get scan history — returns today's BUY signal summary.
+     * @return List of scan response summaries
      */
     public List<ScanResponse> getScanHistory() {
-        // Query recent signals as scan history
-        // In production, would have a dedicated scan history table
-        return new ArrayList<>();
+        LocalDate today = LocalDate.now();
+        List<SignalEntity> todaySignals = signalRepository.findByDateRangeAndSignalType(
+            today, today, "BUY", PageRequest.of(0, 50));
+        if (todaySignals.isEmpty()) {
+            return Collections.emptyList();
+        }
+        ScanResponse response = new ScanResponse();
+        response.setScanTime(LocalDateTime.now());
+        response.setStatus(ScanResponse.ScanStatus.COMPLETED);
+        response.setSymbolsScanned((int) stockRepository.count());
+        response.setSignalsFound(todaySignals.size());
+        response.setBuySignals(todaySignals.size());
+        response.setSellSignals(0);
+        response.setHoldSignals(0);
+        response.setScannedSymbols(new ArrayList<>());
+        response.setMessage("SUCCESS");
+        return List.of(response);
     }
 
     /**
-     * Get scan results for a specific date
+     * Get scan results for a specific date.
+     * Queries all stock symbols from the repository (not hardcoded).
      * @param date the scan date
      * @return Scan results for the date
      */
     public ScanResult getScanResultsByDate(LocalDate date) {
-        // Query signals for the specified date
-        List<String> opportunities = new ArrayList<>();
+        List<String> symbols = new ArrayList<>();
+        stockRepository.findAll().forEach(stock -> symbols.add(stock.getSymbol()));
 
-        var signals = signalRepository.findBySymbolAndDate("RELIANCE", date);
-        for (var signal : signals) {
-            if ("BUY".equals(signal.getSignalType())) {
-                opportunities.add(signal.getSymbol());
+        List<String> opportunities = new ArrayList<>();
+        for (String symbol : symbols) {
+            List<SignalEntity> signals = signalRepository.findBySymbolAndDate(symbol, date);
+            for (SignalEntity signal : signals) {
+                if ("BUY".equals(signal.getSignalType())) {
+                    opportunities.add(signal.getSymbol());
+                }
             }
         }
 
@@ -115,37 +134,18 @@ public class ScanService {
      */
     private ScanResponse convertScanResultToResponse(ScanResult result) {
         ScanResponse response = new ScanResponse();
-        response.setScanTime(result.getScanTime());
+        response.setScanTime(result.scanTime());
         response.setStatus(ScanResponse.ScanStatus.COMPLETED);
-        response.setSymbolsScanned(result.getOpportunityCount());
-        response.setSignalsFound(result.getOpportunityCount());
-        response.setBuySignals(result.getOpportunityCount());
+        response.setSymbolsScanned(result.opportunityCount());
+        response.setSignalsFound(result.opportunityCount());
+        response.setBuySignals(result.opportunityCount());
         response.setSellSignals(0);
         response.setHoldSignals(0);
-        response.setScannedSymbols(result.getOpportunities());
-        response.setMessage(result.getStatus());
+        response.setScannedSymbols(result.opportunities());
+        response.setMessage(result.status());
         return response;
     }
 
-    // DTO class for API response
-
-    public static class ScanResult {
-        private final LocalDateTime scanTime;
-        private final int opportunityCount;
-        private final List<String> opportunities;
-        private final String status;
-
-        public ScanResult(LocalDateTime scanTime, int opportunityCount,
-                          List<String> opportunities, String status) {
-            this.scanTime = scanTime;
-            this.opportunityCount = opportunityCount;
-            this.opportunities = opportunities;
-            this.status = status;
-        }
-
-        public LocalDateTime getScanTime() { return scanTime; }
-        public int getOpportunityCount() { return opportunityCount; }
-        public List<String> getOpportunities() { return opportunities; }
-        public String getStatus() { return status; }
+    public record ScanResult(LocalDateTime scanTime, int opportunityCount, List<String> opportunities, String status) {
     }
 }
