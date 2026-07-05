@@ -212,16 +212,18 @@ public class PositionService {
         try {
             paperTradingEngine.closePosition("POS_" + entity.getId(), exitPrice, reason);
         } catch (Exception e) {
-            logger.warn("Position {} not found in PaperTradingEngine: {}", symbol, e.getMessage());
+            logger.error("PaperTradingEngine failed to close position {} for symbol {}: {}",
+                entity.getId(), symbol, e.getMessage(), e);
+            throw new RuntimeException("Failed to close position in engine: " + e.getMessage(), e);
         }
 
         // Then update DB entity
         entity.setStatus("CLOSED");
         entity.setCurrentPrice(exitPrice);
         entity.setUpdatedAt(LocalDateTime.now());
-        positionRepository.save(entity);
+        PositionEntity savedEntity = positionRepository.save(entity);
 
-        return convertToResponse(entity);
+        return convertToResponse(savedEntity);
     }
 
     /**
