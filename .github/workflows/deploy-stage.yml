@@ -78,12 +78,13 @@ jobs:
 
       - name: Copy JAR and start stage
         run: |
+          sudo mkdir -p /var/log/swing-trade
+          sudo chown dietpi:dietpi /var/log/swing-trade
           cp backend/api/target/api-1.0.0.jar /home/dietpi/swing-trade/stage/swing-trade-api.jar
           cd /home/dietpi/swing-trade/stage
           # Source .env for env vars
           set -a && source .env && set +a
           export SPRING_PROFILES_ACTIVE=stage
-          mkdir -p /var/log/swing-trade
           nohup java -jar swing-trade-api.jar \
             -Dserver.port=8081 \
             -Dlogging.file.name=/var/log/swing-trade/stage.log \
