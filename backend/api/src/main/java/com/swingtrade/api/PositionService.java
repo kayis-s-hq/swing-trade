@@ -331,7 +331,7 @@ public class PositionService {
         response.setEntryPrice(entity.getEntryPrice());
         response.setEntryDate(entity.getEntryDate());
         response.setQuantity(entity.getQuantity());
-        response.setExitReason(entity.getEntryReason());
+        response.setExitReason(null);
         return response;
     }
 
