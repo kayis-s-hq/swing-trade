@@ -69,7 +69,7 @@ public class SignalService {
      */
     public List<Signal> getSignalsByDateRange(LocalDate startDate, LocalDate endDate) {
         Pageable pageable = PageRequest.of(0, 100);
-        List<SignalEntity> entities = signalRepository.findByDateRangeAndSignalType(startDate, endDate, "BUY", pageable);
+        List<SignalEntity> entities = signalRepository.findByDateRange(startDate, endDate, pageable);
         return convertToDomain(entities);
     }
 
@@ -80,16 +80,9 @@ public class SignalService {
      */
     public List<Signal> getSignalsByType(String signalType) {
         Pageable pageable = PageRequest.of(0, 100);
-        List<SignalEntity> entities = signalRepository.findBuySignalsSince(LocalDate.now().minusDays(30), pageable);
-        // Filter by the actual signalType parameter instead of hardcoding BUY
-        List<Signal> signals = convertToDomain(entities);
-        List<Signal> filtered = new ArrayList<>();
-        for (Signal signal : signals) {
-            if (signal.getType().toString().equals(signalType)) {
-                filtered.add(signal);
-            }
-        }
-        return filtered;
+        List<SignalEntity> entities = signalRepository.findByDateRangeAndSignalType(
+            LocalDate.now().minusDays(30), LocalDate.now(), signalType, pageable);
+        return convertToDomain(entities);
     }
 
     /**
@@ -103,7 +96,7 @@ public class SignalService {
         List<Signal> signals = convertToDomain(allEntities);
         List<Signal> highConfidence = new ArrayList<>();
         for (Signal signal : signals) {
-            if (signal.getConfidence() >= minConfidence) {
+            if (signal.confidence() >= minConfidence) {
                 highConfidence.add(signal);
             }
         }
@@ -122,6 +115,21 @@ public class SignalService {
         // Return the latest signal for the symbol
         var latest = signalRepository.findLatestBySymbol(symbol);
         return latest.map(com.swingtrade.domain.Signal.class::cast).orElse(null);
+    }
+
+    /**
+     * Generate a price-action signal for a specific symbol (Phase 2 strategy engine:
+     * EMA20/EMA50/RSI14/ATR14/VolumeMA20 breakout rules).
+     * @param symbol the stock symbol
+     * @return the generated/latest price-action signal entity, or empty if there wasn't
+     *         enough candle history to compute one
+     */
+    public java.util.Optional<SignalEntity> generatePriceActionSignal(String symbol) {
+        signalEngine.generatePriceActionSignalForSymbolNow(symbol);
+        java.util.List<SignalEntity> latest = signalRepository.findLatestBySymbolAndStrategy(
+                symbol, SignalEntity.STRATEGY_PRICE_ACTION,
+                PageRequest.of(0, 1));
+        return latest.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(latest.get(0));
     }
 
     /**
@@ -169,7 +177,7 @@ public class SignalService {
      */
     private SignalType combineSignals(com.swingtrade.domain.Signal technicalSignal, SentimentAnalysis sentiment) {
         com.swingtrade.domain.Signal.SignalType technicalType = technicalSignal.type();
-        String sentimentScore = sentiment.getScore();
+        String sentimentScore = sentiment.score();
 
         if ("NEGATIVE".equals(sentimentScore)) {
             // Negative sentiment suppresses BUY signals
@@ -229,90 +237,23 @@ public class SignalService {
 
     // DTO classes for API responses
 
-    public static class Signal {
-        private final String symbol;
-        private final SignalType type;
-        private final Double confidence;
-        private final LocalDate date;
-        private final String reasoning;
-
-        public Signal(String symbol, String type, Double confidence, LocalDate date, String reasoning) {
-            this.symbol = symbol;
-            this.type = SignalType.valueOf(type);
-            this.confidence = confidence;
-            this.date = date;
-            this.reasoning = reasoning;
+    public record Signal(String symbol, SignalType type, Double confidence, LocalDate date, String reasoning) {
+            public Signal(String symbol, String type, Double confidence, LocalDate date, String reasoning) {
+                this(symbol, SignalType.valueOf(type), confidence, date, reasoning);
+            }
         }
-
-        public String getSymbol() { return symbol; }
-        public SignalType getType() { return type; }
-        public Double getConfidence() { return confidence; }
-        public LocalDate getDate() { return date; }
-        public String getReasoning() { return reasoning; }
-    }
 
     public enum SignalType {
         BUY, SELL, HOLD
     }
 
-    public static class TechnicalAnalysis {
-        private final String symbol;
-        private final LocalDate date;
-        private final List<String> indicators;
-        private final double strength;
-
-        public TechnicalAnalysis(String symbol, LocalDate date, List<String> indicators, double strength) {
-            this.symbol = symbol;
-            this.date = date;
-            this.indicators = indicators;
-            this.strength = strength;
-        }
-
-        public String getSymbol() { return symbol; }
-        public LocalDate getDate() { return date; }
-        public List<String> getIndicators() { return indicators; }
-        public double getStrength() { return strength; }
+    public record TechnicalAnalysis(String symbol, LocalDate date, List<String> indicators, double strength) {
     }
 
-    public static class SentimentAnalysis {
-        private final String symbol;
-        private final LocalDate date;
-        private final String score;
-        private final String summary;
-
-        public SentimentAnalysis(String symbol, LocalDate date, String score, String summary) {
-            this.symbol = symbol;
-            this.date = date;
-            this.score = score;
-            this.summary = summary;
-        }
-
-        public String getSymbol() { return symbol; }
-        public LocalDate getDate() { return date; }
-        public String getScore() { return score; }
-        public String getSummary() { return summary; }
+    public record SentimentAnalysis(String symbol, LocalDate date, String score, String summary) {
     }
 
-    public static class CombinedSignal {
-        private final String symbol;
-        private final LocalDate date;
-        private final Signal technicalSignal;
-        private final SentimentAnalysis sentiment;
-        private final SignalType finalSignal;
-
-        public CombinedSignal(String symbol, LocalDate date, Signal technicalSignal,
-                              SentimentAnalysis sentiment, SignalType finalSignal) {
-            this.symbol = symbol;
-            this.date = date;
-            this.technicalSignal = technicalSignal;
-            this.sentiment = sentiment;
-            this.finalSignal = finalSignal;
-        }
-
-        public String getSymbol() { return symbol; }
-        public LocalDate getDate() { return date; }
-        public Signal getTechnicalSignal() { return technicalSignal; }
-        public SentimentAnalysis getSentiment() { return sentiment; }
-        public SignalType getFinalSignal() { return finalSignal; }
+    public record CombinedSignal(String symbol, LocalDate date, Signal technicalSignal, SentimentAnalysis sentiment,
+                                 SignalType finalSignal) {
     }
 }
