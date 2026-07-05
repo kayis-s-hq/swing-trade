@@ -19,6 +19,7 @@ concurrency:
 
 env:
   JAVA_VERSION: 21
+  PI_NODE_HOST: "127.0.0.1"
 
 jobs:
   build-and-deploy:
@@ -42,34 +43,57 @@ jobs:
         working-directory: backend/api/target
         run: ls -la api-1.0.0.jar
 
-      - name: Write .env for deployment
-        working-directory: backend
+      - name: Write .env for stage
         run: |
-          cat > .env <<EOF
-          SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}
-          SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}
-          SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
-          SPRING_REDIS_HOST=${{ secrets.SPRING_REDIS_HOST }}
-          SPRING_REDIS_PORT=${{ secrets.SPRING_REDIS_PORT }}
+          mkdir -p /home/dietpi/swing-trade/stage
+          cat > /home/dietpi/swing-trade/stage/.env <<EOF
+          # Database Configuration
+          SPRING_DATASOURCE_URL=jdbc:postgresql://192.168.0.100:5436/swingtrade_stage
+          SPRING_DATASOURCE_USERNAME=swingtrade_user
+          SPRING_DATASOURCE_PASSWORD=swingtrade_password
+
+          # Redis Configuration
+          SPRING_REDIS_HOST=192.168.0.100
+          SPRING_REDIS_PORT=6380
+
+          # Active Profiles
           SPRING_PROFILES_ACTIVE=stage
           SERVER_PORT=8081
           EOF
 
-      - name: Deploy to pi-node (local)
-        working-directory: backend
+      - name: Stop existing stage app
         run: |
-          chmod +x deploy.sh
-          ./deploy.sh deploy stage
+          pkill -f "swing-trade-api.jar" 2>/dev/null || true
+          sleep 3
+
+      - name: Copy JAR and start stage
+        run: |
+          cp backend/api/target/api-1.0.0.jar /home/dietpi/swing-trade/stage/swing-trade-api.jar
+          cd /home/dietpi/swing-trade/stage
+          # Source .env for env vars
+          set -a && source .env && set +a
+          export SPRING_PROFILES_ACTIVE=stage
+          mkdir -p /var/log/swing-trade
+          nohup java -jar swing-trade-api.jar \
+            -Dserver.port=8081 \
+            -Dlogging.file.name=/var/log/swing-trade/stage.log \
+            > /var/log/swing-trade/stage-start.log 2>&1 &
+          echo "Started stage (PID: $!)"
+          sleep 5
+          echo "=== Startup log (last 30 lines) ==="
+          tail -30 /var/log/swing-trade/stage-start.log
 
       - name: Health check
         run: |
-          for i in $(seq 1 10); do
+          for i in $(seq 1 15); do
             if curl -sf http://localhost:8081/actuator/health | grep -q '"UP"'; then
               echo "Stage is UP on port 8081"
               exit 0
             fi
-            echo "Waiting... ($i/10)"
-            sleep 6
+            echo "Waiting... ($i/15)"
+            sleep 8
           done
           echo "Health check failed"
+          echo "=== Latest logs ==="
+          tail -50 /var/log/swing-trade/stage.log 2>/dev/null || true
           exit 1

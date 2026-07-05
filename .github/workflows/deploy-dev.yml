@@ -42,34 +42,57 @@ jobs:
         working-directory: backend/api/target
         run: ls -la api-1.0.0.jar
 
-      - name: Write .env for deployment
-        working-directory: backend
+      - name: Write .env for dev
         run: |
-          cat > .env <<EOF
-          SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}
-          SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}
-          SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
-          SPRING_REDIS_HOST=${{ secrets.SPRING_REDIS_HOST }}
-          SPRING_REDIS_PORT=${{ secrets.SPRING_REDIS_PORT }}
+          mkdir -p /home/dietpi/swing-trade/dev
+          cat > /home/dietpi/swing-trade/dev/.env <<EOF
+          # Database Configuration
+          SPRING_DATASOURCE_URL=jdbc:postgresql://192.168.0.100:5435/swingtrade_db
+          SPRING_DATASOURCE_USERNAME=swingtrade_user
+          SPRING_DATASOURCE_PASSWORD=swingtrade_password
+
+          # Redis Configuration
+          SPRING_REDIS_HOST=192.168.0.100
+          SPRING_REDIS_PORT=6379
+
+          # Active Profiles
           SPRING_PROFILES_ACTIVE=local
           SERVER_PORT=8080
           EOF
 
-      - name: Deploy to pi-node (local)
-        working-directory: backend
+      - name: Stop existing dev app
         run: |
-          chmod +x deploy.sh
-          ./deploy.sh deploy dev
+          pkill -f "swing-trade-dev.jar" 2>/dev/null || true
+          pkill -f "swing-trade-api.jar.*dev" 2>/dev/null || true
+          sleep 3
+
+      - name: Copy JAR and start dev
+        run: |
+          cp backend/api/target/api-1.0.0.jar /home/dietpi/swing-trade/dev/swing-trade-api.jar
+          cd /home/dietpi/swing-trade/dev
+          set -a && source .env && set +a
+          export SPRING_PROFILES_ACTIVE=local
+          mkdir -p /var/log/swing-trade
+          nohup java -jar swing-trade-api.jar \
+            -Dserver.port=8080 \
+            -Dlogging.file.name=/var/log/swing-trade/dev.log \
+            > /var/log/swing-trade/dev-start.log 2>&1 &
+          echo "Started dev (PID: $!)"
+          sleep 5
+          echo "=== Startup log (last 30 lines) ==="
+          tail -30 /var/log/swing-trade/dev-start.log
 
       - name: Health check
         run: |
-          for i in $(seq 1 10); do
+          for i in $(seq 1 15); do
             if curl -sf http://localhost:8080/actuator/health | grep -q '"UP"'; then
               echo "Dev is UP on port 8080"
               exit 0
             fi
-            echo "Waiting... ($i/10)"
-            sleep 6
+            echo "Waiting... ($i/15)"
+            sleep 8
           done
           echo "Health check failed"
+          echo "=== Latest logs ==="
+          tail -50 /var/log/swing-trade/dev.log 2>/dev/null || true
           exit 1
