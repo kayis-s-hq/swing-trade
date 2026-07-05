@@ -8,6 +8,8 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
+
+import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -73,7 +75,7 @@ public class NseInstrumentService {
             for (NseInstrumentRecord r : records) {
                 if ("NSE_EQ".equals(r.segment) && "EQ".equals(r.instrumentType)
                         && r.tradingSymbol != null && r.instrumentKey != null) {
-                    newMap.put(r.tradingSymbol.toUpperCase(), r.instrumentKey);
+                    newMap.put(r.tradingSymbol.toUpperCase(Locale.ROOT), r.instrumentKey);
                 }
             }
             this.symbolToInstrumentKey = newMap;
@@ -87,7 +89,7 @@ public class NseInstrumentService {
      * Example: "RELIANCE" → Optional.of("NSE_EQ%7CINE002A01018")
      */
     public Optional<String> getEncodedInstrumentKey(String tradingSymbol) {
-        String raw = symbolToInstrumentKey.get(tradingSymbol.toUpperCase());
+        String raw = symbolToInstrumentKey.get(tradingSymbol.toUpperCase(Locale.ROOT));
         if (raw == null) return Optional.empty();
         return Optional.of(raw.replace("|", "%7C"));
     }

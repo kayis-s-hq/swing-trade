@@ -11,6 +11,21 @@ This repo has **two** backend implementations — know which one you're working 
 
 When in doubt, `backend/` is the active development target.
 
+## Java Version
+
+**MUST use Java 21 for Maven builds.** The system JDK may be Java 25/26, which causes PMD 7.14.0 to crash (ASM parser cannot parse JDK class files of version 70+). Use sdkman to switch:
+
+```bash
+source "$HOME/.sdkman/bin/sdkman-init.sh"
+java -version  # should show openjdk 21.0.2
+mvn validate   # now works
+```
+
+Verify before running Maven:
+```bash
+java -version  # must be Java 21, NOT 25/26
+```
+
 ## Project Structure
 
 ```
@@ -67,7 +82,7 @@ core → (none)
 ## Key Technologies
 
 ### Backend
-- Java 21 (MUST use Java 21, NOT Java 25 — Spring Boot 3.4.2 incompatible with Lombok 1.18.38)
+- Java 21 (MUST use Java 21 via sdkman — `source "$HOME/.sdkman/bin/sdkman-init.sh"` before Maven; NOT Java 25/26)
 - Spring Boot 3.3.1 (backend/) / 3.4.2 (root src/)
 - Maven multi-module build
 - PostgreSQL + TimescaleDB (time-series)

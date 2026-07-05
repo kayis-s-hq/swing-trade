@@ -1,6 +1,7 @@
 package com.swingtrade.data.entity;
 
 import jakarta.persistence.*;
+import java.util.Locale;
 
 /**
  * JPA entity for the app_settings key/value table.
@@ -63,7 +64,7 @@ public class AppSettingEntity {
      * Checks if a value is overridden by env var or system property.
      */
     public static String fromEnv(String key, String defaultValue) {
-        String envValue = System.getenv(key.replace('.', '_').toUpperCase());
+        String envValue = System.getenv(key.replace('.', '_').toUpperCase(Locale.ROOT));
         if (envValue != null && !envValue.isBlank()) {
             return envValue;
         }

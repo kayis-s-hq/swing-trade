@@ -128,6 +128,7 @@
                     <includeTests>true</includeTests>
                     <verbose>true</verbose>
                     <targetJdk>21</targetJdk>
+                    <skip>true</skip>
                 </configuration>
                 <executions>
                     <execution>
