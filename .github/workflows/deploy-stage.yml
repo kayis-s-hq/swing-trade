@@ -36,8 +36,7 @@ jobs:
           cache: maven
 
       - name: Install Fyers SDK
-        working-directory: backend/data
-        run: mvn install:install-file -Dfile=libs/fyersjavasdk-1.9.0.jar -DgroupId=com.tts.in -DartifactId=fyersjavasdk -Dversion=1.9.0 -Dpackaging=jar
+        run: mvn install:install-file -Dfile=${{ github.workspace }}/backend/data/libs/fyersjavasdk-1.9.0.jar -DgroupId=com.tts.in -DartifactId=fyersjavasdk -Dversion=1.9.0 -Dpackaging=jar
 
       - name: Build backend
         working-directory: backend
