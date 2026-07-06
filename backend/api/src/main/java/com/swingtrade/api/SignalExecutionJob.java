@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -41,7 +42,7 @@ public class SignalExecutionJob {
     @Scheduled(fixedDelayString = "${paper.trading.signal-execution-delay:30000}")
     public void executePendingSignals() {
         List<SignalEntity> pendingSignals = signalRepository.findUnprocessedBuySignalsSince(
-            LocalDateTime.now().minusMinutes(5));
+            LocalDate.now());
 
         for (SignalEntity signalEntity : pendingSignals) {
             executeSignal(signalEntity);

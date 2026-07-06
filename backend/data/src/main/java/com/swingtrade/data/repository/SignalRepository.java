@@ -165,6 +165,6 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      */
     @Query("SELECT s FROM SignalEntity s WHERE s.signalType = 'BUY' AND s.date >= :since AND s.processed = false ORDER BY s.date ASC")
     List<SignalEntity> findUnprocessedBuySignalsSince(
-        @Param("since") LocalDateTime since
+        @Param("since") LocalDate since
     );
 }
