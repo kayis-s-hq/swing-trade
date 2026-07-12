@@ -217,12 +217,24 @@ const handleAnalyse = async () => {
   if (!symbolInput.value.trim()) return
   analyzing.value = true
   error.value = ''
+  newsArticles.value = []
+  latestSignal.value = null
   try {
-    const res = await triggerSentimentAnalysis(symbolInput.value)
+    const [res, newsRes, signalRes] = await Promise.all([
+      triggerSentimentAnalysis(symbolInput.value),
+      getLatestNews(symbolInput.value),
+      getLatestSignalForSymbol(symbolInput.value),
+    ])
     if (res.success && res.data) {
       sentiment.value = res.data
     } else {
       error.value = res.error || 'Analysis failed'
+    }
+    if (newsRes.success && newsRes.data) {
+      newsArticles.value = newsRes.data
+    }
+    if (signalRes.success && signalRes.data) {
+      latestSignal.value = signalRes.data
     }
   } finally {
     analyzing.value = false
