@@ -59,37 +59,54 @@
         <p v-if="error" class="mt-3 text-xs text-danger">{{ error }}</p>
       </div>
 
-      <!-- Latest Sentiment Card -->
-      <div v-if="sentiment" class="card-panel p-5">
-        <div class="mb-4 flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-text-primary">{{ sentiment.symbol }}</h3>
-          <span class="text-xs text-text-muted">{{ sentiment.date }}</span>
-        </div>
-
-        <div class="mb-4 flex items-center gap-4">
-          <SentimentBadge :score="sentiment.score" :confidence="sentiment.confidence" />
-        </div>
-
-        <div class="mb-4">
-          <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">Summary</h4>
-          <p class="text-sm text-text-secondary">{{ sentiment.summary }}</p>
-        </div>
-
-        <div v-if="sentiment.redFlags.length" class="mb-4">
-          <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-danger">Red Flags</h4>
-          <ul class="list-disc pl-4 text-sm text-text-secondary">
-            <li v-for="rf in sentiment.redFlags" :key="rf">{{ rf }}</li>
-          </ul>
-        </div>
-
-        <div v-if="sentiment.catalysts.length">
-          <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-success">Catalysts</h4>
-          <ul class="list-disc pl-4 text-sm text-text-secondary">
-            <li v-for="c in sentiment.catalysts" :key="c">{{ c }}</li>
-          </ul>
+      <!-- News Sources Section -->
+      <div v-if="!loading && !analyzing && newsArticles.length" class="mb-6">
+        <h3 class="mb-3 text-sm font-semibold text-text-primary">News Sources</h3>
+        <div class="space-y-2">
+          <NewsSourceCard v-for="article in newsArticles" :key="article.link" :article="article" />
         </div>
       </div>
 
+      <!-- Sentiment Result -->
+      <div v-if="!loading && !analyzing && sentiment">
+        <!-- LLM Analysis -->
+        <div class="mb-6 card-panel p-5">
+          <h3 class="mb-4 text-sm font-semibold text-text-primary">LLM Analysis</h3>
+          <div class="mb-4 flex items-center justify-between">
+            <h4 class="text-sm font-semibold text-text-primary">{{ sentiment.symbol }}</h4>
+            <span class="text-xs text-text-muted">{{ sentiment.date }}</span>
+          </div>
+          <div class="mb-4 flex items-center gap-4">
+            <SentimentBadge :score="sentiment.score" :confidence="sentiment.confidence" />
+          </div>
+          <div class="mb-4">
+            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">Summary</h4>
+            <p class="text-sm text-text-secondary">{{ sentiment.summary }}</p>
+          </div>
+          <div v-if="sentiment.redFlags.length" class="mb-4">
+            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-danger">Red Flags</h4>
+            <ul class="list-disc pl-4 text-sm text-text-secondary">
+              <li v-for="rf in sentiment.redFlags" :key="rf">{{ rf }}</li>
+            </ul>
+          </div>
+          <div v-if="sentiment.catalysts.length">
+            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-success">Catalysts</h4>
+            <ul class="list-disc pl-4 text-sm text-text-secondary">
+              <li v-for="c in sentiment.catalysts" :key="c">{{ c }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Context Panel -->
+        <ContextPanel
+          :signal="latestSignal"
+          :sentiment="sentiment"
+          :article-count="newsArticles.length"
+          :trend="history.length > 0 ? history : [sentiment]"
+        />
+      </div>
+
+      <!-- Empty state -->
       <div v-if="!sentiment && !loading && !analyzing" class="card-panel p-5">
         <p class="text-sm text-text-muted">No data available. Enter a symbol to view sentiment.</p>
       </div>
@@ -129,11 +146,19 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import { getSentimentLatest, getSentimentHistory, triggerSentimentAnalysis } from '../api/client'
-import { getWatchlist } from '../api/client'
-import type { SentimentResult, WatchlistEntry } from '../api/types'
+import {
+  getSentimentLatest,
+  getSentimentHistory,
+  triggerSentimentAnalysis,
+  getLatestNews,
+  getLatestSignalForSymbol,
+  getWatchlist,
+} from '../api/client'
+import type { SentimentResult, WatchlistEntry, NewsArticle, Signal } from '../api/types'
 import SentimentBadge from '../components/SentimentBadge.vue'
 import SentimentTimeline from '../components/SentimentTimeline.vue'
+import NewsSourceCard from '../components/NewsSourceCard.vue'
+import ContextPanel from '../components/ContextPanel.vue'
 
 const tabs = [
   { key: 'detail', label: 'Detail' },
@@ -146,6 +171,8 @@ const loading = ref(false)
 const analyzing = ref(false)
 const error = ref('')
 const sentiment = ref<SentimentResult | null>(null)
+const newsArticles = ref<NewsArticle[]>([])
+const latestSignal = ref<Signal | null>(null)
 
 const historyLoading = ref(false)
 const history = ref<SentimentResult[]>([])
@@ -159,12 +186,27 @@ const loadSentiment = async () => {
   loading.value = true
   error.value = ''
   sentiment.value = null
+  newsArticles.value = []
+  latestSignal.value = null
   try {
-    const res = await getSentimentLatest(symbolInput.value)
-    if (res.success && res.data) {
-      sentiment.value = res.data
+    const [sentRes, newsRes, signalRes] = await Promise.all([
+      getSentimentLatest(symbolInput.value),
+      getLatestNews(symbolInput.value),
+      getLatestSignalForSymbol(symbolInput.value),
+    ])
+
+    if (sentRes.success && sentRes.data) {
+      sentiment.value = sentRes.data
     } else {
-      error.value = res.error || 'Failed to load sentiment'
+      error.value = sentRes.error || 'Failed to load sentiment'
+    }
+
+    if (newsRes.success && newsRes.data) {
+      newsArticles.value = newsRes.data
+    }
+
+    if (signalRes.success && signalRes.data) {
+      latestSignal.value = signalRes.data
     }
   } finally {
     loading.value = false
