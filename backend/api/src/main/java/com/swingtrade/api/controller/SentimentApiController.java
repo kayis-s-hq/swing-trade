@@ -55,10 +55,10 @@ public class SentimentApiController {
     @GetMapping("/sentiment/{symbol}/latest")
     public ResponseEntity<ApiResponse<SentimentResult>> getLatestSentiment(
             @PathVariable String symbol) {
-        return sentimentRepo.findLatestBySymbol(symbol)
+        return sentimentRepo.findLatestBySymbol(symbol.toUpperCase())
             .map(e -> ResponseEntity.ok(ApiResponse.ok(e.toDomain())))
-            .orElse(ResponseEntity.ok(ApiResponse.ok(SentimentResult.create(
-                symbol, java.time.LocalDate.now(),
+            .orElseGet(() -> ResponseEntity.ok(ApiResponse.ok(SentimentResult.create(
+                symbol.toUpperCase(), java.time.LocalDate.now(),
                 SentimentResult.SentimentScore.NEUTRAL, "No data", "", 0.0,
                 List.of(), List.of()))));
     }
@@ -69,7 +69,7 @@ public class SentimentApiController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         PageRequest pageable = PageRequest.of(page, size, Sort.by("date").descending());
-        List<SentimentResult> results = sentimentRepo.findAllBySymbol(symbol, pageable)
+        List<SentimentResult> results = sentimentRepo.findAllBySymbol(symbol.toUpperCase(), pageable)
             .stream().map(SentimentResultEntity::toDomain).toList();
         return ResponseEntity.ok(ApiResponse.ok(results));
     }
