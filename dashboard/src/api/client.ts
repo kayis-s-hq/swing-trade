@@ -267,6 +267,17 @@ export async function getSignalsByType(type: 'BUY' | 'SELL'): Promise<ApiRespons
   return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
 }
 
+export async function getLatestSignalForSymbol(symbol: string): Promise<ApiResponse<Signal | null>> {
+  const raw = await rawFetch(`/signals/symbol/${symbol}`)
+  if (!raw.ok) return errResponse(raw.error!)
+
+  const data = (raw.data as BackendSignal[])
+  const latest = data.length > 0 ? data[data.length - 1] : null
+  if (!latest) return { success: true, data: null }
+
+  return { success: true, data: mapSignal(latest) }
+}
+
 export async function getHighConfidenceSignals(minConfidence: number = 0.7): Promise<ApiResponse<Signal[]>> {
   const raw = await rawFetch(`/signals/high-confidence?minConfidence=${minConfidence}`)
   if (!raw.ok) return errResponse(raw.error!)
@@ -504,6 +515,45 @@ export async function testDiscordWebhook(): Promise<ApiResponse<{ success: boole
   const raw = await rawFetch('/settings/test/discord', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: (raw.data as any).data as { success: boolean } }
+}
+
+// ---------------------------------------------------------------------------
+// Trading Configuration
+// ---------------------------------------------------------------------------
+
+export async function getTradingSettings(): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/trading')
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: (raw.data as any).data as Record<string, string> }
+}
+
+export async function setTradingSettings(settings: Record<string, string>): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/trading', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: (raw.data as any).data as Record<string, string> }
+}
+
+// ---------------------------------------------------------------------------
+// Unified Save
+// ---------------------------------------------------------------------------
+
+export async function saveAllSettings(body: {
+  broker?: string
+  llm?: Record<string, string>
+  discord?: Record<string, string>
+  trading?: Record<string, string>
+}): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: (raw.data as any).data as Record<string, string> }
 }
 
 // ---------------------------------------------------------------------------
