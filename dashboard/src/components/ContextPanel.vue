@@ -35,7 +35,7 @@
           <div class="text-[10px] text-text-muted">Articles</div>
         </div>
         <div class="rounded-lg bg-bg-primary p-2">
-          <div class="text-lg font-semibold text-text-primary">{{ summary.length }} chars</div>
+          <div class="text-lg font-semibold text-text-primary">{{ (props.sentiment.summary ?? '').length }} chars</div>
           <div class="text-[10px] text-text-muted">Summary</div>
         </div>
       </div>
@@ -71,8 +71,6 @@ const props = defineProps<{
 }>()
 
 const confidencePct = computed(() => Math.round((props.sentiment.confidence ?? 0) * 100))
-
-const summary = computed(() => props.sentiment.summary ?? '')
 
 const agreementText = computed(() => {
   if (!props.signal) return 'No signal to compare'

@@ -59,6 +59,11 @@
         <p v-if="error" class="mt-3 text-xs text-danger">{{ error }}</p>
       </div>
 
+      <!-- Loading state -->
+      <div v-if="loading || analyzing" class="flex justify-center py-12">
+        <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      </div>
+
       <!-- News Sources Section -->
       <div v-if="!loading && !analyzing && newsArticles.length" class="mb-6">
         <h3 class="mb-3 text-sm font-semibold text-text-primary">News Sources</h3>
