@@ -13,23 +13,17 @@ echo "  Swing Trade - Dev Stack Manager"
 echo "=========================================="
 echo ""
 
-# Stage infra on pi-node (separate from dev infra)
+do_stage_monitoring() {
+    local cmd="${2:-up}"
+    docker compose -f docker-compose.monitoring-stage.yml "$cmd"
+}
+
 do_stage_infra() {
     local cmd="${2:-up}"
-    case "$cmd" in
-        up|down|restart|ps|logs)
-            docker context use pi-node
-            cd "$BACKEND_DIR"
-            docker compose -f docker-compose.infra-stage.yml "$cmd"
-            docker context use desktop-linux
-            ;;
-        *)
-            docker context use pi-node
-            cd "$BACKEND_DIR"
-            docker compose -f docker-compose.infra-stage.yml "$cmd"
-            docker context use desktop-linux
-            ;;
-    esac
+    docker context use pi-node
+    cd "$BACKEND_DIR"
+    docker compose -f docker-compose.infra-stage.yml "$cmd"
+    docker context use desktop-linux
 }
 
 case "${1:-help}" in
@@ -121,7 +115,21 @@ case "${1:-help}" in
     cd "$BACKEND_DIR"
     docker compose -f docker-compose.infra-dev.yml logs "${@:2}"
     ;;
-    
+
+  stage-monitoring)
+    echo "📊 Managing stage monitoring stack (Grafana + Prometheus)..."
+    do_stage_monitoring "${@:2}"
+    ;;
+
+  logs-json)
+    LOG_FILE="${PROJECT_ROOT}/logs/swing-trade-local.log"
+    if [ -f "$LOG_FILE" ]; then
+      tail -n "${2:-50}" "$LOG_FILE" | jq '.' 2>/dev/null || tail -n "${2:-50}" "$LOG_FILE"
+    else
+      echo "Log file not found: $LOG_FILE (start app first with '$0 start')"
+    fi
+    ;;
+
   stage)
     echo "🚀 Starting Stage Dev Stack..."
     echo ""
@@ -148,15 +156,17 @@ case "${1:-help}" in
     ;;
 
   *)
-    echo "Usage: $0 {start|stage|stop|infra|status|logs}"
+    echo "Usage: $0 {start|stage|stop|infra|status|logs|logs-json|stage-monitoring}"
     echo ""
     echo "Commands:"
-    echo "  start   - Start dev infra on pi-node and run Spring Boot locally"
-    echo "  stage   - Start stage infra on pi-node and run Spring Boot locally"
-    echo "  stop    - Stop everything"
-    echo "  infra   - Manage dev infrastructure (pass docker compose commands)"
-    echo "  status  - Check status of all services"
-    echo "  logs    - View logs"
+    echo "  start            - Start dev infra on pi-node and run Spring Boot locally"
+    echo "  stage            - Start stage infra on pi-node and run Spring Boot locally"
+    echo "  stop             - Stop everything"
+    echo "  infra            - Manage dev infrastructure (pass docker compose commands)"
+    echo "  status           - Check status of all services"
+    echo "  logs             - View infrastructure logs"
+    echo "  logs-json        - View structured JSON logs (requires jq)"
+    echo "  stage-monitoring - Start/stop Grafana + Prometheus (stage only)"
     echo ""
     echo "Examples:"
     echo "  $0 start"
@@ -164,5 +174,7 @@ case "${1:-help}" in
     echo "  $0 infra up -d"
     echo "  $0 status"
     echo "  $0 logs --tail=100"
+    echo "  $0 logs-json 50"
+    echo "  $0 stage-monitoring up -d"
     ;;
 esac

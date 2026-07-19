@@ -1,0 +1,105 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasources": ["Prometheus"],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "percent" } },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "list" }, "tooltip": { "mode": "single" }, "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "JVM Memory Usage",
+      "type": "gauge",
+      "targets": [{ "expr": "sum(jvm_memory_used_bytes{id=\"swing-trade-api\"}) / sum(jvm_memory_max_bytes{id=\"swing-trade-api\"}) * 100", "legendFormat": "Used %" }]
+    },
+    {
+      "datasources": ["Prometheus"],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" } },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "id": 2,
+      "title": "HTTP Request Latency (95th %ile)",
+      "type": "timeseries",
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{id=\"swing-trade-api\"}[5m]))", "legendFormat": "{{method}} {{uri}}" }]
+    },
+    {
+      "datasources": ["Prometheus"],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "reqps" } },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "id": 3,
+      "title": "HTTP Request Rate",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count{id=\"swing-trade-api\"}[5m])) by (uri)", "legendFormat": "{{uri}}" }]
+    },
+    {
+      "datasources": ["Prometheus"],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 4,
+      "title": "GC Pause Time",
+      "type": "timeseries",
+      "targets": [{ "expr": "rate(jvm_gc_pause_seconds_sum{id=\"swing-trade-api\"}[5m])", "legendFormat": "{{action}} {{cause}}" }]
+    },
+    {
+      "datasources": ["Prometheus"],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "connections" } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 5,
+      "title": "HikariCP Connection Pool",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "hikaricp_connections_active{id=\"swing-trade-api\"}", "legendFormat": "active" },
+        { "expr": "hikaricp_connections_idle{id=\"swing-trade-api\"}", "legendFormat": "idle" },
+        { "expr": "hikaricp_connections_pending{id=\"swing-trade-api\"}", "legendFormat": "pending" }
+      ]
+    },
+    {
+      "datasources": ["Prometheus"],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 6,
+      "title": "Thread Count",
+      "type": "timeseries",
+      "targets": [{ "expr": "jvm_threads_live_threads{id=\"swing-trade-api\"}", "legendFormat": "live" }, { "expr": "jvm_threads_daemon_threads{id=\"swing-trade-api\"}", "legendFormat": "daemon" }]
+    },
+    {
+      "datasources": ["Prometheus"],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "id": 7,
+      "title": "Error Rate",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count{id=\"swing-trade-api\", status=~\"5..\"}[5m]))", "legendFormat": "5xx" }, { "expr": "sum(rate(http_server_requests_seconds_count{id=\"swing-trade-api\", status=~\"4..\"}[5m]))", "legendFormat": "4xx" }]
+    },
+    {
+      "datasources": ["Prometheus"],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "bytes" } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 8,
+      "title": "JVM Memory by Pool",
+      "type": "timeseries",
+      "targets": [{ "expr": "jvm_memory_used_bytes{id=\"swing-trade-api\", area=\"heap\"}", "legendFormat": "{{id} - {{space}}" }]
+    },
+    {
+      "datasources": ["Prometheus"],
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 9,
+      "title": "System CPU Usage",
+      "type": "timeseries",
+      "targets": [{ "expr": "system_cpu_usage{id=\"swing-trade-api\"}", "legendFormat": "cpu" }]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["swing-trade", "stage", "jvm"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "asia/kolkata",
+  "title": "JVM / Spring Boot (Stage)",
+  "uid": "jvm-spring-boot-stage",
+  "version": 1
+}

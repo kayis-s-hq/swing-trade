@@ -3,6 +3,11 @@
 name: swing-trade-dev
 
 services:
+  # Log volume is a named volume for log persistence
+  # Logs are written by Spring Boot to /var/log/swing-trade/ inside the container
+  # Access via: docker compose logs --tail=100 api
+  # Or: docker run --rm -v swing-trade-dev_swing_logs:/mnt alpine cat /mnt/api.log
+
   postgres:
     image: postgres:16
     container_name: swing_trade_postgres
