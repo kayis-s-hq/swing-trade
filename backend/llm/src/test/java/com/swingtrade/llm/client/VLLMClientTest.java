@@ -1,5 +1,6 @@
 package com.swingtrade.llm.client;
 
+import com.swingtrade.data.service.AppSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -8,6 +9,11 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for VLLMClient testing HTTP request format, response parsing,
@@ -26,12 +32,10 @@ class VLLMClientTest {
 
     @BeforeEach
     void setUp() {
-        // Create VLLMClient with test configuration
-        vllmClient = new VLLMClient(
-                WebClient.builder(),
-                "http://localhost:8000/v1",
-                "qwen3"
-        );
+        var appSettings = mock(AppSettingsService.class);
+        when(appSettings.get(any(), anyString())).thenReturn("http://localhost:8000/v1");
+        when(appSettings.get(eq("llm.vllm.model"), anyString())).thenReturn("qwen3");
+        vllmClient = new VLLMClient(WebClient.builder(), appSettings);
     }
 
     @Test

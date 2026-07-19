@@ -388,5 +388,10 @@
                 <enabled>false</enabled>
             </releases>
         </repository>
+        <repository>
+            <id>data-libs</id>
+            <name>Data Module Local Libs</name>
+            <url>file://${project.basedir}/libs</url>
+        </repository>
     </repositories>
 </project>

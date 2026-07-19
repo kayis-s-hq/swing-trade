@@ -60,25 +60,6 @@ swing-trade/
 └── dev-stack.sh            # Dev stack orchestration script
 ```
 
-## Project Overview
-
-Automated swing trading system for NSE/BSE Indian equities. Implements 1-4 week hold periods on Nifty 500 stocks using:
-- **Technical Analysis**: EMA crossovers, RSI, MACD, ATR-based stops (TA4j)
-- **LLM Sentiment**: vLLM-powered sentiment on financial news (LangChain4j)
-- **Paper Trading**: Full order management with risk controls
-- **Market Data**: Upstox API (OAuth2 token management)
-
-## Backend Module Dependencies
-
-```
-api → strategy, llm, broker, data, core
-broker → data, core
-strategy → data, core
-llm → core
-data → core
-core → (none)
-```
-
 ## Key Technologies
 
 ### Backend
@@ -101,16 +82,22 @@ core → (none)
 
 ## Development Commands
 
-### Dev Stack (Recommended — runs infra on pi-node, app locally on Mac)
-```bash
-./dev-stack.sh start    # Start infra on pi-node + local Spring Boot (profiles: local,fyers)
-./dev-stack.sh status   # Check infra + local API health
-./dev-stack.sh stop     # Stop local app + infra on pi-node
-./dev-stack.sh logs     # View infra logs
-./dev-stack.sh infra <cmd>  # Pass any docker compose command to pi-node infra
-```
+### Dev Stack (pi-node infra + local app)
+The dev stack runs infrastructure on a Raspberry Pi (pi-node) via SSH, with Spring Boot and the dashboard running locally on Mac.
 
-Notes: `start` loads `backend/.env` automatically. Infra takes ~15s to become healthy after `up`.
+**Infrastructure containers** (on `piworm.local` via `docker context pi-node`):
+| Service | Image | Local Port | Container | Notes |
+|---------|-------|------------|-----------|-------|
+| PostgreSQL 16 | `postgres:16` | `5435` | `swing_trade_postgres` | TimescaleDB, trust auth |
+| Redis | `redis:alpine` | `6379` | `swing_trade_redis` | AOF enabled |
+
+Network: `swingtrade-network` (bridge). Volumes: `postgres_data`, `redis_data`.
+
+**Local services**:
+| Service | Port | Profile |
+|---------|------|---------|
+| Spring Boot API | `8080` | `local,fyers` |
+| Vue Dashboard | `3003` | — |
 
 ### Backend (multi-module)
 ```bash

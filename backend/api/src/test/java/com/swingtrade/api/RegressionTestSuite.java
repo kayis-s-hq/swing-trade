@@ -111,7 +111,6 @@ class RegressionTestSuite {
 
         // Step 5: Close position
         ClosePositionRequest closeRequest = new ClosePositionRequest();
-        closeRequest.setSymbol("AAPL");
         closeRequest.setExitReason("Target reached");
 
         String closedPositionJson = mockMvc.perform(post("/api/trades/AAPL/close")
@@ -266,7 +265,6 @@ class RegressionTestSuite {
 
         // Close position at different price
         ClosePositionRequest closeRequest = new ClosePositionRequest();
-        closeRequest.setSymbol("ROLLUP");
         closeRequest.setExitReason("Exit for rollup test");
 
         String closePositionJson = mockMvc.perform(post("/api/trades/ROLLUP/close")
@@ -465,7 +463,6 @@ class RegressionTestSuite {
 
         // Close position
         ClosePositionRequest closeRequest = new ClosePositionRequest();
-        closeRequest.setSymbol("MGT");
         closeRequest.setExitReason("Management test");
 
         mockMvc.perform(post("/api/trades/MGT/close")

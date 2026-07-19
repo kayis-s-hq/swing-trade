@@ -28,6 +28,12 @@ public class AppSettingEntity {
     public AppSettingEntity() {
     }
 
+    public AppSettingEntity(String key, String value) {
+        this.key = key;
+        this.value = value;
+        this.updatedAt = java.time.LocalDateTime.now();
+    }
+
     public Long getId() {
         return id;
     }

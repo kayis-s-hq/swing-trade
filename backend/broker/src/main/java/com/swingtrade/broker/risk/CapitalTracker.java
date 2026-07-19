@@ -1,9 +1,9 @@
 package com.swingtrade.broker.risk;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.model.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -24,10 +24,7 @@ public class CapitalTracker {
 
     private static final Logger logger = LoggerFactory.getLogger(CapitalTracker.class);
 
-    // Default values for live trading
     private static final BigDecimal DEFAULT_INITIAL_CAPITAL = new BigDecimal("50000");
-    private static final int DEFAULT_MAX_POSITIONS = 3;
-    private static final BigDecimal DEFAULT_MAX_PER_POSITION = new BigDecimal("10000");
 
     private final BigDecimal initialCapital;
     private final int maxPositions;
@@ -36,26 +33,8 @@ public class CapitalTracker {
 
     private BigDecimal deployedCapital;
 
-    public CapitalTracker() {
-        this(DEFAULT_INITIAL_CAPITAL, DEFAULT_MAX_POSITIONS, DEFAULT_MAX_PER_POSITION);
-        logger.info("CapitalTracker initialized with defaults: capital={}, maxPositions={}, maxPerPosition={}",
-                initialCapital, maxPositions, maxCapitalPerPosition);
-    }
-
-    /**
-     * Constructor with configured values from application properties.
-     */
-    public CapitalTracker(
-            @Value("${broker.max-concurrent-positions:3}") int maxPositions,
-            @Value("${broker.max-capital-per-position:10000}") BigDecimal maxPerPosition) {
-        this.initialCapital = DEFAULT_INITIAL_CAPITAL;
-        this.maxPositions = maxPositions;
-        this.maxCapitalPerPosition = maxPerPosition;
-        this.maxTotalExposure = initialCapital.multiply(new BigDecimal("0.8")); // Max 80% total exposure
-
-        this.deployedCapital = BigDecimal.ZERO;
-        logger.info("CapitalTracker initialized with: capital={}, maxPositions={}, maxPerPosition={}",
-                initialCapital, maxPositions, maxCapitalPerPosition);
+    public CapitalTracker(BrokerProperties props) {
+        this(DEFAULT_INITIAL_CAPITAL, props.getMaxConcurrentPositions(), props.getMaxCapitalPerPosition());
     }
 
     /**

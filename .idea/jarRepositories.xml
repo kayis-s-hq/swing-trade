@@ -7,9 +7,39 @@
       <option name="url" value="https://repo.maven.apache.org/maven2" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="data-libs" />
+      <option name="name" value="Data Module Local Libs" />
+      <option name="url" value="file://$PROJECT_DIR$/backend/libs" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="data-libs" />
+      <option name="name" value="Data Module Local Libs" />
+      <option name="url" value="file://$PROJECT_DIR$/backend/llm/libs" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="data-libs" />
+      <option name="name" value="Data Module Local Libs" />
+      <option name="url" value="file://$PROJECT_DIR$/backend/broker/libs" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="data-libs" />
+      <option name="name" value="Data Module Local Libs" />
+      <option name="url" value="file://$PROJECT_DIR$/backend/strategy/libs" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="spring-milestones" />
       <option name="name" value="Spring Milestones" />
       <option name="url" value="https://repo.spring.io/milestone" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="data-libs" />
+      <option name="name" value="Data Module Local Libs" />
+      <option name="url" value="file://$PROJECT_DIR$/backend/core/libs" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="data-libs" />
+      <option name="name" value="Data Module Local Libs" />
+      <option name="url" value="file://$PROJECT_DIR$/backend/data/libs" />
     </remote-repository>
     <remote-repository>
       <option name="id" value="central" />
@@ -25,6 +55,11 @@
       <option name="id" value="jboss.community" />
       <option name="name" value="JBoss Community repository" />
       <option name="url" value="https://repository.jboss.org/nexus/content/repositories/public/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="data-libs" />
+      <option name="name" value="Data Module Local Libs" />
+      <option name="url" value="file://$PROJECT_DIR$/backend/api/libs" />
     </remote-repository>
   </component>
 </project>

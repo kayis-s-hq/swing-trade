@@ -1,10 +1,9 @@
 package com.swingtrade.broker.risk;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.PositionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -19,24 +18,13 @@ public class PositionLimitChecker {
     private static final Logger logger = LoggerFactory.getLogger(PositionLimitChecker.class);
 
     private final PositionManager positionManager;
-    private int maxConcurrentPositions;
-    private BigDecimal maxCapitalPerPosition;
+    private final int maxConcurrentPositions;
+    private final BigDecimal maxCapitalPerPosition;
 
-    @Value("${broker.max-concurrent-positions:5}")
-    public void setMaxConcurrentPositions(int maxConcurrentPositions) {
-        this.maxConcurrentPositions = maxConcurrentPositions;
-    }
-
-    @Value("${broker.max-capital-per-position:200000}")
-    public void setMaxCapitalPerPosition(BigDecimal maxCapitalPerPosition) {
-        this.maxCapitalPerPosition = maxCapitalPerPosition;
-    }
-
-    @Autowired
-    public PositionLimitChecker(PositionManager positionManager) {
+    public PositionLimitChecker(PositionManager positionManager, BrokerProperties props) {
         this.positionManager = positionManager;
-        this.maxConcurrentPositions = 5; // default
-        this.maxCapitalPerPosition = BigDecimal.valueOf(200000); // default
+        this.maxConcurrentPositions = props.getMaxConcurrentPositions();
+        this.maxCapitalPerPosition = props.getMaxCapitalPerPosition();
         logger.info("PositionLimitChecker initialized with max {} positions, max ₹{} per position",
                 maxConcurrentPositions, maxCapitalPerPosition);
     }

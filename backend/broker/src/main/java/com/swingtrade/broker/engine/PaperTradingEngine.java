@@ -1,9 +1,10 @@
 package com.swingtrade.broker.engine;
 
+import com.swingtrade.broker.config.BrokerMode;
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.*;
-import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Signal;
 import org.slf4j.Logger;
@@ -472,6 +473,16 @@ public class PaperTradingEngine {
     }
 
     /**
+     * Finds an open position by symbol.
+     *
+     * @param symbol the trading symbol
+     * @return the position if found, null otherwise
+     */
+    public Position findOpenPositionBySymbol(String symbol) {
+        return positionManager.findOpenPositionBySymbol(symbol);
+    }
+
+    /**
      * Gets a specific position by ID.
      *
      * @param positionId the position ID
@@ -585,24 +596,6 @@ public class PaperTradingEngine {
      */
     public BigDecimal getInitialCapital() {
         return initialCapital;
-    }
-
-    /**
-     * Updates all positions with new candle data from entity.
-     *
-     * @param entity the candle entity
-     */
-    public void updatePositionsFromEntity(OhlcvCandleEntity entity) {
-        OhlcvCandle candle = OhlcvCandle.of(
-            entity.getSymbol(),
-            entity.getDate(),
-            entity.getOpenPrice(),
-            entity.getHighPrice(),
-            entity.getLowPrice(),
-            entity.getClosePrice(),
-            entity.getVolume()
-        );
-        updatePositionsFromDomain(candle);
     }
 
     /**

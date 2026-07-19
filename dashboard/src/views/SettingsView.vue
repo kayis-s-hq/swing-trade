@@ -146,8 +146,7 @@
           <div class="flex items-center justify-between rounded-lg border border-border-subtle p-3">
             <span class="text-sm">Enable Discord</span>
             <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" v-model="discordSettings.enabled"
-                @change="saveDiscordSettings" class="sr-only peer" />
+              <input type="checkbox" v-model="discordSettings.enabled" class="sr-only peer" />
               <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer
                 peer-checked:after:translate-x-full peer-checked:after:border-white
                 after:content-[''] after:absolute after:top-[2px] after:left-[2px]
@@ -205,6 +204,13 @@
         </div>
       </div>
 
+      <!-- Save Button -->
+      <button @click="handleSave" :disabled="saving"
+        class="w-full rounded-md bg-brand px-4 py-3 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
+        :class="saved ? 'bg-success' : ''">
+        {{ saving ? 'Saving...' : saved ? 'Saved!' : 'Save All Settings' }}
+      </button>
+
       <!-- Health Status -->
       <div class="card-panel p-5">
         <h2 class="mb-4 text-base font-semibold text-text-primary">System Health</h2>
@@ -230,10 +236,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getFyersLoginUrl, getFyersStatus, fyersAuthCode, fyersLogout, getLlmSettings, setLlmSettings, getDiscordSettings, setDiscordSettings, testDiscordWebhook as apiTestDiscordWebhook } from '../api/client'
+import { getFyersLoginUrl, getFyersStatus, fyersAuthCode, fyersLogout, testDiscordWebhook as apiTestDiscordWebhook } from '../api/client'
 import type { FyersStatus, HealthStatus } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
-import { getSettings } from '../stores/settings'
+import { getSettings, loadSettings, saveSettings, saveLlmSettings, saveDiscordSettings } from '../stores/settings'
 
 const settings = getSettings()
 const llmSettings = settings.llmSettings
@@ -249,6 +255,8 @@ const authCodeInput = ref('')
 const testingLlm = ref(false)
 const testingPdf = ref(false)
 const testingDiscord = ref(false)
+const saving = ref(false)
+const saved = ref(false)
 let pollTimer: number | null = null
 
 const brokers = [
@@ -355,30 +363,31 @@ const disconnectFyers = async () => {
   fyersStatus.value = res.success && res.data ? res.data : null
 }
 
-const saveLlmSettings = async () => {
-  const settings: Record<string, string> = {
-    'llm.vllm.base_url': llmSettings.vllmBaseUrl,
-    'llm.vllm.model': llmSettings.model,
-    'llm.pdf.base_url': llmSettings.pdfBaseUrl,
-    'llm.pdf.model': llmSettings.pdfModel,
+const handleSave = async () => {
+  saving.value = true
+  saved.value = false
+  try {
+    const ok = await saveSettings()
+    if (ok) {
+      saved.value = true
+      setTimeout(() => { saved.value = false }, 2000)
+    }
+  } catch (err: unknown) {
+    alert(err instanceof Error ? err.message : 'Failed to save settings')
+  } finally {
+    saving.value = false
   }
-  await setLlmSettings(settings)
-}
-
-const saveDiscordSettings = async () => {
-  const settings: Record<string, string> = {
-    'discord.webhook.url': discordSettings.webhookUrl,
-    'discord.webhook.enabled': String(discordSettings.enabled),
-  }
-  await setDiscordSettings(settings)
 }
 
 const testLlmConnection = async () => {
   testingLlm.value = true
   try {
-    await saveLlmSettings()
-    // Trigger a test analysis on a dummy symbol
-    alert('LLM settings saved. Test analysis will run on next signal.')
+    const ok = await saveLlmSettings()
+    if (ok) {
+      alert('LLM settings saved. Test analysis will run on next signal.')
+    } else {
+      alert('Failed to save LLM settings.')
+    }
   } catch (err: unknown) {
     alert(err instanceof Error ? err.message : 'Failed to save LLM settings')
   } finally {
@@ -389,8 +398,12 @@ const testLlmConnection = async () => {
 const testPdfExtraction = async () => {
   testingPdf.value = true
   try {
-    await saveLlmSettings()
-    alert('PDF extraction settings saved.')
+    const ok = await saveLlmSettings()
+    if (ok) {
+      alert('PDF extraction settings saved.')
+    } else {
+      alert('Failed to save PDF settings.')
+    }
   } catch (err: unknown) {
     alert(err instanceof Error ? err.message : 'Failed to save PDF settings')
   } finally {
@@ -399,7 +412,11 @@ const testPdfExtraction = async () => {
 }
 
 const testDiscordWebhook = async () => {
-  await saveDiscordSettings()
+  const ok = await saveDiscordSettings()
+  if (!ok) {
+    alert('Failed to save Discord settings.')
+    return
+  }
   testingDiscord.value = true
   try {
     const res = await apiTestDiscordWebhook()
@@ -429,7 +446,7 @@ const handleMessage = (event: MessageEvent) => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   const route = useRoute()
   const router = useRouter()
   const authParam = route.query.auth as string
@@ -439,31 +456,10 @@ onMounted(() => {
   }
   refreshFyersStatus()
   refreshHealth()
-  loadBackendSettings()
+  await loadSettings()
   window.addEventListener('message', handleMessage)
 })
 
-const loadBackendSettings = async () => {
-  try {
-    const llmRes = await getLlmSettings()
-    if (llmRes.success && llmRes.data) {
-      Object.assign(llmSettings, {
-        vllmBaseUrl: llmRes.data['llm.vllm.base_url'] || llmSettings.vllmBaseUrl,
-        model: llmRes.data['llm.vllm.model'] || llmSettings.model,
-        pdfBaseUrl: llmRes.data['llm.pdf.base_url'] || llmSettings.pdfBaseUrl,
-        pdfModel: llmRes.data['llm.pdf.model'] || llmSettings.pdfModel,
-      })
-    }
-  } catch { /* ignore */ }
-
-  try {
-    const discordRes = await getDiscordSettings()
-    if (discordRes.success && discordRes.data) {
-      discordSettings.webhookUrl = discordRes.data['discord.webhook.url'] || discordSettings.webhookUrl
-      discordSettings.enabled = discordRes.data['discord.webhook.enabled'] === 'true'
-    }
-  } catch { /* ignore */ }
-}
 onUnmounted(() => {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   window.removeEventListener('message', handleMessage)

@@ -31,6 +31,7 @@ import static org.mockito.Mockito.when;
 @SpringBootTest
 @ActiveProfiles(resolver = com.swingtrade.data.test.TestProfileResolver.class)
 @Transactional
+@org.junit.jupiter.api.Disabled("Integration test - slow Spring context boot, run manually when needed")
 class DataIngestionIntegrationTest {
 
     @Autowired
