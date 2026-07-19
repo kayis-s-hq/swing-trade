@@ -2,6 +2,7 @@ package com.swingtrade.llm.config;
 
 import com.swingtrade.data.repository.SentimentResultRepository;
 import com.swingtrade.data.repository.StockRepository;
+import com.swingtrade.data.service.AppSettingsService;
 import com.swingtrade.llm.client.VLLMClient;
 import com.swingtrade.llm.service.NewsFilterService;
 import com.swingtrade.llm.service.NewsIngestionService;
@@ -44,6 +45,9 @@ import java.util.Properties;
 @EnableJpaRepositories(basePackages = "com.swingtrade.data.repository")
 public class TestLlmConfig {
 
+    @MockBean
+    private AppSettingsService appSettingsService;
+
     @Primary
     @Bean
     public WebClient.Builder webClientBuilder() {
@@ -52,11 +56,8 @@ public class TestLlmConfig {
 
     @Primary
     @Bean
-    public VLLMClient vllmClient(WebClient.Builder webClientBuilder) {
-        // Use test vLLM URL and model name
-        String baseUrl = "https://u425-af79-4d7d6139.singapore-a.gpuhub.com:8443/v1";
-        String modelName = "claude-sonnet-4-6";
-        return new VLLMClient(webClientBuilder, baseUrl, modelName);
+    public VLLMClient vllmClient(WebClient.Builder webClientBuilder, AppSettingsService appSettingsService) {
+        return new VLLMClient(webClientBuilder, appSettingsService);
     }
 
     @Primary

@@ -48,6 +48,9 @@ COPY llm/src ./llm/src
 COPY broker/src ./broker/src
 COPY api/src ./api/src
 
+# Copy parent config (PMD ruleset)
+COPY config ./config
+
 # Set timezone to Asia/Kolkata for correct scheduling
 RUN ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
     echo "Asia/Kolkata" > /etc/timezone

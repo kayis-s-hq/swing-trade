@@ -1,9 +1,6 @@
 # Compiled class files
 *.class
 
-# Log files
-*.log
-
 # Package files
 *.jar
 *.war
@@ -24,16 +21,6 @@ target/
 .vscode/
 *.swp
 *.swo
-.DS_Store
-
-# Eclipse
-.classpath
-.project
-bin/
-output/
-
-# IntelliJ
-*.iml
 
 # OS specific
 .DS_Store
@@ -42,8 +29,12 @@ Thumbs.db
 # GSD worktree directories
 .claude/worktrees/
 
+# SDD generated artifacts
+.superpowers/
+
 # Generated docs (keep .planning/ but ignore generated reports)
 docs/generated/
+docs/superpowers/
 reports/
 
 # Build artifacts
@@ -52,21 +43,14 @@ reports/
 *.temp
 
 # Environment files
-# .env - Production secrets (never commit)
-# .env.local - Local overrides (never commit)
-# .env.dev - Development credentials (contains sandbox keys, do not commit)
-# .env.example - Reference template (always commit)
-# .env.dev.example - Development reference template (always commit)
 .env
 .env.local
 .env.*.local
 .env.dev
-
-# Environment files with real credentials (add .example versions for reference)
 .env.*.real
 .env.*.prod
 
-# Database files (if any local DBs)
+# Database files
 *.db
 *.sqlite
 *.h2.db
@@ -81,14 +65,14 @@ user.properties
 # Test containers
 .docker/
 
-# Node modules (if any frontend)
+# Node modules
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
 # Scala
-*.scala_bsp
+*.scala_bsc
 
 # Project specific
 broker/target/
@@ -104,3 +88,10 @@ api/target/
 # Backend runtime artifacts
 backend/api/logs/
 backend/api/data/fyers-tokens.json
+
+# Dashboard build output
+dashboard/dist/
+dashboard/test-results/
+
+# Test results
+*/test-results/

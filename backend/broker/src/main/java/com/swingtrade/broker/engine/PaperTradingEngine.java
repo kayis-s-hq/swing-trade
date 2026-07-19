@@ -1,5 +1,7 @@
 package com.swingtrade.broker.engine;
 
+import com.swingtrade.broker.config.BrokerMode;
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.*;
@@ -469,6 +471,16 @@ public class PaperTradingEngine {
      */
     public List<Position> getOpenPositions() {
         return positionManager.getOpenPositions();
+    }
+
+    /**
+     * Finds an open position by symbol.
+     *
+     * @param symbol the trading symbol
+     * @return the position if found, null otherwise
+     */
+    public Position findOpenPositionBySymbol(String symbol) {
+        return positionManager.findOpenPositionBySymbol(symbol);
     }
 
     /**

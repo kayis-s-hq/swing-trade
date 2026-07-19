@@ -4,7 +4,7 @@ import com.swingtrade.api.dto.SignalQueryResult;
 import com.swingtrade.api.dto.SignalQueryResult.Signal;
 import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.SignalRepository;
-import com.swingtrade.strategy.SignalEngine;
+import com.swingtrade.api.service.SignalEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

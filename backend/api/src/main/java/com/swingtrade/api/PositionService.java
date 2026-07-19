@@ -13,6 +13,8 @@ import com.swingtrade.broker.model.Order;
 import com.swingtrade.broker.model.OrderStatus;
 import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.repository.PositionRepository;
+import com.swingtrade.data.repository.StockRepository;
+import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.domain.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,13 +39,16 @@ public class PositionService {
     private static final Logger logger = LoggerFactory.getLogger(PositionService.class);
 
     private final PositionRepository positionRepository;
+    private final StockRepository stockRepository;
     private final PaperTradingEngine paperTradingEngine;
     private final OrderManager orderManager;
     private final PositionManager positionManager;
 
-    public PositionService(PositionRepository positionRepository, PaperTradingEngine paperTradingEngine,
-                           OrderManager orderManager, PositionManager positionManager) {
+    public PositionService(PositionRepository positionRepository, StockRepository stockRepository,
+                           PaperTradingEngine paperTradingEngine, OrderManager orderManager,
+                           PositionManager positionManager) {
         this.positionRepository = positionRepository;
+        this.stockRepository = stockRepository;
         this.paperTradingEngine = paperTradingEngine;
         this.orderManager = orderManager;
         this.positionManager = positionManager;
@@ -212,7 +217,12 @@ public class PositionService {
 
         // Close in engine first (updates portfolio capital, calculates P&L)
         try {
-            paperTradingEngine.closePosition("POS_" + entity.getId(), exitPrice, reason);
+            com.swingtrade.broker.model.Position enginePos =
+                paperTradingEngine.findOpenPositionBySymbol(symbol);
+            if (enginePos == null) {
+                throw new RuntimeException("No open position found in engine for symbol: " + symbol);
+            }
+            paperTradingEngine.closePosition(enginePos.getPositionId(), exitPrice, reason);
         } catch (Exception e) {
             logger.error("PaperTradingEngine failed to close position {} for symbol {}: {}",
                 entity.getId(), symbol, e.getMessage(), e);
@@ -240,6 +250,19 @@ public class PositionService {
 
         BigDecimal entryPrice = request.getPrice() != null ? request.getPrice() : BigDecimal.ZERO;
 
+        // Auto-create stock if it doesn't exist
+        if (!stockRepository.existsBySymbol(request.getSymbol())) {
+            StockEntity stock = new StockEntity();
+            stock.setSymbol(request.getSymbol());
+            stock.setName(request.getSymbol());
+            stock.setExchange("NSE");
+            stock.setAddedOn(LocalDate.now());
+            stock.setCreatedAt(LocalDateTime.now());
+            stock.setUpdatedAt(LocalDateTime.now());
+            stockRepository.save(stock);
+            logger.info("Auto-created stock entity for symbol: {}", request.getSymbol());
+        }
+
         // Create position in engine via order pipeline
         String positionId = null;
         Order order = orderManager.createBuyOrder(
@@ -265,6 +288,9 @@ public class PositionService {
 
         if (request.getStopPrice() != null) {
             entity.setStopLoss(request.getStopPrice());
+        }
+        if (request.getTarget() != null) {
+            entity.setTarget(request.getTarget());
         }
 
         PositionEntity savedEntity = positionRepository.save(entity);

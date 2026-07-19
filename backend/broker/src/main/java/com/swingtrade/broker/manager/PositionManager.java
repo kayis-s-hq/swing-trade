@@ -429,6 +429,13 @@ public class PositionManager {
      * @param symbol the trading symbol
      * @return true if position exists and is open
      */
+    public Position findOpenPositionBySymbol(String symbol) {
+        return positions.values().stream()
+            .filter(p -> p.getSymbol().equals(symbol) && p.getStatus() == PositionStatus.OPEN)
+            .findFirst()
+            .orElse(null);
+    }
+
     public boolean hasOpenPosition(String symbol) {
         return positions.values().stream()
             .anyMatch(p -> p.getSymbol().equals(symbol) && p.getStatus() == PositionStatus.OPEN);

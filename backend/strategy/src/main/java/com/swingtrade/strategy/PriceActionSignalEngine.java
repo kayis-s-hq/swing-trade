@@ -19,6 +19,7 @@ package com.swingtrade.strategy;
 import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.domain.Signal.SignalType;
+import com.swingtrade.domain.StrategyParams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -59,19 +60,19 @@ public class PriceActionSignalEngine {
 
     // Package-private (not private): reused directly by BacktestEngine so the backtest's
     // entry rules can never drift from the live signal engine's thresholds.
-    static final int EMA_FAST_PERIOD = 20;
-    static final int EMA_SLOW_PERIOD = 50;
-    static final int RSI_PERIOD = 14;
-    static final int ATR_PERIOD = 14;
-    static final int VOLUME_MA_PERIOD = 20;
-    static final int FIFTY_TWO_WEEK_TRADING_DAYS = 252;
+    static final int EMA_FAST_PERIOD = StrategyParams.EMA_FAST;
+    static final int EMA_SLOW_PERIOD = StrategyParams.EMA_SLOW;
+    static final int RSI_PERIOD = StrategyParams.RSI_PERIOD;
+    static final int ATR_PERIOD = StrategyParams.ATR_PERIOD;
+    static final int VOLUME_MA_PERIOD = StrategyParams.VOLUME_MA_PERIOD;
+    static final int FIFTY_TWO_WEEK_TRADING_DAYS = StrategyParams.FIFTY_TWO_WEEK_TRADING_DAYS;
 
-    static final BigDecimal RSI_LOWER_BOUND = BigDecimal.valueOf(50);
-    static final BigDecimal RSI_UPPER_BOUND = BigDecimal.valueOf(65);
-    static final BigDecimal VOLUME_MULTIPLIER = BigDecimal.valueOf(1.5);
-    static final BigDecimal HIGH_PROXIMITY_THRESHOLD = BigDecimal.valueOf(0.97);
+    static final BigDecimal RSI_LOWER_BOUND = StrategyParams.RSI_LOWER;
+    static final BigDecimal RSI_UPPER_BOUND = StrategyParams.RSI_UPPER;
+    static final BigDecimal VOLUME_MULTIPLIER = StrategyParams.VOLUME_MULTIPLIER;
+    static final BigDecimal HIGH_PROXIMITY_THRESHOLD = StrategyParams.HIGH_PROXIMITY;
 
-    static final int MIN_REQUIRED_CANDLES = EMA_SLOW_PERIOD;
+    static final int MIN_REQUIRED_CANDLES = StrategyParams.MIN_CANDLES;
 
     private final OhlcvCandleRepository candleRepository;
 

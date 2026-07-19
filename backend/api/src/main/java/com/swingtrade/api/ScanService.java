@@ -4,7 +4,7 @@ import com.swingtrade.api.dto.ScanResponse;
 import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.data.repository.StockRepository;
-import com.swingtrade.strategy.SignalEngine;
+import com.swingtrade.api.service.SignalEngine;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

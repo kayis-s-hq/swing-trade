@@ -309,6 +309,41 @@ export async function closePosition(symbol: string, exitReason?: string): Promis
   return { success: true, data: mapPosition(raw.data as BackendPosition) }
 }
 
+export interface ExecuteTradeParams {
+  symbol: string
+  quantity: number
+  direction: 'LONG' | 'SHORT'
+  orderType: 'MARKET' | 'LIMIT' | 'STOP_LOSS' | 'TAKE_PROFIT' | 'STOP' | 'STOP_LIMIT'
+  price?: number
+  limitPrice?: number
+  stopPrice?: number
+  target?: number
+  entryReason?: string
+}
+
+export async function executeTrade(params: ExecuteTradeParams): Promise<ApiResponse<Position>> {
+  const body: Record<string, unknown> = {
+    symbol: params.symbol.toUpperCase().trim(),
+    quantity: params.quantity,
+    direction: params.direction,
+    orderType: params.orderType,
+  }
+  if (params.price != null) body.price = params.price
+  if (params.limitPrice != null) body.limitPrice = params.limitPrice
+  if (params.stopPrice != null) body.stopPrice = params.stopPrice
+  if (params.target != null) body.target = params.target
+  if (params.entryReason) body.entryReason = params.entryReason
+
+  const raw = await rawFetch('/trades', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!raw.ok) return errResponse(raw.error!)
+
+  return { success: true, data: mapPosition(raw.data as BackendPosition) }
+}
+
 export async function generatePriceActionSignal(symbol: string): Promise<ApiResponse<Signal>> {
   const raw = await rawFetch(`/signals/price-action/${symbol}/generate`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)

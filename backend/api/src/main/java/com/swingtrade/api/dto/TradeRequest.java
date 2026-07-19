@@ -30,12 +30,16 @@ public class TradeRequest {
     private BigDecimal price;
 
     @DecimalMin(value = "0.01", message = "Limit price must be greater than 0")
-    @Digits(integer = 12, fraction = 2, message = "Limit price must have at most 2 decimal places")
+    @Digits(integer = 12, fraction = 2, message = "Price must have at most 2 decimal places")
     private BigDecimal limitPrice;
 
     @DecimalMin(value = "0.01", message = "Stop price must be greater than 0")
-    @Digits(integer = 12, fraction = 2, message = "Stop price must have at most 2 decimal places")
+    @Digits(integer = 12, fraction = 2, message = "Price must have at most 2 decimal places")
     private BigDecimal stopPrice;
+
+    @DecimalMin(value = "0.01", message = "Target price must be greater than 0")
+    @Digits(integer = 12, fraction = 2, message = "Target price must have at most 2 decimal places")
+    private BigDecimal target;
 
     private String entryReason;
 
@@ -107,6 +111,14 @@ public class TradeRequest {
 
     public void setStopPrice(BigDecimal stopPrice) {
         this.stopPrice = stopPrice;
+    }
+
+    public BigDecimal getTarget() {
+        return target;
+    }
+
+    public void setTarget(BigDecimal target) {
+        this.target = target;
     }
 
     public String getEntryReason() {

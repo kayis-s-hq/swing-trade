@@ -1,0 +1,750 @@
+#!/usr/bin/env bash
+#
+# swingdev - CLI wrapper for the SwingTrade dev stack
+#
+# Usage: swingdev <command> [options]
+#
+# Commands:
+#   help          Show this help message
+#   env-check     Validate environment and dependencies
+#   start         Start infra + local backend + dashboard
+#   stop          Stop local backend + infra
+#   status        Check infra + local API health
+#   logs          View infra logs
+#   infra <cmd>   Pass a docker-compose command to pi-node infra
+#   wait          Wait for infra to be healthy (with progress)
+#   profile       Show or set active Spring profiles
+#   dashboard     Launch the Vue dev server
+#   api           Launch the local Spring Boot API
+#   full-start    Start infra, wait for health, then launch backend + dashboard
+#
+# Options:
+#   --profile <profiles>   Set Spring profiles (default: local,fyers)
+#   --port <port>          Override API port (default: 8080)
+#   --no-color             Disable colored output
+#   --quiet, -q            Suppress non-essential output
+#   --timeout <seconds>    Timeout for health checks (default: 120)
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Globals
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEV_STACK="${SCRIPT_DIR}/dev-stack.sh"
+ENV_FILE="${SCRIPT_DIR}/backend/.env"
+DEFAULT_PROFILE="local,fyers"
+DEFAULT_API_PORT=8080
+DEFAULT_DASHBOARD_PORT=5173
+DEFAULT_TIMEOUT=120
+INFRAS=("piworm.local")
+
+PROFILE="${DEFAULT_PROFILE}"
+API_PORT="${DEFAULT_API_PORT}"
+TIMEOUT="${DEFAULT_TIMEOUT}"
+QUIET=false
+NO_COLOR=false
+
+# Colors
+if [[ "${NO_COLOR}" == "true" ]] || [[ -z "${TERM:-}" ]]; then
+  RED=""
+  GREEN=""
+  YELLOW=""
+  BLUE=""
+  CYAN=""
+  MAGENTA=""
+  BOLD=""
+  RESET=""
+  NCOLOR=""
+else
+  RED="\033[0;31m"
+  GREEN="\033[0;32m"
+  YELLOW="\033[0;33m"
+  BLUE="\033[0;34m"
+  CYAN="\033[0;36m"
+  MAGENTA="\033[0;35m"
+  BOLD="\033[1m"
+  RESET="\033[0m"
+  NCOLOR="\033[0;37m"
+fi
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+log()  { printf "${GREEN}[swingdev]${RESET} %s\n" "$*"; }
+warn() { printf "${YELLOW}[swingdev:warn]${RESET} %s\n" "$*" >&2; }
+error() { printf "${RED}[swingdev:error]${RESET} %s\n" "$*" >&2; }
+info() { printf "${BLUE}[swingdev]${RESET} %s\n" "$*"; }
+step() { printf "${BOLD}%s${RESET}\n" "$*" ; }
+progress() { printf "${CYAN}  %-60s${RESET}" "$*"; }
+check_ok() { printf "${GREEN}  [OK]${RESET} %s\n" "$*"; }
+check_fail() { printf "${RED}  [FAIL]${RESET} %s\n" "$*"; }
+check_skip() { printf "${YELLOW}  [SKIP]${RESET} %s\n" "$*"; }
+
+die() { error "$@"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+parse_args() {
+  local cmd="${1:-help}"
+  shift || true
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --profile)
+        PROFILE="$2"; shift 2 ;;
+      --port)
+        API_PORT="$2"; shift 2 ;;
+      --no-color)
+        NO_COLOR=true; shift ;;
+      --quiet|-q)
+        QUIET=true; shift ;;
+      --timeout)
+        TIMEOUT="$2"; shift 2 ;;
+      *)
+        die "Unknown option: $1. Run 'swingdev help' for usage." ;;
+    esac
+  done
+
+  COMMAND="${cmd}"
+}
+
+# ---------------------------------------------------------------------------
+# Environment checks
+# ---------------------------------------------------------------------------
+check_dev_stack_exists() {
+  if [[ ! -f "${DEV_STACK}" ]]; then
+    check_fail "dev-stack.sh not found at ${DEV_STACK}"
+    warn "Make sure you're running swingdev from the project root."
+    return 1
+  fi
+  check_ok "dev-stack.sh found"
+  return 0
+}
+
+check_env_file() {
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    check_fail "Environment file not found: ${ENV_FILE}"
+    warn "Run 'swingdev start' - it will create a template if missing."
+    return 1
+  fi
+  check_ok "Environment file found"
+  return 0
+}
+
+check_env_vars() {
+  local missing=0
+  local required_vars=(
+    SPRING_DATASOURCE_URL
+    SPRING_DATASOURCE_USERNAME
+    SPRING_DATASOURCE_PASSWORD
+    SPRING_DATA_REDIS_HOST
+    SPRING_DATA_REDIS_PORT
+  )
+
+  for var in "${required_vars[@]}"; do
+    local val
+    # Handle: VAR=value, export VAR=value, VAR = value, VAR : value
+    val=$(grep -iE "^(export[[:space:]]+)?${var}[[:space:]]*[=:][[:space:]]*" "${ENV_FILE}" 2>/dev/null | head -1 | sed -E "s/^(export[[:space:]]+)?${var}[[:space:]]*[=:][[:space:]]*//" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+    if [[ -z "${val}" ]]; then
+      check_fail "${var} not set in backend/.env"
+      missing=$((missing + 1))
+    fi
+  done
+
+  if [[ ${missing} -eq 0 ]]; then
+    check_ok "All required env vars present"
+  fi
+  return ${missing}
+}
+
+check_java() {
+  if command -v java &>/dev/null; then
+    local java_version
+    java_version=$(java -version 2>&1 | head -1 | sed 's/java version "\(.*\)"(.*/\1/')
+    check_ok "java ${java_version}"
+    return 0
+  else
+    check_fail "java not found in PATH"
+    warn "Install Java 21: brew install openjdk@21"
+    return 1
+  fi
+}
+
+check_mvn() {
+  if command -v mvn &>/dev/null; then
+    local mvn_version
+    mvn_version=$(mvn --version 2>&1 | head -1)
+    check_ok "${mvn_version}"
+    return 0
+  else
+    check_fail "mvn not found in PATH"
+    warn "Install Maven: brew install maven"
+    return 1
+  fi
+}
+
+check_npm() {
+  if command -v npm &>/dev/null; then
+    local npm_version
+    # Capture stdout only; npm may emit deprecation warnings on stderr
+    local _npm_err
+    _npm_err=$(mktemp)
+    npm --version > /tmp/_swingdev_npm_out 2>"${_npm_err}"
+    npm_version=$(cat /tmp/_swingdev_npm_out)
+    rm -f "${_npm_err}" /tmp/_swingdev_npm_out
+    check_ok "npm ${npm_version}"
+    return 0
+  else
+    check_fail "npm not found in PATH"
+    warn "Install Node.js: brew install node"
+    return 1
+  fi
+}
+
+check_docker() {
+  if command -v docker &>/dev/null; then
+    local docker_version
+    docker_version=$(docker --version | sed 's/Docker version //;s/,.*//')
+    check_ok "docker ${docker_version}"
+    return 0
+  else
+    check_fail "docker not found in PATH"
+    warn "Install Docker: brew install --cask docker"
+    return 1
+  fi
+}
+
+check_pi_node_ssh() {
+  if [[ -z "${PI_NODE_HOST:-}" ]]; then
+    # pi-node host is typically embedded in dev-stack.sh; skip if not set
+    check_skip "PI_NODE_HOST not set (using dev-stack.sh defaults)"
+    return 0
+  fi
+
+  if ping -c 1 -t 3 "${PI_NODE_HOST}" &>/dev/null; then
+    check_ok "pi-node (${PI_NODE_HOST}) reachable"
+    return 0
+  else
+    check_fail "pi-node (${PI_NODE_HOST}) unreachable"
+    warn "Ensure pi-node is powered on and connected to the network."
+    return 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# env-check command
+# ---------------------------------------------------------------------------
+cmd_env_check() {
+  step "Environment check..."
+  echo
+
+  local failed=0
+  local checks=(
+    check_dev_stack_exists
+    check_env_file
+    check_env_vars
+    check_java
+    check_mvn
+    check_npm
+    check_docker
+    check_pi_node_ssh
+  )
+
+  for check in "${checks[@]}"; do
+    if ! ${check}; then
+      failed=$((failed + 1))
+    fi
+  done
+
+  echo
+  if [[ ${failed} -eq 0 ]]; then
+    check_ok "All checks passed"
+    log "Environment looks good."
+    exit 0
+  else
+    check_fail "${failed} check(s) failed"
+    warn "Fix the issues above, or use 'swingdev start' to auto-setup."
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Health check helpers
+# ---------------------------------------------------------------------------
+wait_for_port() {
+  local host="$1"
+  local port="$2"
+  local label="$3"
+  local elapsed=0
+
+  while [[ ${elapsed} -lt ${TIMEOUT} ]]; do
+    if command -v curl &>/dev/null; then
+      if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 "http://${host}:${port}/actuator/health" 2>/dev/null | grep -qE '2|4'; then
+        return 0
+      fi
+    fi
+
+    if command -v nc &>/dev/null; then
+      if nc -z -w 2 "${host}" "${port}" 2>/dev/null; then
+        return 0
+      fi
+    fi
+
+    sleep 2
+    elapsed=$((elapsed + 2))
+
+    if (( elapsed % 10 == 0 )); then
+      progress "waiting for ${label} (${elapsed}s/${TIMEOUT}s)..."
+    fi
+  done
+
+  return 1
+}
+
+wait_for_infras() {
+  local elapsed=0
+  step "Waiting for infra to be healthy..."
+  echo
+
+  # Check PostgreSQL
+  progress "PostgreSQL"; sleep 1
+  if nc -z localhost 5435 2>/dev/null; then
+    check_ok "PostgreSQL (port 5435)"
+  else
+    progress "waiting for PostgreSQL (${elapsed}s/${TIMEOUT}s)..."
+    local pg_elapsed=0
+    while [[ ${pg_elapsed} -lt ${TIMEOUT} ]]; do
+      if nc -z localhost 5435 2>/dev/null; then
+        check_ok "PostgreSQL (port 5435)"
+        break
+      fi
+      sleep 2
+      pg_elapsed=$((pg_elapsed + 2))
+      elapsed=$((elapsed + 2))
+      progress "waiting for PostgreSQL (${elapsed}s/${TIMEOUT}s)..."
+    done
+    if ! nc -z localhost 5435 2>/dev/null; then
+      check_fail "PostgreSQL did not become healthy in time"
+      return 1
+    fi
+  fi
+
+  # Check Redis
+  progress "Redis"; sleep 1
+  if nc -z localhost 6379 2>/dev/null; then
+    check_ok "Redis (port 6379)"
+  else
+    progress "waiting for Redis (${elapsed}s/${TIMEOUT}s)..."
+    local redis_elapsed=0
+    while [[ ${redis_elapsed} -lt ${TIMEOUT} ]]; do
+      if nc -z localhost 6379 2>/dev/null; then
+        check_ok "Redis (port 6379)"
+        break
+      fi
+      sleep 2
+      redis_elapsed=$((redis_elapsed + 2))
+      elapsed=$((elapsed + 2))
+      progress "waiting for Redis (${elapsed}s/${TIMEOUT}s)..."
+    done
+    if ! nc -z localhost 6379 2>/dev/null; then
+      check_fail "Redis did not become healthy in time"
+      return 1
+    fi
+  fi
+
+  echo
+  log "Infra is healthy."
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# start command
+# ---------------------------------------------------------------------------
+cmd_start() {
+  step "Starting SwingTrade dev stack..."
+  echo
+
+  # Ensure env file exists
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    warn "Creating template env file at ${ENV_FILE}..."
+    mkdir -p "$(dirname "${ENV_FILE}")"
+    cat > "${ENV_FILE}" <<'ENVEOF'
+# SwingTrade - Environment Variables
+# Copy and fill in the actual values.
+
+# PostgreSQL
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5435/swingtrade
+SPRING_DATASOURCE_USERNAME=swingtrade_user
+SPRING_DATASOURCE_PASSWORD=swingtrade_password
+
+# Redis
+SPRING_DATA_REDIS_HOST=localhost
+SPRING_DATA_REDIS_PORT=6379
+
+# Upstox
+UPSTOX_API_BASE_URL=https://api.upstox.com
+UPSTOX_CLIENT_ID=
+UPSTOX_CLIENT_SECRET=
+UPSTOX_API_KEY=
+UPSTOX_REDIRECT_URL=https://api.upstox.com/auth/callback
+
+# Fyers
+FYERS_CLIENT_ID=
+FYERS_CLIENT_SECRET=
+FYERS_TOKEN=
+
+# LLM
+VLLM_API_BASE_URL=http://localhost:8000
+VLLM_MODEL=
+LLM_SENTIMENT_SYSTEM_PROMPT=
+
+# Broker
+BROKER_TYPE=paper
+BROKER_ENABLED=true
+ENVEOF
+    check_ok "Template env file created"
+  else
+    check_ok "Environment file already exists"
+  fi
+
+  # Start infra
+  step "Starting infrastructure on pi-node..."
+  if ! bash "${DEV_STACK}" start; then
+    error "dev-stack start failed. Check the output above."
+    exit 1
+  fi
+
+  # Wait for infra health
+  if ! wait_for_infras; then
+    error "Infra health check timed out."
+    exit 1
+  fi
+
+  echo
+  # Start local API
+  step "Starting local API backend..."
+  log "Profiles: ${PROFILE}"
+  log "API port: ${API_PORT}"
+
+  if [[ "${QUIET}" == "false" ]]; then
+    cd "${SCRIPT_DIR}/backend/api"
+    mvn spring-boot:run \
+      -Dspring-boot.run.profiles="${PROFILE}" \
+      -Dspring-boot.run.jvmArguments="-Dserver.port=${API_PORT}" &
+    API_PID=$!
+    log "API backend started (PID: ${API_PID})"
+    cd "${SCRIPT_DIR}"
+  else
+    cd "${SCRIPT_DIR}/backend/api"
+    mvn spring-boot:run \
+      -Dspring-boot.run.profiles="${PROFILE}" \
+      -Dspring-boot.run.jvmArguments="-Dserver.port=${API_PORT}" > /dev/null 2>&1 &
+    API_PID=$!
+    cd "${SCRIPT_DIR}"
+  fi
+
+  # Wait for API
+  progress "API health check"
+  if wait_for_port "localhost" "${API_PORT}" "API"; then
+    check_ok "API reachable at http://localhost:${API_PORT}"
+  else
+    warn "API did not become reachable in ${TIMEOUT}s. It may still be starting."
+  fi
+
+  echo
+  log "Dev stack started successfully."
+  log "  Dashboard: http://localhost:${DEFAULT_DASHBOARD_PORT}"
+  log "  API:       http://localhost:${API_PORT}"
+  log "  Use 'swingdev stop' to stop everything."
+}
+
+# ---------------------------------------------------------------------------
+# stop command
+# ---------------------------------------------------------------------------
+cmd_stop() {
+  step "Stopping SwingTrade dev stack..."
+
+  # Kill local processes
+  pkill -f "spring-boot:run" 2>/dev/null || true
+  pkill -f "vite" 2>/dev/null || true
+  log "Stopped local processes"
+
+  # Stop via dev-stack.sh
+  bash "${DEV_STACK}" stop
+  log "Dev stack stopped."
+}
+
+# ---------------------------------------------------------------------------
+# status command
+# ---------------------------------------------------------------------------
+cmd_status() {
+  step "Checking dev stack status..."
+  echo
+
+  # Infra
+  progress "Infra"
+  if [[ -f "${DEV_STACK}" ]]; then
+    bash "${DEV_STACK}" status 2>&1 || true
+  else
+    check_fail "dev-stack.sh not found"
+  fi
+
+  echo
+  # API
+  progress "API (port ${API_PORT})"
+  if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 "http://localhost:${API_PORT}/actuator/health" 2>/dev/null | grep -qE '2|4'; then
+    check_ok "API running"
+  else
+    check_skip "API not reachable"
+  fi
+
+  echo
+  # Dashboard
+  progress "Dashboard (port ${DEFAULT_DASHBOARD_PORT})"
+  if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 "http://localhost:${DEFAULT_DASHBOARD_PORT}" 2>/dev/null | grep -qE '2|3'; then
+    check_ok "Dashboard running"
+  else
+    check_skip "Dashboard not reachable"
+  fi
+
+  echo
+  # DB
+  progress "PostgreSQL (port 5435)"
+  if nc -z localhost 5435 2>/dev/null; then
+    check_ok "PostgreSQL reachable"
+  else
+    check_skip "PostgreSQL not reachable"
+  fi
+
+  echo
+  # Redis
+  progress "Redis (port 6379)"
+  if nc -z localhost 6379 2>/dev/null; then
+    check_ok "Redis reachable"
+  else
+    check_skip "Redis not reachable"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# logs command
+# ---------------------------------------------------------------------------
+cmd_logs() {
+  if [[ -f "${DEV_STACK}" ]]; then
+    bash "${DEV_STACK}" logs "$@"
+  else
+    die "dev-stack.sh not found at ${DEV_STACK}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# infra command
+# ---------------------------------------------------------------------------
+cmd_infra() {
+  if [[ $# -eq 0 ]]; then
+    die "Usage: swingdev infra <cmd> [args...]"
+  fi
+  if [[ -f "${DEV_STACK}" ]]; then
+    bash "${DEV_STACK}" infra "$@"
+  else
+    die "dev-stack.sh not found at ${DEV_STACK}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# wait command
+# ---------------------------------------------------------------------------
+cmd_wait() {
+  if ! wait_for_infras; then
+    error "Infra health check timed out after ${TIMEOUT}s."
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# profile command
+# ---------------------------------------------------------------------------
+cmd_profile() {
+  if [[ $# -eq 0 ]]; then
+    step "Active profiles: ${PROFILE}"
+    log "To set profiles: swingdev --profile dev,start or use 'swingdev start --profile dev,fyers'"
+    return 0
+  fi
+
+  local action="$1"
+  shift
+
+  case "${action}" in
+    set)
+      PROFILE="$*"
+      log "Profiles set to: ${PROFILE}"
+      ;;
+    show|get)
+      log "${PROFILE}"
+      ;;
+    list)
+      log "Available profiles:"
+      for p in local dev test fyers; do
+        printf "  ${BLUE}%s${RESET}\n" "$p"
+      done
+      ;;
+    *)
+      die "Unknown profile action: ${action}. Use set, show, or list."
+      ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# dashboard command
+# ---------------------------------------------------------------------------
+cmd_dashboard() {
+  step "Starting Vue dashboard..."
+
+  local DASH_DIR="${SCRIPT_DIR}/dashboard"
+  if [[ ! -d "${DASH_DIR}" ]]; then
+    die "Dashboard directory not found at ${DASH_DIR}"
+  fi
+
+  if [[ ! -f "${DASH_DIR}/package.json" ]]; then
+    die "package.json not found in ${DASH_DIR}. Run 'npm install' first."
+  fi
+
+  cd "${DASH_DIR}"
+  npm run dev "$@"
+}
+
+# ---------------------------------------------------------------------------
+# api command
+# ---------------------------------------------------------------------------
+cmd_api() {
+  step "Starting local API backend..."
+
+  local API_DIR="${SCRIPT_DIR}/backend/api"
+  if [[ ! -d "${API_DIR}" ]]; then
+    die "API module directory not found at ${API_DIR}"
+  fi
+
+  cd "${API_DIR}"
+  mvn spring-boot:run \
+    -Dspring-boot.run.profiles="${PROFILE}" \
+    -Dspring-boot.run.jvmArguments="-Dserver.port=${API_PORT}"
+}
+
+# ---------------------------------------------------------------------------
+# full-start command
+# ---------------------------------------------------------------------------
+cmd_full_start() {
+  step "Full SwingTrade start..."
+  echo
+
+  # Start infra
+  step "1/4 Starting infrastructure..."
+  bash "${DEV_STACK}" start
+  echo
+
+  # Wait for infra
+  step "2/4 Waiting for infra to be healthy..."
+  wait_for_infras || die "Infra health check failed."
+  echo
+
+  # Start API in background
+  step "3/4 Starting API backend..."
+  cd "${SCRIPT_DIR}/backend/api"
+  mvn spring-boot:run \
+    -Dspring-boot.run.profiles="${PROFILE}" \
+    -Dspring-boot.run.jvmArguments="-Dserver.port=${API_PORT}" > /dev/null 2>&1 &
+  API_PID=$!
+  cd "${SCRIPT_DIR}"
+  log "API backend started (PID: ${API_PID})"
+
+  # Wait for API
+  step "4/4 Waiting for API to be healthy..."
+  progress "API health check"
+  if wait_for_port "localhost" "${API_PORT}" "API"; then
+    check_ok "API reachable at http://localhost:${API_PORT}"
+  else
+    warn "API did not become reachable in ${TIMEOUT}s."
+  fi
+  echo
+
+  log "Full stack started successfully."
+  log "  Dashboard: http://localhost:${DEFAULT_DASHBOARD_PORT}"
+  log "  API:       http://localhost:${API_PORT}"
+  log ""
+  log "  To stop everything: swingdev stop"
+  log "  To view infra logs: swingdev logs"
+
+  # Trap SIGTERM/SIGINT to clean up child processes
+  trap 'echo; warn "Stopping..."; kill "${API_PID}" 2>/dev/null || true; bash "${DEV_STACK}" stop 2>/dev/null || true; exit 0' INT TERM
+  wait "${API_PID}" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# help command
+# ---------------------------------------------------------------------------
+cmd_help() {
+  cat <<'HELPEOF'
+swingdev - CLI wrapper for the SwingTrade dev stack
+
+USAGE
+  swingdev <command> [options]
+
+COMMANDS
+  help          Show this help message
+  env-check     Validate environment and dependencies
+  start         Start infra + local backend
+  stop          Stop local backend + infra
+  status        Check infra + local API health
+  logs          View infra logs (passes args to dev-stack.sh)
+  infra <cmd>   Pass a docker-compose command to pi-node infra
+  wait          Wait for infra to be healthy (with progress)
+  profile       Show or set active Spring profiles
+  dashboard     Launch the Vue dev server
+  api           Launch the local Spring Boot API
+  full-start    Start infra, wait for health, then launch backend
+
+OPTIONS
+  --profile <profiles>   Set Spring profiles (default: local,fyers)
+  --port <port>          Override API port (default: 8080)
+  --timeout <seconds>    Timeout for health checks (default: 120)
+  --no-color             Disable colored output
+  --quiet, -q            Suppress non-essential output
+
+EXAMPLES
+  swingdev help
+  swingdev env-check
+  swingdev start --profile dev
+  swingdev status
+  swingdev wait --timeout 60
+  swingdev dashboard
+  swingdev full-start --profile fyers
+
+HELPEOF
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+main() {
+  parse_args "$@"
+
+  case "${COMMAND}" in
+    help)          cmd_help ;;
+    env-check)     cmd_env_check ;;
+    start)         cmd_start ;;
+    stop)          cmd_stop ;;
+    status)        cmd_status ;;
+    logs)          cmd_logs "$@" ;;
+    infra)         cmd_infra "$@" ;;
+    wait)          cmd_wait ;;
+    profile)       cmd_profile "$@" ;;
+    dashboard)     cmd_dashboard ;;
+    api)           cmd_api ;;
+    full-start)    cmd_full_start ;;
+    *)             cmd_help ;;
+  esac
+}
+
+main "$@"

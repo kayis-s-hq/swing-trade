@@ -2,9 +2,9 @@ package com.swingtrade.llm.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.swingtrade.data.service.AppSettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -14,34 +14,21 @@ import java.util.Map;
 
 /**
  * Client for communicating with vLLM serving LLM APIs.
- * Uses OpenAI-compatible interface for sentiment analysis.
+ * Reads model config from AppSettingsService so changes persist at runtime.
  */
 @Component
 public class VLLMClient {
 
     private static final Logger logger = LoggerFactory.getLogger(VLLMClient.class);
 
-    private final WebClient webClient;
-    private final String baseUrl;
-    private final String modelName;
+    private final WebClient.Builder webClientBuilder;
+    private final AppSettingsService appSettingsService;
 
-    /**
-     * Constructs VLLM client with required dependencies.
-     *
-     * @param webClientBuilder WebClient builder
-     * @param vllmBaseUrl Base URL of vLLM server (e.g., https://gpuhub.example.com:8443/v1)
-     * @param modelName Model name to use (e.g., claude-sonnet-4-6)
-     */
     public VLLMClient(WebClient.Builder webClientBuilder,
-                      @Value("${llm.vllm.base-url:https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1}") String vllmBaseUrl,
-                      @Value("${llm.vllm.model-name:Qwen3-30B-AWQ}") String modelName) {
-
-        this.baseUrl = vllmBaseUrl;
-        this.modelName = modelName;
-
-        this.webClient = webClientBuilder
-                .defaultHeader("Content-Type", "application/json")
-                .build();
+                      AppSettingsService appSettingsService) {
+        this.webClientBuilder = webClientBuilder
+                .defaultHeader("Content-Type", "application/json");
+        this.appSettingsService = appSettingsService;
     }
 
     /**
@@ -56,6 +43,10 @@ public class VLLMClient {
         logger.debug("Generating completion with prompt: {} (truncated)",
                      prompt.length() > 100 ? prompt.substring(0, 100) + "..." : prompt);
 
+        String baseUrl = appSettingsService.get("llm.vllm.base_url",
+                "https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1");
+        String modelName = appSettingsService.get("llm.vllm.model", "claude-sonnet-4-6");
+
         Map<String, Object> request = Map.of(
                 "model", modelName,
                 "prompt", prompt,
@@ -67,7 +58,8 @@ public class VLLMClient {
                 "stream", false
         );
 
-        return webClient.post()
+        return webClientBuilder.build()
+                .post()
                 .uri(baseUrl + "/completions")
                 .bodyValue(request)
                 .retrieve()
@@ -97,6 +89,10 @@ public class VLLMClient {
                                                 double temperature) {
         logger.debug("Generating chat completion with {} messages", messages.size());
 
+        String baseUrl = appSettingsService.get("llm.vllm.base_url",
+                "https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1");
+        String modelName = appSettingsService.get("llm.vllm.model", "claude-sonnet-4-6");
+
         Map<String, Object> request = Map.of(
                 "model", modelName,
                 "messages", messages,
@@ -108,7 +104,8 @@ public class VLLMClient {
                 "response_format", Map.of("type", "json_object")
         );
 
-        return webClient.post()
+        return webClientBuilder.build()
+                .post()
                 .uri(baseUrl + "/chat/completions")
                 .bodyValue(request)
                 .retrieve()
@@ -198,9 +195,11 @@ public class VLLMClient {
     private static class Message {
         @JsonProperty("content")
         private String content;
+        @JsonProperty("reasoning")
+        private String reasoning;
 
         public String getContent() {
-            return content;
+            return content != null ? content : reasoning;
         }
     }
 }

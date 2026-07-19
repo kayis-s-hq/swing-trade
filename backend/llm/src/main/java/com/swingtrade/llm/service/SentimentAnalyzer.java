@@ -36,7 +36,9 @@ public class SentimentAnalyzer {
             Consider: earnings momentum, regulatory news, management changes,
             sector tailwinds, FII/DII activity, promoter actions.
 
-            Respond in this exact JSON format only, no other text:
+            CRITICAL: Respond with ONLY a JSON object. No explanation, no reasoning, no other text.
+            Start your response with { and end with }.
+
             {
               "score": "POSITIVE|NEUTRAL|NEGATIVE",
               "confidence": 0.0-1.0,
@@ -63,7 +65,9 @@ public class SentimentAnalyzer {
 
                 Task: Determine if news sentiment supports a 1-4 week swing trade entry.
 
-                Respond in this exact JSON format only, no other text:
+                CRITICAL: Respond with ONLY a JSON object. No explanation, no reasoning, no other text.
+                Start your response with { and end with }.
+
                 {
                   "score": "POSITIVE|NEUTRAL|NEGATIVE",
                   "confidence": 0.0-1.0,
@@ -122,13 +126,18 @@ public class SentimentAnalyzer {
 
     /**
      * Parses LLM JSON response into SentimentOutput using Jackson.
+     * Handles: reasoning text wrapping JSON, plain text fallback, and empty responses.
      */
     public SentimentOutput parseResponse(String jsonResponse) {
         try {
-            JsonNode root = objectMapper.readTree(jsonResponse);
+            String content = extractJsonFromReasoning(jsonResponse);
+            JsonNode root = objectMapper.readTree(content);
+
+            if (!root.has("score")) throw new IllegalArgumentException("Missing score field");
+
             String score = root.get("score").asText();
-            double confidence = root.get("confidence").asDouble();
-            String summary = root.get("summary").asText();
+            double confidence = root.has("confidence") ? root.get("confidence").asDouble() : 0.5;
+            String summary = root.has("summary") ? root.get("summary").asText() : "Analysis incomplete";
 
             List<String> redFlags = new ArrayList<>();
             if (root.has("red_flags") && root.get("red_flags").isArray()) {
@@ -148,10 +157,41 @@ public class SentimentAnalyzer {
                     catalysts
             );
         } catch (Exception e) {
-            logger.warn("Failed to parse LLM response: {}", e.getMessage());
-            return new SentimentOutput(
-                    SentimentType.NEUTRAL, "Parse failed", 0.3, List.of(), List.of());
+            logger.debug("JSON parse failed, trying plain text: {}", e.getMessage());
+            return parsePlainText(jsonResponse);
         }
+    }
+
+    /**
+     * Falls back to plain text parsing when the LLM returns no JSON at all.
+     * Extracts sentiment from keywords in the reasoning text.
+     */
+    private SentimentOutput parsePlainText(String text) {
+        if (text == null || text.isBlank()) {
+            return new SentimentOutput(SentimentType.NEUTRAL, "Empty response", 0.1, List.of(), List.of());
+        }
+
+        String lower = text.toLowerCase();
+        SentimentType sentiment;
+        double confidence;
+        String summary;
+
+        if (lower.contains("positive") && !lower.contains("negative")) {
+            sentiment = SentimentType.POSITIVE;
+            confidence = 0.4;
+        } else if (lower.contains("negative") && !lower.contains("positive")) {
+            sentiment = SentimentType.NEGATIVE;
+            confidence = 0.4;
+        } else {
+            sentiment = SentimentType.NEUTRAL;
+            confidence = 0.2;
+        }
+
+        // Truncate to first meaningful sentence as summary
+        summary = text.length() > 150 ? text.substring(0, 150).replaceAll("\\.$", "") : text.trim();
+
+        logger.warn("Parsed plain text response: {} (confidence: {})", sentiment, confidence);
+        return new SentimentOutput(sentiment, summary, confidence, List.of(), List.of());
     }
 
     /**
@@ -334,6 +374,73 @@ public class SentimentAnalyzer {
      * @param keywords list of keywords to count
      * @return total count of keyword matches
      */
+    /**
+     * Extracts JSON from reasoning text that wraps it (common with reasoning models).
+     * Scans for the first '{', then tries to find the matching '}' that produces valid JSON.
+     * Falls back to first/last brace pair, then returns raw text.
+     */
+    private String extractJsonFromReasoning(String text) {
+        if (text == null || text.isBlank()) return text;
+
+        // Try: find first '{', then scan for valid JSON end
+        int firstOpen = findBrace(text, '{');
+        if (firstOpen < 0) return text;
+
+        for (int i = firstOpen + 1; i < text.length(); i++) {
+            if (text.charAt(i) == '}') {
+                String candidate = text.substring(firstOpen, i + 1);
+                if (isValidJson(candidate)) return candidate;
+            }
+        }
+
+        // Fallback: first '{' and last '}'
+        int lastClose = findBrace(text, '}');
+        if (lastClose > firstOpen) {
+            return text.substring(firstOpen, lastClose + 1);
+        }
+        return text;
+    }
+
+    /**
+     * Finds the index of a character that is not inside quotes or nested braces.
+     * Returns -1 if not found.
+     */
+    private int findBrace(String text, char c) {
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < text.length(); i++) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            char ch = text.charAt(i);
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (!inString && ch == c) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Checks if a string is valid JSON (minimal check: parseable by Jackson).
+     */
+    private boolean isValidJson(String text) {
+        try {
+            objectMapper.readTree(text);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private int countKeywords(List<String> articles, List<String> keywords) {
         int count = 0;
         for (String article : articles) {

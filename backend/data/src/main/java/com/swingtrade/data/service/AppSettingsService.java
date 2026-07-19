@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.transaction.annotation.Transactional;
+
 @Service
 public class AppSettingsService {
 
@@ -37,15 +39,21 @@ public class AppSettingsService {
     }
 
     /**
-     * Write a setting. Skips write if env var is set (read-only in that case).
+     * Write a setting (upsert). Skips write if env var is set (read-only in that case).
      */
+    @Transactional
     public void set(String key, String value) {
         String envValue = AppSettingEntity.fromEnv(key, null);
         if (envValue != null) {
             log.warn("Cannot set {}: overridden by environment variable", key);
             return;
         }
-        repo.updateValue(key, value);
+        Optional<AppSettingEntity> existing = repo.findByKey(key);
+        if (existing.isPresent()) {
+            repo.updateValue(key, value);
+        } else {
+            repo.save(new AppSettingEntity(key, value));
+        }
         log.debug("Updated setting {}: {}", key, value);
     }
 

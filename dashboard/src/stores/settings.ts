@@ -1,6 +1,5 @@
-import { reactive, watch } from 'vue'
-
-const STORAGE_KEY = 'swingtrade_settings'
+import { reactive } from 'vue'
+import { getLlmSettings, setLlmSettings, getDiscordSettings, setDiscordSettings, getTradingSettings, setTradingSettings, saveAllSettings } from '../api/client'
 
 interface TradingConfig {
   mode: 'paper' | 'live'
@@ -48,34 +47,140 @@ const defaults: SettingsState = {
   },
 }
 
-function load(): SettingsState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { ...defaults }
-    const parsed = JSON.parse(raw)
-    // Validate broker value
-    if (!['fyers', 'upstox', 'yahoo', 'none'].includes(parsed.selectedBroker)) {
-      parsed.selectedBroker = defaults.selectedBroker
-    }
-    return { ...defaults, ...parsed, tradingConfig: { ...defaults.tradingConfig, ...(parsed.tradingConfig ?? {}) } }
-  } catch {
-    return { ...defaults }
+function parseTradingConfig(raw: Record<string, string>): TradingConfig {
+  return {
+    mode: (raw['trading.mode'] || 'paper') as 'paper' | 'live',
+    maxPositionSize: parseInt(raw['trading.max_position_size'] || '10', 10),
+    stopLoss: parseInt(raw['trading.stop_loss'] || '5', 10),
+    takeProfit: parseInt(raw['trading.take_profit'] || '15', 10),
   }
 }
 
-const state = reactive<SettingsState>(load())
+async function loadAll(): Promise<SettingsState> {
+  const state: SettingsState = { ...defaults, tradingConfig: { ...defaults.tradingConfig } }
 
-// Persist on every change
-watch(state as any, (val) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(val))
-}, { deep: true })
+  // Load LLM settings
+  try {
+    const llmRes = await getLlmSettings()
+    if (llmRes.success && llmRes.data) {
+      Object.assign(state.llmSettings, {
+        vllmBaseUrl: llmRes.data['llm.vllm.base_url'] || state.llmSettings.vllmBaseUrl,
+        model: llmRes.data['llm.vllm.model'] || state.llmSettings.model,
+        pdfBaseUrl: llmRes.data['llm.pdf.base_url'] || state.llmSettings.pdfBaseUrl,
+        pdfModel: llmRes.data['llm.pdf.model'] || state.llmSettings.pdfModel,
+      })
+    }
+  } catch { /* ignore */ }
+
+  // Load Discord settings
+  try {
+    const discordRes = await getDiscordSettings()
+    if (discordRes.success && discordRes.data) {
+      state.discordSettings.webhookUrl = discordRes.data['discord.webhook.url'] || state.discordSettings.webhookUrl
+      state.discordSettings.enabled = discordRes.data['discord.webhook.enabled'] === 'true'
+    }
+  } catch { /* ignore */ }
+
+  // Load trading config
+  try {
+    const tradingRes = await getTradingSettings()
+    if (tradingRes.success && tradingRes.data) {
+      Object.assign(state.tradingConfig, parseTradingConfig(tradingRes.data))
+    }
+  } catch { /* ignore */ }
+
+  return state
+}
+
+const state = reactive<SettingsState>(defaults as SettingsState)
+let loaded = false
+
+export async function loadSettings() {
+  if (loaded) return
+  const fresh = await loadAll()
+  Object.assign(state, fresh)
+  loaded = true
+}
+
+export async function saveSettings(): Promise<boolean> {
+  const body = {
+    broker: state.selectedBroker,
+    llm: {
+      'llm.vllm.base_url': state.llmSettings.vllmBaseUrl,
+      'llm.vllm.model': state.llmSettings.model,
+      'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
+      'llm.pdf.model': state.llmSettings.pdfModel,
+    },
+    discord: {
+      'discord.webhook.url': state.discordSettings.webhookUrl,
+      'discord.webhook.enabled': String(state.discordSettings.enabled),
+    },
+    trading: {
+      'trading.mode': state.tradingConfig.mode,
+      'trading.max_position_size': String(state.tradingConfig.maxPositionSize),
+      'trading.stop_loss': String(state.tradingConfig.stopLoss),
+      'trading.take_profit': String(state.tradingConfig.takeProfit),
+    },
+  }
+
+  const res = await saveAllSettings(body)
+  if (!res.success) {
+    console.error('Failed to save settings:', res.error)
+    return false
+  }
+  return true
+}
+
+// Keep individual save methods for toggle-on-change behavior
+export async function saveLlmSettings(): Promise<boolean> {
+  const settings: Record<string, string> = {
+    'llm.vllm.base_url': state.llmSettings.vllmBaseUrl,
+    'llm.vllm.model': state.llmSettings.model,
+    'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
+    'llm.pdf.model': state.llmSettings.pdfModel,
+  }
+  const res = await setLlmSettings(settings)
+  if (!res.success) {
+    console.error('Failed to save LLM settings:', res.error)
+    return false
+  }
+  return true
+}
+
+export async function saveDiscordSettings(): Promise<boolean> {
+  const settings: Record<string, string> = {
+    'discord.webhook.url': state.discordSettings.webhookUrl,
+    'discord.webhook.enabled': String(state.discordSettings.enabled),
+  }
+  const res = await setDiscordSettings(settings)
+  if (!res.success) {
+    console.error('Failed to save Discord settings:', res.error)
+    return false
+  }
+  return true
+}
+
+export async function saveTradingConfig(): Promise<boolean> {
+  const settings: Record<string, string> = {
+    'trading.mode': state.tradingConfig.mode,
+    'trading.max_position_size': String(state.tradingConfig.maxPositionSize),
+    'trading.stop_loss': String(state.tradingConfig.stopLoss),
+    'trading.take_profit': String(state.tradingConfig.takeProfit),
+  }
+  const res = await setTradingSettings(settings)
+  if (!res.success) {
+    console.error('Failed to save trading config:', res.error)
+    return false
+  }
+  return true
+}
 
 export function getSettings() {
   return state
 }
 
 export function resetSettings() {
-  Object.assign(state, load())
+  Object.assign(state, defaults)
 }
 
 export const brokerLabels: Record<string, string> = {
