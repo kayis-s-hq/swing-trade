@@ -207,3 +207,39 @@ export interface NewsArticle {
   source: string
   rawContent: string
 }
+
+export interface CompositeAnalysis {
+  symbol: string
+  date: string
+  compositeScore: number
+  compositeSignal: 'BUY' | 'SELL' | 'HOLD'
+  compositeConfidence: number
+  sources: Array<{ name: string; score: number; weight: number; description: string }>
+  news: {
+    score: number
+    summary: string
+    catalysts: string[]
+    redFlags: string[]
+    articleCount: number
+  }
+  technical: {
+    score: number
+    signal: string
+    confidence: number
+    indicators: string[]
+  }
+  fundamentals: {
+    score: number
+    factors: string[]
+  }
+  backtest: {
+    totalTrades: number
+    winRate: number
+    profitFactor: number
+    maxDrawdown: number
+    totalReturn: number
+    expectancy: number
+    hasEnoughData: boolean
+  }
+  reasoning: string
+}

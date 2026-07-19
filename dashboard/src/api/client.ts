@@ -17,6 +17,7 @@ import type {
   SentimentResult,
   SentimentAccuracyStats,
   NewsArticle,
+  CompositeAnalysis,
 } from './types'
 
 // ---------------------------------------------------------------------------
@@ -657,4 +658,10 @@ export async function getBacktestReport(filename: string): Promise<ApiResponse<B
   const raw = await rawFetch(`/backtest/reports/${filename}`)
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as BacktestReportSummary }
+}
+
+export async function getCompositeAnalysis(symbol: string): Promise<ApiResponse<CompositeAnalysis>> {
+  const raw = await rawFetch(`/analysis/analyze?symbol=${encodeURIComponent(symbol)}`, { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as CompositeAnalysis }
 }

@@ -33,9 +33,9 @@
 
     <!-- File appender with JSON format -->
     <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${logging.file.name:-/var/log/swing-trade/api.log}</file>
+        <file>${LOG_FILE:-./logs/swing-trade.log}</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeRollingPolicy">
-            <fileNamePattern>${logging.file.name:-/var/log/swing-trade/api}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${LOG_FILE:-./logs/swing-trade}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>100MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>3GB</totalSizeCap>

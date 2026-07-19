@@ -21,8 +21,134 @@
       </button>
     </div>
 
-    <!-- Detail Tab -->
-    <div v-if="activeTab === 'detail'">
+    <!-- Overview Tab -->
+    <div v-if="activeTab === 'overview'">
+      <!-- Symbol Selector + Analyze -->
+      <div class="mb-6 card-panel p-5">
+        <h3 class="mb-3 text-sm font-semibold text-text-primary">Select Symbol</h3>
+        <form @submit.prevent="analyzeComposite" class="flex flex-col sm:flex-row gap-3">
+          <div class="flex-1">
+            <input
+              v-model="symbolInput"
+              type="text"
+              placeholder="e.g. RELIANCE"
+              list="watchlistSymbols"
+              required
+              class="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-brand/30"
+            />
+            <datalist id="watchlistSymbols">
+              <option v-for="w in watchlistSymbols" :key="w.symbol" :value="w.symbol" />
+            </datalist>
+          </div>
+          <button
+            type="submit"
+            :disabled="compositeLoading"
+            class="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
+          >
+            {{ compositeLoading ? 'Analyzing...' : 'Analyze' }}
+          </button>
+          <button
+            type="button"
+            :disabled="loading"
+            @click="loadSentiment"
+            class="rounded-md border border-border-subtle px-4 py-2 text-sm text-text-muted transition-colors hover:bg-bg-hover disabled:opacity-50"
+          >
+            {{ loading ? 'Loading...' : 'View Sentiment' }}
+          </button>
+        </form>
+        <p v-if="error" class="mt-3 text-xs text-danger">{{ error }}</p>
+      </div>
+
+      <!-- Composite loading state -->
+      <div v-if="compositeLoading" class="flex justify-center py-12">
+        <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      </div>
+
+      <!-- Composite analysis results -->
+      <div v-if="!compositeLoading && composite" class="space-y-6">
+        <!-- Score Card -->
+        <ScoreCard
+          :score="composite.compositeScore"
+          :signal="composite.compositeSignal"
+          :confidence="composite.compositeConfidence"
+          :reasoning="composite.reasoning"
+        />
+
+        <!-- Source Breakdown -->
+        <SourceBreakdown :sources="composite.sources" />
+
+        <!-- Technical Indicators -->
+        <TechnicalIndicatorsComp
+          :score="composite.technical.score"
+          :signal="composite.technical.signal as 'BUY' | 'SELL' | 'HOLD'"
+          :confidence="composite.technical.confidence"
+          :indicators="composite.technical.indicators"
+        />
+
+        <!-- Fundamentals -->
+        <FundamentalsPanel
+          :score="composite.fundamentals.score"
+          :factors="composite.fundamentals.factors"
+        />
+
+        <!-- Backtest -->
+        <BacktestPanel
+          :totalTrades="composite.backtest.totalTrades"
+          :winRate="composite.backtest.winRate"
+          :profitFactor="composite.backtest.profitFactor"
+          :maxDrawdown="composite.backtest.maxDrawdown"
+          :totalReturn="composite.backtest.totalReturn"
+          :expectancy="composite.backtest.expectancy"
+          :hasEnoughData="composite.backtest.hasEnoughData"
+        />
+      </div>
+
+      <!-- Old sentiment result (coexists with composite) -->
+      <div v-if="!compositeLoading && sentiment" class="mt-6">
+        <div class="mb-6 card-panel p-5">
+          <h3 class="mb-4 text-sm font-semibold text-text-primary">LLM Analysis</h3>
+          <div class="mb-4 flex items-center justify-between">
+            <h4 class="text-sm font-semibold text-text-primary">{{ sentiment.symbol }}</h4>
+            <span class="text-xs text-text-muted">{{ sentiment.date }}</span>
+          </div>
+          <div class="mb-4 flex items-center gap-4">
+            <SentimentBadge :score="sentiment.score" :confidence="sentiment.confidence" />
+          </div>
+          <div class="mb-4">
+            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">Summary</h4>
+            <p class="text-sm text-text-secondary">{{ sentiment.summary }}</p>
+          </div>
+          <div v-if="sentiment.redFlags.length" class="mb-4">
+            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-danger">Red Flags</h4>
+            <ul class="list-disc pl-4 text-sm text-text-secondary">
+              <li v-for="rf in sentiment.redFlags" :key="rf">{{ rf }}</li>
+            </ul>
+          </div>
+          <div v-if="sentiment.catalysts.length">
+            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-success">Catalysts</h4>
+            <ul class="list-disc pl-4 text-sm text-text-secondary">
+              <li v-for="c in sentiment.catalysts" :key="c">{{ c }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Context Panel -->
+        <ContextPanel
+          :signal="latestSignal"
+          :sentiment="sentiment"
+          :article-count="newsArticles.length"
+          :trend="history.length > 0 ? history : [sentiment]"
+        />
+      </div>
+
+      <!-- Empty state -->
+      <div v-if="!composite && !sentiment && !compositeLoading && !loading" class="card-panel p-5">
+        <p class="text-sm text-text-muted">No data available. Enter a symbol and click Analyze or View Sentiment.</p>
+      </div>
+    </div>
+
+    <!-- Details Tab -->
+    <div v-if="activeTab === 'details'">
       <!-- Symbol Selector -->
       <div class="mb-6 card-panel p-5">
         <h3 class="mb-3 text-sm font-semibold text-text-primary">Select Symbol</h3>
@@ -64,6 +190,36 @@
         <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
       </div>
 
+      <!-- Composite analysis (if available) -->
+      <div v-if="!loading && !analyzing && composite" class="space-y-6 mb-6">
+        <ScoreCard
+          :score="composite.compositeScore"
+          :signal="composite.compositeSignal"
+          :confidence="composite.compositeConfidence"
+          :reasoning="composite.reasoning"
+        />
+        <SourceBreakdown :sources="composite.sources" />
+        <TechnicalIndicatorsComp
+          :score="composite.technical.score"
+          :signal="composite.technical.signal as 'BUY' | 'SELL' | 'HOLD'"
+          :confidence="composite.technical.confidence"
+          :indicators="composite.technical.indicators"
+        />
+        <FundamentalsPanel
+          :score="composite.fundamentals.score"
+          :factors="composite.fundamentals.factors"
+        />
+        <BacktestPanel
+          :totalTrades="composite.backtest.totalTrades"
+          :winRate="composite.backtest.winRate"
+          :profitFactor="composite.backtest.profitFactor"
+          :maxDrawdown="composite.backtest.maxDrawdown"
+          :totalReturn="composite.backtest.totalReturn"
+          :expectancy="composite.backtest.expectancy"
+          :hasEnoughData="composite.backtest.hasEnoughData"
+        />
+      </div>
+
       <!-- News Sources Section -->
       <div v-if="!loading && !analyzing && newsArticles.length" class="mb-6">
         <h3 class="mb-3 text-sm font-semibold text-text-primary">News Sources</h3>
@@ -72,9 +228,8 @@
         </div>
       </div>
 
-      <!-- Sentiment Result -->
+      <!-- LLM Analysis -->
       <div v-if="!loading && !analyzing && sentiment">
-        <!-- LLM Analysis -->
         <div class="mb-6 card-panel p-5">
           <h3 class="mb-4 text-sm font-semibold text-text-primary">LLM Analysis</h3>
           <div class="mb-4 flex items-center justify-between">
@@ -112,7 +267,7 @@
       </div>
 
       <!-- Empty state -->
-      <div v-if="!sentiment && !loading && !analyzing" class="card-panel p-5">
+      <div v-if="!sentiment && !composite && !loading && !analyzing" class="card-panel p-5">
         <p class="text-sm text-text-muted">No data available. Enter a symbol to view sentiment.</p>
       </div>
     </div>
@@ -158,18 +313,25 @@ import {
   getLatestNews,
   getLatestSignalForSymbol,
   getWatchlist,
+  getCompositeAnalysis,
 } from '../api/client'
-import type { SentimentResult, WatchlistEntry, NewsArticle, Signal } from '../api/types'
+import type { SentimentResult, WatchlistEntry, NewsArticle, Signal, CompositeAnalysis } from '../api/types'
 import SentimentBadge from '../components/SentimentBadge.vue'
 import SentimentTimeline from '../components/SentimentTimeline.vue'
 import NewsSourceCard from '../components/NewsSourceCard.vue'
 import ContextPanel from '../components/ContextPanel.vue'
+import ScoreCard from '../components/ScoreCard.vue'
+import SourceBreakdown from '../components/SourceBreakdown.vue'
+import TechnicalIndicatorsComp from '../components/TechnicalIndicators.vue'
+import FundamentalsPanel from '../components/FundamentalsPanel.vue'
+import BacktestPanel from '../components/BacktestPanel.vue'
 
 const tabs = [
-  { key: 'detail', label: 'Detail' },
+  { key: 'overview', label: 'Overview' },
+  { key: 'details', label: 'Details' },
   { key: 'history', label: 'History' },
 ]
-const activeTab = ref('detail')
+const activeTab = ref('overview')
 
 const symbolInput = ref('RELIANCE')
 const loading = ref(false)
@@ -178,6 +340,10 @@ const error = ref('')
 const sentiment = ref<SentimentResult | null>(null)
 const newsArticles = ref<NewsArticle[]>([])
 const latestSignal = ref<Signal | null>(null)
+
+// Composite analysis state
+let composite: CompositeAnalysis | null = null
+const compositeLoading = ref(false)
 
 const historyLoading = ref(false)
 const history = ref<SentimentResult[]>([])
@@ -243,6 +409,23 @@ const handleAnalyse = async () => {
     }
   } finally {
     analyzing.value = false
+  }
+}
+
+const analyzeComposite = async () => {
+  if (!symbolInput.value.trim()) return
+  compositeLoading.value = true
+  error.value = ''
+  composite = null
+  try {
+    const res = await getCompositeAnalysis(symbolInput.value)
+    if (res.success && res.data) {
+      composite = res.data
+    } else {
+      error.value = res.error || 'Composite analysis failed'
+    }
+  } finally {
+    compositeLoading.value = false
   }
 }
 
