@@ -16,6 +16,14 @@ import type {
   BacktestReportSummary,
   SentimentResult,
   SentimentAccuracyStats,
+  AccuracySummary,
+  AccuracyByWindow,
+  AccuracyByRegime,
+  AccuracyBySymbol,
+  CalibrationData,
+  RollingIC,
+  SignalVolumeStats,
+  ECEStats,
   NewsArticle,
   CompositeAnalysis,
 } from './types'
@@ -178,7 +186,7 @@ const mapPosition = (p: BackendPosition): Position => ({
 const mapSignal = (s: BackendSignal): Signal => ({
   id: String(s.id),
   symbol: s.symbol,
-  direction: s.signalType,
+  direction: s.signalType as 'BUY' | 'SELL',
   confidence: Math.round(toNum(s.confidence) * 100),
   reason: s.reasoning,
   entryPrice: toNum(s.entryPrice),
@@ -258,14 +266,14 @@ export async function getSignals(): Promise<ApiResponse<Signal[]>> {
   const raw = await rawFetch('/signals/latest')
   if (!raw.ok) return errResponse(raw.error!)
 
-  return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
+  return { success: true, data: (raw.data as BackendSignal[]).filter(s => s.signalType !== 'HOLD').map(mapSignal) }
 }
 
 export async function getSignalsByType(type: 'BUY' | 'SELL'): Promise<ApiResponse<Signal[]>> {
   const raw = await rawFetch(`/signals/type/${type}`)
   if (!raw.ok) return errResponse(raw.error!)
 
-  return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
+  return { success: true, data: (raw.data as BackendSignal[]).filter(s => s.signalType !== 'HOLD').map(mapSignal) }
 }
 
 export async function getLatestSignalForSymbol(symbol: string): Promise<ApiResponse<Signal | null>> {
@@ -274,7 +282,7 @@ export async function getLatestSignalForSymbol(symbol: string): Promise<ApiRespo
 
   const data = (raw.data as BackendSignal[])
   const latest = data.length > 0 ? data[data.length - 1] : null
-  if (!latest) return { success: true, data: null }
+  if (!latest || latest.signalType === 'HOLD') return { success: true, data: null }
 
   return { success: true, data: mapSignal(latest) }
 }
@@ -283,7 +291,7 @@ export async function getHighConfidenceSignals(minConfidence: number = 0.7): Pro
   const raw = await rawFetch(`/signals/high-confidence?minConfidence=${minConfidence}`)
   if (!raw.ok) return errResponse(raw.error!)
 
-  return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
+  return { success: true, data: (raw.data as BackendSignal[]).filter(s => s.signalType !== 'HOLD').map(mapSignal) }
 }
 
 export async function getTradeHistory(limit: number = 10): Promise<ApiResponse<Position[]>> {
@@ -617,6 +625,62 @@ export async function getAccuracyStats(): Promise<ApiResponse<SentimentAccuracyS
   return { success: true, data: resp.data }
 }
 
+export async function getAccuracySummary(): Promise<ApiResponse<AccuracySummary>> {
+  const raw = await rawFetch('/sentiment/accuracy/summary')
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: AccuracySummary; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getAccuracyByWindow(): Promise<ApiResponse<AccuracyByWindow[]>> {
+  const raw = await rawFetch('/sentiment/accuracy/by-window')
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: AccuracyByWindow[]; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getAccuracyByRegime(): Promise<ApiResponse<AccuracyByRegime[]>> {
+  const raw = await rawFetch('/sentiment/accuracy/by-regime')
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: AccuracyByRegime[]; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getAccuracyBySymbol(): Promise<ApiResponse<AccuracyBySymbol[]>> {
+  const raw = await rawFetch('/sentiment/accuracy/by-symbol')
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: AccuracyBySymbol[]; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getCalibration(): Promise<ApiResponse<CalibrationData[]>> {
+  const raw = await rawFetch('/sentiment/accuracy/calibration')
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: CalibrationData[]; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getRollingIC(windowDays = 30): Promise<ApiResponse<RollingIC[]>> {
+  const raw = await rawFetch(`/sentiment/accuracy/rolling-ic?windowDays=${windowDays}`)
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: RollingIC[]; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getSignalVolume(): Promise<ApiResponse<SignalVolumeStats>> {
+  const raw = await rawFetch('/sentiment/accuracy/signal-volume')
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: SignalVolumeStats; error?: string }
+  return { success: true, data: resp.data }
+}
+
+export async function getECE(): Promise<ApiResponse<ECEStats>> {
+  const raw = await rawFetch('/sentiment/accuracy/ece')
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { success: boolean; data: ECEStats; error?: string }
+  return { success: true, data: resp.data }
+}
+
 export async function triggerSentimentAnalysis(symbol: string): Promise<ApiResponse<SentimentResult>> {
   const raw = await rawFetch(`/sentiment/${symbol}/analyse`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
@@ -664,4 +728,10 @@ export async function getCompositeAnalysis(symbol: string): Promise<ApiResponse<
   const raw = await rawFetch(`/analysis/analyze?symbol=${encodeURIComponent(symbol)}`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as CompositeAnalysis }
+}
+
+export async function backfillSymbol(symbol: string, years: number = 3): Promise<ApiResponse<string>> {
+  const raw = await rawFetch(`/ingestion/backfill?symbol=${encodeURIComponent(symbol)}&years=${years}`, { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: (raw.data as any).data as string }
 }
