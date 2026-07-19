@@ -19,6 +19,7 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class MonthlyReportService {
@@ -79,7 +80,7 @@ public class MonthlyReportService {
     }
 
     Map<String, Object> buildReport(LocalDate reportDate, List<PositionEntity> positions, List<Signal> signals) {
-        Map<String, Object> report = new HashMap<>();
+        Map<String, Object> report = new ConcurrentHashMap<>();
 
         // Period info
         report.put("reportDate", reportDate.toString());
@@ -116,7 +117,7 @@ public class MonthlyReportService {
             .filter(p -> "MANUAL".equals(p.getStatus()))
             .count();
 
-        Map<String, Long> exitReasons = new HashMap<>();
+        Map<String, Long> exitReasons = new ConcurrentHashMap<>();
         exitReasons.put("STOP_LOSS", stopLossCount);
         exitReasons.put("TARGET_HIT", targetHitCount);
         exitReasons.put("MANUAL", manualCount);
@@ -133,7 +134,7 @@ public class MonthlyReportService {
             .filter(s -> com.swingtrade.domain.Signal.SignalType.HOLD == s.type())
             .count();
 
-        Map<String, Long> signalDistribution = new HashMap<>();
+        Map<String, Long> signalDistribution = new ConcurrentHashMap<>();
         signalDistribution.put("BUY", buySignals);
         signalDistribution.put("SELL", sellSignals);
         signalDistribution.put("HOLD", holdSignals);

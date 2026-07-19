@@ -161,14 +161,14 @@ public class HealthController {
     }
 
     private HealthStatus.ComponentStatus getComponentHealth(String name, String description) {
-        Map<String, Object> details = new HashMap<>();
+        Map<String, Object> details = new ConcurrentHashMap<>();
         details.put("status", "Active");
         details.put("responseTime", "OK");
         return new HealthStatus.ComponentStatus(name, "UP", description, details);
     }
 
     private Map<String, Object> getComponentDetails(Object service) {
-        Map<String, Object> details = new HashMap<>();
+        Map<String, Object> details = new ConcurrentHashMap<>();
         details.put("serviceName", service.getClass().getSimpleName());
         details.put("status", "Active");
         return details;

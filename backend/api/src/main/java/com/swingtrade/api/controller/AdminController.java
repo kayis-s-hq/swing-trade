@@ -67,7 +67,7 @@ public class AdminController {
     @GetMapping("/symbols/status")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getSymbolMasterStatus() {
         try {
-            Map<String, Object> data = new HashMap<>();
+            Map<String, Object> data = new ConcurrentHashMap<>();
             data.put("count", symbolMasterService.count());
             return ResponseEntity.ok(ApiResponse.ok(data));
         } catch (Exception e) {
@@ -98,7 +98,7 @@ public class AdminController {
                 logger.info("Kill switch DISABLED by admin request");
             }
 
-            Map<String, Object> data = new HashMap<>();
+            Map<String, Object> data = new ConcurrentHashMap<>();
             data.put("active", killSwitchService.isActive());
             data.put("enabledAt", killSwitchService.getEnabledAt());
             data.put("reason", request.getReason());
@@ -144,7 +144,7 @@ public class AdminController {
 
         try {
             killSwitchService.toggle(enable);
-            Map<String, Object> data = new HashMap<>();
+            Map<String, Object> data = new ConcurrentHashMap<>();
             data.put("active", killSwitchService.isActive());
             data.put("enabledAt", killSwitchService.getEnabledAt());
             data.put("reason", killSwitchService.getReason());
@@ -165,7 +165,7 @@ public class AdminController {
      */
     @GetMapping("/health")
     public ResponseEntity<ApiResponse<Map<String, Object>>> adminHealth() {
-        Map<String, Object> data = new HashMap<>();
+        Map<String, Object> data = new ConcurrentHashMap<>();
         data.put("service", "admin");
         data.put("status", "healthy");
         data.put("killSwitchActive", killSwitchService.isActive());
@@ -197,7 +197,7 @@ public class AdminController {
 
             int ingested = dataIngestionService.pullDataFromUpstox(symbol, from, to);
 
-            Map<String, Object> data = new HashMap<>();
+            Map<String, Object> data = new ConcurrentHashMap<>();
             data.put("symbol", symbol);
             data.put("startDate", startDate);
             data.put("endDate", endDate);
@@ -230,7 +230,7 @@ public class AdminController {
             var candles = dataIngestionService.getRecentCandles(symbol, days);
             var latest = dataIngestionService.getLatestCandle(symbol);
 
-            Map<String, Object> data = new HashMap<>();
+            Map<String, Object> data = new ConcurrentHashMap<>();
             data.put("symbol", symbol);
             data.put("daysChecked", days);
             data.put("candleCount", candles.size());

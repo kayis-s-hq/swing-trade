@@ -104,11 +104,9 @@ public class PositionService {
      * @return List of positions with the given status
      */
     public List<PositionResponse> getPositionsByStatus(String status) {
-        // Convert string to uppercase for comparison
-        String statusUpper = status.toUpperCase();
         List<PositionEntity> allPositions = positionRepository.findAll();
         return allPositions.stream()
-                .filter(p -> statusUpper.equals(p.getStatus().toUpperCase()))
+                .filter(p -> status.equalsIgnoreCase(p.getStatus()))
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
