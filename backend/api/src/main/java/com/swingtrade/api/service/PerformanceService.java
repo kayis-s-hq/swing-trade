@@ -2,13 +2,16 @@ package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.PerformanceResponse;
 import com.swingtrade.broker.engine.PaperTradingEngine;
+import com.swingtrade.data.entity.TradeEntity;
 import com.swingtrade.data.repository.PositionRepository;
+import com.swingtrade.data.repository.TradeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Service for retrieving performance statistics
@@ -18,11 +21,13 @@ public class PerformanceService {
 
     private final PaperTradingEngine paperTradingEngine;
     private final PositionRepository positionRepository;
+    private final TradeRepository tradeRepository;
 
     @Autowired
-    public PerformanceService(PaperTradingEngine paperTradingEngine, PositionRepository positionRepository) {
+    public PerformanceService(PaperTradingEngine paperTradingEngine, PositionRepository positionRepository, TradeRepository tradeRepository) {
         this.paperTradingEngine = paperTradingEngine;
         this.positionRepository = positionRepository;
+        this.tradeRepository = tradeRepository;
     }
 
     /**
@@ -102,19 +107,56 @@ public class PerformanceService {
      * Calculate Sharpe ratio
      */
     private BigDecimal calculateSharpeRatio() {
-        // Risk-free rate for Indian government bonds
-        // Calculate from actual trade returns
-        // For now, return a placeholder
-        return BigDecimal.ONE;
+        List<TradeEntity> closed = tradeRepository.findAllClosedTrades();
+        if (closed.size() < 2) return BigDecimal.ZERO;
+
+        BigDecimal riskFreeDaily = BigDecimal.valueOf(0.0004); // ~10% annual / 252
+        List<BigDecimal> returns = new java.util.ArrayList<>();
+        BigDecimal initialCapital = BigDecimal.valueOf(100000);
+
+        for (TradeEntity t : closed) {
+            BigDecimal pnl = t.getTotalPnL() != null ? t.getTotalPnL() : BigDecimal.ZERO;
+            returns.add(pnl.divide(initialCapital, 6, RoundingMode.HALF_UP));
+        }
+
+        int n = returns.size();
+        BigDecimal mean = returns.stream().reduce(BigDecimal.ZERO, BigDecimal::add).divide(BigDecimal.valueOf(n), 6, RoundingMode.HALF_UP);
+        double variance = returns.stream()
+            .map(r -> r.subtract(mean).pow(2).doubleValue())
+            .mapToDouble(Double::doubleValue)
+            .average().orElse(0.0);
+        double stdDev = Math.sqrt(variance);
+
+        if (stdDev < 1e-10) return BigDecimal.ZERO;
+        double sharpe = (mean.doubleValue() - riskFreeDaily.doubleValue()) / stdDev;
+        return BigDecimal.valueOf(sharpe).setScale(2, RoundingMode.HALF_UP);
     }
 
     /**
-     * Calculate maximum drawdown
+     * Calculate maximum drawdown from equity curve
      */
     private BigDecimal calculateMaxDrawdown() {
-        // Calculate from equity curve
-        // For now, return a placeholder
-        return BigDecimal.valueOf(5);
+        List<TradeEntity> closed = tradeRepository.findAllClosedTrades()
+            .stream()
+            .sorted(java.util.Comparator.comparing(TradeEntity::getExitDate))
+            .toList();
+
+        if (closed.isEmpty()) return BigDecimal.ZERO;
+
+        BigDecimal initialCapital = BigDecimal.valueOf(100000);
+        double peak = initialCapital.doubleValue();
+        double maxDD = 0.0;
+        double equity = initialCapital.doubleValue();
+
+        for (TradeEntity t : closed) {
+            BigDecimal pnl = t.getTotalPnL() != null ? t.getTotalPnL() : BigDecimal.ZERO;
+            equity += pnl.doubleValue();
+            if (equity > peak) peak = equity;
+            double dd = (peak - equity) / peak;
+            if (dd > maxDD) maxDD = dd;
+        }
+
+        return BigDecimal.valueOf(maxDD * 100).setScale(2, RoundingMode.HALF_UP);
     }
 
     /**
@@ -144,18 +186,31 @@ public class PerformanceService {
      * Calculate average win
      */
     private BigDecimal calculateAvgWin() {
-        // Calculate average P&L from winning trades
-        // For now, return a placeholder
-        return BigDecimal.valueOf(500.0);
+        List<TradeEntity> closed = tradeRepository.findAllClosedTrades();
+        List<BigDecimal> wins = closed.stream()
+            .filter(t -> t.getTotalPnL() != null && t.getTotalPnL().compareTo(BigDecimal.ZERO) > 0)
+            .map(TradeEntity::getTotalPnL)
+            .toList();
+
+        if (wins.isEmpty()) return BigDecimal.ZERO;
+        BigDecimal sum = wins.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return sum.divide(BigDecimal.valueOf(wins.size()), 2, RoundingMode.HALF_UP);
     }
 
     /**
      * Calculate average loss
      */
     private BigDecimal calculateAvgLoss() {
-        // Calculate average P&L from losing trades
-        // For now, return a placeholder
-        return BigDecimal.valueOf(300.0);
+        List<TradeEntity> closed = tradeRepository.findAllClosedTrades();
+        List<BigDecimal> losses = closed.stream()
+            .filter(t -> t.getTotalPnL() != null && t.getTotalPnL().compareTo(BigDecimal.ZERO) < 0)
+            .map(TradeEntity::getTotalPnL)
+            .map(p -> p.abs())
+            .toList();
+
+        if (losses.isEmpty()) return BigDecimal.ZERO;
+        BigDecimal sum = losses.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return sum.divide(BigDecimal.valueOf(losses.size()), 2, RoundingMode.HALF_UP);
     }
 
     // DTO class for API response

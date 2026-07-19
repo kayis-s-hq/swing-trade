@@ -1,8 +1,11 @@
 package com.swingtrade.api.service;
 
+import com.swingtrade.api.dto.CompositeAnalysis;
 import com.swingtrade.data.entity.SignalEntity;
+import com.swingtrade.data.repository.SentimentResultRepository;
 import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.api.service.SignalEngine;
+import com.swingtrade.api.service.TechnicalAnalysisService;
 import com.swingtrade.api.dto.SignalQueryResult;
 import com.swingtrade.api.dto.SignalQueryResult.CombinedSignal;
 import com.swingtrade.api.dto.SignalQueryResult.SentimentAnalysis;
@@ -24,10 +27,17 @@ import java.util.List;
 public class SignalService {
 
     private final SignalRepository signalRepository;
+    private final SentimentResultRepository sentimentResultRepository;
+    private final TechnicalAnalysisService technicalAnalysisService;
     private final SignalEngine signalEngine;
 
-    public SignalService(SignalRepository signalRepository, SignalEngine signalEngine) {
+    public SignalService(SignalRepository signalRepository,
+                         SentimentResultRepository sentimentResultRepository,
+                         TechnicalAnalysisService technicalAnalysisService,
+                         SignalEngine signalEngine) {
         this.signalRepository = signalRepository;
+        this.sentimentResultRepository = sentimentResultRepository;
+        this.technicalAnalysisService = technicalAnalysisService;
         this.signalEngine = signalEngine;
     }
 
@@ -139,9 +149,10 @@ public class SignalService {
      * @return Technical analysis results
      */
     public TechnicalAnalysis getTechnicalAnalysis(String symbol) {
-        // This would delegate to TechnicalIndicators service
-        // For now, return placeholder
-        return new TechnicalAnalysis(symbol, LocalDate.now(), new ArrayList<>(), 0.0);
+        CompositeAnalysis.TechnicalScore score = technicalAnalysisService.compute(symbol);
+        return new TechnicalAnalysis(
+            symbol, LocalDate.now(), score.indicators(), score.confidence()
+        );
     }
 
     /**
@@ -150,9 +161,11 @@ public class SignalService {
      * @return Sentiment analysis results
      */
     public SentimentAnalysis getSentimentAnalysis(String symbol) {
-        // This would delegate to LLM sentiment service
-        // For now, return placeholder
-        return new SentimentAnalysis(symbol, LocalDate.now(), "NEUTRAL", "No recent news");
+        String sym = symbol.toUpperCase(java.util.Locale.ROOT);
+        return sentimentResultRepository.findLatestBySymbol(sym)
+            .map(e -> new SentimentAnalysis(
+                sym, e.getDate(), e.getSentimentScore(), e.getSummary()))
+            .orElseGet(() -> new SentimentAnalysis(sym, LocalDate.now(), "NEUTRAL", "No sentiment data available"));
     }
 
     /**

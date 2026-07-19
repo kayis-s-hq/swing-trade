@@ -178,7 +178,7 @@ const mapPosition = (p: BackendPosition): Position => ({
 const mapSignal = (s: BackendSignal): Signal => ({
   id: String(s.id),
   symbol: s.symbol,
-  direction: s.signalType === 'HOLD' ? 'BUY' : s.signalType,
+  direction: s.signalType,
   confidence: Math.round(toNum(s.confidence) * 100),
   reason: s.reasoning,
   entryPrice: toNum(s.entryPrice),
