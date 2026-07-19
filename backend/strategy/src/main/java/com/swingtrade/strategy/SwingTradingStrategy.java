@@ -205,8 +205,8 @@ public class SwingTradingStrategy {
             confidence = 0.5;
         }
 
-        logger.info("Signal: {} (confidence: {:.2%}) - Factors: {} buy, {} sell",
-                    signalType, confidence, buyScore, sellScore);
+        logger.info("Signal: {} (confidence: {}%) - Factors: {} buy, {} sell",
+                    String.format("%.0f", confidence * 100), signalType, buyScore, sellScore);
 
         if (signalType == SignalType.BUY && !buyFactors.isEmpty()) {
             logger.debug("Buy factors: {}", buyFactors);
