@@ -21,10 +21,10 @@ public class TradingController {
     private static final Logger logger = LoggerFactory.getLogger(TradingController.class);
 
     @Autowired
-    private com.swingtrade.api.PositionService positionService;
+    private com.swingtrade.api.service.PositionService positionService;
 
     @Autowired
-    private com.swingtrade.api.PerformanceService performanceService;
+    private com.swingtrade.api.service.PerformanceService performanceService;
 
     /**
      * Create a new trading position.

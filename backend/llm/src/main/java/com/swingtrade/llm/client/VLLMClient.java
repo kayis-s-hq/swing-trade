@@ -21,13 +21,14 @@ public class VLLMClient {
 
     private static final Logger logger = LoggerFactory.getLogger(VLLMClient.class);
 
-    private final WebClient.Builder webClientBuilder;
+    private final WebClient webClient;
     private final AppSettingsService appSettingsService;
 
     public VLLMClient(WebClient.Builder webClientBuilder,
                       AppSettingsService appSettingsService) {
-        this.webClientBuilder = webClientBuilder
-                .defaultHeader("Content-Type", "application/json");
+        this.webClient = webClientBuilder
+                .defaultHeader("Content-Type", "application/json")
+                .build();
         this.appSettingsService = appSettingsService;
     }
 
@@ -44,8 +45,8 @@ public class VLLMClient {
                      prompt.length() > 100 ? prompt.substring(0, 100) + "..." : prompt);
 
         String baseUrl = appSettingsService.get("llm.vllm.base_url",
-                "https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1");
-        String modelName = appSettingsService.get("llm.vllm.model", "claude-sonnet-4-6");
+                "https://u425-946a-eaeb4020.singapore-b.gpuhub.com:8443/v1");
+        String modelName = appSettingsService.get("llm.vllm.model-name", "meta-llama/Llama-3.2-3B-Instruct");
 
         Map<String, Object> request = Map.of(
                 "model", modelName,
@@ -58,7 +59,7 @@ public class VLLMClient {
                 "stream", false
         );
 
-        return webClientBuilder.build()
+        return webClient
                 .post()
                 .uri(baseUrl + "/completions")
                 .bodyValue(request)
@@ -91,7 +92,7 @@ public class VLLMClient {
 
         String baseUrl = appSettingsService.get("llm.vllm.base_url",
                 "https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1");
-        String modelName = appSettingsService.get("llm.vllm.model", "claude-sonnet-4-6");
+        String modelName = appSettingsService.get("llm.vllm.model-name", "meta-llama/Llama-3.2-3B-Instruct");
 
         Map<String, Object> request = Map.of(
                 "model", modelName,
@@ -104,7 +105,7 @@ public class VLLMClient {
                 "response_format", Map.of("type", "json_object")
         );
 
-        return webClientBuilder.build()
+        return webClient
                 .post()
                 .uri(baseUrl + "/chat/completions")
                 .bodyValue(request)

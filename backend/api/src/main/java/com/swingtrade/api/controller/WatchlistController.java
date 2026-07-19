@@ -1,6 +1,7 @@
 package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.ApiResponse;
+import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.data.service.WatchlistService;
 import com.swingtrade.data.service.WatchlistService.PullProgress;
 import org.slf4j.Logger;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api")
@@ -18,8 +20,12 @@ public class WatchlistController {
 
     private final WatchlistService watchlistService;
 
-    public WatchlistController(WatchlistService watchlistService) {
+    private final DataIngestionService dataIngestionService;
+
+    public WatchlistController(WatchlistService watchlistService,
+                               DataIngestionService dataIngestionService) {
         this.watchlistService = watchlistService;
+        this.dataIngestionService = dataIngestionService;
     }
 
     // -----------------------------------------------------------------------
@@ -129,5 +135,34 @@ public class WatchlistController {
     public ResponseEntity<ApiResponse<String>> cancelPull() {
         watchlistService.cancelPull();
         return ResponseEntity.ok(ApiResponse.ok("Data pull cancelled"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Single Symbol Backfill
+    // -----------------------------------------------------------------------
+
+    @PostMapping("/data/backfill")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> backfillSymbol(
+            @RequestParam String symbol,
+            @RequestParam(defaultValue = "2") int yearsBack) {
+
+        logger.info("Starting full backfill for {}: {} years", symbol, yearsBack);
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                dataIngestionService.backfillStockData(symbol, yearsBack);
+                logger.info("Backfill completed for {}", symbol);
+            } catch (Exception e) {
+                logger.error("Backfill failed for {}: {}", symbol, e.getMessage(), e);
+            }
+        });
+
+        Map<String, Object> data = Map.of(
+            "symbol", symbol,
+            "yearsBack", yearsBack,
+            "status", "started",
+            "message", "Backfill started for " + symbol + " (" + yearsBack + " year(s))"
+        );
+        return ResponseEntity.ok(ApiResponse.ok(data));
     }
 }

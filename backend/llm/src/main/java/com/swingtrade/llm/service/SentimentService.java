@@ -138,8 +138,24 @@ public class SentimentService {
             }
 
             // Perform sentiment analysis
-            SentimentOutput analysisResult =
-                    performSentimentAnalysis(stockSymbol, newsContent);
+            SentimentOutput analysisResult;
+            try {
+                analysisResult = performSentimentAnalysis(stockSymbol, newsContent);
+            } catch (Exception llmEx) {
+                logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", stockSymbol, llmEx.getMessage());
+                // Build a simple result from headlines
+                List<String> headlines = newsContent.stream().toList();
+                SentimentResult fallback = keywordBasedSentiment(stockSymbol, headlines);
+                analysisResult = new SentimentOutput(
+                        switch (fallback.score()) {
+                            case POSITIVE -> SentimentType.POSITIVE;
+                            case NEGATIVE -> SentimentType.NEGATIVE;
+                            default -> SentimentType.NEUTRAL;
+                        },
+                        fallback.summary(), fallback.confidence(),
+                        fallback.redFlags(), fallback.catalysts()
+                );
+            }
 
             // Build and cache result
             SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult);
@@ -540,12 +556,17 @@ public class SentimentService {
             List<Map<String, String>> messages = sentimentAnalyzer.createSentimentAnalysisPrompt(
                     symbol, headlines, earningsData != null ? earningsData.toString() : null);
 
-            String llmResponse = vllmClient.generateChatCompletion(messages, 512, 0.3)
-                    .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+            String llmResponse;
+            try {
+                llmResponse = vllmClient.generateChatCompletion(messages, 512, 0.3)
+                        .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+            } catch (Exception llmEx) {
+                logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", symbol, llmEx.getMessage());
+                return keywordBasedSentiment(symbol, headlines);
+            }
 
             if (llmResponse == null || llmResponse.isBlank()) {
-                return SentimentResult.create(symbol, LocalDate.now(),
-                        SentimentResult.SentimentScore.NEUTRAL, "Empty LLM response", "", 0.1, List.of(), List.of());
+                return keywordBasedSentiment(symbol, headlines);
             }
 
             SentimentOutput result = sentimentAnalyzer.parseResponse(llmResponse);
@@ -570,6 +591,206 @@ public class SentimentService {
             return SentimentResult.create(symbol, LocalDate.now(),
                     SentimentResult.SentimentScore.NEUTRAL, "Analysis error", "", 0.2, List.of(), List.of());
         }
+    }
+
+    /**
+     * Keyword-based sentiment fallback when LLM is unavailable.
+     * Classifies each headline by its overall sentiment using phrase matching,
+     * then aggregates into a composite result.
+     */
+    private SentimentResult keywordBasedSentiment(String symbol, List<String> headlines) {
+        int posCount = 0, negCount = 0, neuCount = 0;
+        List<String> posHeadlines = new ArrayList<>();
+        List<String> negHeadlines = new ArrayList<>();
+        List<String> allFlags = new ArrayList<>();
+        List<String> allCatalysts = new ArrayList<>();
+
+        for (String h : headlines) {
+            String lower = h.toLowerCase();
+            HeadlineResult result = classifyHeadline(lower, h);
+
+            if (result.classification() == Classification.POSITIVE) {
+                posCount++;
+                posHeadlines.add(h);
+            } else if (result.classification() == Classification.NEGATIVE) {
+                negCount++;
+                negHeadlines.add(h);
+            } else {
+                neuCount++;
+            }
+            allFlags.addAll(result.extractedFlags());
+            allCatalysts.addAll(result.extractedCatalysts());
+        }
+
+        // Build reasoning from actual headline content
+        StringBuilder reasoning = new StringBuilder();
+        if (posCount > 0 && negCount == 0) {
+            reasoning.append("All ").append(posCount).append(" articles carry positive price momentum or growth signals");
+            // Summarize the positive themes
+            Set<String> themes = extractThemes(posHeadlines);
+            if (!themes.isEmpty()) {
+                reasoning.append(" (").append(String.join(", ", themes)).append(")");
+            }
+        } else if (negCount > 0 && posCount == 0) {
+            reasoning.append("All ").append(negCount).append(" articles carry negative price pressure or risk signals");
+        } else if (posCount > negCount) {
+            reasoning.append(posCount).append(" positive vs ").append(negCount).append(" negative articles");
+        } else if (negCount > posCount) {
+            reasoning.append(negCount).append(" negative vs ").append(posCount).append(" positive articles");
+        } else {
+            reasoning.append("Mixed signals: ").append(posCount).append(" positive, ").append(negCount).append(" negative, ").append(neuCount).append(" neutral");
+        }
+
+        // Determine score and confidence
+        SentimentResult.SentimentScore score;
+        double confidence;
+
+        if (posCount == 0 && negCount == 0 && neuCount > 0) {
+            score = SentimentResult.SentimentScore.NEUTRAL;
+            confidence = 0.5;
+        } else if (posCount > negCount) {
+            score = SentimentResult.SentimentScore.POSITIVE;
+            confidence = Math.min(0.85, 0.5 + posCount * 0.15);
+        } else if (negCount > posCount) {
+            score = SentimentResult.SentimentScore.NEGATIVE;
+            confidence = Math.min(0.85, 0.5 + (negCount - posCount) * 0.15);
+        } else {
+            score = SentimentResult.SentimentScore.NEUTRAL;
+            confidence = 0.4;
+        }
+
+        // Deduplicate red flags and catalysts
+        List<String> uniqueFlags = allFlags.stream().distinct().toList();
+        List<String> uniqueCatalysts = allCatalysts.stream().distinct().toList();
+
+        return SentimentResult.create(symbol, LocalDate.now(), score,
+                reasoning.toString(), "", confidence,
+                uniqueFlags.isEmpty() ? List.of() : uniqueFlags,
+                uniqueCatalysts.isEmpty() ? List.of() : uniqueCatalysts);
+    }
+
+    /** Headline classification result. */
+    private enum Classification { POSITIVE, NEGATIVE, NEUTRAL }
+
+    /**
+     * Result of classifying a single headline, including extracted signals.
+     */
+    private record HeadlineResult(Classification classification, List<String> extractedCatalysts, List<String> extractedFlags) {
+        static HeadlineResult of(Classification c) { return new HeadlineResult(c, List.of(), List.of()); }
+    }
+
+    /**
+     * Classifies a lowercase headline into POSITIVE, NEGATIVE, or NEUTRAL.
+     * Uses multi-word phrases for accuracy, not just single keywords.
+     */
+    private HeadlineResult classifyHeadline(String lower, String original) {
+        boolean hasPositiveSignal = false;
+        boolean hasNegativeSignal = false;
+        List<String> extractedCatalysts = new ArrayList<>();
+        List<String> extractedFlags = new ArrayList<>();
+
+        // === POSITIVE phrases (price movement, growth, bullish) ===
+        if (lower.contains("shares climb") || lower.contains("shares surge") || lower.contains("shares jump") ||
+            lower.contains("stock rallies") || lower.contains("stock gains") || lower.contains("stock rises") ||
+            lower.contains("share price") && (lower.contains("climb") || lower.contains("surge") || lower.contains("rally") || lower.contains("gain") || lower.contains("rise") || lower.contains("jump")) ||
+            lower.contains("up nearly") || lower.contains("up over") || lower.contains("up more than") ||
+            lower.contains("beat estimates") || lower.contains("beat forecasts") || lower.contains("beats estimates") ||
+            lower.contains("profit") && (lower.contains("record") || lower.contains("high") || lower.contains("rise") || lower.contains("jump")) ||
+            lower.contains("strong") && (lower.contains("demand") || lower.contains("buy") || lower.contains("inflow") || lower.contains("fii") || lower.contains("di")) ||
+            lower.contains("fii buy") || lower.contains("di buy") || lower.contains("inflow") ||
+            lower.contains("upgrade") || lower.contains("raised") || lower.contains("revised") ||
+            lower.contains("bullish") || lower.contains("outperform") || lower.contains("overweight") ||
+            lower.contains("new record") || lower.contains("record high") || lower.contains("set stage") ||
+            lower.contains("gains most") || lower.contains("stand to gain") ||
+            lower.contains("near launch") && (lower.contains("shareholder") || lower.contains("investor") || lower.contains("gainer")) ||
+            lower.contains("files for") && (lower.contains("ipo") || lower.contains("listing"))) {
+            hasPositiveSignal = true;
+        }
+
+        // === NEGATIVE phrases (price decline, risk, distress) ===
+        if (lower.contains("shares fall") || lower.contains("shares drop") || lower.contains("shares plunge") ||
+            lower.contains("stock falls") || lower.contains("stock drops") || lower.contains("stock slides") ||
+            lower.contains("stock declines") || lower.contains("stock drops") ||
+            lower.contains("share price") && (lower.contains("fall") || lower.contains("drop") || lower.contains("slide") || lower.contains("plunge") || lower.contains("decline")) ||
+            lower.contains("down over") || lower.contains("down nearly") || lower.contains("down more than") ||
+            lower.contains("miss estimates") || lower.contains("missed estimates") || lower.contains("miss forecasts") ||
+            lower.contains("loss") && !lower.contains("unrealised") && !lower.contains("mark") && !lower.contains("market") &&
+            lower.contains("downgrade") || lower.contains("cut") && (lower.contains("target") || lower.contains("estimate") || lower.contains("forecast")) ||
+            lower.contains("bearish") || lower.contains("underperform") || lower.contains("underweight") ||
+            lower.contains("sued") || lower.contains("fraud") || lower.contains("probe") || lower.contains("scam") ||
+            lower.contains("default") || lower.contains("bankrupt") ||
+            lower.contains("warn") && (lower.contains("risk") || lower.contains("loss") || lower.contains("delay")) ||
+            lower.contains("fii sell") || lower.contains("di sell") || lower.contains("outflow")) {
+            hasNegativeSignal = true;
+        }
+
+        // === CATALYSTS (corporate events — neutral on their own, can be positive context) ===
+        if (hasPositiveSignal) {
+            if (lower.contains("ipo")) {
+                String entity = extractEntityNear(original, "ipo");
+                extractedCatalysts.add("IPO catalyst: " + entity);
+            }
+            if (lower.contains("acquisition") || lower.contains("merger") || lower.contains("partnership")) {
+                extractedCatalysts.add("M&A/Partnership catalyst");
+            }
+            if (lower.contains("upgrade") || lower.contains("raised target")) {
+                extractedCatalysts.add("Analyst positive action");
+            }
+        }
+
+        // Red flags
+        if (hasNegativeSignal) {
+            if (lower.contains("fraud") || lower.contains("sued") || lower.contains("probe") || lower.contains("scam")) {
+                extractedFlags.add("Regulatory/legal investigation");
+            }
+            if (lower.contains("default") || lower.contains("bankrupt") || lower.contains("debt crisis")) {
+                extractedFlags.add("Financial distress signal");
+            }
+            if (lower.contains("warn") && (lower.contains("risk") || lower.contains("loss"))) {
+                extractedFlags.add("Company warning on risks/losses");
+            }
+        }
+
+        Classification cls;
+        if (hasPositiveSignal && hasNegativeSignal) cls = Classification.NEUTRAL;
+        else if (hasPositiveSignal) cls = Classification.POSITIVE;
+        else if (hasNegativeSignal) cls = Classification.NEGATIVE;
+        // Check for neutral corporate events (IPO, listing, etc.) — these are catalysts, not sentiment
+        else if (lower.contains("ipo") || lower.contains("listing") || lower.contains("demerger") ||
+            lower.contains("split") || lower.contains("bonus") || lower.contains("right") && lower.contains("issue") ||
+            lower.contains("near launch") || lower.contains("files for")) {
+            cls = Classification.NEUTRAL;
+        } else {
+            cls = Classification.NEUTRAL;
+        }
+
+        return new HeadlineResult(cls, extractedCatalysts, extractedFlags);
+    }
+
+    /**
+     * Extracts key themes from a list of headlines.
+     */
+    private Set<String> extractThemes(List<String> headlines) {
+        Set<String> themes = new HashSet<>();
+        for (String h : headlines) {
+            String lower = h.toLowerCase();
+            if (lower.contains("ipo") || lower.contains("listing") || lower.contains("files for") || lower.contains("near launch")) {
+                themes.add("IPO activity");
+            }
+            if (lower.contains("climb") || lower.contains("surge") || lower.contains("rally") || lower.contains("gain")) {
+                themes.add("Price momentum");
+            }
+            if (lower.contains("profit") || lower.contains("revenue") || lower.contains("growth")) {
+                themes.add("Earnings strength");
+            }
+            if (lower.contains("fii") || lower.contains("di") || lower.contains("inflow")) {
+                themes.add("Foreign/domestic buying");
+            }
+            if (lower.contains("upgrade") || lower.contains("target")) {
+                themes.add("Analyst upgrade");
+            }
+        }
+        return themes;
     }
 
     // ============ Weekly Sector Digest Methods ============
@@ -838,6 +1059,34 @@ public class SentimentService {
 
         logger.info("Generating sector digest for week: {} to {}", startDate, endDate);
         return generateSectorDigest(startDate, endDate);
+    }
+
+    /**
+     * Extracts a short entity name from a headline near a keyword.
+     * Looks for meaningful capitalized words (skipping newspaper names and generic terms).
+     */
+    private String extractEntityNear(String headline, String keyword) {
+        String lower = headline.toLowerCase();
+        int idx = lower.indexOf(keyword);
+        if (idx == -1) return keyword;
+
+        int start = Math.max(0, idx - 50);
+        int end = Math.min(lower.length(), idx + 15);
+        String snippet = headline.substring(start, end);
+
+        // Words to skip (newspaper names, generic terms, connectors)
+        Set<String> skipWords = Set.of("Hindu", "Times", "Standard", "Post", "Express",
+                "News", "IPOs", "IPO", "The", "For", "And", "As", "At", "In", "On", "Is");
+
+        String[] words = snippet.split("\\s+");
+        for (int i = words.length - 1; i >= 0; i--) {
+            String w = words[i].replaceAll("[^a-zA-Z]", "");
+            if (w.length() > 2 && Character.isUpperCase(w.charAt(0)) && !skipWords.contains(w)) {
+                return w;
+            }
+        }
+        // Fallback: return first 30 chars of snippet
+        return snippet.trim().length() > 30 ? snippet.trim().substring(0, 30) + "..." : snippet.trim();
     }
 
     // ============ Inner Classes ============

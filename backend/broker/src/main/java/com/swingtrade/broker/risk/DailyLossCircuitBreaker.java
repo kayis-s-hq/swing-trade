@@ -1,11 +1,11 @@
 package com.swingtrade.broker.risk;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -24,6 +24,7 @@ public class DailyLossCircuitBreaker {
     private static final Logger logger = LoggerFactory.getLogger(DailyLossCircuitBreaker.class);
 
     private final PositionManager positionManager;
+    private final BrokerProperties props;
     private BigDecimal dailyLossThresholdPercent;
     private BigDecimal initialCapital;
 
@@ -35,21 +36,12 @@ public class DailyLossCircuitBreaker {
     private LocalDateTime circuitOpenTime;
     private BigDecimal lossAtCircuitOpen;
 
-    @Value("${broker.daily-loss-circuit-breaker:2.0}")
-    public void setDailyLossThresholdPercent(BigDecimal dailyLossThresholdPercent) {
-        this.dailyLossThresholdPercent = dailyLossThresholdPercent;
-    }
-
-    @Value("${broker.initial-capital:1000000}")
-    public void setInitialCapital(BigDecimal initialCapital) {
-        this.initialCapital = initialCapital;
-    }
-
     @Autowired
-    public DailyLossCircuitBreaker(PositionManager positionManager) {
+    public DailyLossCircuitBreaker(PositionManager positionManager, BrokerProperties props) {
         this.positionManager = positionManager;
-        this.dailyLossThresholdPercent = BigDecimal.valueOf(2.0); // default
-        this.initialCapital = BigDecimal.valueOf(1000000); // default
+        this.props = props;
+        this.dailyLossThresholdPercent = props.getDailyLossCircuitBreaker();
+        this.initialCapital = props.getInitialCapital();
         logger.info("DailyLossCircuitBreaker initialized with {}% daily loss threshold",
                 dailyLossThresholdPercent);
         resetDailyTracker();
@@ -60,6 +52,7 @@ public class DailyLossCircuitBreaker {
      */
     public DailyLossCircuitBreaker(PositionManager positionManager, BigDecimal dailyLossThresholdPercent, BigDecimal initialCapital) {
         this.positionManager = positionManager;
+        this.props = null;
         this.dailyLossThresholdPercent = dailyLossThresholdPercent;
         this.initialCapital = initialCapital;
         resetDailyTracker();

@@ -37,13 +37,12 @@ public class FyersAuthService {
     private final AtomicReference<String> refreshTokenRef = new AtomicReference<>();
 
     @Autowired
-    public FyersAuthService(FyersConfig fyersConfig) {
-        this(fyersConfig, WebClient.builder().baseUrl(BASE_URL));
-    }
-
     public FyersAuthService(FyersConfig fyersConfig, WebClient.Builder webClientBuilder) {
         this.fyersConfig = fyersConfig;
-        this.webClient = webClientBuilder.build();
+        this.webClient = webClientBuilder
+                .baseUrl(BASE_URL)
+                .defaultHeader("Content-Type", "application/json")
+                .build();
         this.objectMapper = new ObjectMapper();
     }
 

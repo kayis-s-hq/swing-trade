@@ -181,7 +181,7 @@ public class SignalEngine {
         signalRepository.save(signalEntity);
 
         logger.info("Generated {} signal for {} on {} (confidence: {}%, warning: {})",
-                    signal.type(), symbol, latestDate, String.format("%.0f", signal.confidence() * 100), warningFlag);
+                    signal.type(), symbol, latestDate, String.format("%.0f", signal.confidence().doubleValue() * 100), warningFlag);
     }
 
     /**

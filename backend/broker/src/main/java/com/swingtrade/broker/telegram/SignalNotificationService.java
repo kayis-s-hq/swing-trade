@@ -1,10 +1,11 @@
 package com.swingtrade.broker.telegram;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.model.Position;
 import com.swingtrade.domain.Trade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -36,38 +37,16 @@ public class SignalNotificationService {
     private static final DateTimeFormatter MESSAGE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");
 
-    /**
-     * Signal API Token - configured via application.properties or SIGNAL_API_TOKEN env var.
-     * This token is obtained from the Signl4 dashboard or Signal integration settings.
-     */
-    @Value("${signal.enabled:false}")
+    private final BrokerProperties props;
     private boolean enabled;
-
-    @Value("${signal.api.token:}")
     private String apiToken;
-
-    @Value("${signal.chat.id:}")
     private String chatId;
-
-    @Value("${signal.notify.on.trades:true}")
     private boolean notifyOnTrades;
-
-    @Value("${signal.notify.on.signals:false}")
     private boolean notifyOnSignals;
-
-    @Value("${signal.notify.on.errors:false}")
     private boolean notifyOnErrors;
-
-    @Value("${signal.notify.max.message.length:4096}")
     private int maxMessageLength;
-
-    @Value("${signal.quiet.hours.enabled:false}")
     private boolean quietHoursEnabled;
-
-    @Value("${signal.quiet.hours.start:22}")
     private int quietHoursStart;
-
-    @Value("${signal.quiet.hours.end:7}")
     private int quietHoursEnd;
 
     private final SignalMessageFormatter messageFormatter;
@@ -76,14 +55,28 @@ public class SignalNotificationService {
     // Quiet hours state
     private volatile boolean inQuietHours = false;
 
-    public SignalNotificationService(SignalMessageFormatter messageFormatter) {
+    @Autowired
+    public SignalNotificationService(SignalMessageFormatter messageFormatter, BrokerProperties props) {
         this.messageFormatter = messageFormatter;
+        this.props = props;
     }
 
     /**
      * Initialize the service after Spring beans are created.
      */
     public void init() {
+        BrokerProperties.Signal sig = props.getSignal();
+        this.enabled = sig.isEnabled();
+        this.apiToken = sig.getApi().getToken();
+        this.chatId = sig.getApi().getChatId();
+        this.notifyOnTrades = sig.isNotifyOnTrades();
+        this.notifyOnSignals = sig.isNotifyOnSignals();
+        this.notifyOnErrors = sig.isNotifyOnErrors();
+        this.maxMessageLength = sig.getMaxMessageLength();
+        BrokerProperties.QuietHours qh = sig.getQuietHours();
+        this.quietHoursEnabled = qh.isEnabled();
+        this.quietHoursStart = qh.getStart();
+        this.quietHoursEnd = qh.getEnd();
         initRestTemplate();
         log.info("Signal notifications initialized: enabled={}, chatId={}, apiTokenConfigured={}",
                 enabled, chatId, apiToken != null && !apiToken.isEmpty());

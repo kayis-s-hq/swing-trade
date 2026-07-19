@@ -1,9 +1,9 @@
 package com.swingtrade.broker.risk;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -17,22 +17,13 @@ public class PositionSizeValidator {
 
     private static final Logger logger = LoggerFactory.getLogger(PositionSizeValidator.class);
 
-    @Value("${broker.max-capital-per-trade:50000}")
-    private BigDecimal maxCapitalPerTrade;
-
-    @Value("${broker.initial-capital:1000000}")
-    private BigDecimal initialCapital;
-
-    @Value("${broker.max-position-size-percentage:10}")
-    private BigDecimal maxPositionSizePercentage;
-
-    @Value("${broker.min-position-size-percentage:1}")
-    private BigDecimal minPositionSizePercentage;
+    private final BrokerProperties props;
 
     @Autowired
-    public PositionSizeValidator() {
+    public PositionSizeValidator(BrokerProperties props) {
+        this.props = props;
         logger.info("PositionSizeValidator initialized with max ₹{} per trade, {}% max position size",
-                maxCapitalPerTrade, maxPositionSizePercentage);
+                props.getMaxCapitalPerTrade(), props.getMaxPositionSizePercentage());
     }
 
     /**
@@ -53,25 +44,25 @@ public class PositionSizeValidator {
         }
 
         // Check maximum capital per trade
-        if (tradeValue.compareTo(maxCapitalPerTrade) > 0) {
+        if (tradeValue.compareTo(props.getMaxCapitalPerTrade()) > 0) {
             result.addError("Trade value exceeds maximum per trade: ₹{} > ₹{}",
-                    tradeValue, maxCapitalPerTrade);
+                    tradeValue, props.getMaxCapitalPerTrade());
             return result;
         }
 
         // Check maximum percentage of capital
-        BigDecimal maxAllowed = initialCapital.multiply(maxPositionSizePercentage).divide(BigDecimal.valueOf(100));
+        BigDecimal maxAllowed = props.getInitialCapital().multiply(props.getMaxPositionSizePercentage()).divide(BigDecimal.valueOf(100));
         if (tradeValue.compareTo(maxAllowed) > 0) {
             result.addError("Trade size exceeds maximum position size: {}% > {}%",
-                    calculatePositionPercent(tradeValue), maxPositionSizePercentage);
+                    calculatePositionPercent(tradeValue), props.getMaxPositionSizePercentage());
             return result;
         }
 
         // Check minimum position size (optional, prevents trivial trades)
-        BigDecimal minAllowed = initialCapital.multiply(minPositionSizePercentage).divide(BigDecimal.valueOf(100));
+        BigDecimal minAllowed = props.getInitialCapital().multiply(props.getMinPositionSizePercentage()).divide(BigDecimal.valueOf(100));
         if (tradeValue.compareTo(minAllowed) < 0) {
             result.addWarning("Trade size is below minimum recommended: {}% < {}%",
-                    calculatePositionPercent(tradeValue), minPositionSizePercentage);
+                    calculatePositionPercent(tradeValue), props.getMinPositionSizePercentage());
         }
 
         result.addInfo("Position size validated: ₹{} ({}% of capital)",
@@ -87,10 +78,10 @@ public class PositionSizeValidator {
      * @return percentage of capital
      */
     public BigDecimal calculatePositionPercent(BigDecimal tradeValue) {
-        if (initialCapital.compareTo(BigDecimal.ZERO) == 0) {
+        if (props.getInitialCapital().compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }
-        return tradeValue.multiply(BigDecimal.valueOf(100)).divide(initialCapital, 4, BigDecimal.ROUND_HALF_UP);
+        return tradeValue.multiply(BigDecimal.valueOf(100)).divide(props.getInitialCapital(), 4, BigDecimal.ROUND_HALF_UP);
     }
 
     /**
@@ -99,7 +90,7 @@ public class PositionSizeValidator {
      * @return maximum position size
      */
     public BigDecimal getMaxPositionSize() {
-        return initialCapital.multiply(maxPositionSizePercentage).divide(BigDecimal.valueOf(100));
+        return props.getInitialCapital().multiply(props.getMaxPositionSizePercentage()).divide(BigDecimal.valueOf(100));
     }
 
     /**
@@ -111,20 +102,6 @@ public class PositionSizeValidator {
     public BigDecimal calculateRecommendedPositionSize(BigDecimal riskPerTrade) {
         // Position size = Capital * Risk % / Stop Loss %
         // For now, return a simple calculation based on risk percentage
-        return initialCapital.multiply(riskPerTrade).divide(BigDecimal.valueOf(100));
-    }
-
-    /**
-     * Get the maximum capital allowed per trade.
-     */
-    public BigDecimal getMaxCapitalPerTrade() {
-        return maxCapitalPerTrade;
-    }
-
-    /**
-     * Get the maximum position size percentage.
-     */
-    public BigDecimal getMaxPositionSizePercentage() {
-        return maxPositionSizePercentage;
+        return props.getInitialCapital().multiply(riskPerTrade).divide(BigDecimal.valueOf(100));
     }
 }

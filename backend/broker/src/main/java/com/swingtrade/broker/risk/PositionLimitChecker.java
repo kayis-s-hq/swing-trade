@@ -4,6 +4,7 @@ import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.PositionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -21,6 +22,7 @@ public class PositionLimitChecker {
     private final int maxConcurrentPositions;
     private final BigDecimal maxCapitalPerPosition;
 
+    @Autowired
     public PositionLimitChecker(PositionManager positionManager, BrokerProperties props) {
         this.positionManager = positionManager;
         this.maxConcurrentPositions = props.getMaxConcurrentPositions();

@@ -1,9 +1,9 @@
 package com.swingtrade.broker.risk;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -25,31 +25,20 @@ public class KillSwitchService {
     private String reason;
 
     private final JdbcTemplate jdbcTemplate;
+    private final BrokerProperties props;
 
-    @Value("${broker.kill-switch-enabled:true}")
-    private boolean killSwitchEnabled;
-
-    @Value("${broker.kill-switch-active:false}")
-    private boolean killSwitchActiveConfig;
-
-    /**
-     * Default constructor for Spring.
-     */
-    public KillSwitchService() {
-        this.active = killSwitchActiveConfig;
-        this.enabledAt = null;
-        this.reason = null;
-        this.jdbcTemplate = null;
-        logger.info("KillSwitchService initialized (in-memory mode, DB not configured)");
+    public KillSwitchService(BrokerProperties props) {
+        this(null, props);
     }
 
     /**
      * Constructor with JdbcTemplate for persistence.
      */
     @Autowired
-    public KillSwitchService(JdbcTemplate jdbcTemplate) {
+    public KillSwitchService(JdbcTemplate jdbcTemplate, BrokerProperties props) {
         this.jdbcTemplate = jdbcTemplate;
-        this.active = killSwitchActiveConfig;
+        this.props = props;
+        this.active = props.isKillSwitchActive();
         this.enabledAt = null;
         this.reason = null;
 
@@ -210,7 +199,7 @@ public class KillSwitchService {
      * @return true if kill switch is enabled in configuration
      */
     public boolean isKillSwitchEnabled() {
-        return killSwitchEnabled;
+        return props.isKillSwitchEnabled();
     }
 
     /**

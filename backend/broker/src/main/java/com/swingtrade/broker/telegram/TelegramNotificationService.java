@@ -1,5 +1,6 @@
 package com.swingtrade.broker.telegram;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.model.Order;
 import com.swingtrade.broker.model.Position;
 import com.swingtrade.broker.risk.RiskControlsService;
@@ -10,7 +11,6 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -41,16 +41,8 @@ public class TelegramNotificationService implements NotificationService {
     private static final DateTimeFormatter MESSAGE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");
 
-    /**
-     * Telegram Bot Token - configured via application.properties
-     */
-    @Value("${telegram.bot.token:}")
+    private final BrokerProperties props;
     private String botToken;
-
-    /**
-     * Whether Telegram notifications are enabled
-     */
-    @Value("${telegram.bot.enabled:true}")
     private boolean enabled;
 
     /**
@@ -73,9 +65,11 @@ public class TelegramNotificationService implements NotificationService {
 
     @Autowired
     public TelegramNotificationService(TelegramMessageFormatter messageFormatter,
-                                       RiskControlsService riskControlsService) {
+                                       RiskControlsService riskControlsService,
+                                       BrokerProperties props) {
         this.messageFormatter = messageFormatter;
         this.riskControlsService = riskControlsService;
+        this.props = props;
         initializeCommandHandlers();
     }
 
@@ -84,6 +78,9 @@ public class TelegramNotificationService implements NotificationService {
      */
     @PostConstruct
     public void init() {
+        BrokerProperties.Telegram telegram = props.getTelegram();
+        this.botToken = telegram.getBotToken();
+        this.enabled = telegram.isBotEnabled();
         initRestTemplate();
         initializeChatIds();
     }

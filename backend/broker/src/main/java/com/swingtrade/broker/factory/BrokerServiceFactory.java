@@ -1,6 +1,7 @@
 package com.swingtrade.broker.factory;
 
 import com.swingtrade.broker.config.BrokerMode;
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.factory.DryRunService;
 import com.swingtrade.broker.factory.LiveTradingService;
@@ -13,7 +14,6 @@ import com.swingtrade.broker.service.PaperTradingServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,9 +31,7 @@ public class BrokerServiceFactory {
     private final BrokerClient brokerClient;
     private final RiskControls riskControlsService;
     private final KillSwitchService killSwitchService;
-
-    @Value("${broker.mode:paper}")
-    private String brokerModeString;
+    private final BrokerProperties props;
 
     private BrokerMode currentMode;
     private BrokerService currentService;
@@ -43,12 +41,14 @@ public class BrokerServiceFactory {
                                 OrderManager orderManager,
                                 org.springframework.beans.factory.ObjectProvider<BrokerClient> brokerClientProvider,
                                 RiskControls riskControlsService,
-                                KillSwitchService killSwitchService) {
+                                KillSwitchService killSwitchService,
+                                BrokerProperties props) {
         this.paperTradingEngine = paperTradingEngine;
         this.orderManager = orderManager;
         this.brokerClient = brokerClientProvider.getIfAvailable();
         this.riskControlsService = riskControlsService;
         this.killSwitchService = killSwitchService;
+        this.props = props;
 
         if (this.brokerClient == null) {
             logger.info("No BrokerClient bean found. Live trading will not be available.");
@@ -61,7 +61,7 @@ public class BrokerServiceFactory {
      * Initialize the broker service based on configuration.
      */
     public void initialize() {
-        currentMode = BrokerMode.fromString(brokerModeString);
+        currentMode = BrokerMode.fromString(props.getMode());
         currentService = createService(currentMode);
 
         logger.info("BrokerServiceFactory initialized with mode: {} ({})",
@@ -192,13 +192,13 @@ public class BrokerServiceFactory {
      * Get current mode configuration property.
      */
     public String getModeString() {
-        return brokerModeString;
+        return props.getMode();
     }
 
     /**
      * Update the mode configuration property.
      */
     public void setModeString(String modeString) {
-        this.brokerModeString = modeString;
+        props.setMode(modeString);
     }
 }

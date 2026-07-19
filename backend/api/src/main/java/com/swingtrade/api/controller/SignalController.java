@@ -28,10 +28,10 @@ public class SignalController {
     private static final Logger logger = LoggerFactory.getLogger(SignalController.class);
 
     @Autowired
-    private com.swingtrade.api.SignalService signalService;
+    private com.swingtrade.api.service.SignalService signalService;
 
     @Autowired
-    private com.swingtrade.api.ScanService scanService;
+    private com.swingtrade.api.service.ScanService scanService;
 
     @Autowired
     private com.swingtrade.data.repository.SignalRepository signalRepository;

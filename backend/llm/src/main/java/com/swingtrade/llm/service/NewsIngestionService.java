@@ -28,6 +28,9 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -72,6 +75,7 @@ public class NewsIngestionService {
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final NewsFilterService newsFilterService;
+    private final ExecutorService newsExecutor;
 
     private final List<String> rssFeedUrls;
     private final int maxArticlesPerFeed;
@@ -95,6 +99,11 @@ public class NewsIngestionService {
         this.objectMapper = objectMapper;
         this.newsFilterService = newsFilterService;
         this.maxArticlesPerFeed = maxArticlesPerFeed;
+        this.newsExecutor = Executors.newFixedThreadPool(4, r -> {
+            Thread t = new Thread(r, "news-fetcher");
+            t.setDaemon(true);
+            return t;
+        });
 
         // Parse custom RSS feeds or use defaults
         if (rssFeedUrls != null && !rssFeedUrls.isBlank()) {
@@ -277,6 +286,16 @@ public class NewsIngestionService {
     }
 
     /**
+     * Strips HTML tags from text, leaving only plain text.
+     */
+    private String stripHtml(String html) {
+        if (html == null || html.isBlank()) return "";
+        // Strip HTML tags, then unescape HTML entities
+        String text = html.replaceAll("<[^>]+>", "");
+        return StringEscapeUtils.unescapeHtml4(text).replaceAll("\\s+", " ").trim();
+    }
+
+    /**
      * Parses RSS publication date.
      *
      * @param pubDateStr the date string in RSS format
@@ -287,11 +306,12 @@ public class NewsIngestionService {
             return null;
         }
 
+        String trimmed = pubDateStr.trim();
         try {
-            // Try RFC 822 format (common for RSS)
+            // Try RFC 822 format (common for RSS) with English locale
             DateTimeFormatter rfc822Formatter = DateTimeFormatter
-                    .ofPattern("EEE, dd MMM yyyy HH:mm:ss zzz");
-            return ZonedDateTime.parse(pubDateStr.trim(), rfc822Formatter);
+                    .ofPattern("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.ENGLISH);
+            return ZonedDateTime.parse(trimmed, rfc822Formatter);
         } catch (Exception e) {
             logger.trace("Error parsing pubDate with RFC 822: {}", e.getMessage());
         }
@@ -300,7 +320,7 @@ public class NewsIngestionService {
             // Try ISO 8601 format
             DateTimeFormatter isoFormatter = DateTimeFormatter
                     .ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
-            return ZonedDateTime.parse(pubDateStr.trim(), isoFormatter);
+            return ZonedDateTime.parse(trimmed, isoFormatter);
         } catch (Exception e) {
             logger.trace("Error parsing pubDate with ISO 8601: {}", e.getMessage());
         }
@@ -503,8 +523,8 @@ public class NewsIngestionService {
                     symbol + "+NSE+stock&hl=en-IN&gl=IN&ceid=IN:en";
             HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setRequestProperty("User-Agent", "SwingTrade/1.0");
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(30000);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(10000);
 
             if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
                 logger.warn("Google News HTTP {} for {}", conn.getResponseCode(), symbol);
@@ -524,12 +544,14 @@ public class NewsIngestionService {
                 Element item = (Element) items.item(i);
                 String title = getChildText(item, "title");
                 String link = getChildText(item, "link");
-                String desc = getChildText(item, "description");
+                String desc = stripHtml(getChildText(item, "description"));
                 String pubDateStr = getChildText(item, "pubDate");
                 ZonedDateTime pubDate = parsePubDate(pubDateStr);
                 if (title != null && !title.isBlank()) {
-                    if (pubDate == null) pubDate = ZonedDateTime.now();
-                    articles.add(new NewsArticle(title, link, desc, pubDate, "google_news", desc));
+                    if (pubDate == null) {
+                        logger.debug("No pubDate for Google News article '{}', using now", title);
+                    }
+                    articles.add(new NewsArticle(title, link, desc, pubDate != null ? pubDate : ZonedDateTime.now(), "google_news", desc));
                 }
             }
             logger.info("Fetched {} articles from Google News for {}", articles.size(), symbol);
@@ -542,71 +564,62 @@ public class NewsIngestionService {
 
     /**
      * Fetches NSE corporate announcements for a symbol.
+     * NSE blocks non-browser requests frequently, so use a single short attempt.
      */
     public List<NewsArticle> fetchNseAnnouncements(String symbol) {
         logger.debug("Fetching NSE announcements for {}", symbol);
-        int retries = 3;
-        for (int i = 0; i < retries; i++) {
-            try {
-                String url = "https://www.nseindia.com/api/corp-info?symbol=" + symbol;
-                HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-                conn.setRequestProperty("User-Agent", "SwingTrade/1.0");
-                conn.setRequestProperty("Accept", "application/json");
-                conn.setConnectTimeout(10000);
-                conn.setReadTimeout(30000);
+        try {
+            String url = "https://www.nseindia.com/api/corp-info?symbol=" + symbol;
+            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setRequestProperty("User-Agent", "SwingTrade/1.0");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setConnectTimeout(2000);
+            conn.setReadTimeout(2000);
 
-                int code = conn.getResponseCode();
-                if (code == HttpURLConnection.HTTP_OK) {
-                    BufferedReader reader = new BufferedReader(
-                            new InputStreamReader(conn.getInputStream(), "UTF-8"));
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) sb.append(line);
-                    reader.close();
+            int code = conn.getResponseCode();
+            if (code == HttpURLConnection.HTTP_OK) {
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                reader.close();
 
-                    String body = sb.toString();
-                    if (body.startsWith("<") || body.startsWith("<!")) {
-                        logger.warn("NSE blocked request for {} (returned HTML)", symbol);
-                        return List.of();
-                    }
-
-                    // Simple JSON parsing for NSE announcement array
-                    List<NewsArticle> articles = new ArrayList<>();
-                    // NSE returns: [{"subject":"...","description":"...","date":"..."}]
-                    if (body.startsWith("[")) {
-                        body = body.replace("}{", "};{").replace("[", "").replace("]", "");
-                        String[] items = body.split(";");
-                        for (String item : items) {
-                            try {
-                                String subject = extractJsonField(item, "subject");
-                                String date = extractJsonField(item, "date");
-                                String desc = extractJsonField(item, "description");
-                                if (subject != null && !subject.isBlank()) {
-                                    ZonedDateTime pubDate = parseNseDate(date);
-                                    articles.add(new NewsArticle(subject, null, desc,
-                                            pubDate != null ? pubDate : ZonedDateTime.now(), "nse", desc));
-                                }
-                            } catch (Exception e) {
-                                // skip malformed items
-                            }
-                        }
-                    }
-                    logger.info("Fetched {} announcements from NSE for {}", articles.size(), symbol);
-                    return articles;
-                }
-                logger.warn("NSE HTTP {} for {}", code, symbol);
-                return List.of();
-            } catch (Exception e) {
-                long backoff = (long) Math.pow(2, i) * 1000;
-                logger.warn("NSE fetch attempt {} failed for {}: {} (retry in {}ms)",
-                        i + 1, symbol, e.getMessage(), backoff);
-                try { Thread.sleep(backoff); } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
+                String body = sb.toString();
+                if (body.startsWith("<") || body.startsWith("<!")) {
+                    logger.debug("NSE returned HTML for {}, skipping", symbol);
                     return List.of();
                 }
+
+                // Simple JSON parsing for NSE announcement array
+                List<NewsArticle> articles = new ArrayList<>();
+                if (body.startsWith("[")) {
+                    body = body.replace("}{", "};{").replace("[", "").replace("]", "");
+                    String[] items = body.split(";");
+                    for (String item : items) {
+                        try {
+                            String subject = extractJsonField(item, "subject");
+                            String date = extractJsonField(item, "date");
+                            String desc = extractJsonField(item, "description");
+                            if (subject != null && !subject.isBlank()) {
+                                ZonedDateTime pubDate = parseNseDate(date);
+                                articles.add(new NewsArticle(subject, null, desc,
+                                        pubDate != null ? pubDate : ZonedDateTime.now(), "nse", desc));
+                            }
+                        } catch (Exception e) {
+                            // skip malformed items
+                        }
+                    }
+                }
+                logger.info("Fetched {} announcements from NSE for {}", articles.size(), symbol);
+                return articles;
             }
+            logger.debug("NSE HTTP {} for {}", code, symbol);
+            return List.of();
+        } catch (Exception e) {
+            logger.debug("NSE fetch skipped for {}: {}", symbol, e.getMessage());
+            return List.of();
         }
-        return List.of();
     }
 
     /**
@@ -614,25 +627,55 @@ public class NewsIngestionService {
      */
     public List<NewsArticle> fetchAllNews(String symbol) {
         logger.debug("Fetching all news for {}", symbol);
+
+        long start = System.currentTimeMillis();
         ZoneId ist = ZoneId.of("Asia/Kolkata");
-        LocalDateTime sevenDaysAgo = LocalDateTime.now(ist).minusDays(7);
+        LocalDateTime thirtyDaysAgo = LocalDateTime.now(ist).minusDays(30);
+        CompletableFuture<List<NewsArticle>> nseFut = CompletableFuture.supplyAsync(() -> fetchNseAnnouncements(symbol), newsExecutor);
+        CompletableFuture<List<NewsArticle>> googleFut = CompletableFuture.supplyAsync(() -> fetchGoogleNews(symbol), newsExecutor);
 
-        CompletableFuture<List<NewsArticle>> nseFut = CompletableFuture.supplyAsync(() -> fetchNseAnnouncements(symbol));
-        CompletableFuture<List<NewsArticle>> googleFut = CompletableFuture.supplyAsync(() -> fetchGoogleNews(symbol));
-
+        // Hard 15s timeout so the REST endpoint doesn't block indefinitely
+        long remaining = Math.max(1000, 15000 - (System.currentTimeMillis() - start));
         List<NewsArticle> all = new ArrayList<>();
-        all.addAll(nseFut.join());
-        all.addAll(googleFut.join());
+        try {
+            all.addAll(nseFut.get(remaining, TimeUnit.MILLISECONDS));
+        } catch (Exception e) {
+            logger.warn("NSE news fetch timed out for {}: {}", symbol, e.getMessage());
+            nseFut.cancel(true);
+        }
+        remaining = Math.max(1000, 15000 - (System.currentTimeMillis() - start));
+        try {
+            all.addAll(googleFut.get(remaining, TimeUnit.MILLISECONDS));
+        } catch (Exception e) {
+            logger.warn("Google News fetch timed out for {}: {}", symbol, e.getMessage());
+            googleFut.cancel(true);
+        }
 
-        // Dedup by normalized headline + date within 1 hour
+        // Dedup by normalized headline + 30-day filter
+        // Keep articles with null dates (Google News often omits them)
+        // and use a wider window since symbol-specific news may be sparse
         Set<String> seen = new HashSet<>();
         List<NewsArticle> deduped = new ArrayList<>();
+        List<NewsArticle> nullDateArticles = new ArrayList<>();
         for (NewsArticle a : all) {
-            if (a.publishedDate() == null) continue;
-            if (a.publishedDate().toLocalDateTime().isBefore(sevenDaysAgo)) continue;
+            if (a.publishedDate() == null) {
+                nullDateArticles.add(a);
+                continue;
+            }
+            if (a.publishedDate().toLocalDateTime().isBefore(thirtyDaysAgo)) continue;
             String key = a.title().toLowerCase().trim();
             if (seen.add(key)) {
                 deduped.add(a);
+            }
+        }
+        // If 7-day filter produced nothing, fall back to null-date articles
+        if (deduped.isEmpty() && !nullDateArticles.isEmpty()) {
+            Set<String> seen2 = new HashSet<>();
+            for (NewsArticle a : nullDateArticles) {
+                String key = a.title().toLowerCase().trim();
+                if (seen2.add(key)) {
+                    deduped.add(a);
+                }
             }
         }
 

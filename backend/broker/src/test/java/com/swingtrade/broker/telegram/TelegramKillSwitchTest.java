@@ -1,5 +1,6 @@
 package com.swingtrade.broker.telegram;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.risk.RiskControlsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ class TelegramKillSwitchTest {
     @BeforeEach
     void setUp() {
         reset(riskControlsService, messageFormatter, restTemplate);
-        telegramService = new TelegramNotificationService(messageFormatter, riskControlsService);
+        telegramService = new TelegramNotificationService(messageFormatter, riskControlsService, new BrokerProperties());
         // Inject mock restTemplate using reflection
         try {
             java.lang.reflect.Field field = TelegramNotificationService.class.getDeclaredField("restTemplate");

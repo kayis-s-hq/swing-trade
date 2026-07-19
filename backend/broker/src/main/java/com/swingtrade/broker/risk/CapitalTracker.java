@@ -4,6 +4,7 @@ import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.model.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -33,6 +34,7 @@ public class CapitalTracker {
 
     private BigDecimal deployedCapital;
 
+    @Autowired
     public CapitalTracker(BrokerProperties props) {
         this(DEFAULT_INITIAL_CAPITAL, props.getMaxConcurrentPositions(), props.getMaxCapitalPerPosition());
     }

@@ -1,9 +1,9 @@
 package com.swingtrade.broker.service;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.domain.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -30,12 +30,11 @@ public class DiscordNotificationService implements NotificationService {
     public static final int COLOR_RED = 15158332;
     public static final int COLOR_BLURPLE = 0x5865F2;
 
-    public DiscordNotificationService(
-            @Value("${discord.webhook.url:}") String webhookUrl,
-            @Value("${discord.webhook.enabled:false}") boolean enabled) {
+    public DiscordNotificationService(BrokerProperties props) {
+        BrokerProperties.Discord discord = props.getDiscord();
+        this.webhookUrl = discord.getWebhookUrl();
+        this.enabled = discord.isWebhookEnabled();
         this.webClient = WebClient.create();
-        this.webhookUrl = webhookUrl;
-        this.enabled = enabled;
     }
 
     @Override

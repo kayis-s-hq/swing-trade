@@ -2,6 +2,7 @@ package com.swingtrade.api;
 
 import com.swingtrade.api.dto.SignalQueryResult;
 import com.swingtrade.api.dto.SignalQueryResult.Signal;
+import com.swingtrade.api.service.SignalService;
 import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.api.service.SignalEngine;

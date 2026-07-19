@@ -1,5 +1,6 @@
 package com.swingtrade.broker.kite;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.model.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,26 +24,26 @@ class KiteConnectClientTest {
     @BeforeEach
     void setUp() {
         // Create sandbox config
-        KiteConfig config = new KiteConfig();
-        config.setApiKey("test_api_key_12345");
-        config.setAccessToken("test_access_token_67890");
-        config.setEnvironment("sandbox");
+        BrokerProperties props = new BrokerProperties();
+        props.getKite().setApiKey("test_api_key_12345");
+        props.getKite().setAccessToken("test_access_token_67890");
+        props.getKite().setEnvironment("sandbox");
+        KiteConfig config = new KiteConfig(props);
 
         // Create the client
-        client = new KiteConnectClient(config, null, "test_access_token_67890");
+        client = new KiteConnectClient(config, null);
 
         // Create live config
-        KiteConfig liveConfig = new KiteConfig();
-        liveConfig.setApiKey("live_api_key_xyz");
-        liveConfig.setAccessToken("live_access_token_123");
-        liveConfig.setEnvironment("live");
+        BrokerProperties liveProps = new BrokerProperties();
+        liveProps.getKite().setApiKey("live_api_key_xyz");
+        liveProps.getKite().setAccessToken("live_access_token_123");
+        liveProps.getKite().setEnvironment("live");
+        KiteConfig liveConfig = new KiteConfig(liveProps);
 
-        liveClient = new KiteConnectClient(liveConfig, null, "live_access_token_123");
+        liveClient = new KiteConnectClient(liveConfig, null);
 
         // Create empty config
-        KiteConfig emptyConfig = new KiteConfig();
-
-        emptyClient = new KiteConnectClient(emptyConfig, null, null);
+        emptyClient = new KiteConnectClient(new KiteConfig(new BrokerProperties()), null);
     }
 
     @Test
@@ -53,10 +54,8 @@ class KiteConnectClientTest {
 
     @Test
     void testConstructor_WithEmptyApiKey() {
-        KiteConfig emptyConfig = new KiteConfig();
-        KiteConnectClient testClient = new KiteConnectClient(emptyConfig, null, null);
-        assertThat(testClient).isNotNull();
-        assertThat(testClient.isConfigured()).isFalse();
+        assertThat(emptyClient).isNotNull();
+        assertThat(emptyClient.isConfigured()).isFalse();
     }
 
     @Test
@@ -79,9 +78,7 @@ class KiteConnectClientTest {
 
     @Test
     void testIsConfigured_false() {
-        KiteConfig emptyConfig = new KiteConfig();
-        KiteConnectClient testClient = new KiteConnectClient(emptyConfig, null, null);
-        assertThat(testClient.isConfigured()).isFalse();
+        assertThat(emptyClient.isConfigured()).isFalse();
     }
 
     @Test
@@ -192,34 +189,34 @@ class KiteConnectClientTest {
 
     @Test
     void testDefaultKiteConfig() {
-        KiteConfig config = new KiteConfig();
-        assertThat(config.getApiKey()).isEmpty();
-        assertThat(config.isConfigured()).isFalse();
-        assertThat(config.isSandbox()).isFalse();
+        BrokerProperties.Kite kite = new BrokerProperties().getKite();
+        assertThat(kite.getApiKey() == null || kite.getApiKey().isEmpty()).isTrue();
+        assertThat(kite.isConfigured()).isFalse();
+        assertThat(kite.isSandbox()).isFalse();
         // Default environment is "live", so isLive() returns true
-        assertThat(config.isLive()).isTrue();
+        assertThat(kite.isLive()).isTrue();
     }
 
     @Test
     void testSetAndGetEnvironment() {
-        KiteConfig config = new KiteConfig();
-        config.setEnvironment("live");
-        assertThat(config.getEnvironment()).isEqualTo("live");
-        assertThat(config.isLive()).isTrue();
+        BrokerProperties.Kite kite = new BrokerProperties().getKite();
+        kite.setEnvironment("live");
+        assertThat(kite.getEnvironment()).isEqualTo("live");
+        assertThat(kite.isLive()).isTrue();
 
-        config.setEnvironment("sandbox");
-        assertThat(config.getEnvironment()).isEqualTo("sandbox");
-        assertThat(config.isSandbox()).isTrue();
+        kite.setEnvironment("sandbox");
+        assertThat(kite.getEnvironment()).isEqualTo("sandbox");
+        assertThat(kite.isSandbox()).isTrue();
     }
 
     @Test
     void testSetAndGetProxyConfig() {
-        KiteConfig config = new KiteConfig();
-        config.setProxyHost("proxy.example.com");
-        config.setProxyPort(8080);
+        BrokerProperties.Kite kite = new BrokerProperties().getKite();
+        kite.setProxyHost("proxy.example.com");
+        kite.setProxyPort(8080);
 
-        assertThat(config.getProxyHost()).isEqualTo("proxy.example.com");
-        assertThat(config.getProxyPort()).isEqualTo(8080);
+        assertThat(kite.getProxyHost()).isEqualTo("proxy.example.com");
+        assertThat(kite.getProxyPort()).isEqualTo(8080);
     }
 
     @Test

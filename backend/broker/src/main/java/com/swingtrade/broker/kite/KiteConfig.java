@@ -1,39 +1,30 @@
 package com.swingtrade.broker.kite;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.swingtrade.broker.config.BrokerProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
  * Configuration class for Zerodha Kite Connect integration.
- * Holds API credentials and other Kite-specific settings.
+ * Delegates to centralized BrokerProperties.
  */
 @Configuration
 public class KiteConfig {
 
-    @Value("${kite.api-key:}")
-    private String apiKey = "";
+    private final BrokerProperties.Kite kite;
 
-    @Value("${kite.access-token:}")
-    private String accessToken = "";
-
-    @Value("${kite.environment:live}")
-    private String environment = "live";
-
-    @Value("${kite.proxy-host:}")
-    private String proxyHost = "";
-
-    @Value("${kite.proxy-port:0}")
-    private int proxyPort = 0;
+    public KiteConfig(BrokerProperties props) {
+        this.kite = props.getKite();
+    }
 
     /**
      * Get API key for Kite Connect authentication.
      */
     public String getApiKey() {
-        return apiKey != null ? apiKey : "";
+        return kite.getApiKey();
     }
 
     public void setApiKey(String apiKey) {
-        this.apiKey = apiKey;
+        kite.setApiKey(apiKey);
     }
 
     /**
@@ -41,11 +32,11 @@ public class KiteConfig {
      * This is obtained after OAuth authorization flow.
      */
     public String getAccessToken() {
-        return accessToken;
+        return kite.getAccessToken();
     }
 
     public void setAccessToken(String accessToken) {
-        this.accessToken = accessToken;
+        kite.setAccessToken(accessToken);
     }
 
     /**
@@ -53,53 +44,53 @@ public class KiteConfig {
      * Sandbox is used for testing before going live.
      */
     public String getEnvironment() {
-        return environment;
+        return kite.getEnvironment();
     }
 
     public void setEnvironment(String environment) {
-        this.environment = environment;
+        kite.setEnvironment(environment);
     }
 
     /**
      * Get proxy host for network configuration.
      */
     public String getProxyHost() {
-        return proxyHost;
+        return kite.getProxyHost();
     }
 
     public void setProxyHost(String proxyHost) {
-        this.proxyHost = proxyHost;
+        kite.setProxyHost(proxyHost);
     }
 
     /**
      * Get proxy port for network configuration.
      */
     public int getProxyPort() {
-        return proxyPort;
+        return kite.getProxyPort();
     }
 
     public void setProxyPort(int proxyPort) {
-        this.proxyPort = proxyPort;
+        kite.setProxyPort(proxyPort);
     }
 
     /**
      * Check if Kite Connect is configured.
      */
     public boolean isConfigured() {
-        return apiKey != null && !apiKey.trim().isEmpty();
+        return kite.isConfigured();
     }
 
     /**
      * Check if using sandbox environment.
      */
     public boolean isSandbox() {
-        return "sandbox".equalsIgnoreCase(environment);
+        return kite.isSandbox();
     }
 
     /**
      * Check if using live environment.
      */
     public boolean isLive() {
-        return "live".equalsIgnoreCase(environment);
+        return kite.isLive();
     }
 }

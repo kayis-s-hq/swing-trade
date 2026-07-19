@@ -22,7 +22,7 @@ public class PositionController {
     private static final Logger logger = LoggerFactory.getLogger(PositionController.class);
 
     @Autowired
-    private com.swingtrade.api.PositionService positionService;
+    private com.swingtrade.api.service.PositionService positionService;
 
     /**
      * Get all open positions.

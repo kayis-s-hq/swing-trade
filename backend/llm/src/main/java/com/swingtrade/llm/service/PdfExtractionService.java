@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClient.Builder;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -32,11 +33,14 @@ public class PdfExtractionService {
     public PdfExtractionService(
             @Value("${llm.pdf.base-url:}") String pdfBaseUrl,
             @Value("${llm.pdf.model:gemma-4-E2B}") String pdfModel,
-            PdfExtractionRepository pdfRepo) {
+            PdfExtractionRepository pdfRepo,
+            Builder webClientBuilder) {
         this.pdfBaseUrl = pdfBaseUrl;
         this.pdfModel = pdfModel;
         this.pdfRepo = pdfRepo;
-        this.webClient = WebClient.create();
+        this.webClient = webClientBuilder
+                .defaultHeader("Content-Type", "application/json")
+                .build();
     }
 
     /**

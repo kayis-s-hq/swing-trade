@@ -1,6 +1,7 @@
 package com.swingtrade.broker.factory;
 
 import com.swingtrade.broker.config.BrokerMode;
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.manager.OrderManager;
@@ -41,8 +42,9 @@ class BrokerServiceFactoryTest {
     private KillSwitchService mockKillSwitch;
 
     private BrokerServiceFactory createFactory(String mode) {
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch);
-        factory.setModeString(mode);
+        BrokerProperties props = new BrokerProperties();
+        props.setMode(mode);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch, props);
         factory.initialize();
         return factory;
     }
@@ -178,7 +180,8 @@ class BrokerServiceFactoryTest {
     void testGetModeString() {
         // Given
         when(mockClientProvider.getIfAvailable()).thenReturn(mockClient);
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch);
+        BrokerProperties props = new BrokerProperties(); // default "paper" to avoid live service in constructor
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch, props);
         factory.setModeString("live");
 
         // When
