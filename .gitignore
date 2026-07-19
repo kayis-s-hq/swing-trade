@@ -32,6 +32,9 @@ Thumbs.db
 # SDD generated artifacts
 .superpowers/
 
+# Git worktree directories
+.worktrees/
+
 # Generated docs (keep .planning/ but ignore generated reports)
 docs/generated/
 docs/superpowers/
