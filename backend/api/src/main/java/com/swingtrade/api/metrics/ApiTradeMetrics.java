@@ -85,7 +85,7 @@ public class ApiTradeMetrics {
 
     public void recordTradeClose(String outcome) {
         tradeCloseCounter.increment();
-        switch (outcome.toUpperCase()) {
+        switch (outcome.toUpperCase(java.util.Locale.ROOT)) {
             case "STOP_LOSS" -> tradeStopLossCounter.increment();
             case "TARGET_HIT" -> tradeTargetHitCounter.increment();
             case "TIME_STOP" -> tradeTimeStopCounter.increment();

@@ -21,7 +21,7 @@ public class RedisTestContainer {
     /**
      * Start the Redis TestContainer.
      */
-    public static void start() {
+    public static synchronized void start() {
         if (redisContainer != null && redisContainer.isRunning()) {
             logger.info("Redis TestContainer already running");
             return;
@@ -50,7 +50,7 @@ public class RedisTestContainer {
     /**
      * Stop and clean up the TestContainer.
      */
-    public static void stop() {
+    public static synchronized void stop() {
         if (redisContainer != null && redisContainer.isRunning()) {
             logger.info("Stopping Redis TestContainer...");
             redisContainer.stop();

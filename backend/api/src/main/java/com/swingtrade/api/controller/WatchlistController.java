@@ -45,7 +45,7 @@ public class WatchlistController {
         if (watchlistService.getBySymbol(symbol).isPresent()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("Symbol " + symbol + " already in watchlist"));
         }
-        var entity = watchlistService.addToWatchlist(symbol.toUpperCase().trim(), name, exchange);
+        var entity = watchlistService.addToWatchlist(symbol.toUpperCase(java.util.Locale.ROOT).trim(), name, exchange);
         return ResponseEntity.ok(ApiResponse.ok(entity));
     }
 

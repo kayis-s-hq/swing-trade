@@ -9,6 +9,10 @@ import java.util.List;
 public final class SignalQueryResult {
     private SignalQueryResult() {} // prevent instantiation
 
+    public static List<String> allSignalTypes() {
+        return List.of("BUY", "SELL", "HOLD");
+    }
+
     public record Signal(String symbol, SignalType type, Double confidence, LocalDate date, String reasoning) {
         public Signal(String symbol, String type, Double confidence, LocalDate date, String reasoning) {
             this(symbol, SignalType.valueOf(type), confidence, date, reasoning);

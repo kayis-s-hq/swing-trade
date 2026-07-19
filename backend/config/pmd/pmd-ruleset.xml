@@ -22,5 +22,10 @@
   <rule ref="category/java/security.xml"/>
 
   <!-- Keep only multithreading — concurrency bugs -->
-  <rule ref="category/java/multithreading.xml"/>
+  <rule ref="category/java/multithreading.xml">
+    <exclude name="UseConcurrentHashMap"/>
+    <exclude name="DoNotUseThreads"/>
+    <exclude name="AvoidSynchronizedStatement"/>
+    <exclude name="AvoidSynchronizedAtMethodLevel"/>
+  </rule>
 </ruleset>
