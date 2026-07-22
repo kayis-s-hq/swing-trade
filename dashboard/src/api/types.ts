@@ -299,3 +299,18 @@ export interface CompositeAnalysis {
   }
   reasoning: string
 }
+
+export interface AnalysisProgress {
+  stageNumber: number
+  stageName: string
+  status: 'running' | 'completed' | 'skipped' | 'error'
+  message: string
+  timestamp: string
+}
+
+export interface FullAnalysisResult {
+  composite: CompositeAnalysis
+  progress: AnalysisProgress[]
+  durationMs: number
+  symbol: string
+}

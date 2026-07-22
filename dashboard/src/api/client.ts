@@ -26,6 +26,8 @@ import type {
   ECEStats,
   NewsArticle,
   CompositeAnalysis,
+  AnalysisProgress,
+  FullAnalysisResult,
 } from './types'
 
 // ---------------------------------------------------------------------------
@@ -734,4 +736,50 @@ export async function backfillSymbol(symbol: string, years: number = 3): Promise
   const raw = await rawFetch(`/ingestion/backfill?symbol=${encodeURIComponent(symbol)}&years=${years}`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: (raw.data as any).data as string }
+}
+
+// ---------------------------------------------------------------------------
+// Full Analysis Orchestration (SSE)
+// ---------------------------------------------------------------------------
+
+export async function* runFullAnalysis(
+  symbol: string,
+  years: number = 3,
+): AsyncIterable<AnalysisProgress | FullAnalysisResult> {
+  const params = new URLSearchParams({
+    symbol: encodeURIComponent(symbol),
+    years: String(years),
+  })
+
+  const response = await fetch(`${API_BASE_URL}/analysis/run-full?${params}`, {
+    headers: DEFAULT_HEADERS,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Analysis failed: ${response.statusText}`)
+  }
+
+  const reader = response.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = JSON.parse(line.slice(6))
+          yield data
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
 }

@@ -42,10 +42,10 @@
           </div>
           <button
             type="submit"
-            :disabled="compositeLoading"
+            :disabled="orchestrating"
             class="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
           >
-            {{ compositeLoading ? 'Analyzing...' : 'Analyze' }}
+            {{ orchestrating ? 'Analyzing...' : 'Analyze' }}
           </button>
           <button
             type="button"
@@ -59,13 +59,24 @@
         <p v-if="error" class="mt-3 text-xs text-danger">{{ error }}</p>
       </div>
 
-      <!-- Composite loading state -->
-      <div v-if="compositeLoading" class="flex justify-center py-12">
+      <!-- Full analysis orchestration progress -->
+      <div v-if="orchestrating" class="animate-fade-in">
+        <AnalysisProgressComp
+          :stages="analysisStages"
+          :current-stage="analysisCurrentStage"
+          :is-complete="analysisComplete"
+          :duration-ms="analysisDurationMs"
+          :error="analysisError"
+        />
+      </div>
+
+      <!-- Legacy composite loading state -->
+      <div v-else-if="compositeLoading" class="flex justify-center py-12">
         <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
       </div>
 
       <!-- Composite analysis results -->
-      <div v-if="!compositeLoading && composite" class="flex flex-col gap-6">
+      <div v-if="(!orchestrating && !compositeLoading) && composite" class="flex flex-col gap-6">
         <!-- Score Card -->
         <ScoreCard
           :score="composite.compositeScore"
@@ -313,9 +324,9 @@ import {
   getLatestNews,
   getLatestSignalForSymbol,
   getWatchlist,
-  getCompositeAnalysis,
+  runFullAnalysis,
 } from '../api/client'
-import type { SentimentResult, WatchlistEntry, NewsArticle, Signal, CompositeAnalysis } from '../api/types'
+import type { SentimentResult, WatchlistEntry, NewsArticle, Signal, CompositeAnalysis, AnalysisProgress, FullAnalysisResult } from '../api/types'
 import SentimentBadge from '../components/SentimentBadge.vue'
 import SentimentTimeline from '../components/SentimentTimeline.vue'
 import NewsSourceCard from '../components/NewsSourceCard.vue'
@@ -325,6 +336,7 @@ import SourceBreakdown from '../components/SourceBreakdown.vue'
 import TechnicalIndicatorsComp from '../components/TechnicalIndicators.vue'
 import FundamentalsPanel from '../components/FundamentalsPanel.vue'
 import BacktestPanel from '../components/BacktestPanel.vue'
+import AnalysisProgressComp from '../components/AnalysisProgress.vue'
 
 const tabs = [
   { key: 'overview', label: 'Overview' },
@@ -344,6 +356,14 @@ const latestSignal = ref<Signal | null>(null)
 // Composite analysis state
 let composite: CompositeAnalysis | null = null
 const compositeLoading = ref(false)
+
+// Full analysis orchestration state
+const analysisStages = ref<AnalysisProgress[]>([])
+const analysisCurrentStage = ref(0)
+const analysisComplete = ref(false)
+const analysisDurationMs = ref(0)
+const analysisError = ref<string | null>(null)
+const orchestrating = ref(false)
 
 const historyLoading = ref(false)
 const history = ref<SentimentResult[]>([])
@@ -414,17 +434,36 @@ const handleAnalyse = async () => {
 
 const analyzeComposite = async () => {
   if (!symbolInput.value.trim()) return
-  compositeLoading.value = true
+  orchestrating.value = true
   error.value = ''
   composite = null
+  analysisStages.value = []
+  analysisCurrentStage.value = 0
+  analysisComplete.value = false
+  analysisDurationMs.value = 0
+  analysisError.value = null
   try {
-    const res = await getCompositeAnalysis(symbolInput.value)
-    if (res.success && res.data) {
-      composite = res.data
-    } else {
-      error.value = res.error || 'Composite analysis failed'
+    for await (const data of runFullAnalysis(symbolInput.value)) {
+      if ('stageNumber' in data && 'stageName' in data) {
+        // AnalysisProgress
+        const stage = data as AnalysisProgress
+        analysisStages.value = [...analysisStages.value, stage]
+        if (stage.status === 'running') {
+          analysisCurrentStage.value = stage.stageNumber
+        }
+      } else {
+        // FullAnalysisResult
+        const result = data as FullAnalysisResult
+        composite = result.composite
+        analysisDurationMs.value = result.durationMs
+        analysisComplete.value = true
+      }
     }
+  } catch (e) {
+    analysisError.value = e instanceof Error ? e.message : 'Analysis failed'
+    error.value = analysisError.value
   } finally {
+    orchestrating.value = false
     compositeLoading.value = false
   }
 }
