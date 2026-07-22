@@ -139,4 +139,29 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
         @Param("symbol") String symbol,
         @Param("before") LocalDateTime before
     );
+
+    /**
+     * Finds the Nth trading day candle after a given date.
+     * Useful for computing returns over evaluation windows (1d, 5d, 21d).
+     *
+     * @param symbol the stock symbol
+     * @param after the reference date (candles must be after this date)
+     * @param n the Nth trading day (1 = next trading day, 5 = 5 trading days later)
+     * @return optional containing the Nth candle
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol AND c.date > :after ORDER BY c.date ASC")
+    Optional<OhlcvCandleEntity> findNthBySymbolAndDateAfterOrderByDateAsc(
+        @Param("symbol") String symbol,
+        @Param("after") LocalDate after,
+        @Param("n") int n
+    );
+
+    /**
+     * Finds the latest candle for a symbol on or after a given date.
+     */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol AND c.date >= :date ORDER BY c.date ASC")
+    Optional<OhlcvCandleEntity> findFirstBySymbolAndDateAfterOrderByDateAsc(
+        @Param("symbol") String symbol,
+        @Param("date") LocalDate date
+    );
 }

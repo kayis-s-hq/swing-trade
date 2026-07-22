@@ -1,6 +1,21 @@
 #!/bin/bash
 # Dev Stack - Swing Trade Development Environment
-# This script manages the dev infrastructure on pi-node and runs the Spring Boot app locally
+#
+# Architecture:
+#   - Dev stack: runs infra on pi-node, Spring Boot app locally on Mac
+#   - Stage stack: runs everything (infra + API) in Docker on pi-node
+#   - Monitoring: pi-node runs Prometheus + Grafana for all stage metrics
+#
+# Ports on pi-node:
+#   5435 - dev PostgreSQL
+#   5436 - stage PostgreSQL
+#   6379 - dev Redis
+#   6380 - stage Redis
+#   8080 - dev API (no monitoring)
+#   8081 - stage API (scraped by pi-prometheus)
+#   9090 - pi-prometheus
+#   3001 - pi-grafana
+#   3002 - local Grafana (optional, for local dashboard access)
 
 set -e
 
@@ -60,36 +75,36 @@ case "${1:-help}" in
     cd "$BACKEND_DIR/api"
     mvn spring-boot:run -Dspring-boot.run.profiles=local
     ;;
-    
+
   stop)
     echo "🛑 Stopping Dev Stack..."
     echo ""
-    
+
     # Stop local Spring Boot
     pkill -f "spring-boot:run" 2>/dev/null || true
     echo "✓ Stopped local Spring Boot app"
     echo ""
-    
+
     # Stop infrastructure on pi-node
     echo "📦 Stopping infrastructure on pi-node..."
     docker context use pi-node
     cd "$BACKEND_DIR"
     docker compose -f docker-compose.infra-dev.yml down
     echo ""
-    
+
     # Switch back to local context
     docker context use desktop-linux
     echo ""
     echo "✓ Dev Stack stopped"
     ;;
-    
+
   infra)
     echo "📦 Managing infrastructure on pi-node..."
     docker context use pi-node
     cd "$BACKEND_DIR"
     docker compose -f docker-compose.infra-dev.yml "${@:2}"
     ;;
-    
+
   status)
     echo "📊 Dev Stack Status"
     echo ""
@@ -98,7 +113,7 @@ case "${1:-help}" in
     cd "$BACKEND_DIR"
     docker compose -f docker-compose.infra-dev.yml ps
     echo ""
-    
+
     echo "Local Spring Boot:"
     docker context use desktop-linux
     pgrep -f "spring-boot:run" && echo "✓ Running" || echo "✗ Not running"
@@ -106,7 +121,7 @@ case "${1:-help}" in
     echo "API Health:"
     curl -s "http://localhost:8080/actuator/health" | python3 -m json.tool 2>/dev/null || echo "✗ API not reachable"
     ;;
-    
+
   logs)
     echo "📋 Dev Stack Logs"
     echo ""
@@ -117,7 +132,7 @@ case "${1:-help}" in
     ;;
 
   stage-monitoring)
-    echo "📊 Managing stage monitoring stack (Grafana + Prometheus)..."
+    echo "📊 Managing stage monitoring (local Grafana → pi-node Prometheus)..."
     do_stage_monitoring "${@:2}"
     ;;
 
@@ -133,40 +148,106 @@ case "${1:-help}" in
   stage)
     echo "🚀 Starting Stage Dev Stack..."
     echo ""
-
-    # Start stage infrastructure on pi-node
-    echo "📦 Starting stage infrastructure on pi-node..."
-    do_stage_infra up -d
+    echo "Stage runs entirely on pi-node: Docker containers for infra + API."
+    echo "Monitoring is handled by pi-prometheus (port 9090) + pi-grafana (port 3001)."
     echo ""
 
-    # Wait for services to be healthy
-    echo "⏳ Waiting for stage services to be ready..."
-    sleep 15
+    # Step 1: Build Docker image from local Maven artifacts
+    echo "🔨 Building Docker image from local Maven build..."
+    cd "$BACKEND_DIR"
+    docker build -t swing-trade-api:dev -f backend/Dockerfile --target runtime-jar ..
+    echo "✓ Image built: swing-trade-api:dev"
+    echo ""
+
+    # Step 2: Start stage infrastructure (PostgreSQL + Redis)
+    echo "📦 Starting stage infrastructure on pi-node..."
     docker context use pi-node
     cd "$BACKEND_DIR"
-    docker compose -f docker-compose.infra-stage.yml ps
-    docker context use desktop-linux
+    docker compose -f docker-compose.infra-stage.yml up -d
     echo ""
 
-    # Start Spring Boot locally with stage profile
-    # NOTE: .env has dev values (192.168.0.100:5435), skip it — application-stage.properties
-    # already has correct defaults (piworm.local:5436/swingtrade_stage)
-    cd "$BACKEND_DIR/api"
-    mvn spring-boot:run -Dspring-boot.run.profiles=stage
+    # Step 3: Wait for infra to be healthy
+    echo "⏳ Waiting for stage infrastructure to be ready..."
+    sleep 15
+    docker compose -f docker-compose.infra-stage.yml ps
+    echo ""
+
+    # Step 4: Start API container on swingtrade-network
+    echo "🐳 Starting stage API container..."
+    docker stop swing-trade-stage-api 2>/dev/null || true
+    docker rm swing-trade-stage-api 2>/dev/null || true
+    sleep 2
+    docker run -d \
+      --name swing-trade-stage-api \
+      --network swing-trade-stage_swingtrade-network \
+      -p 8081:8080 \
+      -e SPRING_PROFILES_ACTIVE=stage \
+      -e DB_HOST=swing_trade_stage_postgres \
+      -e DB_PORT=5432 \
+      -e DB_NAME=swingtrade_stage \
+      -e DB_USER=swingtrade_user \
+      -e DB_PASSWORD=swingtrade_password \
+      -e REDIS_HOST=swing_trade_stage_redis \
+      -e REDIS_PORT=6379 \
+      -e LLM_BASE_URL=http://localhost:8000 \
+      -e LLM_MODEL_NAME=claude-sonnet-4-6 \
+      -e LLM_TIMEOUT=30000 \
+      -e TRADING_ENABLED=true \
+      -e PAPER_TRADING_ENABLED=true \
+      -e REAL_TRADING_ENABLED=false \
+      -e STRATEGY_ENABLED=true \
+      -e SIGNAL_ENABLED=false \
+      -e DISCORD_WEBHOOK_ENABLED=false \
+      swing-trade-api:dev \
+      java -jar /app/swing-trade-api.jar
+    echo "✓ API container started"
+    echo ""
+
+    # Step 5: Wait for Spring Boot startup
+    echo "⏳ Waiting for Spring Boot startup (~20s)..."
+    sleep 20
+    docker context use desktop-linux
+
+    # Step 6: Health check
+    echo "🏥 Checking API health on piworm.local:8081..."
+    curl -s "http://piworm.local:8081/actuator/health" | python3 -m json.tool 2>/dev/null || echo "⚠ API not yet reachable"
+    echo ""
+
+    # Step 7: Verify Prometheus scrape target
+    echo "📊 Checking Prometheus scrape target..."
+    if curl -sf "http://piworm.local:9090/api/v1/targets" | grep -q '"job":"swing-trade-stage"'; then
+      echo "✓ Prometheus is scraping stage API"
+    else
+      echo "⚠ Prometheus target may take one scrape interval (15s) to appear"
+    fi
+    echo ""
+
+    echo "Stage stack is running:"
+    echo "  API:       http://piworm.local:8081"
+    echo "  Prometheus: http://piworm.local:9090"
+    echo "  Grafana:    http://piworm.local:3001"
+    echo ""
+    echo "To stop: $0 stage-monitoring down  (local Grafana only)"
+    echo "To see logs: docker --context pi-node logs -f swing-trade-stage-api"
     ;;
 
   *)
     echo "Usage: $0 {start|stage|stop|infra|status|logs|logs-json|stage-monitoring}"
     echo ""
     echo "Commands:"
-    echo "  start            - Start dev infra on pi-node and run Spring Boot locally"
-    echo "  stage            - Start stage infra on pi-node and run Spring Boot locally"
-    echo "  stop             - Stop everything"
+    echo "  start            - Start dev infra on pi-node + run Spring Boot locally"
+    echo "  stage            - Build + deploy stage stack (Docker on pi-node)"
+    echo "  stop             - Stop dev stack"
     echo "  infra            - Manage dev infrastructure (pass docker compose commands)"
     echo "  status           - Check status of all services"
     echo "  logs             - View infrastructure logs"
     echo "  logs-json        - View structured JSON logs (requires jq)"
-    echo "  stage-monitoring - Start/stop Grafana + Prometheus (stage only)"
+    echo "  stage-monitoring - Start/stop local Grafana (scrapes pi-node Prometheus)"
+    echo ""
+    echo "Stage monitoring stack:"
+    echo "  API metrics:   http://piworm.local:8081/actuator/prometheus"
+    echo "  Prometheus:    http://piworm.local:9090  (scrapes stage API)"
+    echo "  Grafana:       http://piworm.local:3001  (JVM/Spring Boot dashboard)"
     echo ""
     echo "Examples:"
     echo "  $0 start"

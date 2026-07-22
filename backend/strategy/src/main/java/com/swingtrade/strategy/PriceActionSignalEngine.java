@@ -160,12 +160,13 @@ public class PriceActionSignalEngine {
         recordRule(nearWeeklyHigh, passed, failed,
             "Price within 3% of 52-week high (price=" + fmt(price) + ", 52wHigh=" + fmt(weeklyHigh) + ")");
 
-        boolean allRulesPassed = trendAligned && rsiInRange && volumeSurge && nearWeeklyHigh;
-        SignalType type = allRulesPassed ? SignalType.BUY : SignalType.HOLD;
+        int rulesPassed = (trendAligned ? 1 : 0) + (rsiInRange ? 1 : 0) + (volumeSurge ? 1 : 0) + (nearWeeklyHigh ? 1 : 0);
+        boolean enoughRulesPassed = rulesPassed >= 3;
+        SignalType type = enoughRulesPassed ? SignalType.BUY : SignalType.HOLD;
 
-        String reasoning = allRulesPassed
-            ? "All entry rules passed: " + String.join("; ", passed)
-            : "Entry rules failed: " + String.join("; ", failed);
+        String reasoning = enoughRulesPassed
+            ? rulesPassed + " of 4 entry rules passed: " + String.join("; ", passed)
+            : rulesPassed + " of 4 entry rules passed: " + String.join("; ", failed);
 
         logger.debug("Signal for {} on {}: {} ({})", symbol, date, type, reasoning);
 

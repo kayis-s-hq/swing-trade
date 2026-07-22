@@ -4,7 +4,10 @@ import jakarta.persistence.*;
 
 @Entity
 @Table(name = "sentiment_accuracy", indexes = {
-    @Index(name = "idx_sentiment_accuracy_symbol_date", columnList = "symbol, signal_date")
+    @Index(name = "idx_sentiment_accuracy_symbol_date", columnList = "symbol, analysis_date"),
+    @Index(name = "idx_sentiment_accuracy_label", columnList = "ground_truth_label"),
+    @Index(name = "idx_sentiment_accuracy_regime", columnList = "market_regime"),
+    @Index(name = "idx_sentiment_accuracy_evaluated", columnList = "evaluated_at")
 })
 public class SentimentAccuracyEntity {
 
@@ -12,26 +15,64 @@ public class SentimentAccuracyEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 10)
+    @Column(nullable = false, length = 20)
     private String symbol;
 
-    @Column(name = "signal_date", nullable = false)
-    private java.time.LocalDate signalDate;
+    @Column(name = "analysis_date", nullable = false)
+    private java.time.LocalDate analysisDate;
 
-    @Column(name = "sentiment_score", nullable = false, length = 20)
-    private String sentimentScore;
+    @Column(name = "llm_score", nullable = false, length = 20)
+    private String llmScore;
 
-    @Column(name = "actual_outcome", nullable = false, length = 20)
-    private String actualOutcome;
+    @Column(name = "llm_confidence", nullable = false)
+    private Float llmConfidence;
+
+    @Column(name = "numeric_score", nullable = false)
+    private Float numericScore;
+
+    // Ground truth
+    @Column(name = "actual_return_1d", precision = 10, scale = 6)
+    private java.math.BigDecimal actualReturn1d;
+
+    @Column(name = "actual_return_5d", precision = 10, scale = 6)
+    private java.math.BigDecimal actualReturn5d;
+
+    @Column(name = "actual_return_21d", precision = 10, scale = 6)
+    private java.math.BigDecimal actualReturn21d;
+
+    @Column(name = "ground_truth_label", length = 10)
+    private String groundTruthLabel;
 
     @Column
     private Boolean wasCorrect;
 
-    @Column(name = "pnl_pct", precision = 10, scale = 2)
+    @Column(name = "pnl_pct", precision = 10, scale = 6)
     private java.math.BigDecimal pnlPct;
 
-    @Column(name = "recorded_at")
-    private java.time.LocalDateTime recordedAt;
+    // Context
+    @Column(name = "market_regime", length = 10)
+    private String marketRegime;
+
+    @Column(name = "prompt_hash", length = 64)
+    private String promptHash;
+
+    @Column(name = "model_version", length = 50)
+    private String modelVersion;
+
+    @Column(name = "composite_score")
+    private Integer compositeScore;
+
+    @Column(name = "composite_signal", length = 10)
+    private String compositeSignal;
+
+    @Column(name = "composite_id")
+    private Long compositeId;
+
+    @Column(name = "created_at", updatable = false)
+    private java.time.LocalDateTime createdAt;
+
+    @Column(name = "evaluated_at")
+    private java.time.LocalDateTime evaluatedAt;
 
     public SentimentAccuracyEntity() {
     }
@@ -52,28 +93,68 @@ public class SentimentAccuracyEntity {
         this.symbol = symbol;
     }
 
-    public java.time.LocalDate getSignalDate() {
-        return signalDate;
+    public java.time.LocalDate getAnalysisDate() {
+        return analysisDate;
     }
 
-    public void setSignalDate(java.time.LocalDate signalDate) {
-        this.signalDate = signalDate;
+    public void setAnalysisDate(java.time.LocalDate analysisDate) {
+        this.analysisDate = analysisDate;
     }
 
-    public String getSentimentScore() {
-        return sentimentScore;
+    public String getLlmScore() {
+        return llmScore;
     }
 
-    public void setSentimentScore(String sentimentScore) {
-        this.sentimentScore = sentimentScore;
+    public void setLlmScore(String llmScore) {
+        this.llmScore = llmScore;
     }
 
-    public String getActualOutcome() {
-        return actualOutcome;
+    public Float getLlmConfidence() {
+        return llmConfidence;
     }
 
-    public void setActualOutcome(String actualOutcome) {
-        this.actualOutcome = actualOutcome;
+    public void setLlmConfidence(Float llmConfidence) {
+        this.llmConfidence = llmConfidence;
+    }
+
+    public Float getNumericScore() {
+        return numericScore;
+    }
+
+    public void setNumericScore(Float numericScore) {
+        this.numericScore = numericScore;
+    }
+
+    public java.math.BigDecimal getActualReturn1d() {
+        return actualReturn1d;
+    }
+
+    public void setActualReturn1d(java.math.BigDecimal actualReturn1d) {
+        this.actualReturn1d = actualReturn1d;
+    }
+
+    public java.math.BigDecimal getActualReturn5d() {
+        return actualReturn5d;
+    }
+
+    public void setActualReturn5d(java.math.BigDecimal actualReturn5d) {
+        this.actualReturn5d = actualReturn5d;
+    }
+
+    public java.math.BigDecimal getActualReturn21d() {
+        return actualReturn21d;
+    }
+
+    public void setActualReturn21d(java.math.BigDecimal actualReturn21d) {
+        this.actualReturn21d = actualReturn21d;
+    }
+
+    public String getGroundTruthLabel() {
+        return groundTruthLabel;
+    }
+
+    public void setGroundTruthLabel(String groundTruthLabel) {
+        this.groundTruthLabel = groundTruthLabel;
     }
 
     public Boolean getWasCorrect() {
@@ -92,11 +173,67 @@ public class SentimentAccuracyEntity {
         this.pnlPct = pnlPct;
     }
 
-    public java.time.LocalDateTime getRecordedAt() {
-        return recordedAt;
+    public String getMarketRegime() {
+        return marketRegime;
     }
 
-    public void setRecordedAt(java.time.LocalDateTime recordedAt) {
-        this.recordedAt = recordedAt;
+    public void setMarketRegime(String marketRegime) {
+        this.marketRegime = marketRegime;
+    }
+
+    public String getPromptHash() {
+        return promptHash;
+    }
+
+    public void setPromptHash(String promptHash) {
+        this.promptHash = promptHash;
+    }
+
+    public String getModelVersion() {
+        return modelVersion;
+    }
+
+    public void setModelVersion(String modelVersion) {
+        this.modelVersion = modelVersion;
+    }
+
+    public Integer getCompositeScore() {
+        return compositeScore;
+    }
+
+    public void setCompositeScore(Integer compositeScore) {
+        this.compositeScore = compositeScore;
+    }
+
+    public String getCompositeSignal() {
+        return compositeSignal;
+    }
+
+    public void setCompositeSignal(String compositeSignal) {
+        this.compositeSignal = compositeSignal;
+    }
+
+    public Long getCompositeId() {
+        return compositeId;
+    }
+
+    public void setCompositeId(Long compositeId) {
+        this.compositeId = compositeId;
+    }
+
+    public java.time.LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(java.time.LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public java.time.LocalDateTime getEvaluatedAt() {
+        return evaluatedAt;
+    }
+
+    public void setEvaluatedAt(java.time.LocalDateTime evaluatedAt) {
+        this.evaluatedAt = evaluatedAt;
     }
 }

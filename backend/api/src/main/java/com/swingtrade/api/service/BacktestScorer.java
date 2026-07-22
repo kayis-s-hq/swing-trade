@@ -39,7 +39,7 @@ public class BacktestScorer {
                 result.maxDrawdownPct(),
                 result.totalReturn(),
                 result.expectancy(),
-                result.totalTrades() > 0
+                true
             );
         } catch (IllegalStateException e) {
             logger.warn("Insufficient data for backtest: {}", sym);

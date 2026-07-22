@@ -7,11 +7,6 @@ on:
       - backend/**
       - .github/workflows/**
   workflow_dispatch:
-    inputs:
-      profile:
-        description: 'Spring profile'
-        default: stage
-        required: false
 
 concurrency:
   group: deploy-stage
@@ -19,7 +14,8 @@ concurrency:
 
 env:
   JAVA_VERSION: 21
-  PI_NODE_HOST: "127.0.0.1"
+  DOCKER_IMAGE: swing-trade-api
+  DOCKER_TAG: dev
 
 jobs:
   build-and-deploy:
@@ -53,60 +49,74 @@ jobs:
         working-directory: backend/api/target
         run: ls -la api-1.0.0.jar
 
-      - name: Write .env for stage
+      - name: Build Docker image
         run: |
-          mkdir -p /home/dietpi/swing-trade/stage
-          cat > /home/dietpi/swing-trade/stage/.env <<EOF
-          # Database Configuration
-          SPRING_DATASOURCE_URL=jdbc:postgresql://192.168.0.100:5436/swingtrade_stage
-          SPRING_DATASOURCE_USERNAME=swingtrade_user
-          SPRING_DATASOURCE_PASSWORD=swingtrade_password
+          docker build -t ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }} -f backend/Dockerfile --target runtime-jar ..
 
-          # Redis Configuration
-          SPRING_REDIS_HOST=192.168.0.100
-          SPRING_REDIS_PORT=6380
-
-          # Active Profiles
-          SPRING_PROFILES_ACTIVE=stage
-          SERVER_PORT=8081
-          EOF
-
-      - name: Stop existing stage app
+      - name: Stop existing stage API container
         run: |
-          pkill -f "swing-trade-api.jar" 2>/dev/null || true
+          docker stop swing-trade-stage-api 2>/dev/null || true
+          docker rm swing-trade-stage-api 2>/dev/null || true
           sleep 3
 
-      - name: Copy JAR and start stage
+      - name: Verify stage infrastructure is healthy
         run: |
-          cp backend/api/target/api-1.0.0.jar /home/dietpi/swing-trade/stage/swing-trade-api.jar
-          cd /home/dietpi/swing-trade/stage
-          set -a && source .env && set +a
-          export SPRING_PROFILES_ACTIVE=stage
-          mkdir -p /home/dietpi/swing-trade/logs
-          nohup java -jar swing-trade-api.jar \
-            -Dserver.port=8081 \
-            -Dlogging.file.name=/home/dietpi/swing-trade/logs/stage.log \
-            > /home/dietpi/swing-trade/logs/stage-start.log 2>&1 &
-          echo "Started stage (PID: $!)"
-          sleep 5
-          echo "=== Startup log ==="
-          cat /home/dietpi/swing-trade/logs/stage-start.log
+          echo "Checking stage PostgreSQL..."
+          docker inspect swing_trade_stage_postgres --format '{{.State.Health.Status}}' || exit 1
+          echo "Checking stage Redis..."
+          docker inspect swing_trade_stage_redis --format '{{.State.Health.Status}}' || exit 1
+          echo "Checking swingtrade-network..."
+          docker network inspect swing-trade-stage_swingtrade-network --format '{{.Name}}' || exit 1
+
+      - name: Start stage API container on swingtrade-network
+        run: |
+          docker run -d \
+            --name swing-trade-stage-api \
+            --network swing-trade-stage_swingtrade-network \
+            -p 8081:8080 \
+            -e SPRING_PROFILES_ACTIVE=stage \
+            -e DB_HOST=swing_trade_stage_postgres \
+            -e DB_PORT=5432 \
+            -e DB_NAME=swingtrade_stage \
+            -e DB_USER=swingtrade_user \
+            -e DB_PASSWORD=swingtrade_password \
+            -e REDIS_HOST=swing_trade_stage_redis \
+            -e REDIS_PORT=6379 \
+            -e LLM_BASE_URL=http://localhost:8000 \
+            -e LLM_MODEL_NAME=claude-sonnet-4-6 \
+            -e LLM_TIMEOUT=30000 \
+            -e TRADING_ENABLED=true \
+            -e PAPER_TRADING_ENABLED=true \
+            -e REAL_TRADING_ENABLED=false \
+            -e STRATEGY_ENABLED=true \
+            -e SIGNAL_ENABLED=false \
+            -e DISCORD_WEBHOOK_ENABLED=false \
+            ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }} \
+            java -jar /app/swing-trade-api.jar
+
+      - name: Wait for startup
+        run: sleep 20
 
       - name: Health check
         run: |
           for i in $(seq 1 20); do
             if curl -sf http://localhost:8081/actuator/health | grep -q '"UP"'; then
-              echo "Stage is UP on port 8081"
+              echo "Stage API is UP on port 8081"
               exit 0
             fi
             echo "Waiting... ($i/20)"
             sleep 6
           done
           echo "Health check failed"
-          echo "=== Startup log ==="
-          cat /home/dietpi/swing-trade/logs/stage-start.log 2>/dev/null || true
-          echo "=== App log ==="
-          cat /home/dietpi/swing-trade/logs/stage.log 2>/dev/null || true
-          echo "=== Process check ==="
-          ps aux | grep swing-trade-api | grep -v grep || echo "No swing-trade process found"
+          docker logs --tail 30 swing-trade-stage-api
+          docker ps --filter name=swing-trade-stage-api
           exit 1
+
+      - name: Verify Prometheus scrape target
+        run: |
+          echo "Verifying Prometheus can reach stage API..."
+          if curl -sf http://localhost:9090/api/v1/targets | grep -q '"job":"swing-trade-stage"'; then
+            echo "Prometheus target found"
+          else
+            echo "WARNING: Prometheus target not found — may take one scrape interval to appear"
+          fi

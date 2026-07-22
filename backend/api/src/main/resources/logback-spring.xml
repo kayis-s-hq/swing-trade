@@ -2,71 +2,22 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <!-- MDC pattern for structured fields -->
-    <conversionRule conversionWord="mdc" class="org.springframework.boot.logging.logback.MdcConverter"/>
-
-    <!-- JSON console appender -->
-    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
-            <providers>
-                <timestamp>
-                    <timeZone>Asia/Kolkata</timeZone>
-                </timestamp>
-                <pattern>
-                    <pattern>
-                        {
-                        "timestamp":"%timestamp",
-                        "module":"%mdc{module}",
-                        "traceId":"%mdc{traceId}",
-                        "symbol":"%mdc{symbol}",
-                        "level":"%level",
-                        "logger":"%logger{36}",
-                        "thread":"%thread",
-                        "message":"%message",
-                        "exception":"%exception"
-                        }
-                    </pattern>
-                </pattern>
-            </providers>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN:-%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n}</pattern>
         </encoder>
     </appender>
 
-    <!-- File appender with JSON format -->
     <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_FILE:-./logs/swing-trade.log}</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <fileNamePattern>${LOG_FILE:-./logs/swing-trade}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>100MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>3GB</totalSizeCap>
         </rollingPolicy>
-        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
-            <providers>
-                <timestamp>
-                    <timeZone>Asia/Kolkata</timeZone>
-                </timestamp>
-                <pattern>
-                    <pattern>
-                        {
-                        "module":"%mdc{module}",
-                        "traceId":"%mdc{traceId}",
-                        "symbol":"%mdc{symbol}",
-                        "level":"%level",
-                        "logger":"%logger{36}",
-                        "thread":"%thread",
-                        "message":"%message",
-                        "exception":"%exception"
-                        }
-                    </pattern>
-                </pattern>
-            </providers>
-        </encoder>
-    </appender>
-
-    <!-- Human-readable console for local dev -->
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>${CONSOLE_LOG_PATTERN:-%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n}</pattern>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n traceId=%X{traceId} symbol=%X{symbol} module=%X{module}</pattern>
         </encoder>
     </appender>
 
@@ -82,7 +33,7 @@
 
     <springProfile name="stage">
         <root level="INFO">
-            <appender-ref ref="JSON_CONSOLE"/>
+            <appender-ref ref="CONSOLE"/>
             <appender-ref ref="JSON_FILE"/>
         </root>
         <logger name="com.swingtrade" level="INFO"/>

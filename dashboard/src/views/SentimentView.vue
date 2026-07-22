@@ -65,7 +65,7 @@
       </div>
 
       <!-- Composite analysis results -->
-      <div v-if="!compositeLoading && composite" class="space-y-6">
+      <div v-if="!compositeLoading && composite" class="flex flex-col gap-6">
         <!-- Score Card -->
         <ScoreCard
           :score="composite.compositeScore"
@@ -191,7 +191,7 @@
       </div>
 
       <!-- Composite analysis (if available) -->
-      <div v-if="!loading && !analyzing && composite" class="space-y-6 mb-6">
+      <div v-if="!loading && !analyzing && composite" class="flex flex-col gap-6 mb-6">
         <ScoreCard
           :score="composite.compositeScore"
           :signal="composite.compositeSignal"

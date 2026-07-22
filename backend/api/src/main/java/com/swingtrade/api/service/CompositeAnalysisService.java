@@ -1,6 +1,9 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.CompositeAnalysis;
+import com.swingtrade.data.entity.OhlcvCandleEntity;
+import com.swingtrade.data.repository.OhlcvCandleRepository;
+import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
@@ -18,20 +21,27 @@ import java.util.Locale;
 public class CompositeAnalysisService {
 
     private static final Logger logger = LoggerFactory.getLogger(CompositeAnalysisService.class);
+    private static final int MIN_CANDLES_FOR_BACKTEST = 100;
 
     private final SentimentService sentimentService;
     private final NewsIngestionService newsService;
+    private final OhlcvCandleRepository candleRepository;
+    private final DataIngestionService dataIngestionService;
     private final TechnicalAnalysisService technicalService;
     private final FundamentalScorer fundamentalScorer;
     private final BacktestScorer backtestScorer;
 
     public CompositeAnalysisService(SentimentService sentimentService,
                                     NewsIngestionService newsService,
+                                    OhlcvCandleRepository candleRepository,
+                                    DataIngestionService dataIngestionService,
                                     TechnicalAnalysisService technicalService,
                                     FundamentalScorer fundamentalScorer,
                                     BacktestScorer backtestScorer) {
         this.sentimentService = sentimentService;
         this.newsService = newsService;
+        this.candleRepository = candleRepository;
+        this.dataIngestionService = dataIngestionService;
         this.technicalService = technicalService;
         this.fundamentalScorer = fundamentalScorer;
         this.backtestScorer = backtestScorer;
@@ -40,6 +50,9 @@ public class CompositeAnalysisService {
     public CompositeAnalysis analyze(String symbol) {
         String sym = symbol.toUpperCase(Locale.ROOT);
         LocalDate date = LocalDate.now();
+
+        // Auto-pull data if insufficient candles for backtest
+        ensureData(sym);
 
         // Parallel fetch
         CompositeAnalysis.NewsScore news = fetchNewsScore(sym);
@@ -68,30 +81,44 @@ public class CompositeAnalysisService {
             news, technical, fundamentals, backtest, reasoning);
     }
 
+    /**
+     * Auto-pull historical data if the symbol has insufficient candles for backtesting.
+     * Backtest needs at least MIN_CANDLES_FOR_BACKTEST candles; if fewer exist,
+     * trigger a 3-year backfill via the data ingestion service.
+     */
+    private void ensureData(String symbol) {
+        List<OhlcvCandleEntity> candles = candleRepository.findAllBySymbolOrderByDateDesc(symbol);
+        if (candles.size() >= MIN_CANDLES_FOR_BACKTEST) {
+            return; // enough data already
+        }
+
+        logger.info("Insufficient candles for {} ({}), auto-pulling 3 years of data", symbol, candles.size());
+        try {
+            dataIngestionService.processStockData(symbol,
+                LocalDate.now().minusYears(3),
+                LocalDate.now());
+            logger.info("Data pull completed for {}, now has {} candles", symbol,
+                candleRepository.countBySymbol(symbol));
+        } catch (Exception e) {
+            logger.warn("Auto-pull failed for {}: {}", symbol, e.getMessage());
+        }
+    }
+
     private int computeComposite(CompositeAnalysis.NewsScore news,
                                  CompositeAnalysis.TechnicalScore technical,
                                  CompositeAnalysis.FundamentalScore fundamentals) {
         double weightedSum = 0;
-        double totalWeight = 0;
 
-        // News: 40% weight (only if valid)
+        // News: 30% weight (only if valid)
         if (news != null && news.articleCount() > 0) {
-            weightedSum += news.score() * 0.40;
-            totalWeight += 0.40;
+            weightedSum += news.score() * 0.30;
         }
 
         // Technical: 40% weight (always available if data exists)
         weightedSum += technical.score() * 0.40;
-        totalWeight += 0.40;
 
-        // Fundamentals: 20% weight (always available if data exists)
-        weightedSum += fundamentals.score() * 0.20;
-        totalWeight += 0.20;
-
-        // Re-normalize if news was excluded
-        if (totalWeight < 1.0) {
-            weightedSum /= totalWeight;
-        }
+        // Fundamentals: 30% weight (always available if data exists)
+        weightedSum += fundamentals.score() * 0.30;
 
         return Math.round((int) weightedSum);
     }

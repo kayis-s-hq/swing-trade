@@ -1,8 +1,8 @@
 package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.ApiResponse;
+import com.swingtrade.data.entity.PdfExtractionEntity;
 import com.swingtrade.data.entity.SentimentResultEntity;
-import com.swingtrade.data.repository.NewsItemRepository;
 import com.swingtrade.data.repository.PdfExtractionRepository;
 import com.swingtrade.data.repository.SentimentResultRepository;
 import com.swingtrade.data.service.SentimentAccuracyService;
@@ -11,8 +11,6 @@ import com.swingtrade.llm.domain.EarningsData;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.PdfExtractionService;
 import com.swingtrade.llm.service.SentimentService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
@@ -28,8 +26,6 @@ import java.util.Map;
 @RequestMapping("/api")
 public class SentimentApiController {
 
-    private static final Logger log = LoggerFactory.getLogger(SentimentApiController.class);
-
     private final SentimentService sentimentService;
     private final NewsIngestionService newsService;
     private final PdfExtractionService pdfService;
@@ -42,7 +38,6 @@ public class SentimentApiController {
                                   PdfExtractionService pdfService,
                                   SentimentAccuracyService accuracyService,
                                   SentimentResultRepository sentimentRepo,
-                                  NewsItemRepository newsItemRepo,
                                   PdfExtractionRepository pdfExtractionRepo) {
         this.sentimentService = sentimentService;
         this.newsService = newsService;
@@ -74,6 +69,8 @@ public class SentimentApiController {
         return ResponseEntity.ok(ApiResponse.ok(results));
     }
 
+    // --- Accuracy metrics endpoints ---
+
     @GetMapping("/sentiment/accuracy")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getAccuracyStats() {
         var stats = accuracyService.getAccuracyStats();
@@ -86,6 +83,64 @@ public class SentimentApiController {
         );
         return ResponseEntity.ok(ApiResponse.ok(data));
     }
+
+    @GetMapping("/sentiment/accuracy/summary")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getAccuracySummary() {
+        var stats = accuracyService.getAccuracyStats();
+        long directionalTotal = accuracyService.getDirectionalCount();
+        long directionalCorrect = accuracyService.getDirectionalCorrectCount();
+        double directionalAccuracy = directionalTotal > 0 ?
+            Math.round((double) directionalCorrect / directionalTotal * 10000.0) / 100.0 : 0.0;
+
+        Map<String, Object> summary = Map.of(
+            "total", stats.total(),
+            "correct", stats.correct(),
+            "accuracy_pct", stats.accuracyPct(),
+            "directional_accuracy", directionalAccuracy,
+            "avg_confidence", accuracyService.getAvgConfidence(),
+            "by_sentiment", stats.bySentiment(),
+            "by_symbol", stats.bySymbol()
+        );
+        return ResponseEntity.ok(ApiResponse.ok(summary));
+    }
+
+    @GetMapping("/sentiment/accuracy/by-window")
+    public ResponseEntity<ApiResponse<List<SentimentAccuracyService.AccuracyByWindow>>> getAccuracyByWindow() {
+        return ResponseEntity.ok(ApiResponse.ok(accuracyService.getAccuracyByWindow()));
+    }
+
+    @GetMapping("/sentiment/accuracy/by-regime")
+    public ResponseEntity<ApiResponse<List<SentimentAccuracyService.AccuracyByRegime>>> getAccuracyByRegime() {
+        return ResponseEntity.ok(ApiResponse.ok(accuracyService.getAccuracyByRegime()));
+    }
+
+    @GetMapping("/sentiment/accuracy/by-symbol")
+    public ResponseEntity<ApiResponse<List<SentimentAccuracyService.AccuracyBySymbol>>> getAccuracyBySymbol() {
+        return ResponseEntity.ok(ApiResponse.ok(accuracyService.getAccuracyBySymbol()));
+    }
+
+    @GetMapping("/sentiment/accuracy/calibration")
+    public ResponseEntity<ApiResponse<List<SentimentAccuracyService.CalibrationData>>> getCalibration() {
+        return ResponseEntity.ok(ApiResponse.ok(accuracyService.getCalibrationData()));
+    }
+
+    @GetMapping("/sentiment/accuracy/rolling-ic")
+    public ResponseEntity<ApiResponse<List<SentimentAccuracyService.RollingICResult>>> getRollingIC(
+            @RequestParam(defaultValue = "30") int windowDays) {
+        return ResponseEntity.ok(ApiResponse.ok(accuracyService.getRollingIC(windowDays)));
+    }
+
+    @GetMapping("/sentiment/accuracy/signal-volume")
+    public ResponseEntity<ApiResponse<SentimentAccuracyService.SignalVolumeStats>> getSignalVolume() {
+        return ResponseEntity.ok(ApiResponse.ok(accuracyService.getSignalVolumeStats()));
+    }
+
+    @GetMapping("/sentiment/accuracy/ece")
+    public ResponseEntity<ApiResponse<SentimentAccuracyService.ECEStats>> getECE() {
+        return ResponseEntity.ok(ApiResponse.ok(accuracyService.getECEStats()));
+    }
+
+    // --- Legacy endpoints ---
 
     @GetMapping("/news/{symbol}/latest")
     public ResponseEntity<ApiResponse<List<NewsIngestionService.NewsArticle>>> getLatestNews(

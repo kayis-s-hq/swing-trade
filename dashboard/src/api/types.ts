@@ -199,6 +199,62 @@ export interface SentimentAccuracyStats {
   by_symbol: Record<string, number>
 }
 
+export interface AccuracySummary {
+  total: number
+  correct: number
+  accuracy_pct: number
+  directional_accuracy: number
+  avg_confidence: number
+  by_sentiment: Record<string, number>
+  by_symbol: Record<string, number>
+}
+
+export interface AccuracyByWindow {
+  window: string
+  total: number
+  accuracy: number
+  avg_return: number
+}
+
+export interface AccuracyByRegime {
+  regime: string
+  total: number
+  accuracy: number
+  avg_confidence: number
+}
+
+export interface AccuracyBySymbol {
+  symbol: string
+  total_signals: number
+  accuracy: number
+  avg_confidence: number
+}
+
+export interface CalibrationData {
+  confidence_bin: number
+  predicted_confidence: number
+  actual_accuracy: number
+  error: number
+  count: number
+}
+
+export interface RollingIC {
+  date: string
+  spearman_ic: number
+}
+
+export interface SignalVolumeStats {
+  today_count: number
+  seven_day_count: number
+  seven_day_avg: number
+  thirty_day_avg: number
+}
+
+export interface ECEStats {
+  ece: number
+  bins: number
+}
+
 export interface NewsArticle {
   title: string
   link: string

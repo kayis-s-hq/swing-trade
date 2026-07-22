@@ -348,7 +348,9 @@ public class SentimentService {
                 cached.confidence(),
                 LocalDate.now(),
                 cached.redFlags(),
-                cached.catalysts()
+                cached.catalysts(),
+                null,
+                null
         );
     }
 
@@ -548,7 +550,8 @@ public class SentimentService {
                         cs.sentimentType() == SentimentType.NEGATIVE ? SentimentResult.SentimentScore.NEGATIVE :
                         SentimentResult.SentimentScore.NEUTRAL,
                         cs.reasoning(), "", cs.confidence(),
-                        LocalDate.now(), cs.redFlags(), cs.catalysts());
+                        LocalDate.now(), cs.redFlags(), cs.catalysts(),
+                        null, null);
             }
         }
 

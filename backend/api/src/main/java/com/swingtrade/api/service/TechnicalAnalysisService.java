@@ -83,7 +83,7 @@ public class TechnicalAnalysisService {
         boolean emaBullish = ema20 != null && ema50 != null &&
             price.doubleValue() > ema20 && ema20 > ema50;
         score += emaBullish ? 25 : -25;
-        indicators.add(String.format("EMA20>%50: %s (%.2f / %.2f / %.2f)",
+        indicators.add(String.format("EMA20>EMA50: %s (%.2f / %.2f / %.2f)",
             emaBullish ? "bullish" : "bearish", price.doubleValue(),
             ema20 != null ? ema20 : 0, ema50 != null ? ema50 : 0));
 

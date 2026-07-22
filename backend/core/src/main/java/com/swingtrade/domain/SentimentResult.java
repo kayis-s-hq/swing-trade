@@ -27,7 +27,9 @@ public record SentimentResult(
     Double confidence,
     LocalDate analyzedAt,
     List<String> redFlags,
-    List<String> catalysts
+    List<String> catalysts,
+    String promptHash,
+    String modelVersion
 ) {
     /**
      * Enum representing the different sentiment scores.
@@ -93,7 +95,9 @@ public record SentimentResult(
             normalizedConfidence,
             LocalDate.now(),
             redFlags != null ? redFlags : List.of(),
-            catalysts != null ? catalysts : List.of()
+            catalysts != null ? catalysts : List.of(),
+            null,
+            null
         );
     }
 

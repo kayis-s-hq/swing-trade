@@ -276,7 +276,11 @@ public class BacktestEngine {
         boolean volumeSurge = volumeVal.compareTo(volumeMaVal.multiply(PriceActionSignalEngine.VOLUME_MULTIPLIER)) > 0;
         boolean nearWeeklyHigh = price.compareTo(weeklyHighVal.multiply(PriceActionSignalEngine.HIGH_PROXIMITY_THRESHOLD)) >= 0;
 
-        if (!(trendAligned && rsiInRange && volumeSurge && nearWeeklyHigh)) {
+        int rulesPassed = (trendAligned ? 1 : 0)
+            + (rsiInRange ? 1 : 0)
+            + (volumeSurge ? 1 : 0)
+            + (nearWeeklyHigh ? 1 : 0);
+        if (rulesPassed < 3) {
             return null;
         }
 

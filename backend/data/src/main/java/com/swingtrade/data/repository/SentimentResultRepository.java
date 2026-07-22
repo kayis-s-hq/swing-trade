@@ -80,4 +80,10 @@ public interface SentimentResultRepository extends JpaRepository<SentimentResult
 
     @Query("SELECT s FROM SentimentResultEntity s WHERE s.symbol = :symbol ORDER BY s.date DESC LIMIT 1")
     Optional<SentimentResultEntity> findLatestBySymbol(@Param("symbol") String symbol);
+
+    /**
+     * Finds all sentiment results before a given date, ordered ascending.
+     * Used by the evaluation job to find unevaluated sentiment records.
+     */
+    List<SentimentResultEntity> findAllByDateBeforeOrderByDateAsc(LocalDate before);
 }

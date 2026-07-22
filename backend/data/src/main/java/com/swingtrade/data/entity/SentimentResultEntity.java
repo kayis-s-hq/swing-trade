@@ -52,6 +52,12 @@ public class SentimentResultEntity {
     @Column(name = "updated_at")
     private java.time.LocalDateTime updatedAt;
 
+    @Column(name = "prompt_hash", length = 64)
+    private String promptHash;
+
+    @Column(name = "model_version", length = 50)
+    private String modelVersion;
+
     /**
      * Default constructor for JPA.
      */
@@ -76,6 +82,8 @@ public class SentimentResultEntity {
         entity.setAnalyzedAt(result.analyzedAt());
         entity.setRedFlags(result.redFlags() != null ? result.redFlags().toArray(new String[0]) : null);
         entity.setCatalysts(result.catalysts() != null ? result.catalysts().toArray(new String[0]) : null);
+        entity.setPromptHash(result.promptHash());
+        entity.setModelVersion(result.modelVersion());
         return entity;
     }
 
@@ -95,7 +103,9 @@ public class SentimentResultEntity {
             confidence,
             analyzedAt,
             redFlags != null ? List.of(redFlags) : List.of(),
-            catalysts != null ? List.of(catalysts) : List.of()
+            catalysts != null ? List.of(catalysts) : List.of(),
+            promptHash,
+            modelVersion
         );
     }
 
@@ -195,5 +205,21 @@ public class SentimentResultEntity {
 
     public void setUpdatedAt(java.time.LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getPromptHash() {
+        return promptHash;
+    }
+
+    public void setPromptHash(String promptHash) {
+        this.promptHash = promptHash;
+    }
+
+    public String getModelVersion() {
+        return modelVersion;
+    }
+
+    public void setModelVersion(String modelVersion) {
+        this.modelVersion = modelVersion;
     }
 }
