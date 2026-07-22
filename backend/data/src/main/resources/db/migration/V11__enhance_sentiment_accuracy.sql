@@ -27,16 +27,20 @@ CREATE TABLE sentiment_accuracy (
     model_version     VARCHAR(50),                -- LLM model version
     composite_score   INT,                        -- Composite analysis score (-100 to +100)
     composite_signal  VARCHAR(10),                -- BUY, SELL, HOLD
+    composite_id      BIGINT,                     -- Composite analysis FK
 
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     evaluated_at      TIMESTAMPTZ                 -- When ground truth was computed
-
-    -- Composite analysis FK (optional, only when available)
-    composite_id      BIGINT REFERENCES composite_analysis(id)
 );
 
--- Hypertable for time-series queries
-SELECT create_hypertable('sentiment_accuracy', 'analysis_date', if_not_exists => TRUE);
+-- Hypertable (only if TimescaleDB is installed)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'timescaledb') THEN
+        PERFORM create_hypertable('sentiment_accuracy', 'analysis_date', if_not_exists => TRUE);
+    END IF;
+END
+$$;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_sentiment_accuracy_symbol_date ON sentiment_accuracy (symbol, analysis_date);
@@ -44,26 +48,25 @@ CREATE INDEX IF NOT EXISTS idx_sentiment_accuracy_label ON sentiment_accuracy (g
 CREATE INDEX IF NOT EXISTS idx_sentiment_accuracy_regime ON sentiment_accuracy (market_regime);
 CREATE INDEX IF NOT EXISTS idx_sentiment_accuracy_evaluated ON sentiment_accuracy (evaluated_at) WHERE evaluated_at IS NOT NULL;
 
--- Daily accuracy summary continuous aggregate
-CREATE MATERIALIZED VIEW IF NOT EXISTS sentiment_accuracy_daily
-WITH (timescaledb.continuous) AS
-SELECT
-    time_bucket('1 day', analysis_date) AS bucket,
-    llm_score,
-    COUNT(*) AS total_signals,
-    COUNT(*) FILTER (WHERE was_correct = true) AS correct_count,
-    AVG(llm_confidence) AS avg_confidence,
-    AVG(actual_return_5d) AS avg_return_5d
-FROM sentiment_accuracy
-GROUP BY bucket, llm_score;
+-- Continuous aggregate (only if TimescaleDB is installed)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'timescaledb') THEN
+        CREATE MATERIALIZED VIEW IF NOT EXISTS sentiment_accuracy_daily
+        WITH (timescaledb.continuous) AS
+        SELECT
+            time_bucket('1 day', analysis_date) AS bucket,
+            llm_score,
+            COUNT(*) AS total_signals,
+            COUNT(*) FILTER (WHERE was_correct = true) AS correct_count,
+            AVG(llm_confidence) AS avg_confidence,
+            AVG(actual_return_5d) AS avg_return_5d
+        FROM sentiment_accuracy
+        GROUP BY bucket, llm_score;
 
--- Refresh continuous aggregate
-SELECT refresh_continuous_aggregate('sentiment_accuracy_daily', NULL, NULL);
+        PERFORM refresh_continuous_aggregate('sentiment_accuracy_daily', NULL, NULL);
 
--- Retention policy: compress raw data after 1 year
-SELECT add_retention_policy('sentiment_accuracy',
-    INTERVAL '1 year',
-    INTERVAL '7 days')
-WHERE NOT EXISTS (
-    SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'timescaledb'
-);
+        PERFORM add_retention_policy('sentiment_accuracy', INTERVAL '1 year', INTERVAL '7 days');
+    END IF;
+END
+$$;

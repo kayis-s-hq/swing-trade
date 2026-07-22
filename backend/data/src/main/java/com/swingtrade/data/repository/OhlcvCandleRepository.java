@@ -149,7 +149,7 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
      * @param n the Nth trading day (1 = next trading day, 5 = 5 trading days later)
      * @return optional containing the Nth candle
      */
-    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol AND c.date > :after ORDER BY c.date ASC")
+    @Query(value = "SELECT * FROM ohlcv_candles WHERE symbol = :symbol AND date > :after ORDER BY date ASC LIMIT 1 OFFSET :n", nativeQuery = true)
     Optional<OhlcvCandleEntity> findNthBySymbolAndDateAfterOrderByDateAsc(
         @Param("symbol") String symbol,
         @Param("after") LocalDate after,

@@ -27,24 +27,24 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
 
     @Query("""
         SELECT COUNT(s) FROM SentimentAccuracyEntity s
-        WHERE s.wasCorrect = true AND s.ground_truth_label IN ('UP', 'DOWN')
+        WHERE s.wasCorrect = true AND s.groundTruthLabel IN ('UP', 'DOWN')
           AND s.evaluatedAt IS NOT NULL
-          AND s.evaluatedAt >= :since
+          AND DATE(s.evaluatedAt) >= :since
         """)
     long countCorrectDirectionalSince(@Param("since") LocalDate since);
 
     @Query("""
         SELECT COUNT(s) FROM SentimentAccuracyEntity s
-        WHERE s.ground_truth_label IN ('UP', 'DOWN')
+        WHERE s.groundTruthLabel IN ('UP', 'DOWN')
           AND s.evaluatedAt IS NOT NULL
-          AND s.evaluatedAt >= :since
+          AND DATE(s.evaluatedAt) >= :since
         """)
     long countDirectionalSince(@Param("since") LocalDate since);
 
     @Query("SELECT s FROM SentimentAccuracyEntity s " +
            "WHERE s.evaluatedAt IS NOT NULL " +
-           "AND s.ground_truth_label IN ('UP', 'DOWN') " +
-           "AND s.evaluatedAt >= :since " +
+           "AND s.groundTruthLabel IN ('UP', 'DOWN') " +
+           "AND DATE(s.evaluatedAt) >= :since " +
            "ORDER BY s.evaluatedAt DESC")
     List<SentimentAccuracyEntity> findDirectionalSince(@Param("since") LocalDate since);
 
@@ -102,7 +102,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
           AND s.actualReturn5d IS NOT NULL
-          AND s.evaluatedAt >= :since
+          AND DATE(s.evaluatedAt) >= :since
         ORDER BY s.evaluatedAt DESC
         """)
     List<Object[]> scoreReturnPairsSince(@Param("since") LocalDate since);
@@ -118,7 +118,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
 
     @Query("""
         SELECT COUNT(s) FROM SentimentAccuracyEntity s
-        WHERE s.evaluatedAt >= :since
+        WHERE DATE(s.evaluatedAt) >= :since
         """)
     long countSince(@Param("since") LocalDate since);
 
@@ -126,7 +126,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
         SELECT AVG(CASE WHEN s.wasCorrect THEN 1.0 ELSE 0.0 END)
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
-          AND s.evaluatedAt >= :since
+          AND DATE(s.evaluatedAt) >= :since
         """)
     Double overallAccuracySince(@Param("since") LocalDate since);
 
