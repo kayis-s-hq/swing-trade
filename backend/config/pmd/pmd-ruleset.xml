@@ -8,14 +8,13 @@
   <!-- Keep only errorprone — real bugs, noisy rules excluded -->
   <rule ref="category/java/errorprone.xml">
     <exclude name="AvoidDuplicateLiterals"/>
-    <exclude name="UseConcurrentHashMap"/>
     <exclude name="AvoidLiteralsInIfCondition"/>
-    <exclude name="AvoidUsingVolatile"/>
     <exclude name="NullAssignment"/>
-    <exclude name="DoNotUseThreads"/>
     <exclude name="TestClassWithoutTestCases"/>
     <exclude name="MissingSerialVersionUID"/>
     <exclude name="AvoidFieldNameMatchingMethodName"/>
+    <exclude name="UseConcurrentHashMap"/>
+    <exclude name="DoNotUseThreads"/>
   </rule>
 
   <!-- Keep only security — critical -->
@@ -23,9 +22,9 @@
 
   <!-- Keep only multithreading — concurrency bugs -->
   <rule ref="category/java/multithreading.xml">
-    <exclude name="UseConcurrentHashMap"/>
-    <exclude name="DoNotUseThreads"/>
     <exclude name="AvoidSynchronizedStatement"/>
     <exclude name="AvoidSynchronizedAtMethodLevel"/>
+    <exclude name="UseConcurrentHashMap"/>
+    <exclude name="DoNotUseThreads"/>
   </rule>
 </ruleset>

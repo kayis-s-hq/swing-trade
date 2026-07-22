@@ -5,6 +5,7 @@ import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.*;
+import com.swingtrade.broker.service.PaperTradingStateService;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Signal;
 import org.slf4j.Logger;
@@ -45,6 +46,14 @@ public class PaperTradingEngine {
     // Position counter for unique IDs
     private final AtomicLong positionCounter;
     private final AtomicLong orderCounter;
+
+    // DB persistence bridge (setter-injected to avoid circular dependency)
+    private PaperTradingStateService stateService;
+
+    @Autowired
+    public void setStateService(PaperTradingStateService stateService) {
+        this.stateService = stateService;
+    }
 
     /**
      * Creates a new PaperTradingEngine with specified configuration.
@@ -227,6 +236,13 @@ public class PaperTradingEngine {
 
             logger.info("Position {} created from order {} at {}",
                 position.getPositionId(), orderId, executionPrice);
+
+            // Persist
+            if (stateService != null) {
+                stateService.saveOrder(order);
+                stateService.savePosition(position);
+                stateService.savePortfolio();
+            }
         }
 
         return order;
@@ -388,6 +404,12 @@ public class PaperTradingEngine {
         logger.info("Partial exit completed for position {}: remaining={}",
             positionId, position.getQuantity());
 
+        // Persist
+        if (stateService != null) {
+            stateService.savePosition(position);
+            stateService.savePortfolio();
+        }
+
         return position;
     }
 
@@ -432,6 +454,12 @@ public class PaperTradingEngine {
 
         logger.info("Position {} closed: P&L={}, Reason={}",
             positionId, position.getProfitLoss(), reason);
+
+        // Persist
+        if (stateService != null) {
+            stateService.closePosition(positionId, position);
+            stateService.savePortfolio();
+        }
     }
 
     /**
@@ -609,11 +637,21 @@ public class PaperTradingEngine {
         // Check triggers for each updated position
         for (Position position : updated) {
             if (position.getStatus() == PositionStatus.OPEN) {
+                // Persist updated price/P&L
+                if (stateService != null) {
+                    stateService.savePosition(position);
+                }
                 continue;
             }
 
             logger.info("Position {} status changed to: {}",
                 position.getPositionId(), position.getStatus());
+
+            // Persist closed position
+            if (stateService != null) {
+                stateService.closePosition(position.getPositionId(), position);
+                stateService.savePortfolio();
+            }
         }
     }
 

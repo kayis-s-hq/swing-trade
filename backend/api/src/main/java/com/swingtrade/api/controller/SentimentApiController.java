@@ -1,6 +1,7 @@
 package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.ApiResponse;
+import com.swingtrade.api.dto.CompositeAnalysis;
 import com.swingtrade.data.entity.PdfExtractionEntity;
 import com.swingtrade.data.entity.SentimentResultEntity;
 import com.swingtrade.data.repository.PdfExtractionRepository;
@@ -29,7 +30,7 @@ public class SentimentApiController {
     private final SentimentService sentimentService;
     private final NewsIngestionService newsService;
     private final PdfExtractionService pdfService;
-    private final SentimentAccuracyService accuracyService;
+        private final SentimentAccuracyService accuracyService;
     private final SentimentResultRepository sentimentRepo;
     private final PdfExtractionRepository pdfExtractionRepo;
 

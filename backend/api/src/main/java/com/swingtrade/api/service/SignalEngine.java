@@ -18,6 +18,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -178,6 +179,23 @@ public class SignalEngine {
         signalEntity.setReasoning(buildSignalReason(signal));
         signalEntity.setWarningFlag(warningFlag);
 
+        // Populate entryPrice/stopLoss/target from latest candle
+        OhlcvCandleEntity latestCandle = candleRepository.findLatestBySymbol(symbol).orElse(null);
+        if (latestCandle != null && latestCandle.getClosePrice() != null) {
+            BigDecimal closePrice = latestCandle.getClosePrice();
+            BigDecimal atr = calculateATR(latestCandle, chronologicalCandles);
+            BigDecimal stopLoss = closePrice.subtract(atr.multiply(BigDecimal.valueOf(2)));
+            BigDecimal risk = closePrice.subtract(stopLoss);
+            BigDecimal target = closePrice.add(risk.multiply(BigDecimal.valueOf(2.5)));
+            BigDecimal rr = risk.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO : target.subtract(closePrice).divide(risk, 4, BigDecimal.ROUND_HALF_UP);
+
+            signalEntity.setEntryPrice(closePrice);
+            signalEntity.setStopLoss(stopLoss);
+            signalEntity.setTarget(target);
+            signalEntity.setRiskReward(rr);
+        }
+
         signalRepository.save(signalEntity);
 
         logger.info("Generated {} signal for {} on {} (confidence: {}%, warning: {})",
@@ -220,6 +238,23 @@ public class SignalEngine {
         signalEntity.setIndicators(buildPriceActionIndicators(result));
         signalEntity.setWarningFlag(SignalEntity.WARNING_NONE);
         signalEntity.setStrategy(SignalEntity.STRATEGY_PRICE_ACTION);
+
+        // Populate entryPrice/stopLoss/target from latest candle + ATR
+        OhlcvCandleEntity latestCandle = candleRepository.findLatestBySymbol(result.symbol()).orElse(null);
+        if (latestCandle != null && latestCandle.getClosePrice() != null) {
+            BigDecimal closePrice = latestCandle.getClosePrice();
+            BigDecimal atr = BigDecimal.valueOf(result.atr());
+            BigDecimal stopLoss = closePrice.subtract(atr.multiply(BigDecimal.valueOf(2)));
+            BigDecimal risk = closePrice.subtract(stopLoss);
+            BigDecimal target = closePrice.add(risk.multiply(BigDecimal.valueOf(2.5)));
+            BigDecimal rr = risk.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO : target.subtract(closePrice).divide(risk, 4, BigDecimal.ROUND_HALF_UP);
+
+            signalEntity.setEntryPrice(closePrice);
+            signalEntity.setStopLoss(stopLoss);
+            signalEntity.setTarget(target);
+            signalEntity.setRiskReward(rr);
+        }
 
         signalRepository.save(signalEntity);
 
@@ -274,13 +309,31 @@ public class SignalEngine {
      * @return reason string
      */
     private String buildSignalReason(Signal signal) {
-        // Note: The strategy returns signalType and confidence, but we need to capture factors
-        // For now, provide a simple reason based on signal type
         return switch (signal.type()) {
             case BUY -> "Technical indicators suggest bullish momentum";
             case SELL -> "Technical indicators suggest bearish momentum";
             case HOLD -> "No clear signal - maintain current position";
         };
+    }
+
+    /**
+     * Calculates ATR from the last 14 candles for a symbol.
+     */
+    private BigDecimal calculateATR(OhlcvCandleEntity latest, List<OhlcvCandleEntity> candles) {
+        if (candles.size() < 15) return BigDecimal.valueOf(0.02).multiply(latest.getClosePrice());
+        BigDecimal totalRange = BigDecimal.ZERO;
+        int count = 0;
+        for (int i = candles.size() - 14; i < candles.size(); i++) {
+            OhlcvCandleEntity c = candles.get(i);
+            BigDecimal high = c.getHighPrice();
+            BigDecimal low = c.getLowPrice();
+            if (high != null && low != null) {
+                totalRange = totalRange.add(high.subtract(low));
+                count++;
+            }
+        }
+        return count > 0 ? totalRange.divide(BigDecimal.valueOf(count), 4, BigDecimal.ROUND_HALF_UP)
+                        : BigDecimal.valueOf(0.02).multiply(latest.getClosePrice());
     }
 
     /**

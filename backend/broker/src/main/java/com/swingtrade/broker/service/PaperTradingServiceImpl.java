@@ -5,6 +5,8 @@ import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.model.Order;
 import com.swingtrade.broker.model.Portfolio;
 import com.swingtrade.broker.model.Position;
+import com.swingtrade.broker.model.TradeDirection;
+import com.swingtrade.broker.service.PaperTradingStateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -24,11 +26,14 @@ public class PaperTradingServiceImpl implements BrokerService {
 
     private final PaperTradingEngine paperTradingEngine;
     private final OrderManager orderManager;
+    private final PaperTradingStateService stateService;
 
     public PaperTradingServiceImpl(PaperTradingEngine paperTradingEngine,
-                                   OrderManager orderManager) {
+                                   OrderManager orderManager,
+                                   PaperTradingStateService stateService) {
         this.paperTradingEngine = paperTradingEngine;
         this.orderManager = orderManager;
+        this.stateService = stateService;
     }
 
     @Override
@@ -36,10 +41,19 @@ public class PaperTradingServiceImpl implements BrokerService {
         if (order == null) {
             throw new IllegalArgumentException("Order cannot be null");
         }
-        // Paper mode: create order in engine and execute immediately
-        Order engineOrder = orderManager.createBuyOrder(
-            order.getSymbol(), order.getQuantity().intValue(), order.getPrice());
+        Order engineOrder;
+        if (order.getDirection() == TradeDirection.LONG) {
+            engineOrder = orderManager.createBuyOrder(
+                order.getSymbol(), order.getQuantity().intValue(), order.getPrice());
+        } else {
+            engineOrder = orderManager.createSellOrder(
+                order.getSymbol(), order.getQuantity().intValue(), order.getPrice());
+        }
         engineOrder = paperTradingEngine.executePendingOrder(engineOrder.getOrderId(), order.getPrice());
+        if (stateService != null) {
+            stateService.saveOrder(engineOrder);
+            stateService.savePortfolio();
+        }
         return engineOrder;
     }
 

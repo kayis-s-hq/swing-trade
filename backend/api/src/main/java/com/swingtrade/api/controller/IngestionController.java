@@ -44,7 +44,7 @@ public class IngestionController {
 
             long count = watchlistService.getIngestionStatus().stream()
                 .filter(s -> symbol.equals(s.get("symbol")))
-                .mapToLong(s -> (long) (Integer) s.get("candleCount"))
+                .mapToLong(s -> ((Number) s.get("candleCount")).longValue())
                 .findFirst()
                 .orElse(0);
 

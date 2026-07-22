@@ -11,6 +11,7 @@ import com.swingtrade.broker.risk.KillSwitchService;
 import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.broker.service.BrokerService;
 import com.swingtrade.broker.service.PaperTradingServiceImpl;
+import com.swingtrade.broker.service.PaperTradingStateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,7 @@ public class BrokerServiceFactory {
     private final BrokerClient brokerClient;
     private final RiskControls riskControlsService;
     private final KillSwitchService killSwitchService;
+    private final PaperTradingStateService stateService;
     private final BrokerProperties props;
 
     private BrokerMode currentMode;
@@ -42,12 +44,14 @@ public class BrokerServiceFactory {
                                 org.springframework.beans.factory.ObjectProvider<BrokerClient> brokerClientProvider,
                                 RiskControls riskControlsService,
                                 KillSwitchService killSwitchService,
+                                PaperTradingStateService stateService,
                                 BrokerProperties props) {
         this.paperTradingEngine = paperTradingEngine;
         this.orderManager = orderManager;
         this.brokerClient = brokerClientProvider.getIfAvailable();
         this.riskControlsService = riskControlsService;
         this.killSwitchService = killSwitchService;
+        this.stateService = stateService;
         this.props = props;
 
         if (this.brokerClient == null) {
@@ -77,7 +81,7 @@ public class BrokerServiceFactory {
         switch (mode) {
             case PAPER:
                 logger.info("Using Paper Trading Service");
-                return new PaperTradingServiceImpl(paperTradingEngine, orderManager);
+                return new PaperTradingServiceImpl(paperTradingEngine, orderManager, stateService);
 
             case LIVE:
                 logger.info("Using Kite Connect Live Trading Service");
@@ -89,7 +93,7 @@ public class BrokerServiceFactory {
 
             default:
                 logger.warn("Unknown mode {}, defaulting to PAPER", mode);
-                return new PaperTradingServiceImpl(paperTradingEngine, orderManager);
+                return new PaperTradingServiceImpl(paperTradingEngine, orderManager, stateService);
         }
     }
 
