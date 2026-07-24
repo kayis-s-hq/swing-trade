@@ -5,6 +5,11 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
+      path: '/news',
+      name: 'News',
+      component: () => import('../views/NewsView.vue'),
+    },
+    {
       path: '/',
       name: 'Dashboard',
       component: DashboardView,

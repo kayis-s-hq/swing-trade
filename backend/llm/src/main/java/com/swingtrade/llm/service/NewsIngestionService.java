@@ -43,33 +43,18 @@ public class NewsIngestionService {
 
     private static final Logger logger = LoggerFactory.getLogger(NewsIngestionService.class);
 
-    // NSE Corporate Announcements RSS feed
-    private static final String NSE_ANNOUNCEMENTS_RSS =
-            "https://feeds.nseindia.com/misc/topstories.htm";
+    // Google News RSS base URL — only working free source for Indian stock news
+    private static final String GOOGLE_NEWS_BASE =
+            "https://news.google.com/rss/search?q=";
+    private static final String GOOGLE_NEWS_PARAMS =
+            "&hl=en-IN&gl=IN&ceid=IN:en";
 
-    // MoneyControl NSE RSS feed
-    private static final String MONEYCONTROL_NSE_RSS =
-            "https://feeds.moneycontrol.com/nse/mncr";
-
-    // Economic Times Stock Market RSS feed
-    private static final String ET_STOCKS_RSS =
-            "https://feeds.economictimes.indiatimes.com/stocks";
-
-    // Bloomberg India RSS feed
-    private static final String BLOOMBERG_INDIA_RSS =
-            "https://feeds.bloombergmarkets.com/india-stocks";
-
-    // Reuters India Markets RSS feed
-    private static final String REUTERS_INDIA_RSS =
-            "https://feeds.reuters.com/IndiaMarkets";
-
-    // Supported RSS feed URLs for configurable fetching
-    private static final List<String> SUPPORTED_RSS_FEEDS = Arrays.asList(
-            NSE_ANNOUNCEMENTS_RSS,
-            MONEYCONTROL_NSE_RSS,
-            ET_STOCKS_RSS,
-            BLOOMBERG_INDIA_RSS,
-            REUTERS_INDIA_RSS
+    // Google News queries for Indian markets
+    private static final List<String> MARKET_QUERIES = Arrays.asList(
+            "India+stock+market+today",
+            "Sensex+Nifty+market",
+            "India+IPO+listing",
+            "India+FII+DII+market"
     );
 
     private final WebClient webClient;
@@ -77,15 +62,13 @@ public class NewsIngestionService {
     private final NewsFilterService newsFilterService;
     private final ExecutorService newsExecutor;
 
-    private final List<String> rssFeedUrls;
+    private final List<String> googleNewsUrls;
     private final int maxArticlesPerFeed;
 
     /**
      * Constructs NewsIngestionService with required dependencies.
-     *
-     * @param webClientBuilder WebClient builder for web requests
-     * @param rssFeedUrls list of RSS feed URLs to monitor (optional, defaults to built-in feeds)
-     * @param maxArticlesPerFeed maximum articles to fetch per feed
+     * Uses Google News as the primary news source since all traditional
+     * Indian financial RSS feeds (NSE, Reuters, ET, Moneycontrol, Bloomberg) are dead.
      */
     @Autowired
     public NewsIngestionService(
@@ -105,38 +88,41 @@ public class NewsIngestionService {
             return t;
         });
 
-        // Parse custom RSS feeds or use defaults
+        // Parse custom queries or use default Google News queries
         if (rssFeedUrls != null && !rssFeedUrls.isBlank()) {
-            this.rssFeedUrls = Arrays.stream(rssFeedUrls.split(","))
+            this.googleNewsUrls = Arrays.stream(rssFeedUrls.split(","))
                     .map(String::trim)
                     .filter(url -> !url.isEmpty())
+                    .map(q -> GOOGLE_NEWS_BASE + q + GOOGLE_NEWS_PARAMS)
                     .collect(Collectors.toList());
-            logger.info("Using custom RSS feeds: {}", this.rssFeedUrls);
+            logger.info("Using custom Google News queries: {}", this.googleNewsUrls);
         } else {
-            this.rssFeedUrls = SUPPORTED_RSS_FEEDS;
-            logger.info("Using default RSS feeds: {}", this.rssFeedUrls);
+            this.googleNewsUrls = MARKET_QUERIES.stream()
+                    .map(q -> GOOGLE_NEWS_BASE + q + GOOGLE_NEWS_PARAMS)
+                    .collect(Collectors.toList());
+            logger.info("Using default Google News queries: {}", this.googleNewsUrls);
         }
     }
 
     /**
-     * Fetches news from all configured RSS feeds.
+     * Fetches market-wide news from Google News queries.
      *
      * @return list of news articles with metadata
      */
     public List<NewsArticle> fetchNewsFromFeeds() {
-        logger.info("Fetching news from {} RSS feeds", rssFeedUrls.size());
+        logger.info("Fetching market-wide news from {} Google News queries", googleNewsUrls.size());
 
         List<NewsArticle> allArticles = new ArrayList<>();
 
-        for (String feedUrl : rssFeedUrls) {
+        for (String queryUrl : googleNewsUrls) {
             try {
-                logger.debug("Fetching from feed: {}", feedUrl);
-                List<NewsArticle> articles = fetchFromRssFeed(feedUrl);
+                logger.debug("Fetching from query: {}", queryUrl);
+                List<NewsArticle> articles = fetchFromGoogleNewsQuery(queryUrl);
                 allArticles.addAll(articles);
-                logger.info("Successfully fetched {} articles from {}", articles.size(), feedUrl);
+                logger.info("Successfully fetched {} articles from {}", articles.size(), queryUrl);
             } catch (Exception e) {
-                logger.error("Error fetching news from feed {}: {}", feedUrl, e.getMessage());
-                logger.trace("RSS feed fetch error", e);
+                logger.error("Error fetching news from query {}: {}", queryUrl, e.getMessage());
+                logger.trace("Google News fetch error", e);
             }
         }
 
@@ -145,47 +131,46 @@ public class NewsIngestionService {
     }
 
     /**
-     * Fetches news from a single RSS feed URL.
+     * Fetches news from a single Google News RSS query URL.
      *
-     * @param feedUrl the RSS feed URL
+     * @param queryUrl the Google News RSS URL
      * @return list of parsed news articles
      */
-    public List<NewsArticle> fetchFromRssFeed(String feedUrl) {
+    public List<NewsArticle> fetchFromGoogleNewsQuery(String queryUrl) {
         List<NewsArticle> articles = new ArrayList<>();
 
         try {
-            // Fetch and parse RSS XML
-            String xmlContent = fetchRssXml(feedUrl);
+            String xmlContent = fetchRssXml(queryUrl);
 
             if (xmlContent == null || xmlContent.isEmpty()) {
-                logger.warn("Empty RSS content from {}", feedUrl);
+                logger.warn("Empty content from {}", queryUrl);
                 return articles;
             }
 
-            // Parse RSS XML using DOM
-            List<NewsItem> rssItems = parseRssXml(xmlContent);
+            // Parse Google News XML using DOM
+            List<NewsItem> items = parseGoogleNewsXml(xmlContent, queryUrl);
 
-            for (NewsItem item : rssItems) {
+            for (NewsItem item : items) {
                 articles.add(NewsArticle.builder()
                         .title(item.title)
                         .link(item.link)
                         .description(item.description)
                         .publishedDate(item.pubDate)
-                        .source(feedUrl)
-                        .rawContent(item.content)
+                        .source(item.content) // source name from Google namespace
+                        .rawContent(item.description)
                         .build());
             }
 
-            // Limit to max articles per feed
+            // Limit to max articles per query
             if (articles.size() > maxArticlesPerFeed) {
                 articles = articles.subList(0, maxArticlesPerFeed);
             }
 
-            logger.info("Fetched {} articles from {}", articles.size(), feedUrl);
+            logger.info("Fetched {} articles from {}", articles.size(), queryUrl);
 
         } catch (Exception e) {
-            logger.error("Error fetching RSS feed {}: {}", feedUrl, e.getMessage());
-            logger.trace("RSS feed fetch error", e);
+            logger.error("Error fetching from {}: {}", queryUrl, e.getMessage());
+            logger.trace("Google News fetch error", e);
         }
 
         return articles;
@@ -229,25 +214,20 @@ public class NewsIngestionService {
     }
 
     /**
-     * Parses RSS XML content into NewsItem objects using DOM parser.
-     *
-     * @param xmlContent the XML content of RSS feed
-     * @return list of parsed items
+     * Parses Google News XML, handling the Google Media RSS namespace for source extraction.
+     * Google uses http://www.google.com/2005/gml/ namespace for the <source> element.
      */
-    private List<NewsItem> parseRssXml(String xmlContent) {
+    private List<NewsItem> parseGoogleNewsXml(String xmlContent, String queryUrl) {
         List<NewsItem> items = new ArrayList<>();
-
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setNamespaceAware(true);
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document document = builder.parse(new ByteArrayInputStream(xmlContent.getBytes("UTF-8")));
-
-            // Normalize for consistent parsing
             document.getDocumentElement().normalize();
 
             NodeList itemsList = document.getElementsByTagName("item");
-
             for (int i = 0; i < itemsList.getLength(); i++) {
                 Element itemElement = (Element) itemsList.item(i);
 
@@ -255,18 +235,37 @@ public class NewsIngestionService {
                 String link = getChildText(itemElement, "link");
                 String description = getChildText(itemElement, "description");
                 ZonedDateTime pubDate = parsePubDate(getChildText(itemElement, "pubDate"));
-                String content = getChildText(itemElement, "content:encoded");
+
+                // Extract source from Google namespace
+                String sourceName = getGoogleNamespaceText(itemElement, "source",
+                        "http://www.google.com/2005/gml/");
+                if (sourceName == null || sourceName.isBlank()) {
+                    sourceName = getChildText(itemElement, "source");
+                }
+                if (sourceName == null || sourceName.isBlank()) {
+                    sourceName = "google_news";
+                }
 
                 if (title != null && !title.trim().isEmpty()) {
-                    items.add(new NewsItem(title, link, description, pubDate, content));
+                    items.add(new NewsItem(title, link, description, pubDate, sourceName));
                 }
             }
-
         } catch (Exception e) {
-            logger.error("Error parsing RSS XML: {}", e.getMessage());
+            logger.error("Error parsing Google News XML: {}", e.getMessage());
         }
-
         return items;
+    }
+
+    /**
+     * Gets text from an element in a specific XML namespace.
+     */
+    private String getGoogleNamespaceText(Element parent, String tagName, String namespaceUri) {
+        NodeList nodeList = parent.getElementsByTagNameNS(namespaceUri, tagName);
+        if (nodeList.getLength() > 0) {
+            String text = nodeList.item(0).getTextContent();
+            return StringEscapeUtils.unescapeHtml4(text);
+        }
+        return null;
     }
 
     /**
@@ -329,7 +328,7 @@ public class NewsIngestionService {
     }
 
     /**
-     * Fetches stock-specific news by searching financial news sources.
+     * Fetches stock-specific news from Google News.
      *
      * @param stockSymbol the stock symbol (e.g., "RELIANCE", "TCS")
      * @return list of news articles about the stock
@@ -339,36 +338,31 @@ public class NewsIngestionService {
 
         List<NewsArticle> stockNews = new ArrayList<>();
 
-        // Search across multiple RSS feeds for stock-specific news
-        for (String feedUrl : rssFeedUrls) {
-            List<NewsArticle> articles = fetchFromRssFeed(feedUrl);
+        // Query Google News with stock-specific queries
+        List<String> stockQueries = Arrays.asList(
+                GOOGLE_NEWS_BASE + stockSymbol + "+NSE+stock" + GOOGLE_NEWS_PARAMS,
+                GOOGLE_NEWS_BASE + stockSymbol + "+NSE" + GOOGLE_NEWS_PARAMS,
+                GOOGLE_NEWS_BASE + stockSymbol + "+market" + GOOGLE_NEWS_PARAMS
+        );
 
-            // Filter articles that mention the stock
-            List<NewsArticle> filtered = articles.stream()
-                    .filter(article -> containsStockSymbol(article, stockSymbol))
-                    .limit(5) // Max 5 articles per feed
-                    .collect(Collectors.toList());
-
-            stockNews.addAll(filtered);
+        for (String queryUrl : stockQueries) {
+            try {
+                List<NewsArticle> articles = fetchFromGoogleNewsQuery(queryUrl);
+                stockNews.addAll(articles);
+            } catch (Exception e) {
+                logger.debug("Query {} returned no results for {}", queryUrl, stockSymbol);
+            }
         }
 
-        logger.info("Found {} articles for stock {}", stockNews.size(), stockSymbol);
-        return stockNews;
-    }
+        // Dedup by normalized title
+        Set<String> seen = new HashSet<>();
+        List<NewsArticle> deduped = stockNews.stream()
+                .filter(a -> seen.add(a.title().toLowerCase().trim()))
+                .limit(maxArticlesPerFeed * 3)
+                .collect(Collectors.toList());
 
-    /**
-     * Checks if a news article contains the stock symbol.
-     *
-     * @param article the news article
-     * @param stockSymbol the stock symbol to search for
-     * @return true if the stock symbol is found in the article
-     */
-    private boolean containsStockSymbol(NewsArticle article, String stockSymbol) {
-        String content = (article.title() != null ? article.title() : "") +
-                        " " + (article.description() != null ? article.description() : "") +
-                        " " + (article.rawContent() != null ? article.rawContent() : "");
-
-        return content.toUpperCase().contains(stockSymbol.toUpperCase());
+        logger.info("Found {} unique articles for stock {}", deduped.size(), stockSymbol);
+        return deduped;
     }
 
     /**
@@ -397,39 +391,7 @@ public class NewsIngestionService {
      */
     public List<NewsArticle> fetchMarketNews() {
         logger.info("Fetching market-wide news");
-
-        List<NewsArticle> marketNews = fetchNewsFromFeeds();
-
-        // Filter for market-wide topics (NIFTY, SENSEX, markets, economy)
-        return marketNews.stream()
-                .filter(article -> isMarketWideNews(article))
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Checks if a news article is market-wide rather than stock-specific.
-     *
-     * @param article the news article
-     * @return true if it's market-wide news
-     */
-    private boolean isMarketWideNews(NewsArticle article) {
-        String content = (article.title() != null ? article.title() : "") +
-                        " " + (article.description() != null ? article.description() : "");
-
-        String lowerContent = content.toLowerCase();
-
-        // Market-wide indicators
-        return lowerContent.contains("nifty") ||
-               lowerContent.contains("sensex") ||
-               lowerContent.contains("market") ||
-               lowerContent.contains("economy") ||
-               lowerContent.contains("fpi") ||
-               lowerContent.contains("fii") ||
-               lowerContent.contains("di") ||
-               lowerContent.contains("inflation") ||
-               lowerContent.contains("rbi") ||
-               lowerContent.contains("budget") ||
-               lowerContent.contains("policy");
+        return fetchNewsFromFeeds();
     }
 
     /**
@@ -514,13 +476,12 @@ public class NewsIngestionService {
     // ===== Symbol-specific news sources =====
 
     /**
-     * Fetches Google News RSS for a symbol using DOM parsing.
+     * Fetches Google News RSS for a symbol using namespace-aware DOM parsing.
      */
     public List<NewsArticle> fetchGoogleNews(String symbol) {
         logger.debug("Fetching Google News for {}", symbol);
         try {
-            String url = "https://news.google.com/rss/search?q=" +
-                    symbol + "+NSE+stock&hl=en-IN&gl=IN&ceid=IN:en";
+            String url = GOOGLE_NEWS_BASE + symbol + "+NSE+stock" + GOOGLE_NEWS_PARAMS;
             HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setRequestProperty("User-Agent", "SwingTrade/1.0");
             conn.setConnectTimeout(5000);
@@ -531,29 +492,19 @@ public class NewsIngestionService {
                 return List.of();
             }
 
-            List<NewsArticle> articles = new ArrayList<>();
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.parse(new ByteArrayInputStream(
-                    conn.getInputStream().readAllBytes()));
-            doc.getDocumentElement().normalize();
+            String xmlContent = new String(conn.getInputStream().readAllBytes(), "UTF-8");
+            List<NewsItem> items = parseGoogleNewsXml(xmlContent, url);
 
-            NodeList items = doc.getElementsByTagName("item");
-            for (int i = 0; i < items.getLength(); i++) {
-                Element item = (Element) items.item(i);
-                String title = getChildText(item, "title");
-                String link = getChildText(item, "link");
-                String desc = stripHtml(getChildText(item, "description"));
-                String pubDateStr = getChildText(item, "pubDate");
-                ZonedDateTime pubDate = parsePubDate(pubDateStr);
-                if (title != null && !title.isBlank()) {
-                    if (pubDate == null) {
-                        logger.debug("No pubDate for Google News article '{}', using now", title);
-                    }
-                    articles.add(new NewsArticle(title, link, desc, pubDate != null ? pubDate : ZonedDateTime.now(), "google_news", desc));
-                }
-            }
+            List<NewsArticle> articles = items.stream()
+                    .map(item -> {
+                        String desc = stripHtml(item.description);
+                        return new NewsArticle(
+                                item.title, item.link, desc,
+                                item.pubDate != null ? item.pubDate : ZonedDateTime.now(),
+                                item.content, desc);
+                    })
+                    .collect(Collectors.toList());
+
             logger.info("Fetched {} articles from Google News for {}", articles.size(), symbol);
             return articles;
         } catch (Exception e) {
@@ -563,97 +514,26 @@ public class NewsIngestionService {
     }
 
     /**
-     * Fetches NSE corporate announcements for a symbol.
-     * NSE blocks non-browser requests frequently, so use a single short attempt.
-     */
-    public List<NewsArticle> fetchNseAnnouncements(String symbol) {
-        logger.debug("Fetching NSE announcements for {}", symbol);
-        try {
-            String url = "https://www.nseindia.com/api/corp-info?symbol=" + symbol;
-            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-            conn.setRequestProperty("User-Agent", "SwingTrade/1.0");
-            conn.setRequestProperty("Accept", "application/json");
-            conn.setConnectTimeout(2000);
-            conn.setReadTimeout(2000);
-
-            int code = conn.getResponseCode();
-            if (code == HttpURLConnection.HTTP_OK) {
-                BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(conn.getInputStream(), "UTF-8"));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) sb.append(line);
-                reader.close();
-
-                String body = sb.toString();
-                if (body.startsWith("<") || body.startsWith("<!")) {
-                    logger.debug("NSE returned HTML for {}, skipping", symbol);
-                    return List.of();
-                }
-
-                // Simple JSON parsing for NSE announcement array
-                List<NewsArticle> articles = new ArrayList<>();
-                if (body.startsWith("[")) {
-                    body = body.replace("}{", "};{").replace("[", "").replace("]", "");
-                    String[] items = body.split(";");
-                    for (String item : items) {
-                        try {
-                            String subject = extractJsonField(item, "subject");
-                            String date = extractJsonField(item, "date");
-                            String desc = extractJsonField(item, "description");
-                            if (subject != null && !subject.isBlank()) {
-                                ZonedDateTime pubDate = parseNseDate(date);
-                                articles.add(new NewsArticle(subject, null, desc,
-                                        pubDate != null ? pubDate : ZonedDateTime.now(), "nse", desc));
-                            }
-                        } catch (Exception e) {
-                            // skip malformed items
-                        }
-                    }
-                }
-                logger.info("Fetched {} announcements from NSE for {}", articles.size(), symbol);
-                return articles;
-            }
-            logger.debug("NSE HTTP {} for {}", code, symbol);
-            return List.of();
-        } catch (Exception e) {
-            logger.debug("NSE fetch skipped for {}: {}", symbol, e.getMessage());
-            return List.of();
-        }
-    }
-
-    /**
-     * Unified fetch with parallel NSE + Google News, dedup, 7-day filter.
+     * Fetches all news for a symbol using Google News, dedup, 30-day filter.
      */
     public List<NewsArticle> fetchAllNews(String symbol) {
         logger.debug("Fetching all news for {}", symbol);
 
-        long start = System.currentTimeMillis();
         ZoneId ist = ZoneId.of("Asia/Kolkata");
         LocalDateTime thirtyDaysAgo = LocalDateTime.now(ist).minusDays(30);
-        CompletableFuture<List<NewsArticle>> nseFut = CompletableFuture.supplyAsync(() -> fetchNseAnnouncements(symbol), newsExecutor);
-        CompletableFuture<List<NewsArticle>> googleFut = CompletableFuture.supplyAsync(() -> fetchGoogleNews(symbol), newsExecutor);
+        CompletableFuture<List<NewsArticle>> googleFut =
+                CompletableFuture.supplyAsync(() -> fetchGoogleNews(symbol), newsExecutor);
 
-        // Hard 15s timeout so the REST endpoint doesn't block indefinitely
-        long remaining = Math.max(1000, 15000 - (System.currentTimeMillis() - start));
+        long start = System.currentTimeMillis();
         List<NewsArticle> all = new ArrayList<>();
         try {
-            all.addAll(nseFut.get(remaining, TimeUnit.MILLISECONDS));
-        } catch (Exception e) {
-            logger.warn("NSE news fetch timed out for {}: {}", symbol, e.getMessage());
-            nseFut.cancel(true);
-        }
-        remaining = Math.max(1000, 15000 - (System.currentTimeMillis() - start));
-        try {
-            all.addAll(googleFut.get(remaining, TimeUnit.MILLISECONDS));
+            all.addAll(googleFut.get(10, TimeUnit.SECONDS));
         } catch (Exception e) {
             logger.warn("Google News fetch timed out for {}: {}", symbol, e.getMessage());
             googleFut.cancel(true);
         }
 
         // Dedup by normalized headline + 30-day filter
-        // Keep articles with null dates (Google News often omits them)
-        // and use a wider window since symbol-specific news may be sparse
         Set<String> seen = new HashSet<>();
         List<NewsArticle> deduped = new ArrayList<>();
         List<NewsArticle> nullDateArticles = new ArrayList<>();
@@ -668,7 +548,6 @@ public class NewsIngestionService {
                 deduped.add(a);
             }
         }
-        // If 7-day filter produced nothing, fall back to null-date articles
         if (deduped.isEmpty() && !nullDateArticles.isEmpty()) {
             Set<String> seen2 = new HashSet<>();
             for (NewsArticle a : nullDateArticles) {
@@ -687,26 +566,6 @@ public class NewsIngestionService {
 
         logger.info("Fetched {} unique headlines for {}", deduped.size(), symbol);
         return deduped;
-    }
-
-    private String extractJsonField(String json, String field) {
-        String pattern = "\"" + field + "\"\\s*:\\s*\"";
-        int start = json.indexOf(pattern);
-        if (start == -1) return null;
-        start += pattern.length();
-        int end = json.indexOf("\"", start);
-        if (end == -1) return null;
-        return json.substring(start, end).replace("\\\"", "\"");
-    }
-
-    private ZonedDateTime parseNseDate(String dateStr) {
-        if (dateStr == null) return null;
-        try {
-            return ZonedDateTime.parse(dateStr.trim(),
-                    DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm:ss"));
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     /**

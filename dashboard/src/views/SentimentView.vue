@@ -76,7 +76,7 @@
       </div>
 
       <!-- Composite analysis results -->
-      <div v-if="(!orchestrating && !compositeLoading) && composite" class="flex flex-col gap-6">
+      <div v-if="composite && !orchestrating && !compositeLoading" class="flex flex-col gap-6">
         <!-- Score Card -->
         <ScoreCard
           :score="composite.compositeScore"
@@ -283,6 +283,115 @@
       </div>
     </div>
 
+    <!-- News Tab -->
+    <div v-if="activeTab === 'news'">
+      <div class="mb-6 card-panel p-5">
+        <h3 class="mb-3 text-sm font-semibold text-text-primary">Select Symbol</h3>
+        <form @submit.prevent="loadNews" class="flex flex-col sm:flex-row gap-3">
+          <div class="flex-1">
+            <input
+              v-model="symbolInput"
+              type="text"
+              placeholder="e.g. RELIANCE"
+              list="watchlistSymbols"
+              required
+              class="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-brand/30"
+            />
+            <datalist id="watchlistSymbols">
+              <option v-for="w in watchlistSymbols" :key="w.symbol" :value="w.symbol" />
+            </datalist>
+          </div>
+          <button
+            type="submit"
+            :disabled="newsLoading"
+            class="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
+          >
+            {{ newsLoading ? 'Loading...' : 'Fetch News' }}
+          </button>
+        </form>
+        <p v-if="error" class="mt-3 text-xs text-danger">{{ error }}</p>
+      </div>
+
+      <div v-if="newsLoading" class="flex justify-center py-12">
+        <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      </div>
+
+      <div v-else-if="newsArticles.length > 0" class="flex flex-col gap-4">
+        <!-- Summary bar -->
+        <div class="card-panel p-4">
+          <div class="flex items-center gap-4 text-sm">
+            <span class="text-text-muted">Symbol:</span>
+            <span class="font-semibold text-text-primary">{{ symbolInput }}</span>
+            <span class="text-text-muted">|</span>
+            <span class="text-text-muted">Articles:</span>
+            <span class="font-semibold text-text-primary">{{ newsArticles.length }}</span>
+            <span class="text-text-muted">|</span>
+            <span class="text-text-muted">Sources:</span>
+            <span class="font-semibold text-text-primary">{{ newsSourceCount }}</span>
+          </div>
+        </div>
+
+        <!-- Article list -->
+        <div class="flex flex-col gap-3">
+          <div
+            v-for="(article, index) in newsArticles"
+            :key="index"
+            class="card-panel p-4 transition-colors hover:bg-bg-hover/50"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1">
+                <div class="mb-1 flex items-center gap-2">
+                  <span class="rounded bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
+                    {{ article.source }}
+                  </span>
+                  <span v-if="article.publishedDate" class="text-xs text-text-muted">
+                    {{ formatDate(article.publishedDate) }}
+                  </span>
+                </div>
+                <h3 class="text-sm font-medium text-text-primary">{{ article.title }}</h3>
+              </div>
+              <button
+                @click="toggleNewsArticle(index)"
+                class="shrink-0 text-text-muted transition-colors hover:text-text-primary"
+              >
+                <svg
+                  class="h-5 w-5 transition-transform"
+                  :class="{ 'rotate-180': expandedNews.has(index) }"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+
+            <div v-if="expandedNews.has(index)" class="mt-3 animate-fade-in">
+              <p v-if="article.description" class="text-sm text-text-secondary leading-relaxed">
+                {{ article.description }}
+              </p>
+              <p v-if="article.rawContent && article.rawContent !== article.description" class="mt-2 text-sm text-text-secondary leading-relaxed">
+                {{ article.rawContent }}
+              </p>
+              <a
+                v-if="article.link"
+                :href="article.link"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="mt-2 inline-block text-xs text-brand hover:underline"
+              >
+                Read full article &rarr;
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="card-panel p-5">
+        <p class="text-sm text-text-muted">No news articles found. Enter a symbol and click Fetch News.</p>
+      </div>
+    </div>
+
     <!-- History Tab -->
     <div v-if="activeTab === 'history'">
       <div v-if="historyLoading" class="flex justify-center py-12">
@@ -316,7 +425,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import {
   getSentimentLatest,
   getSentimentHistory,
@@ -341,6 +450,7 @@ import AnalysisProgressComp from '../components/AnalysisProgress.vue'
 const tabs = [
   { key: 'overview', label: 'Overview' },
   { key: 'details', label: 'Details' },
+  { key: 'news', label: 'News' },
   { key: 'history', label: 'History' },
 ]
 const activeTab = ref('overview')
@@ -351,10 +461,12 @@ const analyzing = ref(false)
 const error = ref('')
 const sentiment = ref<SentimentResult | null>(null)
 const newsArticles = ref<NewsArticle[]>([])
+const newsLoading = ref(false)
+const expandedNews = ref(new Set<number>())
 const latestSignal = ref<Signal | null>(null)
 
 // Composite analysis state
-let composite: CompositeAnalysis | null = null
+const composite = ref<CompositeAnalysis | null>(null)
 const compositeLoading = ref(false)
 
 // Full analysis orchestration state
@@ -436,7 +548,7 @@ const analyzeComposite = async () => {
   if (!symbolInput.value.trim()) return
   orchestrating.value = true
   error.value = ''
-  composite = null
+  composite.value = null
   analysisStages.value = []
   analysisCurrentStage.value = 0
   analysisComplete.value = false
@@ -444,24 +556,27 @@ const analyzeComposite = async () => {
   analysisError.value = null
   try {
     for await (const data of runFullAnalysis(symbolInput.value)) {
-      if ('stageNumber' in data && 'stageName' in data) {
-        // AnalysisProgress
+      const evt = (data as any)._eventType
+      if (evt === 'complete') {
+        const result = data as FullAnalysisResult
+        composite.value = result.composite
+        analysisDurationMs.value = result.durationMs
+        analysisComplete.value = true
+      }
+      else if (evt === 'progress') {
         const stage = data as AnalysisProgress
         analysisStages.value = [...analysisStages.value, stage]
         if (stage.status === 'running') {
           analysisCurrentStage.value = stage.stageNumber
         }
-      } else {
-        // FullAnalysisResult
-        const result = data as FullAnalysisResult
-        composite = result.composite
-        analysisDurationMs.value = result.durationMs
-        analysisComplete.value = true
+        await new Promise(r => setTimeout(r, 100))
       }
+      // 'started' — skip
     }
   } catch (e) {
     analysisError.value = e instanceof Error ? e.message : 'Analysis failed'
     error.value = analysisError.value
+    analysisComplete.value = true
   } finally {
     orchestrating.value = false
     compositeLoading.value = false
@@ -479,6 +594,60 @@ const loadHistory = async () => {
     }
   } finally {
     historyLoading.value = false
+  }
+}
+
+// Load history when switching to history tab
+watch(activeTab, (tab) => {
+  if (tab === 'history') loadHistory()
+})
+
+const newsSourceCount = computed(() => {
+  const sources = new Set(newsArticles.value.map(a => a.source))
+  return sources.size
+})
+
+const loadNews = async () => {
+  if (!symbolInput.value.trim()) return
+  newsLoading.value = true
+  error.value = ''
+  expandedNews.value = new Set()
+  try {
+    const res = await getLatestNews(symbolInput.value)
+    if (res.success && res.data) {
+      newsArticles.value = res.data
+    } else {
+      error.value = res.error || 'Failed to fetch news'
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to fetch news'
+  } finally {
+    newsLoading.value = false
+  }
+}
+
+const toggleNewsArticle = (index: number) => {
+  const next = new Set(expandedNews.value)
+  if (next.has(index)) {
+    next.delete(index)
+  } else {
+    next.add(index)
+  }
+  expandedNews.value = next
+}
+
+const formatDate = (dateStr: string) => {
+  try {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return dateStr
   }
 }
 

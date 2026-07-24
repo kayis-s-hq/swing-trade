@@ -751,17 +751,22 @@ export async function* runFullAnalysis(
     years: String(years),
   })
 
-  const response = await fetch(`${API_BASE_URL}/analysis/run-full?${params}`, {
+  const url = `${API_BASE_URL}/analysis/run-full?${params}`
+
+  const response = await fetch(url, {
+    method: 'POST',
     headers: DEFAULT_HEADERS,
   })
 
   if (!response.ok) {
-    throw new Error(`Analysis failed: ${response.statusText}`)
+    const text = await response.text().catch(() => '')
+    throw new Error(`Analysis failed: ${response.statusText} ${text.slice(0, 200)}`)
   }
 
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let currentEvent = 'progress'
 
   try {
     while (true) {
@@ -769,13 +774,27 @@ export async function* runFullAnalysis(
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
+
       const lines = buffer.split('\n')
       buffer = lines.pop() || ''
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = JSON.parse(line.slice(6))
-          yield data
+        const trimmed = line.trim()
+        // SSE spec: "event: started" or "event:started" — handle both
+        const eventMatch = trimmed.match(/^event:\s*(\S+)/)
+        if (eventMatch) {
+          currentEvent = eventMatch[1]
+          continue
+        }
+        // "data: {...}" — parse and yield
+        const dataPrefix = 'data:'
+        if (trimmed.startsWith(dataPrefix)) {
+          try {
+            const data = JSON.parse(trimmed.slice(dataPrefix.length).trim())
+            yield { ...data, _eventType: currentEvent }
+          } catch {
+            // Skip malformed JSON, continue processing
+          }
         }
       }
     }

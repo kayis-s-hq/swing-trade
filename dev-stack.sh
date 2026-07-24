@@ -73,7 +73,7 @@ case "${1:-help}" in
         echo "✓ Loaded environment from $BACKEND_DIR/.env"
     fi
     cd "$BACKEND_DIR/api"
-    mvn spring-boot:run -Dspring-boot.run.profiles=local
+    mvn spring-boot:run -Dspring-boot.run.profiles=local -Dcheckstyle.skip=true -Dpmd.skip=true
     ;;
 
   stop)
