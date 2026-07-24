@@ -59,9 +59,9 @@
                 <td class="px-5 py-4">
                   <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="trade.status === 'OPEN' ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'">{{ trade.status }}</span>
                 </td>
-                <td class="px-5 py-4 text-sm text-text-secondary">${{ trade.entryPrice }}</td>
+                <td class="px-5 py-4 text-sm text-text-secondary">₹{{ trade.entryPrice }}</td>
                 <td class="px-5 py-4 text-sm text-text-secondary">{{ trade.currentPrice ? '$' + trade.currentPrice : '—' }}</td>
-                <td class="px-5 py-4 text-right text-sm font-semibold" :class="trade.pnl >= 0 ? 'text-success' : 'text-danger'">{{ trade.pnl >= 0 ? '+' : '' }}${{ trade.pnl }}</td>
+                <td class="px-5 py-4 text-right text-sm font-semibold" :class="trade.pnl >= 0 ? 'text-success' : 'text-danger'">{{ trade.pnl >= 0 ? '+' : '' }}₹{{ trade.pnl }}</td>
                 <td class="px-5 py-4 text-sm text-text-muted">{{ tradeDuration(trade.entryDate) }}</td>
               </tr>
               <tr v-if="recentTrades.length === 0">

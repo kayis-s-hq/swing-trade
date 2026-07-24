@@ -81,12 +81,12 @@ const pnlPositive = computed(() => (props.portfolioSummary?.totalPnlPercent ?? 0
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Total Value</p>
-        <p class="mt-1 text-xl font-bold text-text-primary">${{ portfolioSummary?.totalValue.toLocaleString() ?? 0 }}</p>
+        <p class="mt-1 text-xl font-bold text-text-primary">₹{{ portfolioSummary?.totalValue.toLocaleString() ?? 0 }}</p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Total P&L</p>
         <p class="mt-1 text-xl font-bold" :class="pnlPositive ? 'text-success' : 'text-danger'">
-          ${{ portfolioSummary?.totalPnl.toLocaleString() ?? 0 }}
+          ₹{{ portfolioSummary?.totalPnl.toLocaleString() ?? 0 }}
           <span class="ml-1 text-sm font-normal opacity-70">({{ (portfolioSummary?.totalPnlPercent ?? 0).toFixed(2) }}%)</span>
         </p>
       </div>
@@ -108,11 +108,11 @@ const pnlPositive = computed(() => (props.portfolioSummary?.totalPnlPercent ?? 0
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Avg Win</p>
-        <p class="mt-1 text-lg font-bold text-success">${{ portfolioSummary?.averageWin.toLocaleString() ?? 0 }}</p>
+        <p class="mt-1 text-lg font-bold text-success">₹{{ portfolioSummary?.averageWin.toLocaleString() ?? 0 }}</p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Avg Loss</p>
-        <p class="mt-1 text-lg font-bold text-danger">${{ portfolioSummary?.averageLoss.toLocaleString() ?? 0 }}</p>
+        <p class="mt-1 text-lg font-bold text-danger">₹{{ portfolioSummary?.averageLoss.toLocaleString() ?? 0 }}</p>
       </div>
     </div>
 

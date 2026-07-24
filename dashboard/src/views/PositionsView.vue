@@ -57,16 +57,16 @@
             <tbody class="divide-y divide-border-subtle/50">
               <tr v-for="pos in filteredPositions" :key="pos.id" class="transition-colors hover:bg-bg-hover">
                 <td class="px-5 py-4 text-sm font-semibold text-text-primary">{{ pos.symbol }}</td>
-                <td class="px-5 py-4 text-sm text-text-secondary">${{ pos.entryPrice }}</td>
+                <td class="px-5 py-4 text-sm text-text-secondary">₹{{ pos.entryPrice }}</td>
                 <td class="px-5 py-4 text-right text-sm text-text-secondary">{{ pos.quantity }}</td>
-                <td class="px-5 py-4 text-right text-sm text-text-secondary">${{ pos.currentPrice }}</td>
+                <td class="px-5 py-4 text-right text-sm text-text-secondary">₹{{ pos.currentPrice }}</td>
                 <td class="px-5 py-4 text-right text-sm text-danger">{{ pos.stopLoss ?? '—' }}</td>
                 <td class="px-5 py-4 text-right text-sm text-success">{{ pos.target ?? '—' }}</td>
                 <td class="px-5 py-4">
                   <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="pos.status === 'OPEN' ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'">{{ pos.status }}</span>
                 </td>
                 <td class="px-5 py-4 text-right text-sm font-semibold" :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'">
-                  {{ pos.pnl >= 0 ? '+' : '' }}${{ pos.pnl }}
+                  {{ pos.pnl >= 0 ? '+' : '' }}₹{{ pos.pnl }}
                   <span class="ml-1 text-xs font-normal opacity-70">({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span>
                 </td>
                 <td class="px-5 py-4 text-center">
@@ -184,11 +184,11 @@
           <div class="mb-4 rounded-lg bg-bg-surface p-4">
             <div class="flex items-center justify-between">
               <span class="text-sm font-semibold text-text-primary">{{ closeTarget.symbol }}</span>
-              <span class="text-xs text-text-muted">{{ closeTarget.quantity }} shares @ ${{ closeTarget.entryPrice }}</span>
+              <span class="text-xs text-text-muted">{{ closeTarget.quantity }} shares @ ₹{{ closeTarget.entryPrice }}</span>
             </div>
             <div class="mt-2 text-right">
               <span class="text-sm font-semibold" :class="closeTarget.pnl >= 0 ? 'text-success' : 'text-danger'">
-                {{ closeTarget.pnl >= 0 ? '+' : '' }}${{ closeTarget.pnl }} ({{ closeTarget.pnlPercent >= 0 ? '+' : '' }}{{ closeTarget.pnlPercent.toFixed(2) }}%)
+                {{ closeTarget.pnl >= 0 ? '+' : '' }}₹{{ closeTarget.pnl }} ({{ closeTarget.pnlPercent >= 0 ? '+' : '' }}{{ closeTarget.pnlPercent.toFixed(2) }}%)
               </span>
             </div>
           </div>
