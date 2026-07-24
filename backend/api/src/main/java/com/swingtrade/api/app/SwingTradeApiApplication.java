@@ -20,8 +20,14 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @ComponentScan(
     basePackages = {"com.swingtrade.api", "com.swingtrade.broker", "com.swingtrade.data", "com.swingtrade.strategy", "com.swingtrade.llm"}
 )
-@EnableJpaRepositories(basePackages = "com.swingtrade.data.repository")
-@EntityScan(basePackages = "com.swingtrade.data.entity")
+@EnableJpaRepositories(basePackages = {
+        "com.swingtrade.data.repository",
+        "com.swingtrade.broker.repository"
+    })
+@EntityScan(basePackages = {
+        "com.swingtrade.data.entity",
+        "com.swingtrade.broker.entity"
+    })
 @EnableCaching
 @EnableScheduling
 @SpringBootApplication

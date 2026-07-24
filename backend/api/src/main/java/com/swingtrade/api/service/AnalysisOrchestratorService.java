@@ -3,11 +3,10 @@ package com.swingtrade.api.service;
 import com.swingtrade.api.dto.AnalysisProgress;
 import com.swingtrade.api.dto.CompositeAnalysis;
 import com.swingtrade.api.dto.FullAnalysisResult;
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
-import com.swingtrade.data.repository.SentimentResultRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
 import org.slf4j.Logger;
@@ -35,8 +34,8 @@ public class AnalysisOrchestratorService {
     private final TechnicalAnalysisService technicalService;
     private final CompositeAnalysisService compositeAnalysisService;
     private final BacktestScorer backtestScorer;
-    private final OhlcvCandleRepository candleRepository;
-    private final SentimentResultRepository sentimentRepository;
+    private final CandleStore candleStore;
+    private final SentimentStore sentimentStore;
 
     public AnalysisOrchestratorService(DataIngestionService dataIngestionService,
                                        NewsIngestionService newsIngestionService,
@@ -44,16 +43,16 @@ public class AnalysisOrchestratorService {
                                        TechnicalAnalysisService technicalService,
                                        CompositeAnalysisService compositeAnalysisService,
                                        BacktestScorer backtestScorer,
-                                       OhlcvCandleRepository candleRepository,
-                                       SentimentResultRepository sentimentRepository) {
+                                       CandleStore candleStore,
+                                       SentimentStore sentimentStore) {
         this.dataIngestionService = dataIngestionService;
         this.newsIngestionService = newsIngestionService;
         this.sentimentService = sentimentService;
         this.technicalService = technicalService;
         this.compositeAnalysisService = compositeAnalysisService;
         this.backtestScorer = backtestScorer;
-        this.candleRepository = candleRepository;
-        this.sentimentRepository = sentimentRepository;
+        this.candleStore = candleStore;
+        this.sentimentStore = sentimentStore;
     }
 
     public FullAnalysisResult runFullAnalysis(String symbol, SseEmitter emitter, int backfillYears) {
@@ -69,7 +68,7 @@ public class AnalysisOrchestratorService {
         try {
             // Stage 1: Check data completeness
             long s1 = System.currentTimeMillis();
-            int candleCount = (int) candleRepository.countBySymbol(sym);
+            int candleCount = (int) candleStore.countBySymbol(sym);
             emitProgress(emitter, progress, AnalysisProgress.completed(1, "checking data",
                 String.format("Found %d candles", candleCount)));
             logger.info("Stage 1 done in {}ms", System.currentTimeMillis() - s1);
@@ -189,7 +188,7 @@ public class AnalysisOrchestratorService {
 
     private boolean hasSentimentForToday(String symbol) {
         try {
-            return sentimentRepository.findBySymbolAndDate(symbol, LocalDate.now()).isPresent();
+            return sentimentStore.findBySymbolAndDate(symbol, LocalDate.now()).isPresent();
         } catch (Exception e) {
             return false;
         }
