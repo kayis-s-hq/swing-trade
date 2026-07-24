@@ -7,6 +7,7 @@ import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.risk.KillSwitchService;
 import com.swingtrade.broker.risk.RiskControls;
+import com.swingtrade.broker.service.PaperTradingStateService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -41,10 +42,13 @@ class BrokerServiceFactoryTest {
     @Mock
     private KillSwitchService mockKillSwitch;
 
+    @Mock
+    private PaperTradingStateService mockStateService;
+
     private BrokerServiceFactory createFactory(String mode) {
         BrokerProperties props = new BrokerProperties();
         props.setMode(mode);
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch, props);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch, mockStateService, props);
         factory.initialize();
         return factory;
     }

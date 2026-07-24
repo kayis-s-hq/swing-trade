@@ -5,6 +5,7 @@ import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.*;
 import com.swingtrade.broker.service.PaperTradingServiceImpl;
+import com.swingtrade.broker.service.PaperTradingStateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,7 +28,7 @@ public class BrokerModuleIntegrationTest {
         OrderManager orderManager = new OrderManager();
         PositionManager positionManager = new PositionManager();
         paperTradingEngine = new PaperTradingEngine(orderManager, positionManager, INITIAL_CAPITAL, 5, BigDecimal.valueOf(0.20));
-        brokerService = new PaperTradingServiceImpl(paperTradingEngine, orderManager);
+        brokerService = new PaperTradingServiceImpl(paperTradingEngine, orderManager, null);
     }
 
     @Test

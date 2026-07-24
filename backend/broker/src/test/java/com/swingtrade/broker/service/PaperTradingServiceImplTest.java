@@ -36,7 +36,7 @@ class PaperTradingServiceImplTest {
         EnginePair pair = createPair(new BigDecimal("100000.00"));
         paperTradingEngine = pair.engine;
         orderManager = pair.orderManager;
-        service = new PaperTradingServiceImpl(paperTradingEngine, orderManager);
+        service = new PaperTradingServiceImpl(paperTradingEngine, orderManager, null);
     }
 
     @Test
@@ -102,7 +102,7 @@ class PaperTradingServiceImplTest {
     @Test
     void testPlaceOrder_createsAndExecutesOrder() {
         EnginePair pair = createPair(new BigDecimal("100000.00"));
-        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager);
+        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager, null);
 
         Order order = new Order();
         order.setSymbol("RELIANCE-EQ");
@@ -124,7 +124,7 @@ class PaperTradingServiceImplTest {
     @Test
     void testPlaceOrder_multipleOrders_createsMultiplePositions() {
         EnginePair pair = createPair(new BigDecimal("500000.00"));
-        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager);
+        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager, null);
 
         Order order1 = createOrder(pair, "TCS-EQ", new BigDecimal("3500"));
         Order order2 = createOrder(pair, "HDFC-EQ", new BigDecimal("1450"));
@@ -140,7 +140,7 @@ class PaperTradingServiceImplTest {
     @Test
     void testCancelOrder_afterExecution_returnsFalse() {
         EnginePair pair = createPair(new BigDecimal("100000.00"));
-        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager);
+        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager, null);
 
         Order order = createOrder(pair, "TCS-EQ", new BigDecimal("3500"));
         Order placed = localService.placeOrder(order);
@@ -158,7 +158,7 @@ class PaperTradingServiceImplTest {
     @Test
     void testServiceDelegationPattern() {
         EnginePair pair = createPair(new BigDecimal("100000.00"));
-        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager);
+        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager, null);
 
         Order order = createOrder(pair, "KOTAKBANK-EQ", new BigDecimal("1700"));
         Order placed = localService.placeOrder(order);
@@ -180,7 +180,7 @@ class PaperTradingServiceImplTest {
     @Test
     void testCalculateProfitLoss_profit() {
         EnginePair pair = createPair(new BigDecimal("100000.00"));
-        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager);
+        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager, null);
 
         Order order = createOrder(pair, "HDFC-EQ", new BigDecimal("1450.00"));
         localService.placeOrder(order);
@@ -196,7 +196,7 @@ class PaperTradingServiceImplTest {
     @Test
     void testCalculateProfitLoss_withLoss() {
         EnginePair pair = createPair(new BigDecimal("100000.00"));
-        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager);
+        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager, null);
 
         Order order = createOrder(pair, "AXISBANK-EQ", new BigDecimal("1100.00"));
         localService.placeOrder(order);
@@ -212,7 +212,7 @@ class PaperTradingServiceImplTest {
     @Test
     void testGetPosition_found() {
         EnginePair pair = createPair(new BigDecimal("100000.00"));
-        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager);
+        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager, null);
 
         Order order = createOrder(pair, "INFY-EQ", new BigDecimal("1350.00"));
         localService.placeOrder(order);
@@ -228,7 +228,7 @@ class PaperTradingServiceImplTest {
     @Test
     void testPlaceOrder_withLargeCapital() {
         EnginePair pair = createPair(new BigDecimal("1000000.00"));
-        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager);
+        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager, null);
 
         Order order = createOrder(pair, "RELIANCE-EQ", new BigDecimal("2500.00"));
         order.setQuantity(new BigDecimal("50"));
@@ -253,7 +253,7 @@ class PaperTradingServiceImplTest {
     @Test
     void testPlaceOrder_createsPositionWithCorrectSymbol() {
         EnginePair pair = createPair(new BigDecimal("100000.00"));
-        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager);
+        PaperTradingServiceImpl localService = new PaperTradingServiceImpl(pair.engine, pair.orderManager, null);
 
         Order order = createOrder(pair, "SBIN-EQ", new BigDecimal("550.00"));
         localService.placeOrder(order);
