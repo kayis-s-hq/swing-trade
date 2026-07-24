@@ -1,11 +1,11 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.CompositeAnalysis;
+import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.StrategyParams;
 import com.swingtrade.strategy.TechnicalIndicators;
 import com.swingtrade.strategy.TechnicalIndicators.CandleWithPrices;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
-import com.swingtrade.data.entity.OhlcvCandleEntity;
+import com.swingtrade.domain.store.CandleStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -23,18 +23,18 @@ public class TechnicalAnalysisService {
     private static final Logger logger = LoggerFactory.getLogger(TechnicalAnalysisService.class);
     private static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
 
-    private final OhlcvCandleRepository candleRepository;
+    private final CandleStore candleStore;
     private final TechnicalIndicators technicalIndicators;
 
-    public TechnicalAnalysisService(OhlcvCandleRepository candleRepository,
+    public TechnicalAnalysisService(CandleStore candleStore,
                                     TechnicalIndicators technicalIndicators) {
-        this.candleRepository = candleRepository;
+        this.candleStore = candleStore;
         this.technicalIndicators = technicalIndicators;
     }
 
     public CompositeAnalysis.TechnicalScore compute(String symbol) {
         String sym = symbol.toUpperCase(Locale.ROOT);
-        List<OhlcvCandleEntity> candles = candleRepository.findAllBySymbolOrderByDateDesc(sym);
+        List<OhlcvCandle> candles = candleStore.findBySymbol(sym);
 
         if (candles.size() < StrategyParams.MIN_CANDLES) {
             logger.warn("Insufficient candles for technical analysis: {} ({} candles)", sym, candles.size());
@@ -42,19 +42,19 @@ public class TechnicalAnalysisService {
         }
 
         // Reverse to chronological order
-        List<OhlcvCandleEntity> chrono = new ArrayList<>(candles);
+        List<OhlcvCandle> chrono = new ArrayList<>(candles);
         java.util.Collections.reverse(chrono);
 
         int lastIndex = chrono.size() - 1;
-        OhlcvCandleEntity latest = chrono.get(lastIndex);
-        BigDecimal price = latest.getClosePrice();
+        OhlcvCandle latest = chrono.get(lastIndex);
+        BigDecimal price = latest.close();
 
         // Extract price lists for TechnicalIndicators
         List<BigDecimal> closes = new ArrayList<>(chrono.size());
         List<CandleWithPrices> candleObjs = new ArrayList<>(chrono.size());
-        for (OhlcvCandleEntity c : chrono) {
-            closes.add(c.getClosePrice());
-            candleObjs.add(new CandleWithPrices(c.getOpenPrice(), c.getHighPrice(), c.getLowPrice(), c.getClosePrice(), BigDecimal.valueOf(c.getVolume())));
+        for (OhlcvCandle c : chrono) {
+            closes.add(c.close());
+            candleObjs.add(new CandleWithPrices(c.open(), c.high(), c.low(), c.close(), BigDecimal.valueOf(c.volume())));
         }
 
         // Calculate indicators
@@ -62,7 +62,7 @@ public class TechnicalAnalysisService {
         Double ema50 = technicalIndicators.calculateEMA(closes, StrategyParams.EMA_SLOW);
         Double rsi = technicalIndicators.calculateRSI(closes, StrategyParams.RSI_PERIOD);
         List<BigDecimal> volumes = chrono.stream()
-            .map(c -> BigDecimal.valueOf(c.getVolume()))
+            .map(c -> BigDecimal.valueOf(c.volume()))
             .toList();
         Double volumeMA = technicalIndicators.calculateVolumeMA(volumes,
             StrategyParams.VOLUME_MA_PERIOD
@@ -71,7 +71,7 @@ public class TechnicalAnalysisService {
 
         // 52-week high
         double maxHigh = chrono.stream()
-            .mapToDouble(c -> c.getHighPrice().doubleValue())
+            .mapToDouble(c -> c.high().doubleValue())
             .max()
             .orElse(price.doubleValue());
 
@@ -94,10 +94,10 @@ public class TechnicalAnalysisService {
 
         // 3. Volume > 1.5x VolumeMA
         boolean volOK = volumeMA != null && volumeMA > 0 &&
-            latest.getVolume() > StrategyParams.VOLUME_MULTIPLIER.doubleValue() * volumeMA;
+            latest.volume() > StrategyParams.VOLUME_MULTIPLIER.doubleValue() * volumeMA;
         score += volOK ? 25 : -25;
         indicators.add(String.format("Volume: %s (%.1fx MA)", volOK ? "above" : "below",
-            volumeMA != null && volumeMA > 0 ? (double) latest.getVolume() / volumeMA : 0));
+            volumeMA != null && volumeMA > 0 ? (double) latest.volume() / volumeMA : 0));
 
         // 4. Price within 3% of 52-week high
         boolean highOK = maxHigh > 0 && price.doubleValue() >= StrategyParams.HIGH_PROXIMITY.doubleValue() * maxHigh;

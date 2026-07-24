@@ -1,7 +1,7 @@
 package com.swingtrade.api.service;
 
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.strategy.TechnicalIndicators.CandleWithPrices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,18 +19,18 @@ public class FundamentalScorer {
     private static final int MOMENTUM_DAYS = 30;
     private static final int VOLUME_HISTORICAL_DAYS = 126;
 
-    private final OhlcvCandleRepository candleRepository;
+    private final CandleStore candleStore;
     private final com.swingtrade.strategy.TechnicalIndicators technicalIndicators;
 
-    public FundamentalScorer(OhlcvCandleRepository candleRepository,
+    public FundamentalScorer(CandleStore candleStore,
                              com.swingtrade.strategy.TechnicalIndicators technicalIndicators) {
-        this.candleRepository = candleRepository;
+        this.candleStore = candleStore;
         this.technicalIndicators = technicalIndicators;
     }
 
     public com.swingtrade.api.dto.CompositeAnalysis.FundamentalScore compute(String symbol) {
         String sym = symbol.toUpperCase(Locale.ROOT);
-        List<OhlcvCandleEntity> candles = candleRepository.findAllBySymbolOrderByDateDesc(sym);
+        List<OhlcvCandle> candles = candleStore.findAllBySymbolOrderByDateDesc(sym);
 
         if (candles.size() < 30) {
             logger.warn("Insufficient candles for fundamental scoring: {} ({} candles)", sym, candles.size());
@@ -38,15 +38,15 @@ public class FundamentalScorer {
         }
 
         // Reverse to chronological order
-        List<OhlcvCandleEntity> chrono = new ArrayList<>(candles);
+        List<OhlcvCandle> chrono = new ArrayList<>(candles);
         java.util.Collections.reverse(chrono);
 
         int lastIndex = chrono.size() - 1;
-        BigDecimal price = chrono.get(lastIndex).getClosePrice();
-        List<BigDecimal> closes = chrono.stream().map(OhlcvCandleEntity::getClosePrice).toList();
+        BigDecimal price = chrono.get(lastIndex).close();
+        List<BigDecimal> closes = chrono.stream().map(OhlcvCandle::close).toList();
         List<CandleWithPrices> candleObjs = new ArrayList<>(chrono.size());
-        for (OhlcvCandleEntity c : chrono) {
-            candleObjs.add(new CandleWithPrices(c.getOpenPrice(), c.getHighPrice(), c.getLowPrice(), c.getClosePrice(), BigDecimal.valueOf(c.getVolume())));
+        for (OhlcvCandle c : chrono) {
+            candleObjs.add(new CandleWithPrices(c.open(), c.high(), c.low(), c.close(), BigDecimal.valueOf(c.volume())));
         }
 
         int score = 0;
@@ -97,12 +97,12 @@ public class FundamentalScorer {
         if (histVolDays > 0) {
             double recentVol = chrono.stream()
                 .skip(Math.max(0, chrono.size() - recentVolDays))
-                .mapToDouble(c -> c.getVolume().doubleValue())
+                .mapToDouble(c -> c.volume().doubleValue())
                 .average()
                 .orElse(0);
             double histVol = chrono.stream()
                 .limit(chrono.size() - Math.max(0, chrono.size() - histVolDays))
-                .mapToDouble(c -> c.getVolume().doubleValue())
+                .mapToDouble(c -> c.volume().doubleValue())
                 .average()
                 .orElse(0);
             if (histVol > 0) {

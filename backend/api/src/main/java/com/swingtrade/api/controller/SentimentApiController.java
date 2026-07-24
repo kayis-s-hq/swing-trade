@@ -3,17 +3,14 @@ package com.swingtrade.api.controller;
 import com.swingtrade.api.dto.ApiResponse;
 import com.swingtrade.api.dto.CompositeAnalysis;
 import com.swingtrade.data.entity.PdfExtractionEntity;
-import com.swingtrade.data.entity.SentimentResultEntity;
 import com.swingtrade.data.repository.PdfExtractionRepository;
-import com.swingtrade.data.repository.SentimentResultRepository;
 import com.swingtrade.data.service.SentimentAccuracyService;
 import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.llm.domain.EarningsData;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.PdfExtractionService;
 import com.swingtrade.llm.service.SentimentService;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,29 +27,29 @@ public class SentimentApiController {
     private final SentimentService sentimentService;
     private final NewsIngestionService newsService;
     private final PdfExtractionService pdfService;
-        private final SentimentAccuracyService accuracyService;
-    private final SentimentResultRepository sentimentRepo;
+    private final SentimentAccuracyService accuracyService;
+    private final SentimentStore sentimentStore;
     private final PdfExtractionRepository pdfExtractionRepo;
 
     public SentimentApiController(SentimentService sentimentService,
                                   NewsIngestionService newsService,
                                   PdfExtractionService pdfService,
                                   SentimentAccuracyService accuracyService,
-                                  SentimentResultRepository sentimentRepo,
+                                  SentimentStore sentimentStore,
                                   PdfExtractionRepository pdfExtractionRepo) {
         this.sentimentService = sentimentService;
         this.newsService = newsService;
         this.pdfService = pdfService;
         this.accuracyService = accuracyService;
-        this.sentimentRepo = sentimentRepo;
+        this.sentimentStore = sentimentStore;
         this.pdfExtractionRepo = pdfExtractionRepo;
     }
 
     @GetMapping("/sentiment/{symbol}/latest")
     public ResponseEntity<ApiResponse<SentimentResult>> getLatestSentiment(
             @PathVariable String symbol) {
-        return sentimentRepo.findLatestBySymbol(symbol.toUpperCase(java.util.Locale.ROOT))
-            .map(e -> ResponseEntity.ok(ApiResponse.ok(e.toDomain())))
+        return sentimentStore.findLatestBySymbol(symbol.toUpperCase(java.util.Locale.ROOT))
+            .map(e -> ResponseEntity.ok(ApiResponse.ok(e)))
             .orElseGet(() -> ResponseEntity.ok(ApiResponse.ok(SentimentResult.create(
                 symbol.toUpperCase(java.util.Locale.ROOT), java.time.LocalDate.now(),
                 SentimentResult.SentimentScore.NEUTRAL, "No data", "", 0.0,
@@ -64,9 +61,14 @@ public class SentimentApiController {
             @PathVariable String symbol,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageRequest pageable = PageRequest.of(page, size, Sort.by("date").descending());
-        List<SentimentResult> results = sentimentRepo.findAllBySymbol(symbol.toUpperCase(java.util.Locale.ROOT), pageable)
-            .stream().map(SentimentResultEntity::toDomain).toList();
+        // Store returns all results; client pagination handled in memory
+        List<SentimentResult> results = sentimentStore.findBySymbol(symbol.toUpperCase(java.util.Locale.ROOT));
+        int start = page * size;
+        if (start >= results.size()) {
+            return ResponseEntity.ok(ApiResponse.ok(List.of()));
+        }
+        int end = Math.min(start + size, results.size());
+        results = results.subList(start, end);
         return ResponseEntity.ok(ApiResponse.ok(results));
     }
 

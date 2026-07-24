@@ -1,5 +1,6 @@
 package com.swingtrade.data.entity;
 
+import com.swingtrade.domain.SentimentAccuracy;
 import jakarta.persistence.*;
 
 @Entity
@@ -75,6 +76,50 @@ public class SentimentAccuracyEntity {
     private java.time.LocalDateTime evaluatedAt;
 
     public SentimentAccuracyEntity() {
+    }
+
+    public SentimentAccuracyEntity(SentimentAccuracy accuracy) {
+        this.id = accuracy.id();
+        this.symbol = accuracy.symbol();
+        this.analysisDate = accuracy.analysisDate();
+        this.llmScore = accuracy.llmScore();
+        this.llmConfidence = accuracy.llmConfidence();
+        this.numericScore = accuracy.numericScore();
+        this.actualReturn1d = accuracy.actualReturn1d();
+        this.actualReturn5d = accuracy.actualReturn5d();
+        this.actualReturn21d = accuracy.actualReturn21d();
+        this.groundTruthLabel = accuracy.groundTruthLabel();
+        this.wasCorrect = accuracy.wasCorrect();
+        this.pnlPct = accuracy.pnlPct();
+        this.marketRegime = accuracy.marketRegime();
+        this.promptHash = accuracy.promptHash();
+        this.modelVersion = accuracy.modelVersion();
+        this.evaluatedAt = accuracy.evaluatedAt();
+    }
+
+    public static SentimentAccuracyEntity fromDomain(SentimentAccuracy accuracy) {
+        return new SentimentAccuracyEntity(accuracy);
+    }
+
+    public SentimentAccuracy toDomain() {
+        return new SentimentAccuracy(
+            id,
+            symbol,
+            analysisDate,
+            llmScore,
+            llmConfidence,
+            numericScore,
+            actualReturn1d,
+            actualReturn5d,
+            actualReturn21d,
+            groundTruthLabel,
+            wasCorrect,
+            pnlPct,
+            marketRegime,
+            promptHash,
+            modelVersion,
+            evaluatedAt
+        );
     }
 
     public Long getId() {

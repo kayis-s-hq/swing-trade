@@ -3,11 +3,10 @@ package com.swingtrade.api.scheduler;
 import com.swingtrade.api.service.SignalFilterService;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.model.Order;
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.entity.SignalEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
-import com.swingtrade.data.repository.SignalRepository;
+import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.SignalStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -26,71 +24,56 @@ public class SignalExecutionJob {
 
     private static final Logger logger = LoggerFactory.getLogger(SignalExecutionJob.class);
 
-    private final SignalRepository signalRepository;
-    private final OhlcvCandleRepository ohlcvCandleRepository;
+    private final SignalStore signalStore;
+    private final CandleStore candleStore;
     private final SignalFilterService signalFilterService;
 
-    public SignalExecutionJob(SignalRepository signalRepository,
-                              PaperTradingEngine paperTradingEngine,
-                              OhlcvCandleRepository ohlcvCandleRepository,
+    public SignalExecutionJob(SignalStore signalStore,
+                              CandleStore candleStore,
                               SignalFilterService signalFilterService) {
-        this.signalRepository = signalRepository;
-        this.ohlcvCandleRepository = ohlcvCandleRepository;
+        this.signalStore = signalStore;
+        this.candleStore = candleStore;
         this.signalFilterService = signalFilterService;
     }
 
     @Scheduled(fixedDelayString = "${paper.trading.signal-execution-delay:30000}")
     public void executePendingSignals() {
-        List<SignalEntity> pendingSignals = signalRepository.findUnprocessedBuySignalsSince(
-            LocalDate.now());
+        // Use Store to get unprocessed signals as domain objects
+        List<Signal> pendingSignals = signalStore.findUnprocessed().stream()
+                .filter(s -> s.type() == Signal.SignalType.BUY)
+                .toList();
 
-        for (SignalEntity signalEntity : pendingSignals) {
-            executeSignal(signalEntity);
+        for (Signal domainSignal : pendingSignals) {
+            executeSignal(domainSignal);
         }
     }
 
-    private void executeSignal(SignalEntity signalEntity) {
-        OhlcvCandleEntity latestCandle = ohlcvCandleRepository
-            .findLatestBySymbolBeforeDate(signalEntity.getSymbol(), LocalDateTime.now())
+    private void executeSignal(Signal domainSignal) {
+        OhlcvCandle latestCandle = candleStore.findLatestBySymbolBeforeDate(
+            domainSignal.symbol(), domainSignal.date())
             .orElse(null);
 
         if (latestCandle == null) {
-            logger.warn("No candle data for {}, skipping signal execution", signalEntity.getSymbol());
+            logger.warn("No candle data for {}, skipping signal execution", domainSignal.symbol());
             return;
         }
 
-        BigDecimal currentPrice = latestCandle.getClosePrice();
+        BigDecimal currentPrice = latestCandle.close();
         if (currentPrice == null || currentPrice.compareTo(BigDecimal.ZERO) == 0) {
-            logger.warn("Invalid price for {}, skipping signal execution", signalEntity.getSymbol());
+            logger.warn("Invalid price for {}, skipping signal execution", domainSignal.symbol());
             return;
         }
-
-        Signal domainSignal = new Signal(
-            signalEntity.getId(),
-            signalEntity.getSymbol(),
-            signalEntity.getDate(),
-            Signal.SignalType.valueOf(signalEntity.getSignalType()),
-            signalEntity.getConfidenceScore(),
-            signalEntity.getReasoning(),
-            signalEntity.getEntryPrice(),
-            signalEntity.getStopLoss(),
-            signalEntity.getTarget(),
-            signalEntity.getRiskReward(),
-            signalEntity.getIndicators(),
-            signalEntity.getGeneratedAt()
-        );
 
         try {
             Order order = signalFilterService.filterAndProcess(domainSignal, currentPrice);
-            signalEntity.setProcessed(true);
-            signalRepository.save(signalEntity);
+            signalStore.markProcessed(domainSignal.id());
             if (order != null) {
-                logger.info("Executed signal for {} at price {}", signalEntity.getSymbol(), currentPrice);
+                logger.info("Executed signal for {} at price {}", domainSignal.symbol(), currentPrice);
             } else {
-                logger.info("Signal for {} suppressed by sentiment filter", signalEntity.getSymbol());
+                logger.info("Signal for {} suppressed by sentiment filter", domainSignal.symbol());
             }
         } catch (Exception e) {
-            logger.warn("Failed to execute signal for {}: {}", signalEntity.getSymbol(), e.getMessage(), e);
+            logger.warn("Failed to execute signal for {}: {}", domainSignal.symbol(), e.getMessage(), e);
             // Do NOT mark as processed — retry on next run
         }
     }

@@ -13,11 +13,12 @@ import java.util.Optional;
 @Repository
 public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccuracyEntity, Long> {
 
+    @Query("SELECT s FROM SentimentAccuracyEntity s WHERE s.symbol = :symbol ORDER BY s.analysisDate DESC")
+    List<SentimentAccuracyEntity> findBySymbolOrderByAnalysisDateDesc(@Param("symbol") String symbol);
+
     boolean existsBySymbolAndAnalysisDate(String symbol, LocalDate analysisDate);
 
     Optional<SentimentAccuracyEntity> findBySymbolAndAnalysisDate(String symbol, LocalDate analysisDate);
-
-    List<SentimentAccuracyEntity> findBySymbolOrderByAnalysisDateDesc(String symbol);
 
     @Query("SELECT COUNT(s) FROM SentimentAccuracyEntity s")
     long countAll();

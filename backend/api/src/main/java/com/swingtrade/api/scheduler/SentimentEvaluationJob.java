@@ -1,11 +1,11 @@
 package com.swingtrade.api.scheduler;
 
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.entity.SentimentAccuracyEntity;
-import com.swingtrade.data.entity.SentimentResultEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
-import com.swingtrade.data.repository.SentimentAccuracyRepository;
-import com.swingtrade.data.repository.SentimentResultRepository;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.SentimentAccuracy;
+import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.SentimentAccuracyStore;
+import com.swingtrade.domain.store.SentimentStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -28,16 +28,16 @@ public class SentimentEvaluationJob {
     private static final Logger log = LoggerFactory.getLogger(SentimentEvaluationJob.class);
     private static final BigDecimal RETURN_THRESHOLD = new BigDecimal("0.005");
 
-    private final OhlcvCandleRepository candleRepo;
-    private final SentimentAccuracyRepository accuracyRepo;
-    private final SentimentResultRepository sentimentRepo;
+    private final CandleStore candleStore;
+    private final SentimentAccuracyStore accuracyStore;
+    private final SentimentStore sentimentStore;
 
-    public SentimentEvaluationJob(OhlcvCandleRepository candleRepo,
-                                  SentimentAccuracyRepository accuracyRepo,
-                                  SentimentResultRepository sentimentRepo) {
-        this.candleRepo = candleRepo;
-        this.accuracyRepo = accuracyRepo;
-        this.sentimentRepo = sentimentRepo;
+    public SentimentEvaluationJob(CandleStore candleStore,
+                                  SentimentAccuracyStore accuracyStore,
+                                  SentimentStore sentimentStore) {
+        this.candleStore = candleStore;
+        this.accuracyStore = accuracyStore;
+        this.sentimentStore = sentimentStore;
     }
 
     @Scheduled(cron = "0 0 2 * * *")
@@ -46,11 +46,11 @@ public class SentimentEvaluationJob {
         LocalDate today = LocalDate.now();
         int processed = 0;
 
-        List<SentimentResultEntity> pending = sentimentRepo.findAllByDateBeforeOrderByDateAsc(today);
+        List<SentimentResult> pending = sentimentStore.findAllByDateBeforeOrderByDateAsc(today);
 
-        for (SentimentResultEntity sentiment : pending) {
+        for (SentimentResult sentiment : pending) {
             // Skip if already evaluated
-            if (accuracyRepo.existsBySymbolAndAnalysisDate(sentiment.getSymbol(), sentiment.getDate())) {
+            if (accuracyStore.existsBySymbolAndAnalysisDate(sentiment.symbol(), sentiment.date())) {
                 continue;
             }
 
@@ -59,26 +59,26 @@ public class SentimentEvaluationJob {
                 processed++;
             } catch (Exception e) {
                 log.warn("Failed to evaluate sentiment for {} on {}: {}",
-                    sentiment.getSymbol(), sentiment.getDate(), e.getMessage());
+                    sentiment.symbol(), sentiment.date(), e.getMessage());
             }
         }
 
         log.info("Sentiment evaluation job complete: processed {} records", processed);
     }
 
-    private void evaluateSingle(SentimentResultEntity sentiment) {
-        String symbol = sentiment.getSymbol();
-        LocalDate analysisDate = sentiment.getDate();
+    private void evaluateSingle(SentimentResult sentiment) {
+        String symbol = sentiment.symbol();
+        LocalDate analysisDate = sentiment.date();
 
         // Find entry candle (first trading day on or after analysis date)
-        Optional<OhlcvCandleEntity> entryOpt = candleRepo.findFirstBySymbolAndDateAfterOrderByDateAsc(symbol, analysisDate);
+        Optional<OhlcvCandle> entryOpt = candleStore.findFirstBySymbolAndDateAfterOrderByDateAsc(symbol, analysisDate);
         if (entryOpt.isEmpty()) return;
-        OhlcvCandleEntity entry = entryOpt.get();
+        OhlcvCandle entry = entryOpt.get();
 
         // Find exit candles at +1, +5, +21 trading days
-        OhlcvCandleEntity exit1 = findNthTradingDay(symbol, entry.getDate(), 1);
-        OhlcvCandleEntity exit5 = findNthTradingDay(symbol, entry.getDate(), 5);
-        OhlcvCandleEntity exit21 = findNthTradingDay(symbol, entry.getDate(), 21);
+        OhlcvCandle exit1 = findNthTradingDay(symbol, entry.date(), 1);
+        OhlcvCandle exit5 = findNthTradingDay(symbol, entry.date(), 5);
+        OhlcvCandle exit21 = findNthTradingDay(symbol, entry.date(), 21);
 
         if (exit1 == null) return; // need at least 1-day return
 
@@ -89,44 +89,47 @@ public class SentimentEvaluationJob {
 
         // Determine ground truth from 1-day return
         String label = classifyReturn(return1d);
-        boolean wasCorrect = wasCorrect(sentiment.getSentimentScore(), label);
+        boolean wasCorrect = wasCorrect(sentiment.score().name(), label);
 
         // Compute market regime
         String regime = computeMarketRegime(symbol, entry);
 
         // Map LLM score to numeric
-        float numericScore = mapToNumeric(sentiment.getSentimentScore());
+        float numericScore = mapToNumeric(sentiment.score().name());
 
         // Build and save accuracy record
-        SentimentAccuracyEntity record = new SentimentAccuracyEntity();
-        record.setSymbol(symbol);
-        record.setAnalysisDate(analysisDate);
-        record.setLlmScore(sentiment.getSentimentScore());
-        record.setLlmConfidence(sentiment.getConfidence() != null ? sentiment.getConfidence().floatValue() : 0.0f);
-        record.setNumericScore(numericScore);
-        record.setActualReturn1d(return1d);
-        record.setActualReturn5d(return5d);
-        record.setActualReturn21d(return21d);
-        record.setGroundTruthLabel(label);
-        record.setWasCorrect(wasCorrect);
-        record.setMarketRegime(regime);
-        record.setPromptHash(sentiment.getPromptHash());
-        record.setModelVersion(sentiment.getModelVersion());
-        record.setEvaluatedAt(java.time.LocalDateTime.now());
+        SentimentAccuracy record = new SentimentAccuracy(
+            null,
+            symbol,
+            analysisDate,
+            sentiment.score().name(),
+            sentiment.confidence() != null ? sentiment.confidence().floatValue() : 0.0f,
+            numericScore,
+            return1d,
+            return5d,
+            return21d,
+            label,
+            wasCorrect,
+            null, // pnlPct
+            regime,
+            sentiment.promptHash(),
+            sentiment.modelVersion(),
+            java.time.LocalDateTime.now()
+        );
 
-        accuracyRepo.save(record);
+        accuracyStore.save(record);
         log.debug("Evaluated sentiment for {} on {}: {} (correct={})",
             symbol, analysisDate, label, wasCorrect);
     }
 
-    private OhlcvCandleEntity findNthTradingDay(String symbol, LocalDate after, int n) {
-        return candleRepo.findNthBySymbolAndDateAfterOrderByDateAsc(symbol, after, n).orElse(null);
+    private OhlcvCandle findNthTradingDay(String symbol, LocalDate after, int n) {
+        return candleStore.findNthBySymbolAndDateAfterOrderByDateAsc(symbol, after, n).orElse(null);
     }
 
-    private BigDecimal computeReturn(OhlcvCandleEntity entry, OhlcvCandleEntity exit) {
-        if (entry.getClosePrice() == null || exit.getClosePrice() == null) return null;
-        BigDecimal diff = exit.getClosePrice().subtract(entry.getClosePrice());
-        return diff.divide(entry.getClosePrice(), 6, RoundingMode.HALF_UP);
+    private BigDecimal computeReturn(OhlcvCandle entry, OhlcvCandle exit) {
+        if (entry.close() == null || exit.close() == null) return null;
+        BigDecimal diff = exit.close().subtract(entry.close());
+        return diff.divide(entry.close(), 6, RoundingMode.HALF_UP);
     }
 
     private String classifyReturn(BigDecimal returnVal) {
@@ -155,19 +158,19 @@ public class SentimentEvaluationJob {
         };
     }
 
-    private String computeMarketRegime(String symbol, OhlcvCandleEntity reference) {
-        List<OhlcvCandleEntity> candles = candleRepo.findAllBySymbolOrderByDateDesc(symbol);
+    private String computeMarketRegime(String symbol, OhlcvCandle reference) {
+        List<OhlcvCandle> candles = candleStore.findBySymbol(symbol);
         if (candles.size() < 200) return "NEUTRAL";
 
         // Compute SMA of last 200 close prices
         BigDecimal sma200 = candles.stream()
             .limit(200)
-            .map(OhlcvCandleEntity::getClosePrice)
+            .map(OhlcvCandle::close)
             .filter(p -> p != null)
             .reduce(BigDecimal.ZERO, BigDecimal::add)
             .divide(BigDecimal.valueOf(200), 4, RoundingMode.HALF_UP);
 
-        BigDecimal price = reference.getClosePrice();
+        BigDecimal price = reference.close();
         if (price == null) return "NEUTRAL";
 
         BigDecimal bullThreshold = sma200.multiply(new BigDecimal("1.02"));

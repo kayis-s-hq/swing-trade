@@ -1,10 +1,10 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.CompositeAnalysis;
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.service.DataIngestionService;
+import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
 import org.slf4j.Logger;
@@ -25,7 +25,7 @@ public class CompositeAnalysisService {
 
     private final SentimentService sentimentService;
     private final NewsIngestionService newsService;
-    private final OhlcvCandleRepository candleRepository;
+    private final CandleStore candleStore;
     private final DataIngestionService dataIngestionService;
     private final TechnicalAnalysisService technicalService;
     private final FundamentalScorer fundamentalScorer;
@@ -33,14 +33,14 @@ public class CompositeAnalysisService {
 
     public CompositeAnalysisService(SentimentService sentimentService,
                                     NewsIngestionService newsService,
-                                    OhlcvCandleRepository candleRepository,
+                                    CandleStore candleStore,
                                     DataIngestionService dataIngestionService,
                                     TechnicalAnalysisService technicalService,
                                     FundamentalScorer fundamentalScorer,
                                     BacktestScorer backtestScorer) {
         this.sentimentService = sentimentService;
         this.newsService = newsService;
-        this.candleRepository = candleRepository;
+        this.candleStore = candleStore;
         this.dataIngestionService = dataIngestionService;
         this.technicalService = technicalService;
         this.fundamentalScorer = fundamentalScorer;
@@ -87,7 +87,7 @@ public class CompositeAnalysisService {
      * trigger a 3-year backfill via the data ingestion service.
      */
     private void ensureData(String symbol) {
-        List<OhlcvCandleEntity> candles = candleRepository.findAllBySymbolOrderByDateDesc(symbol);
+        List<OhlcvCandle> candles = candleStore.findBySymbol(symbol);
         if (candles.size() >= MIN_CANDLES_FOR_BACKTEST) {
             return; // enough data already
         }
@@ -98,7 +98,7 @@ public class CompositeAnalysisService {
                 LocalDate.now().minusYears(3),
                 LocalDate.now());
             logger.info("Data pull completed for {}, now has {} candles", symbol,
-                candleRepository.countBySymbol(symbol));
+                candleStore.countBySymbol(symbol));
         } catch (Exception e) {
             logger.warn("Auto-pull failed for {}: {}", symbol, e.getMessage());
         }

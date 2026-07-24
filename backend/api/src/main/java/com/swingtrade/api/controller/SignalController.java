@@ -1,8 +1,8 @@
 package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.*;
-import com.swingtrade.data.entity.SentimentResultEntity;
-import com.swingtrade.data.repository.SentimentResultRepository;
+import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.store.SentimentStore;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,10 +34,10 @@ public class SignalController {
     private com.swingtrade.api.service.ScanService scanService;
 
     @Autowired
-    private com.swingtrade.data.repository.SignalRepository signalRepository;
+    private com.swingtrade.domain.store.SignalStore signalStore;
 
     @Autowired
-    private SentimentResultRepository sentimentResultRepository;
+    private SentimentStore sentimentStore;
 
     /**
      * Get the latest trading signals for today.
@@ -47,11 +47,11 @@ public class SignalController {
     @GetMapping("/latest")
     public ResponseEntity<List<SignalResponse>> getLatestSignals() {
         logger.debug("Fetching latest signals from DB");
-        List<com.swingtrade.data.entity.SignalEntity> all = signalRepository.findAll();
+        List<com.swingtrade.domain.Signal> all = signalStore.findAll();
         all.sort(java.util.Comparator.comparing(
-            (com.swingtrade.data.entity.SignalEntity e) -> e.getDate() != null ? e.getDate() : java.time.LocalDate.now()
+            (com.swingtrade.domain.Signal s) -> s.date() != null ? s.date() : java.time.LocalDate.now()
         ).reversed());
-        List<SignalResponse> signals = all.stream().map(this::entityToResponse).collect(Collectors.toList());
+        List<SignalResponse> signals = all.stream().map(this::domainSignalToResponse).collect(Collectors.toList());
         return ResponseEntity.ok(signals);
     }
 
@@ -150,7 +150,7 @@ public class SignalController {
         logger.info("Generating price-action signal for symbol: {}", symbol);
 
         return signalService.generatePriceActionSignal(symbol)
-                .map(entity -> ResponseEntity.ok(entityToResponse(entity)))
+                .map(signal -> ResponseEntity.ok(domainSignalToResponse(signal)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -213,16 +213,16 @@ public class SignalController {
     @GetMapping("/sentiment/{symbol}")
     public ResponseEntity<SentimentAnalysisResponse> getSentimentAnalysis(@PathVariable String symbol) {
         logger.debug("Fetching sentiment analysis for symbol: {}", symbol);
-        Optional<SentimentResultEntity> opt = sentimentResultRepository.findLatestBySymbol(symbol);
+        Optional<com.swingtrade.domain.SentimentResult> opt = sentimentStore.findLatestBySymbol(symbol);
         if (opt.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        SentimentResultEntity entity = opt.get();
+        com.swingtrade.domain.SentimentResult result = opt.get();
         SentimentAnalysisResponse response = new SentimentAnalysisResponse();
-        response.setSymbol(entity.getSymbol());
-        response.setAnalyzedAt(entity.getAnalyzedAt());
-        response.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(entity.getSentimentScore()));
-        response.setSummary(entity.getSummary());
+        response.setSymbol(result.symbol());
+        response.setAnalyzedAt(result.analyzedAt());
+        response.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(result.score().name()));
+        response.setSummary(result.summary());
         return ResponseEntity.ok(response);
     }
 
@@ -239,14 +239,14 @@ public class SignalController {
         combined.setSymbol(symbol);
         combined.setAnalysisDate(LocalDate.now());
 
-        Optional<SentimentResultEntity> sentimentOpt = sentimentResultRepository.findLatestBySymbol(symbol);
+        Optional<com.swingtrade.domain.SentimentResult> sentimentOpt = sentimentStore.findLatestBySymbol(symbol);
         if (sentimentOpt.isPresent()) {
-            SentimentResultEntity entity = sentimentOpt.get();
+            com.swingtrade.domain.SentimentResult result = sentimentOpt.get();
             SentimentAnalysisResponse sa = new SentimentAnalysisResponse();
-            sa.setSymbol(entity.getSymbol());
-            sa.setAnalyzedAt(entity.getAnalyzedAt());
-            sa.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(entity.getSentimentScore()));
-            sa.setSummary(entity.getSummary());
+            sa.setSymbol(result.symbol());
+            sa.setAnalyzedAt(result.analyzedAt());
+            sa.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(result.score().name()));
+            sa.setSummary(result.summary());
             combined.setSentimentAnalysis(sa);
         }
 
@@ -270,25 +270,25 @@ public class SignalController {
     }
 
     /**
-     * Convert SignalEntity from DB to SignalResponse DTO
+     * Convert domain Signal to SignalResponse DTO
      */
-    private SignalResponse entityToResponse(com.swingtrade.data.entity.SignalEntity entity) {
+    private SignalResponse domainSignalToResponse(com.swingtrade.domain.Signal signal) {
+        if (signal == null) return null;
         SignalResponse response = new SignalResponse();
-        response.setId(entity.getId());
-        response.setSymbol(entity.getSymbol());
-        response.setDate(entity.getDate());
-        response.setSignalType(SignalResponse.SignalType.valueOf(entity.getSignalType()));
-        response.setConfidence(entity.getConfidenceScore());
-        response.setReasoning(entity.getReasoning());
-        response.setEntryPrice(entity.getEntryPrice());
-        response.setStopLoss(entity.getStopLoss());
-        response.setTarget(entity.getTarget());
-        response.setRiskRewardRatio(entity.getRiskReward());
-        if (entity.getIndicators() != null) {
-            response.setIndicators(java.util.List.of(entity.getIndicators().split(",")));
+        response.setId(signal.id());
+        response.setSymbol(signal.symbol());
+        response.setDate(signal.date());
+        response.setSignalType(SignalResponse.SignalType.valueOf(signal.type().name()));
+        response.setConfidence(signal.confidence());
+        response.setReasoning(signal.reasoning());
+        response.setEntryPrice(signal.entryPrice());
+        response.setStopLoss(signal.stopLoss());
+        response.setTarget(signal.target());
+        response.setRiskRewardRatio(signal.riskReward());
+        if (signal.indicators() != null) {
+            response.setIndicators(java.util.List.of(signal.indicators().split(",")));
         }
-        response.setGeneratedAt(entity.getGeneratedAt());
-        response.setStrategy(entity.getStrategy());
+        response.setGeneratedAt(signal.generatedAt());
         return response;
     }
 

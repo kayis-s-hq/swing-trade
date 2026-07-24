@@ -1,10 +1,10 @@
 package com.swingtrade.strategy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.entity.WatchlistEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
-import com.swingtrade.data.service.WatchlistService;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.Stock;
+import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.WatchlistStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -54,19 +54,19 @@ public class BacktestEngine {
     /** Warm-up (50, from PriceActionSignalEngine.EMA_SLOW_PERIOD) plus a handful of tradable days. */
     private static final int MIN_CANDLES_FOR_BACKTEST = 60;
 
-    private final OhlcvCandleRepository candleRepository;
-    private final WatchlistService watchlistService;
+    private final CandleStore candleStore;
+    private final WatchlistStore watchlistStore;
     private final PriceActionSignalEngine priceActionSignalEngine;
     private final ObjectMapper objectMapper;
     private final String reportsDir;
 
-    public BacktestEngine(OhlcvCandleRepository candleRepository,
-                           WatchlistService watchlistService,
+    public BacktestEngine(CandleStore candleStore,
+                           WatchlistStore watchlistStore,
                            PriceActionSignalEngine priceActionSignalEngine,
                            ObjectMapper objectMapper,
                            @Value("${backtest.reports.dir:reports}") String reportsDir) {
-        this.candleRepository = candleRepository;
-        this.watchlistService = watchlistService;
+        this.candleStore = candleStore;
+        this.watchlistStore = watchlistStore;
         this.priceActionSignalEngine = priceActionSignalEngine;
         this.objectMapper = objectMapper;
         this.reportsDir = reportsDir;
@@ -92,14 +92,14 @@ public class BacktestEngine {
         }
         logger.debug("Running backtest for {} on {}", symbol, exchange);
 
-        List<OhlcvCandleEntity> descendingCandles = candleRepository.findAllBySymbolOrderByDateDesc(symbol);
+        List<OhlcvCandle> descendingCandles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 1000);
         if (descendingCandles.size() < MIN_CANDLES_FOR_BACKTEST) {
             throw new IllegalStateException(
                 "Insufficient candle history for " + symbol + ": need at least "
                     + MIN_CANDLES_FOR_BACKTEST + " candles, found " + descendingCandles.size());
         }
 
-        List<OhlcvCandleEntity> chronologicalCandles = new ArrayList<>(descendingCandles);
+        List<OhlcvCandle> chronologicalCandles = new ArrayList<>(descendingCandles);
         Collections.reverse(chronologicalCandles);
 
         return simulate(symbol, chronologicalCandles, config);
@@ -134,8 +134,8 @@ public class BacktestEngine {
      * Runs a backtest across every symbol in the active watchlist.
      */
     public List<BacktestResult> runBacktestAll(String exchange, BacktestConfig config) {
-        List<String> symbols = watchlistService.getActiveWatchlist().stream()
-            .map(WatchlistEntity::getSymbol)
+        List<String> symbols = watchlistStore.getWatchlist().stream()
+            .map(Stock::symbol)
             .toList();
         return runBacktestAll(symbols, exchange, config);
     }
@@ -176,7 +176,7 @@ public class BacktestEngine {
     // Simulation
     // -----------------------------------------------------------------------
 
-    private BacktestResult simulate(String symbol, List<OhlcvCandleEntity> chronologicalCandles, BacktestConfig config) {
+    private BacktestResult simulate(String symbol, List<OhlcvCandle> chronologicalCandles, BacktestConfig config) {
         BarSeries series = priceActionSignalEngine.buildBarSeries(symbol, chronologicalCandles);
         int barCount = series.getBarCount();
 
@@ -230,7 +230,7 @@ public class BacktestEngine {
                 }
 
                 if (reason != null) {
-                    LocalDate exitDate = chronologicalCandles.get(i).getDate();
+                    LocalDate exitDate = chronologicalCandles.get(i).date();
                     BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, i, reason, config);
                     trades.add(trade);
                     capital += trade.pnl();
@@ -247,7 +247,7 @@ public class BacktestEngine {
         if (open != null) {
             int lastIndex = barCount - 1;
             BigDecimal exitPrice = numToBigDecimal(closePrice.getValue(lastIndex));
-            LocalDate exitDate = chronologicalCandles.get(lastIndex).getDate();
+            LocalDate exitDate = chronologicalCandles.get(lastIndex).date();
             BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, lastIndex, ExitReason.TIME_STOP, config);
             trades.add(trade);
             capital += trade.pnl();
@@ -257,7 +257,7 @@ public class BacktestEngine {
         return buildResult(symbol, trades, capitalCurve, capital, config);
     }
 
-    private OpenPosition tryEnter(List<OhlcvCandleEntity> chronologicalCandles,
+    private OpenPosition tryEnter(List<OhlcvCandle> chronologicalCandles,
                                    ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
                                    EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
                                    VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
@@ -302,7 +302,7 @@ public class BacktestEngine {
             return null;
         }
 
-        LocalDate entryDate = chronologicalCandles.get(entryIndex).getDate();
+        LocalDate entryDate = chronologicalCandles.get(entryIndex).date();
         return new OpenPosition(entryIndex, entryDate, entryPrice, stopLoss, target, quantity);
     }
 

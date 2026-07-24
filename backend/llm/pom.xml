@@ -23,7 +23,7 @@
             <artifactId>core</artifactId>
         </dependency>
 
-        <!-- Data module dependency -->
+        <!-- Data module dependency (needed for PdfExtractionEntity/Repository) -->
         <dependency>
             <groupId>com.swingtrade</groupId>
             <artifactId>data</artifactId>

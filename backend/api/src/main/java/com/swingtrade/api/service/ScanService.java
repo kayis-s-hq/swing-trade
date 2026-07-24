@@ -1,9 +1,10 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.ScanResponse;
-import com.swingtrade.data.entity.SignalEntity;
-import com.swingtrade.data.repository.SignalRepository;
-import com.swingtrade.data.repository.StockRepository;
+import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.Stock;
+import com.swingtrade.domain.store.SignalStore;
+import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.api.service.SignalEngine;
 
 import java.time.LocalDate;
@@ -12,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,13 +22,13 @@ import org.springframework.stereotype.Service;
 public class ScanService {
 
     private final SignalEngine signalEngine;
-    private final StockRepository stockRepository;
-    private final SignalRepository signalRepository;
+    private final StockStore stockStore;
+    private final SignalStore signalStore;
 
-    public ScanService(SignalEngine signalEngine, StockRepository stockRepository, SignalRepository signalRepository) {
+    public ScanService(SignalEngine signalEngine, StockStore stockStore, SignalStore signalRepository) {
         this.signalEngine = signalEngine;
-        this.stockRepository = stockRepository;
-        this.signalRepository = signalRepository;
+        this.stockStore = stockStore;
+        this.signalStore = signalRepository;
     }
 
     /**
@@ -39,8 +39,9 @@ public class ScanService {
      * @return Scan result
      */
     public ScanResult triggerManualScan() {
-        List<String> symbols = new ArrayList<>();
-        stockRepository.findAll().forEach(stock -> symbols.add(stock.getSymbol()));
+        List<String> symbols = stockStore.findAllActive().stream()
+                .map(Stock::symbol)
+                .toList();
 
         for (String symbol : symbols) {
             signalEngine.generateSignalForSymbolNow(symbol);
@@ -49,9 +50,9 @@ public class ScanService {
         LocalDate today = LocalDate.now();
         List<String> opportunities = new ArrayList<>();
         for (String symbol : symbols) {
-            List<SignalEntity> signals = signalRepository.findBySymbolAndDate(symbol, today);
-            for (SignalEntity signal : signals) {
-                if ("BUY".equals(signal.getSignalType())) {
+            List<Signal> signals = signalStore.findBySymbolAndDate(symbol, today);
+            for (Signal signal : signals) {
+                if (Signal.SignalType.BUY == signal.type()) {
                     opportunities.add(symbol);
                     break;
                 }
@@ -81,15 +82,17 @@ public class ScanService {
      */
     public List<ScanResponse> getScanHistory() {
         LocalDate today = LocalDate.now();
-        List<SignalEntity> todaySignals = signalRepository.findByDateRangeAndSignalType(
-            today, today, "BUY", PageRequest.of(0, 50));
+        List<Signal> todaySignals = signalStore.findAll().stream()
+                .filter(s -> s.date() != null && s.date().equals(today))
+                .filter(s -> s.type() == Signal.SignalType.BUY)
+                .toList();
         if (todaySignals.isEmpty()) {
             return Collections.emptyList();
         }
         ScanResponse response = new ScanResponse();
         response.setScanTime(LocalDateTime.now());
         response.setStatus(ScanResponse.ScanStatus.COMPLETED);
-        response.setSymbolsScanned((int) stockRepository.count());
+        response.setSymbolsScanned(stockStore.findAllActive().size());
         response.setSignalsFound(todaySignals.size());
         response.setBuySignals(todaySignals.size());
         response.setSellSignals(0);
@@ -106,15 +109,16 @@ public class ScanService {
      * @return Scan results for the date
      */
     public ScanResult getScanResultsByDate(LocalDate date) {
-        List<String> symbols = new ArrayList<>();
-        stockRepository.findAll().forEach(stock -> symbols.add(stock.getSymbol()));
+        List<String> symbols = stockStore.findAllActive().stream()
+                .map(Stock::symbol)
+                .toList();
 
         List<String> opportunities = new ArrayList<>();
         for (String symbol : symbols) {
-            List<SignalEntity> signals = signalRepository.findBySymbolAndDate(symbol, date);
-            for (SignalEntity signal : signals) {
-                if ("BUY".equals(signal.getSignalType())) {
-                    opportunities.add(signal.getSymbol());
+            List<Signal> signals = signalStore.findBySymbolAndDate(symbol, date);
+            for (Signal signal : signals) {
+                if (Signal.SignalType.BUY == signal.type()) {
+                    opportunities.add(signal.symbol());
                 }
             }
         }

@@ -12,10 +12,11 @@ import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.Order;
 import com.swingtrade.broker.model.OrderStatus;
 import com.swingtrade.data.entity.PositionEntity;
-import com.swingtrade.data.repository.PositionRepository;
-import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.data.entity.StockEntity;
+import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.Position;
+import com.swingtrade.domain.store.PositionStore;
+import com.swingtrade.domain.store.StockStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -38,17 +40,20 @@ public class PositionService {
 
     private static final Logger logger = LoggerFactory.getLogger(PositionService.class);
 
+    private final PositionStore positionStore;
+    private final StockStore stockStore;
     private final PositionRepository positionRepository;
-    private final StockRepository stockRepository;
     private final PaperTradingEngine paperTradingEngine;
     private final OrderManager orderManager;
     private final PositionManager positionManager;
 
-    public PositionService(PositionRepository positionRepository, StockRepository stockRepository,
+    public PositionService(PositionStore positionStore, StockStore stockStore,
+                           PositionRepository positionRepository,
                            PaperTradingEngine paperTradingEngine, OrderManager orderManager,
                            PositionManager positionManager) {
+        this.positionStore = positionStore;
+        this.stockStore = stockStore;
         this.positionRepository = positionRepository;
-        this.stockRepository = stockRepository;
         this.paperTradingEngine = paperTradingEngine;
         this.orderManager = orderManager;
         this.positionManager = positionManager;
@@ -59,8 +64,7 @@ public class PositionService {
      * @return List of open paper positions as PositionResponse DTOs
      */
     public List<PositionResponse> getOpenPositions() {
-        List<PositionEntity> entities = positionRepository.findAllOpenPositions();
-        return entities.stream()
+        return positionStore.findAllOpen().stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
@@ -71,8 +75,7 @@ public class PositionService {
      * @return PositionResponse details or null if not found
      */
     public PositionResponse getPositionById(Long id) {
-        Optional<PositionEntity> entity = positionRepository.findById(id);
-        return entity.map(this::convertToResponse).orElse(null);
+        return positionStore.findById(id).map(this::convertToResponse).orElse(null);
     }
 
     /**
@@ -81,8 +84,7 @@ public class PositionService {
      * @return PositionResponse details for the symbol, or null if not found
      */
     public PositionResponse getPositionBySymbol(String symbol) {
-        Optional<PositionEntity> entity = positionRepository.findOpenBySymbol(symbol);
-        return entity.map(this::convertToResponse).orElse(null);
+        return positionStore.findBySymbol(symbol).map(this::convertToResponse).orElse(null);
     }
 
     /**
@@ -90,10 +92,8 @@ public class PositionService {
      * @return List of closed positions
      */
     public List<PositionResponse> getClosedPositions() {
-        // Retrieve all positions and filter for closed ones
-        List<PositionEntity> allPositions = positionRepository.findAll();
-        return allPositions.stream()
-                .filter(p -> !"OPEN".equals(p.getStatus()))
+        return positionStore.findAll().stream()
+                .filter(p -> !p.isOpen())
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
@@ -104,9 +104,14 @@ public class PositionService {
      * @return List of positions with the given status
      */
     public List<PositionResponse> getPositionsByStatus(String status) {
-        List<PositionEntity> allPositions = positionRepository.findAll();
-        return allPositions.stream()
-                .filter(p -> status.equalsIgnoreCase(p.getStatus()))
+        Position.PositionStatus ps = switch (status.toUpperCase(Locale.ROOT)) {
+            case "OPEN" -> Position.PositionStatus.OPEN;
+            case "CLOSED" -> Position.PositionStatus.CLOSED;
+            case "STOPPED" -> Position.PositionStatus.STOPPED;
+            case "TARGET_HIT" -> Position.PositionStatus.TARGET_HIT;
+            default -> throw new IllegalArgumentException("Unknown status: " + status);
+        };
+        return positionStore.findByStatus(ps).stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
@@ -117,8 +122,7 @@ public class PositionService {
      * @return List of positions for the symbol
      */
     public List<PositionResponse> getPositionsBySymbol(String symbol) {
-        List<PositionEntity> entities = positionRepository.findBySymbolOrderByEntryDateDesc(symbol);
-        return entities.stream()
+        return positionStore.findBySymbolOrderByEntryDateDesc(symbol).stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
@@ -139,13 +143,14 @@ public class PositionService {
      * @return Position statistics
      */
     public PositionStats getPositionStats() {
-        List<PositionEntity> allPositions = positionRepository.findAll();
-        List<PositionEntity> openPositions = positionRepository.findAllOpenPositions();
+        List<Position> openPositions = positionStore.findAllOpen();
+        // Get all positions via repository (Store only tracks open)
+        List<PositionEntity> allEntities = positionRepository.findAll();
 
         PositionStats stats = new PositionStats();
-        stats.setTotalPositions(allPositions.size());
+        stats.setTotalPositions(allEntities.size());
         stats.setOpenPositions(openPositions.size());
-        stats.setClosedPositions(allPositions.size() - openPositions.size());
+        stats.setClosedPositions(allEntities.size() - openPositions.size());
 
         // Single-pass calculation of all stats
         BigDecimal totalPnL = BigDecimal.ZERO;
@@ -155,7 +160,7 @@ public class PositionService {
         long winCount = 0;
         long closedCount = 0;
 
-        for (PositionEntity p : allPositions) {
+        for (PositionEntity p : allEntities) {
             String status = p.getStatus();
             if ("OPEN".equals(status)) {
                 if (p.getCurrentPrice() != null && p.getEntryPrice() != null && p.getQuantity() != null) {
@@ -204,7 +209,12 @@ public class PositionService {
      * @return Closed position response or null if not found
      */
     public PositionResponse closePosition(String symbol, String exitReason) {
-        Optional<PositionEntity> entityOpt = positionRepository.findOpenBySymbol(symbol);
+        Optional<Position> posOpt = positionStore.findBySymbol(symbol);
+        if (posOpt.isEmpty()) {
+            return null;
+        }
+
+        Optional<PositionEntity> entityOpt = positionRepository.findById(posOpt.get().id());
         if (entityOpt.isEmpty()) {
             return null;
         }
@@ -249,7 +259,7 @@ public class PositionService {
         BigDecimal entryPrice = request.getPrice() != null ? request.getPrice() : BigDecimal.ZERO;
 
         // Auto-create stock if it doesn't exist
-        if (!stockRepository.existsBySymbol(request.getSymbol())) {
+        if (!stockStore.existsBySymbol(request.getSymbol())) {
             StockEntity stock = new StockEntity();
             stock.setSymbol(request.getSymbol());
             stock.setName(request.getSymbol());
@@ -257,7 +267,7 @@ public class PositionService {
             stock.setAddedOn(LocalDate.now());
             stock.setCreatedAt(LocalDateTime.now());
             stock.setUpdatedAt(LocalDateTime.now());
-            stockRepository.save(stock);
+            stockStore.save(stock.toDomain());
             logger.info("Auto-created stock entity for symbol: {}", request.getSymbol());
         }
 
@@ -316,12 +326,12 @@ public class PositionService {
      * @return Risk summary
      */
     public RiskSummary getRiskSummary() {
-        List<PositionEntity> openPositions = positionRepository.findAllOpenPositions();
+        List<Position> openPositions = positionStore.findAllOpen();
         RiskSummary summary = new RiskSummary();
 
         BigDecimal totalExposure = openPositions.stream()
-                .filter(p -> p.getCurrentPrice() != null && p.getQuantity() != null)
-                .map(p -> p.getCurrentPrice().multiply(BigDecimal.valueOf(p.getQuantity())))
+                .filter(p -> p.currentPrice() != null && p.quantity() != null)
+                .map(p -> p.currentPrice().multiply(BigDecimal.valueOf(p.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         summary.setTotalExposure(totalExposure);
         summary.setNumberOfPositions(openPositions.size());
@@ -331,9 +341,9 @@ public class PositionService {
         summary.setUsedCapital(totalExposure);
 
         BigDecimal stopLossExposure = openPositions.stream()
-                .filter(p -> p.getStopLoss() != null && p.getEntryPrice() != null && p.getQuantity() != null)
-                .map(p -> p.getEntryPrice().subtract(p.getStopLoss())
-                        .multiply(BigDecimal.valueOf(p.getQuantity())))
+                .filter(p -> p.stopLoss() != null && p.entryPrice() != null && p.quantity() != null)
+                .map(p -> p.entryPrice().subtract(p.stopLoss())
+                        .multiply(BigDecimal.valueOf(p.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         summary.setStopLossExposure(stopLossExposure);
 
@@ -346,6 +356,13 @@ public class PositionService {
     private PositionResponse convertToResponse(PositionEntity entity) {
         Position domainPosition = entity.toDomain();
         return new PositionResponse(domainPosition);
+    }
+
+    /**
+     * Convert Position domain record to PositionResponse DTO.
+     */
+    private PositionResponse convertToResponse(Position position) {
+        return new PositionResponse(position);
     }
 
     /**

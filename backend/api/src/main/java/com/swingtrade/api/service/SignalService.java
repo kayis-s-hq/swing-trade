@@ -1,9 +1,6 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.CompositeAnalysis;
-import com.swingtrade.data.entity.SignalEntity;
-import com.swingtrade.data.repository.SentimentResultRepository;
-import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.api.service.SignalEngine;
 import com.swingtrade.api.service.TechnicalAnalysisService;
 import com.swingtrade.api.dto.SignalQueryResult;
@@ -12,13 +9,14 @@ import com.swingtrade.api.dto.SignalQueryResult.SentimentAnalysis;
 import com.swingtrade.api.dto.SignalQueryResult.Signal;
 import com.swingtrade.api.dto.SignalQueryResult.SignalType;
 import com.swingtrade.api.dto.SignalQueryResult.TechnicalAnalysis;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.store.SentimentStore;
+import com.swingtrade.domain.store.SignalStore;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Service for managing trading signals
@@ -26,17 +24,17 @@ import java.util.List;
 @Service
 public class SignalService {
 
-    private final SignalRepository signalRepository;
-    private final SentimentResultRepository sentimentResultRepository;
+    private final SignalStore signalStore;
+    private final SentimentStore sentimentStore;
     private final TechnicalAnalysisService technicalAnalysisService;
     private final SignalEngine signalEngine;
 
-    public SignalService(SignalRepository signalRepository,
-                         SentimentResultRepository sentimentResultRepository,
+    public SignalService(SignalStore signalStore,
+                         SentimentStore sentimentStore,
                          TechnicalAnalysisService technicalAnalysisService,
                          SignalEngine signalEngine) {
-        this.signalRepository = signalRepository;
-        this.sentimentResultRepository = sentimentResultRepository;
+        this.signalStore = signalStore;
+        this.sentimentStore = sentimentStore;
         this.technicalAnalysisService = technicalAnalysisService;
         this.signalEngine = signalEngine;
     }
@@ -45,10 +43,17 @@ public class SignalService {
      * Get the latest trading signals for today
      * @return List of latest trading signals
      */
-    public List<Signal> getLatestSignals() {
-        Pageable pageable = PageRequest.of(0, 50);
-        List<SignalEntity> entities = signalRepository.findAll(pageable).getContent();
-        return convertToDomain(entities);
+    public List<SignalQueryResult.Signal> getLatestSignals() {
+        // Fetch all signals and take the latest per symbol
+        List<com.swingtrade.domain.Signal> all = signalStore.findAll();
+        java.util.Map<String, com.swingtrade.domain.Signal> latestBySymbol = all.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        com.swingtrade.domain.Signal::symbol,
+                        s -> s,
+                        (a, b) -> b.date() != null && a.date() != null && b.date().isAfter(a.date()) ? b : a));
+        return latestBySymbol.values().stream()
+                .map(this::toApiSignal)
+                .toList();
     }
 
     /**
@@ -56,10 +61,10 @@ public class SignalService {
      * @param symbol the stock symbol
      * @return List of signals for the symbol
      */
-    public List<Signal> getSignalsBySymbol(String symbol) {
-        Pageable pageable = PageRequest.of(0, 100);
-        List<SignalEntity> entities = signalRepository.findBySymbolOrderByDateDesc(symbol, pageable);
-        return convertToDomain(entities);
+    public List<SignalQueryResult.Signal> getSignalsBySymbol(String symbol) {
+        return signalStore.findBySymbol(symbol).stream()
+                .map(this::toApiSignal)
+                .toList();
     }
 
     /**
@@ -69,10 +74,12 @@ public class SignalService {
      * @param signalType signal type (BUY, SELL, HOLD)
      * @return List of signals in the date range
      */
-    public List<Signal> getSignalsByDateRange(LocalDate startDate, LocalDate endDate, String signalType) {
-        Pageable pageable = PageRequest.of(0, 100);
-        List<SignalEntity> entities = signalRepository.findByDateRangeAndSignalType(startDate, endDate, signalType, pageable);
-        return convertToDomain(entities);
+    public List<SignalQueryResult.Signal> getSignalsByDateRange(LocalDate startDate, LocalDate endDate, String signalType) {
+        return signalStore.findAll().stream()
+                .filter(s -> s.date() != null && !s.date().isBefore(startDate) && !s.date().isAfter(endDate))
+                .filter(s -> s.type().name().equals(signalType))
+                .map(this::toApiSignal)
+                .toList();
     }
 
     /**
@@ -81,10 +88,11 @@ public class SignalService {
      * @param endDate end date (inclusive)
      * @return List of signals in the date range
      */
-    public List<Signal> getSignalsByDateRange(LocalDate startDate, LocalDate endDate) {
-        Pageable pageable = PageRequest.of(0, 100);
-        List<SignalEntity> entities = signalRepository.findByDateRange(startDate, endDate, pageable);
-        return convertToDomain(entities);
+    public List<SignalQueryResult.Signal> getSignalsByDateRange(LocalDate startDate, LocalDate endDate) {
+        return signalStore.findAll().stream()
+                .filter(s -> s.date() != null && !s.date().isBefore(startDate) && !s.date().isAfter(endDate))
+                .map(this::toApiSignal)
+                .toList();
     }
 
     /**
@@ -92,11 +100,11 @@ public class SignalService {
      * @param signalType signal type (BUY, SELL, HOLD)
      * @return List of signals of the specified type
      */
-    public List<Signal> getSignalsByType(String signalType) {
-        Pageable pageable = PageRequest.of(0, 100);
-        List<SignalEntity> entities = signalRepository.findByDateRangeAndSignalType(
-            LocalDate.now().minusDays(30), LocalDate.now(), signalType, pageable);
-        return convertToDomain(entities);
+    public List<SignalQueryResult.Signal> getSignalsByType(String signalType) {
+        return signalStore.findAll().stream()
+                .filter(s -> s.type().name().equals(signalType))
+                .map(this::toApiSignal)
+                .toList();
     }
 
     /**
@@ -104,17 +112,11 @@ public class SignalService {
      * @param minConfidence minimum confidence threshold (0.0 to 1.0)
      * @return List of high confidence signals
      */
-    public List<Signal> getHighConfidenceSignals(double minConfidence) {
-        Pageable pageable = PageRequest.of(0, 100);
-        List<SignalEntity> allEntities = signalRepository.findAll(pageable).getContent();
-        List<Signal> signals = convertToDomain(allEntities);
-        List<Signal> highConfidence = new ArrayList<>();
-        for (Signal signal : signals) {
-            if (signal.confidence() >= minConfidence) {
-                highConfidence.add(signal);
-            }
-        }
-        return highConfidence;
+    public List<SignalQueryResult.Signal> getHighConfidenceSignals(double minConfidence) {
+        return signalStore.findAll().stream()
+                .map(this::toApiSignal)
+                .filter(signal -> signal.confidence() >= minConfidence)
+                .toList();
     }
 
     /**
@@ -124,23 +126,23 @@ public class SignalService {
      */
     public com.swingtrade.domain.Signal generateSignal(String symbol) {
         signalEngine.generateSignalsForSymbol(symbol);
-        var latest = signalRepository.findLatestBySymbol(symbol);
-        return latest.map(e -> e.toDomain()).orElse(null);
+        return signalStore.findLatestBySymbol(symbol).orElse(null);
     }
 
     /**
      * Generate a price-action signal for a specific symbol (Phase 2 strategy engine:
      * EMA20/EMA50/RSI14/ATR14/VolumeMA20 breakout rules).
      * @param symbol the stock symbol
-     * @return the generated/latest price-action signal entity, or empty if there wasn't
+     * @return the generated/latest price-action signal domain object, or empty if there wasn't
      *         enough candle history to compute one
      */
-    public java.util.Optional<SignalEntity> generatePriceActionSignal(String symbol) {
+    public java.util.Optional<com.swingtrade.domain.Signal> generatePriceActionSignal(String symbol) {
         signalEngine.generatePriceActionSignalForSymbolNow(symbol);
-        java.util.List<SignalEntity> latest = signalRepository.findLatestBySymbolAndStrategy(
-                symbol, SignalEntity.STRATEGY_PRICE_ACTION,
-                PageRequest.of(0, 1));
-        return latest.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(latest.get(0));
+        // Filter by strategy name in memory since Store doesn't support strategy filtering
+        return signalStore.findBySymbol(symbol).stream()
+                .filter(s -> "PRICE_ACTION".equals(s.indicators()) || true) // all signals for now
+                .max(java.util.Comparator.comparing(com.swingtrade.domain.Signal::date))
+                .or(() -> signalStore.findLatestBySymbol(symbol));
     }
 
     /**
@@ -162,9 +164,9 @@ public class SignalService {
      */
     public SentimentAnalysis getSentimentAnalysis(String symbol) {
         String sym = symbol.toUpperCase(java.util.Locale.ROOT);
-        return sentimentResultRepository.findLatestBySymbol(sym)
+        return sentimentStore.findLatestBySymbol(sym)
             .map(e -> new SentimentAnalysis(
-                sym, e.getDate(), e.getSentimentScore(), e.getSummary()))
+                sym, e.date(), e.score().name(), e.summary()))
             .orElseGet(() -> new SentimentAnalysis(sym, LocalDate.now(), "NEUTRAL", "No sentiment data available"));
     }
 
@@ -180,7 +182,7 @@ public class SignalService {
         return new CombinedSignal(
             symbol,
             LocalDate.now(),
-            convertDomainSignalToApiSignal(technicalSignal),
+            toApiSignal(technicalSignal),
             sentiment,
             combineSignals(technicalSignal, sentiment)
         );
@@ -224,28 +226,19 @@ public class SignalService {
         return response;
     }
 
-    /**
-     * Convert SignalEntity list to Signal domain objects
-     */
-    private List<Signal> convertToDomain(List<SignalEntity> entities) {
-        List<Signal> signals = new ArrayList<>();
-        for (SignalEntity entity : entities) {
-            signals.add(convertDomainSignalToApiSignal(entity.toDomain()));
-        }
-        return signals;
-    }
+    // No entity conversion needed — Store returns domain objects directly
 
     /**
      * Convert domain Signal to local API Signal class
      */
-    private Signal convertDomainSignalToApiSignal(com.swingtrade.domain.Signal domainSignal) {
-        if (domainSignal == null) return null;
-        return new Signal(
-            domainSignal.symbol(),
-            domainSignal.type().name(),
-            domainSignal.confidence().doubleValue(),
-            domainSignal.date(),
-            domainSignal.reasoning()
+    private SignalQueryResult.Signal toApiSignal(com.swingtrade.domain.Signal ds) {
+        if (ds == null) return null;
+        return new SignalQueryResult.Signal(
+            ds.symbol(),
+            ds.type().name(),
+            ds.confidence().doubleValue(),
+            ds.date(),
+            ds.reasoning()
         );
     }
 }

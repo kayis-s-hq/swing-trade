@@ -38,7 +38,8 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
      * @param symbol the stock symbol
      * @return list of positions
      */
-    List<PositionEntity> findBySymbolOrderByEntryDateDesc(String symbol);
+    @Query("SELECT p FROM PositionEntity p WHERE p.symbol = :symbol ORDER BY p.entryDate DESC")
+    List<PositionEntity> findBySymbolOrderByEntryDateDesc(@Param("symbol") String symbol);
 
     /**
      * Counts open positions.

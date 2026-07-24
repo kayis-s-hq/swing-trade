@@ -16,8 +16,8 @@
 
 package com.swingtrade.strategy;
 
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.domain.StrategyParams;
 import org.slf4j.Logger;
@@ -74,10 +74,10 @@ public class PriceActionSignalEngine {
 
     static final int MIN_REQUIRED_CANDLES = StrategyParams.MIN_CANDLES;
 
-    private final OhlcvCandleRepository candleRepository;
+    private final CandleStore candleStore;
 
-    public PriceActionSignalEngine(OhlcvCandleRepository candleRepository) {
-        this.candleRepository = candleRepository;
+    public PriceActionSignalEngine(CandleStore candleStore) {
+        this.candleStore = candleStore;
     }
 
     /**
@@ -93,14 +93,14 @@ public class PriceActionSignalEngine {
             throw new IllegalArgumentException("Symbol cannot be null or blank");
         }
 
-        List<OhlcvCandleEntity> descendingCandles = candleRepository.findAllBySymbolOrderByDateDesc(symbol);
+        List<OhlcvCandle> descendingCandles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 1000);
         if (descendingCandles.size() < MIN_REQUIRED_CANDLES) {
             throw new IllegalStateException(
                 "Insufficient candle history for " + symbol + ": need at least "
                     + MIN_REQUIRED_CANDLES + " candles, found " + descendingCandles.size());
         }
 
-        List<OhlcvCandleEntity> chronologicalCandles = new ArrayList<>(descendingCandles);
+        List<OhlcvCandle> chronologicalCandles = new ArrayList<>(descendingCandles);
         Collections.reverse(chronologicalCandles);
 
         return analyze(symbol, chronologicalCandles);
@@ -113,7 +113,7 @@ public class PriceActionSignalEngine {
      * @param chronologicalCandles candles ordered oldest to newest
      * @return the resulting signal with the indicator readings that produced it
      */
-    SignalResult analyze(String symbol, List<OhlcvCandleEntity> chronologicalCandles) {
+    SignalResult analyze(String symbol, List<OhlcvCandle> chronologicalCandles) {
         BarSeries series = buildBarSeries(symbol, chronologicalCandles);
         int lastIndex = series.getBarCount() - 1;
 
@@ -136,7 +136,7 @@ public class PriceActionSignalEngine {
         BigDecimal volume = numToBigDecimal(volumeIndicator.getValue(lastIndex));
         BigDecimal volumeMa = numToBigDecimal(volumeMaIndicator.getValue(lastIndex));
         BigDecimal weeklyHigh = numToBigDecimal(weeklyHighIndicator.getValue(lastIndex));
-        LocalDate date = chronologicalCandles.get(chronologicalCandles.size() - 1).getDate();
+        LocalDate date = chronologicalCandles.get(chronologicalCandles.size() - 1).date();
 
         List<String> passed = new ArrayList<>();
         List<String> failed = new ArrayList<>();
@@ -182,18 +182,18 @@ public class PriceActionSignalEngine {
         }
     }
 
-    BarSeries buildBarSeries(String symbol, List<OhlcvCandleEntity> chronologicalCandles) {
+    BarSeries buildBarSeries(String symbol, List<OhlcvCandle> chronologicalCandles) {
         BarSeries series = new BaseBarSeries(symbol);
-        for (OhlcvCandleEntity candle : chronologicalCandles) {
-            ZonedDateTime endTime = candle.getDate().atStartOfDay(MARKET_ZONE);
-            Long volume = candle.getVolume();
+        for (OhlcvCandle candle : chronologicalCandles) {
+            ZonedDateTime endTime = candle.date().atStartOfDay(MARKET_ZONE);
+            Long volume = candle.volume();
             Bar bar = new BaseBar(
                 Duration.ofDays(1),
                 endTime,
-                candle.getOpenPrice(),
-                candle.getHighPrice(),
-                candle.getLowPrice(),
-                candle.getClosePrice(),
+                candle.open(),
+                candle.high(),
+                candle.low(),
+                candle.close(),
                 BigDecimal.valueOf(volume != null ? volume : 0L)
             );
             series.addBar(bar);

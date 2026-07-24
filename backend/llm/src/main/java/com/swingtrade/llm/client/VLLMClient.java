@@ -2,7 +2,7 @@ package com.swingtrade.llm.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.swingtrade.data.service.AppSettingsService;
+import com.swingtrade.domain.store.AppSettingsStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -22,14 +22,14 @@ public class VLLMClient {
     private static final Logger logger = LoggerFactory.getLogger(VLLMClient.class);
 
     private final WebClient webClient;
-    private final AppSettingsService appSettingsService;
+    private final AppSettingsStore appSettingsStore;
 
     public VLLMClient(WebClient.Builder webClientBuilder,
-                      AppSettingsService appSettingsService) {
+                      AppSettingsStore appSettingsStore) {
         this.webClient = webClientBuilder
                 .defaultHeader("Content-Type", "application/json")
                 .build();
-        this.appSettingsService = appSettingsService;
+        this.appSettingsStore = appSettingsStore;
     }
 
     /**
@@ -44,9 +44,10 @@ public class VLLMClient {
         logger.debug("Generating completion with prompt: {} (truncated)",
                      prompt.length() > 100 ? prompt.substring(0, 100) + "..." : prompt);
 
-        String baseUrl = appSettingsService.get("llm.vllm.base_url",
-                "https://u425-946a-eaeb4020.singapore-b.gpuhub.com:8443/v1");
-        String modelName = appSettingsService.get("llm.vllm.model-name", "meta-llama/Llama-3.2-3B-Instruct");
+        String baseUrl = appSettingsStore.get("llm.vllm.base_url")
+                .orElse("https://u425-946a-eaeb4020.singapore-b.gpuhub.com:8443/v1");
+        String modelName = appSettingsStore.get("llm.vllm.model-name")
+                .orElse("meta-llama/Llama-3.2-3B-Instruct");
 
         Map<String, Object> request = Map.of(
                 "model", modelName,
@@ -90,9 +91,10 @@ public class VLLMClient {
                                                 double temperature) {
         logger.debug("Generating chat completion with {} messages", messages.size());
 
-        String baseUrl = appSettingsService.get("llm.vllm.base_url",
-                "https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1");
-        String modelName = appSettingsService.get("llm.vllm.model-name", "meta-llama/Llama-3.2-3B-Instruct");
+        String baseUrl = appSettingsStore.get("llm.vllm.base_url")
+                .orElse("https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1");
+        String modelName = appSettingsStore.get("llm.vllm.model-name")
+                .orElse("meta-llama/Llama-3.2-3B-Instruct");
 
         Map<String, Object> request = Map.of(
                 "model", modelName,

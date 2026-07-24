@@ -1,11 +1,10 @@
 package com.swingtrade.api.service;
 
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.entity.SignalEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
-import com.swingtrade.data.repository.SignalRepository;
+import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.SignalStore;
 import com.swingtrade.llm.service.SentimentService;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
@@ -23,7 +22,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Engine for generating and managing trading signals.
@@ -34,8 +32,8 @@ public class SignalEngine {
 
     private static final Logger logger = LoggerFactory.getLogger(SignalEngine.class);
 
-    private final OhlcvCandleRepository candleRepository;
-    private final SignalRepository signalRepository;
+    private final CandleStore candleStore;
+    private final SignalStore signalStore;
     private final SwingTradingStrategy strategy;
     private final SentimentService sentimentService;
     private final PriceActionSignalEngine priceActionSignalEngine;
@@ -43,13 +41,13 @@ public class SignalEngine {
     /**
      * Constructs SignalEngine with required dependencies.
      */
-    public SignalEngine(OhlcvCandleRepository candleRepository,
-                        SignalRepository signalRepository,
+    public SignalEngine(CandleStore candleStore,
+                        SignalStore signalStore,
                         SwingTradingStrategy strategy,
                         SentimentService sentimentService,
                         PriceActionSignalEngine priceActionSignalEngine) {
-        this.candleRepository = candleRepository;
-        this.signalRepository = signalRepository;
+        this.candleStore = candleStore;
+        this.signalStore = signalStore;
         this.strategy = strategy;
         this.sentimentService = sentimentService;
         this.priceActionSignalEngine = priceActionSignalEngine;
@@ -66,7 +64,7 @@ public class SignalEngine {
 
         try {
             // Get all distinct symbols with candle data
-            List<String> symbols = candleRepository.findAllDistinctSymbols();
+            List<String> symbols = candleStore.findAllDistinctSymbols();
             logger.info("Found {} symbols with candle data", symbols.size());
 
             int processed = 0;
@@ -115,10 +113,7 @@ public class SignalEngine {
         logger.debug("Generating signals for {}", symbol);
 
         // Get recent candles (need at least 50 for EMA)
-        List<OhlcvCandleEntity> candles = candleRepository.findTopBySymbolOrderByDateDesc(
-                symbol,
-                org.springframework.data.domain.PageRequest.of(0, 100)
-        );
+        List<OhlcvCandle> candles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 100);
 
         if (candles.size() < 50) {
             logger.debug("Not enough candles for {}: {} available", symbol, candles.size());
@@ -126,28 +121,24 @@ public class SignalEngine {
         }
 
         // Reverse to get chronological order
-        List<OhlcvCandleEntity> chronologicalCandles = new ArrayList<>(candles);
+        List<OhlcvCandle> chronologicalCandles = new ArrayList<>(candles);
         java.util.Collections.reverse(chronologicalCandles);
 
         // Get latest candle date
-        LocalDate latestDate = chronologicalCandles.get(chronologicalCandles.size() - 1).getDate();
+        LocalDate latestDate = chronologicalCandles.get(chronologicalCandles.size() - 1).date();
 
         // Check if signal already exists for this date
-        List<SignalEntity> existingSignals = signalRepository.findBySymbolAndDate(symbol, latestDate);
+        List<Signal> existingSignals = signalStore.findBySymbolAndDate(symbol, latestDate);
         if (!existingSignals.isEmpty()) {
             logger.debug("Signal already exists for {} on {}", symbol, latestDate);
             return;
         }
 
         // Generate signal
-        List<com.swingtrade.domain.OhlcvCandle> domainCandles = chronologicalCandles.stream()
-                .map(this::toDomainCandle)
-                .collect(Collectors.toList());
-
-        Signal signal = strategy.analyze(domainCandles);
+        Signal signal = strategy.analyze(chronologicalCandles);
 
         // NEW: Check sentiment before saving for BUY signals
-        String warningFlag = SignalEntity.WARNING_NONE;
+        String warningFlag = "NONE";
         try {
             if (signal.type() == Signal.SignalType.BUY) {
                 SentimentResult sentiment = sentimentService.analyzeStockSentiment(symbol, latestDate);
@@ -161,7 +152,7 @@ public class SignalEngine {
                 if (sentiment.isNeutral()) {
                     logger.info("Saving NEUTRAL sentiment signal for {} on {} (reasoning: {})",
                                symbol, latestDate, sentiment.summary());
-                    warningFlag = SignalEntity.WARNING_NEUTRAL_SENTIMENT;
+                    warningFlag = "NEUTRAL_SENTIMENT";
                 }
             }
         } catch (Exception e) {
@@ -170,33 +161,36 @@ public class SignalEngine {
             // Continue saving signal - sentiment check failure should not block signals
         }
 
-        // Save signal
-        SignalEntity signalEntity = new SignalEntity();
-        signalEntity.setSymbol(symbol);
-        signalEntity.setDate(latestDate);
-        signalEntity.setSignalType(signal.type().toString());
-        signalEntity.setConfidenceScore(signal.confidence());
-        signalEntity.setReasoning(buildSignalReason(signal));
-        signalEntity.setWarningFlag(warningFlag);
-
         // Populate entryPrice/stopLoss/target from latest candle
-        OhlcvCandleEntity latestCandle = candleRepository.findLatestBySymbol(symbol).orElse(null);
-        if (latestCandle != null && latestCandle.getClosePrice() != null) {
-            BigDecimal closePrice = latestCandle.getClosePrice();
+        OhlcvCandle latestCandle = candleStore.findLatestBySymbol(symbol).orElse(null);
+        BigDecimal entryPrice = null, stopLoss = null, target = null, rr = null;
+        if (latestCandle != null && latestCandle.close() != null) {
+            BigDecimal closePrice = latestCandle.close();
             BigDecimal atr = calculateATR(latestCandle, chronologicalCandles);
-            BigDecimal stopLoss = closePrice.subtract(atr.multiply(BigDecimal.valueOf(2)));
+            stopLoss = closePrice.subtract(atr.multiply(BigDecimal.valueOf(2)));
             BigDecimal risk = closePrice.subtract(stopLoss);
-            BigDecimal target = closePrice.add(risk.multiply(BigDecimal.valueOf(2.5)));
-            BigDecimal rr = risk.compareTo(BigDecimal.ZERO) == 0
+            target = closePrice.add(risk.multiply(BigDecimal.valueOf(2.5)));
+            rr = risk.compareTo(BigDecimal.ZERO) == 0
                 ? BigDecimal.ZERO : target.subtract(closePrice).divide(risk, 4, BigDecimal.ROUND_HALF_UP);
-
-            signalEntity.setEntryPrice(closePrice);
-            signalEntity.setStopLoss(stopLoss);
-            signalEntity.setTarget(target);
-            signalEntity.setRiskReward(rr);
+            entryPrice = closePrice;
         }
 
-        signalRepository.save(signalEntity);
+        // Save signal via Store (entity persistence handled internally)
+        Signal savedSignal = Signal.create(symbol, latestDate, signal.type(), signal.confidence(),
+                buildSignalReason(signal));
+        // Set trading parameters via domain object recreation
+        Signal finalSignal = new Signal(
+                savedSignal.id(),
+                savedSignal.symbol(),
+                savedSignal.date(),
+                savedSignal.type(),
+                savedSignal.confidence(),
+                savedSignal.reasoning(),
+                entryPrice, stopLoss, target, rr,
+                savedSignal.indicators(),
+                savedSignal.generatedAt()
+        );
+        signalStore.save(finalSignal);
 
         logger.info("Generated {} signal for {} on {} (confidence: {}%, warning: {})",
                     signal.type(), symbol, latestDate, String.format("%.0f", signal.confidence().doubleValue() * 100), warningFlag);
@@ -222,41 +216,41 @@ public class SignalEngine {
             return;
         }
 
-        List<SignalEntity> existingSignals = signalRepository.findBySymbolAndDateAndStrategy(
-                symbol, result.date(), SignalEntity.STRATEGY_PRICE_ACTION);
+        List<Signal> existingSignals = signalStore.findBySymbolAndDate(symbol, result.date());
         if (!existingSignals.isEmpty()) {
             logger.debug("Price-action signal already exists for {} on {}", symbol, result.date());
             return;
         }
 
-        SignalEntity signalEntity = new SignalEntity();
-        signalEntity.setSymbol(result.symbol());
-        signalEntity.setDate(result.date());
-        signalEntity.setSignalType(result.type().toString());
-        signalEntity.setConfidenceScore(result.type() == Signal.SignalType.BUY ? java.math.BigDecimal.ONE : java.math.BigDecimal.valueOf(0.5));
-        signalEntity.setReasoning(result.reasoning());
-        signalEntity.setIndicators(buildPriceActionIndicators(result));
-        signalEntity.setWarningFlag(SignalEntity.WARNING_NONE);
-        signalEntity.setStrategy(SignalEntity.STRATEGY_PRICE_ACTION);
+        BigDecimal confidence = result.type() == Signal.SignalType.BUY ? java.math.BigDecimal.ONE : java.math.BigDecimal.valueOf(0.5);
+        Signal baseSignal = Signal.create(result.symbol(), result.date(), result.type(), confidence, result.reasoning());
 
         // Populate entryPrice/stopLoss/target from latest candle + ATR
-        OhlcvCandleEntity latestCandle = candleRepository.findLatestBySymbol(result.symbol()).orElse(null);
-        if (latestCandle != null && latestCandle.getClosePrice() != null) {
-            BigDecimal closePrice = latestCandle.getClosePrice();
+        OhlcvCandle latestCandle = candleStore.findLatestBySymbol(result.symbol()).orElse(null);
+        BigDecimal entryPrice = null, stopLoss = null, target = null, rr = null;
+        if (latestCandle != null && latestCandle.close() != null) {
+            BigDecimal closePrice = latestCandle.close();
             BigDecimal atr = BigDecimal.valueOf(result.atr());
-            BigDecimal stopLoss = closePrice.subtract(atr.multiply(BigDecimal.valueOf(2)));
+            stopLoss = closePrice.subtract(atr.multiply(BigDecimal.valueOf(2)));
             BigDecimal risk = closePrice.subtract(stopLoss);
-            BigDecimal target = closePrice.add(risk.multiply(BigDecimal.valueOf(2.5)));
-            BigDecimal rr = risk.compareTo(BigDecimal.ZERO) == 0
+            target = closePrice.add(risk.multiply(BigDecimal.valueOf(2.5)));
+            rr = risk.compareTo(BigDecimal.ZERO) == 0
                 ? BigDecimal.ZERO : target.subtract(closePrice).divide(risk, 4, BigDecimal.ROUND_HALF_UP);
-
-            signalEntity.setEntryPrice(closePrice);
-            signalEntity.setStopLoss(stopLoss);
-            signalEntity.setTarget(target);
-            signalEntity.setRiskReward(rr);
+            entryPrice = closePrice;
         }
 
-        signalRepository.save(signalEntity);
+        Signal finalSignal = new Signal(
+                baseSignal.id(),
+                baseSignal.symbol(),
+                baseSignal.date(),
+                baseSignal.type(),
+                baseSignal.confidence(),
+                baseSignal.reasoning(),
+                entryPrice, stopLoss, target, rr,
+                buildPriceActionIndicators(result),
+                baseSignal.generatedAt()
+        );
+        signalStore.save(finalSignal);
 
         logger.info("Generated {} price-action signal for {} on {}", result.type(), symbol, result.date());
     }
@@ -283,24 +277,7 @@ public class SignalEngine {
         generatePriceActionSignalForSymbol(symbol);
     }
 
-    /**
-     * Converts OhlcvCandleEntity to domain OhlcvCandle.
-     *
-     * @param entity the JPA entity
-     * @return domain object
-     */
-    private com.swingtrade.domain.OhlcvCandle toDomainCandle(OhlcvCandleEntity entity) {
-        return new com.swingtrade.domain.OhlcvCandle(
-                entity.getSymbol(),
-                entity.getDate(),
-                entity.getOpenPrice(),
-                entity.getHighPrice(),
-                entity.getLowPrice(),
-                entity.getClosePrice(),
-                entity.getVolume(),
-                entity.getAdjClosePrice()
-        );
-    }
+    // No conversion needed — Store returns domain objects directly
 
     /**
      * Builds a human-readable reason for the signal.
@@ -319,21 +296,21 @@ public class SignalEngine {
     /**
      * Calculates ATR from the last 14 candles for a symbol.
      */
-    private BigDecimal calculateATR(OhlcvCandleEntity latest, List<OhlcvCandleEntity> candles) {
-        if (candles.size() < 15) return BigDecimal.valueOf(0.02).multiply(latest.getClosePrice());
+    private BigDecimal calculateATR(OhlcvCandle latest, List<OhlcvCandle> candles) {
+        if (candles.size() < 15) return BigDecimal.valueOf(0.02).multiply(latest.close());
         BigDecimal totalRange = BigDecimal.ZERO;
         int count = 0;
         for (int i = candles.size() - 14; i < candles.size(); i++) {
-            OhlcvCandleEntity c = candles.get(i);
-            BigDecimal high = c.getHighPrice();
-            BigDecimal low = c.getLowPrice();
+            OhlcvCandle c = candles.get(i);
+            BigDecimal high = c.high();
+            BigDecimal low = c.low();
             if (high != null && low != null) {
                 totalRange = totalRange.add(high.subtract(low));
                 count++;
             }
         }
         return count > 0 ? totalRange.divide(BigDecimal.valueOf(count), 4, BigDecimal.ROUND_HALF_UP)
-                        : BigDecimal.valueOf(0.02).multiply(latest.getClosePrice());
+                        : BigDecimal.valueOf(0.02).multiply(latest.close());
     }
 
     /**
@@ -355,8 +332,8 @@ public class SignalEngine {
      * @return latest signal or empty
      */
     @Cacheable(value = "latestSignal", key = "#symbol")
-    public java.util.Optional<SignalEntity> getLatestSignal(String symbol) {
-        return signalRepository.findLatestBySymbol(symbol);
+    public java.util.Optional<Signal> getLatestSignal(String symbol) {
+        return signalStore.findLatestBySymbol(symbol);
     }
 
     /**
@@ -366,9 +343,8 @@ public class SignalEngine {
      * @return list of signals
      */
     @Cacheable(value = "signals", key = "#symbol")
-    public List<SignalEntity> getSignalsForSymbol(String symbol) {
-        return signalRepository.findBySymbolOrderByDateDesc(symbol,
-                org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE));
+    public List<Signal> getSignalsForSymbol(String symbol) {
+        return signalStore.findBySymbol(symbol);
     }
 
     /**
@@ -377,8 +353,11 @@ public class SignalEngine {
      * @param sinceDate the start date
      * @return list of buy signals
      */
-    public List<SignalEntity> getBuySignalsSince(LocalDate sinceDate) {
-        return signalRepository.findBuySignalsSince(sinceDate,
-                org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE));
+    public List<Signal> getBuySignalsSince(LocalDate sinceDate) {
+        // Fetch all signals and filter by date in memory (Store returns domain objects)
+        return signalStore.findAll().stream()
+                .filter(s -> s.date() != null && !s.date().isBefore(sinceDate))
+                .filter(s -> s.type() == Signal.SignalType.BUY)
+                .toList();
     }
 }

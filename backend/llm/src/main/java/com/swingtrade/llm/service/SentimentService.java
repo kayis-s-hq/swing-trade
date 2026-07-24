@@ -1,9 +1,7 @@
 package com.swingtrade.llm.service;
 
-import com.swingtrade.data.entity.SentimentResultEntity;
-import com.swingtrade.data.entity.StockEntity;
-import com.swingtrade.data.repository.SentimentResultRepository;
-import com.swingtrade.data.repository.StockRepository;
+import com.swingtrade.domain.store.SentimentStore;
+import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Stock;
@@ -47,8 +45,8 @@ public class SentimentService {
     private final SentimentAnalyzer sentimentAnalyzer;
     private final NewsIngestionService newsIngestionService;
     private final SentimentCacheService sentimentCacheService;
-    private final SentimentResultRepository sentimentResultRepository;
-    private final StockRepository stockRepository;
+    private final SentimentStore sentimentStore;
+    private final StockStore stockStore;
 
     private final int maxCacheSize;
     private final long cacheExpiryMinutes;
@@ -64,8 +62,8 @@ public class SentimentService {
             SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService,
             SentimentCacheService sentimentCacheService,
-            SentimentResultRepository sentimentResultRepository,
-            StockRepository stockRepository,
+            SentimentStore sentimentStore,
+            StockStore stockStore,
             @Value("${llm.sentiment.cache.max-size:100}") int maxCacheSize,
             @Value("${llm.sentiment.cache.expiry-minutes:60}") long cacheExpiryMinutes,
             @Value("${llm.sentiment.cache.enabled:true}") boolean enableCaching,
@@ -75,8 +73,8 @@ public class SentimentService {
         this.sentimentAnalyzer = sentimentAnalyzer;
         this.newsIngestionService = newsIngestionService;
         this.sentimentCacheService = sentimentCacheService;
-        this.sentimentResultRepository = sentimentResultRepository;
-        this.stockRepository = stockRepository;
+        this.sentimentStore = sentimentStore;
+        this.stockStore = stockStore;
 
         this.maxCacheSize = maxCacheSize;
         this.cacheExpiryMinutes = cacheExpiryMinutes;
@@ -162,8 +160,7 @@ public class SentimentService {
 
             // Persist to database
             try {
-                SentimentResultEntity entity = SentimentResultEntity.fromDomain(result);
-                sentimentResultRepository.save(entity);
+                sentimentStore.save(result);
                 logger.debug("Persisted sentiment result for {} on {}", stockSymbol, date);
             } catch (Exception e) {
                 logger.warn("Failed to persist sentiment result for {}: {}", stockSymbol, e.getMessage());
@@ -577,8 +574,7 @@ public class SentimentService {
 
             // Persist
             try {
-                SentimentResultEntity entity = SentimentResultEntity.fromDomain(sr);
-                sentimentResultRepository.save(entity);
+                sentimentStore.save(sr);
             } catch (Exception e) {
                 logger.warn("Failed to persist sentiment for {}: {}", symbol, e.getMessage());
             }
@@ -810,24 +806,19 @@ public class SentimentService {
         logger.info("Generating sector digest for date range: {} to {}", startDate, endDate);
 
         // Fetch all sentiment results in date range
-        List<SentimentResultEntity> results = sentimentResultRepository
+        List<SentimentResult> results = sentimentStore
                 .findAllByDateBetween(startDate, endDate);
 
         if (results.isEmpty()) {
             return formatEmptyDigest(startDate, endDate);
         }
 
-        // Convert to domain objects
-        List<SentimentResult> domainResults = results.stream()
-                .map(SentimentResultEntity::toDomain)
-                .collect(Collectors.toList());
-
         // Group by sector and count sentiment
         Map<Stock.Sector, Map<SentimentResult.SentimentScore, Long>> sectorCounts =
-                groupBySectorAndSentiment(domainResults);
+                groupBySectorAndSentiment(results);
 
         // Get sector names for each symbol
-        Map<String, Stock.Sector> symbolToSector = buildSymbolToSectorMap(domainResults);
+        Map<String, Stock.Sector> symbolToSector = buildSymbolToSectorMap(results);
 
         // Identify top sectors
         List<Stock.Sector> topPositiveSectors = getTopSectors(sectorCounts, 3, true);
@@ -891,9 +882,8 @@ public class SentimentService {
      * @return the sector for the stock, or null if not found
      */
     public Stock.Sector getSectorForSymbol(String symbol) {
-        Optional<StockEntity> stock = stockRepository.findBySymbol(symbol);
-        return stock.map(StockEntity::toDomain)
-                .map(Stock::sector)
+        Optional<Stock> stock = stockStore.findBySymbol(symbol);
+        return stock.map(Stock::sector)
                 .orElse(null);
     }
 
