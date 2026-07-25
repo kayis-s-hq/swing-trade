@@ -20,7 +20,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout
-        run: git pull
+        run: git clone https://github.com/kayis-s-hq/swing-trade.git .
 
       - name: Install Fyers SDK
         run: |
