@@ -1,7 +1,9 @@
 package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.manager.PositionManager;
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -108,8 +110,14 @@ class DailyLossCircuitBreakerTest {
     @Test
     void testCircuitOpensOnExcessiveLoss() {
         // Given - simulate large losses (-2.5% of 1M = -25000)
-        Position lossPosition = new Position();
-        lossPosition.setProfitLoss(new BigDecimal("-25000")); // -2.5% loss
+        Position lossPosition = new Position(
+            null, "RELIANCE", new BigDecimal("2000"), java.time.LocalDate.now(),
+            100, new BigDecimal("1900"), new BigDecimal("2200"),
+            PositionStatus.OPEN, "test", new BigDecimal("1975"),
+            null, null, null, TradeDirection.LONG,
+            null, new BigDecimal("-25000"), BigDecimal.ZERO, null,
+            null, null, null, null
+        );
         when(positionManager.getOpenPositions()).thenReturn(java.util.Collections.singletonList(lossPosition));
 
         // When
@@ -122,8 +130,14 @@ class DailyLossCircuitBreakerTest {
     @Test
     void testCircuitStaysClosedOnNormalLoss() {
         // Given - simulate normal losses (-0.5% of 1M = -5000)
-        Position lossPosition = new Position();
-        lossPosition.setProfitLoss(new BigDecimal("-5000")); // -0.5% loss
+        Position lossPosition = new Position(
+            null, "TCS", new BigDecimal("3500"), java.time.LocalDate.now(),
+            50, new BigDecimal("3400"), new BigDecimal("3700"),
+            PositionStatus.OPEN, "test", new BigDecimal("3490"),
+            null, null, null, TradeDirection.LONG,
+            null, new BigDecimal("-5000"), BigDecimal.ZERO, null,
+            null, null, null, null
+        );
         when(positionManager.getOpenPositions()).thenReturn(java.util.Collections.singletonList(lossPosition));
 
         // When

@@ -36,7 +36,7 @@ public class PositionStoreImpl implements PositionStore {
     }
 
     @Override
-    public List<Position> findByStatus(Position.PositionStatus status) {
+    public List<Position> findByStatus(com.swingtrade.domain.PositionStatus status) {
         return repository.findByStatus(status.name()).stream()
             .map(PositionEntity::toDomain)
             .toList();

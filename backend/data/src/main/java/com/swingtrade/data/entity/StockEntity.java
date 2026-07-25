@@ -91,7 +91,7 @@ public class StockEntity {
             symbol,
             exchange != null ? Stock.Exchange.valueOf(exchange) : null,
             name,
-            sector != null ? Stock.Sector.valueOf(sector) : null,
+            sector != null ? Stock.Sector.fromDbName(sector) : null,
             industry,
             marketCap,
             peRatio,

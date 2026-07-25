@@ -1,5 +1,8 @@
 package com.swingtrade.broker.model;
 
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -30,7 +33,7 @@ public class Portfolio {
     }
 
     public void addPosition(Position position) {
-        positions.put(position.getPositionId(), position);
+        positions.put(position.positionId(), position);
         lastUpdated = LocalDateTime.now();
     }
 
@@ -43,7 +46,9 @@ public class Portfolio {
     }
 
     public Position getPosition(String positionId) {
-        return positions.get(positionId);
+        return positions.values().stream()
+            .filter(p -> p.positionId() != null && p.positionId().equals(positionId))
+            .findFirst().orElse(null);
     }
 
     public Map<String, Position> getPositions() {
@@ -53,8 +58,8 @@ public class Portfolio {
     public BigDecimal getTotalValue() {
         BigDecimal totalValue = initialCapital;
         for (Position position : positions.values()) {
-            if (position.getStatus() == PositionStatus.OPEN) {
-                totalValue = totalValue.add(position.getProfitLoss());
+            if (position.status() == PositionStatus.OPEN) {
+                totalValue = totalValue.add(position.unrealizedPnL() != null ? position.unrealizedPnL() : BigDecimal.ZERO);
             }
         }
         return totalValue;
@@ -72,7 +77,7 @@ public class Portfolio {
 
     public void setHoldings(java.util.List<Position> holdings) {
         for (Position position : holdings) {
-            this.positions.put(position.getPositionId(), position);
+            this.positions.put(position.positionId(), position);
         }
         this.lastUpdated = LocalDateTime.now();
     }

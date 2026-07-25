@@ -1,19 +1,18 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.CompositeAnalysis;
-import com.swingtrade.api.service.SignalEngine;
-import com.swingtrade.api.service.TechnicalAnalysisService;
 import com.swingtrade.api.dto.SignalQueryResult;
 import com.swingtrade.api.dto.SignalQueryResult.CombinedSignal;
 import com.swingtrade.api.dto.SignalQueryResult.SentimentAnalysis;
-import com.swingtrade.api.dto.SignalQueryResult.Signal;
-import com.swingtrade.api.dto.SignalQueryResult.SignalType;
 import com.swingtrade.api.dto.SignalQueryResult.TechnicalAnalysis;
+import com.swingtrade.api.dto.SignalResponse;
 import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.SignalStore;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -43,16 +42,16 @@ public class SignalService {
      * Get the latest trading signals for today
      * @return List of latest trading signals
      */
-    public List<SignalQueryResult.Signal> getLatestSignals() {
+    public List<SignalResponse> getLatestSignals() {
         // Fetch all signals and take the latest per symbol
-        List<com.swingtrade.domain.Signal> all = signalStore.findAll();
-        java.util.Map<String, com.swingtrade.domain.Signal> latestBySymbol = all.stream()
+        List<Signal> all = signalStore.findAll();
+        java.util.Map<String, Signal> latestBySymbol = all.stream()
                 .collect(java.util.stream.Collectors.toMap(
-                        com.swingtrade.domain.Signal::symbol,
+                        Signal::symbol,
                         s -> s,
                         (a, b) -> b.date() != null && a.date() != null && b.date().isAfter(a.date()) ? b : a));
         return latestBySymbol.values().stream()
-                .map(this::toApiSignal)
+                .map(SignalResponse::new)
                 .toList();
     }
 
@@ -61,9 +60,9 @@ public class SignalService {
      * @param symbol the stock symbol
      * @return List of signals for the symbol
      */
-    public List<SignalQueryResult.Signal> getSignalsBySymbol(String symbol) {
+    public List<SignalResponse> getSignalsBySymbol(String symbol) {
         return signalStore.findBySymbol(symbol).stream()
-                .map(this::toApiSignal)
+                .map(SignalResponse::new)
                 .toList();
     }
 
@@ -74,11 +73,11 @@ public class SignalService {
      * @param signalType signal type (BUY, SELL, HOLD)
      * @return List of signals in the date range
      */
-    public List<SignalQueryResult.Signal> getSignalsByDateRange(LocalDate startDate, LocalDate endDate, String signalType) {
+    public List<SignalResponse> getSignalsByDateRange(LocalDate startDate, LocalDate endDate, String signalType) {
         return signalStore.findAll().stream()
                 .filter(s -> s.date() != null && !s.date().isBefore(startDate) && !s.date().isAfter(endDate))
                 .filter(s -> s.type().name().equals(signalType))
-                .map(this::toApiSignal)
+                .map(SignalResponse::new)
                 .toList();
     }
 
@@ -88,10 +87,10 @@ public class SignalService {
      * @param endDate end date (inclusive)
      * @return List of signals in the date range
      */
-    public List<SignalQueryResult.Signal> getSignalsByDateRange(LocalDate startDate, LocalDate endDate) {
+    public List<SignalResponse> getSignalsByDateRange(LocalDate startDate, LocalDate endDate) {
         return signalStore.findAll().stream()
                 .filter(s -> s.date() != null && !s.date().isBefore(startDate) && !s.date().isAfter(endDate))
-                .map(this::toApiSignal)
+                .map(SignalResponse::new)
                 .toList();
     }
 
@@ -100,10 +99,10 @@ public class SignalService {
      * @param signalType signal type (BUY, SELL, HOLD)
      * @return List of signals of the specified type
      */
-    public List<SignalQueryResult.Signal> getSignalsByType(String signalType) {
+    public List<SignalResponse> getSignalsByType(String signalType) {
         return signalStore.findAll().stream()
                 .filter(s -> s.type().name().equals(signalType))
-                .map(this::toApiSignal)
+                .map(SignalResponse::new)
                 .toList();
     }
 
@@ -112,10 +111,10 @@ public class SignalService {
      * @param minConfidence minimum confidence threshold (0.0 to 1.0)
      * @return List of high confidence signals
      */
-    public List<SignalQueryResult.Signal> getHighConfidenceSignals(double minConfidence) {
+    public List<SignalResponse> getHighConfidenceSignals(double minConfidence) {
         return signalStore.findAll().stream()
-                .map(this::toApiSignal)
-                .filter(signal -> signal.confidence() >= minConfidence)
+                .map(SignalResponse::new)
+                .filter(signal -> signal.getConfidence() != null && signal.getConfidence().compareTo(BigDecimal.valueOf(minConfidence)) >= 0)
                 .toList();
     }
 
@@ -125,7 +124,7 @@ public class SignalService {
      * @return Generated signal
      */
     public com.swingtrade.domain.Signal generateSignal(String symbol) {
-        signalEngine.generateSignalsForSymbol(symbol);
+        signalEngine.generateSignalForSymbolNow(symbol);
         return signalStore.findLatestBySymbol(symbol).orElse(null);
     }
 
@@ -176,13 +175,13 @@ public class SignalService {
      * @return Combined signal with technical and sentiment analysis
      */
     public CombinedSignal getCombinedSignal(String symbol) {
-        com.swingtrade.domain.Signal technicalSignal = generateSignal(symbol);
+        Signal technicalSignal = generateSignal(symbol);
         SentimentAnalysis sentiment = getSentimentAnalysis(symbol);
 
         return new CombinedSignal(
             symbol,
             LocalDate.now(),
-            toApiSignal(technicalSignal),
+            technicalSignal,
             sentiment,
             combineSignals(technicalSignal, sentiment)
         );
@@ -191,54 +190,17 @@ public class SignalService {
     /**
      * Combines technical signal with sentiment to determine final signal
      */
-    private SignalType combineSignals(com.swingtrade.domain.Signal technicalSignal, SentimentAnalysis sentiment) {
-        com.swingtrade.domain.Signal.SignalType technicalType = technicalSignal.type();
+    private Signal.SignalType combineSignals(Signal technicalSignal, SentimentAnalysis sentiment) {
+        Signal.SignalType technicalType = technicalSignal.type();
         String sentimentScore = sentiment.score();
 
         if ("NEGATIVE".equals(sentimentScore)) {
             // Negative sentiment suppresses BUY signals
-            if (technicalType == com.swingtrade.domain.Signal.SignalType.BUY) {
-                return SignalType.HOLD;
+            if (technicalType == Signal.SignalType.BUY) {
+                return Signal.SignalType.HOLD;
             }
         }
 
-        return SignalType.valueOf(technicalType.name());
-    }
-
-    /**
-     * Convert domain Signal to API SignalResponse
-     */
-    public com.swingtrade.api.dto.SignalResponse convertSignalToResponse(com.swingtrade.domain.Signal signal) {
-        if (signal == null) return null;
-        com.swingtrade.api.dto.SignalResponse response = new com.swingtrade.api.dto.SignalResponse();
-        response.setId(signal.id());
-        response.setSymbol(signal.symbol());
-        response.setDate(signal.date());
-        response.setSignalType(com.swingtrade.api.dto.SignalResponse.SignalType.valueOf(signal.type().name()));
-        response.setConfidence(signal.confidence());
-        response.setReasoning(signal.reasoning());
-        response.setEntryPrice(signal.entryPrice());
-        response.setStopLoss(signal.stopLoss());
-        response.setTarget(signal.target());
-        response.setRiskRewardRatio(signal.riskReward());
-        response.setIndicators(signal.indicators() != null ? java.util.List.of(signal.indicators().split(",")) : java.util.List.of());
-        response.setGeneratedAt(signal.generatedAt());
-        return response;
-    }
-
-    // No entity conversion needed — Store returns domain objects directly
-
-    /**
-     * Convert domain Signal to local API Signal class
-     */
-    private SignalQueryResult.Signal toApiSignal(com.swingtrade.domain.Signal ds) {
-        if (ds == null) return null;
-        return new SignalQueryResult.Signal(
-            ds.symbol(),
-            ds.type().name(),
-            ds.confidence().doubleValue(),
-            ds.date(),
-            ds.reasoning()
-        );
+        return technicalType;
     }
 }

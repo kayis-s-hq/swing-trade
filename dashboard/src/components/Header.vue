@@ -6,6 +6,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
+
       <nav class="flex items-center gap-2">
         <span class="text-sm text-text-muted">Home</span>
         <svg class="h-4 w-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -16,6 +17,22 @@
     </div>
 
     <div class="flex items-center gap-4">
+      <!-- Holiday -->
+      <div class="flex items-center gap-2 text-xs text-text-muted">
+        <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <span v-if="holidayLoading">Loading...</span>
+        <span v-else-if="nextHoliday">{{ nextHoliday.occasion }}</span>
+        <span v-else>-</span>
+      </div>
+
+      <!-- Market Status -->
+      <div class="flex items-center gap-2 rounded-full border border-border-subtle px-3 py-1.5">
+        <span class="pulse-dot inline-block h-2 w-2 rounded-full" :class="marketPillClass"></span>
+        <span class="text-xs font-medium" :class="marketPillClass">{{ marketCountdownState.label || 'Closed' }}</span>
+      </div>
+
       <!-- Theme Toggle -->
       <button
         @click="themeStore.toggle"
@@ -31,12 +48,6 @@
         </svg>
         <span class="text-xs font-medium">{{ themeStore.isDark ? 'Dark' : 'Light' }}</span>
       </button>
-
-      <!-- Market Status -->
-      <div class="flex items-center gap-2 rounded-full border border-border-subtle px-3 py-1.5">
-        <span class="pulse-dot inline-block h-2 w-2 rounded-full" :class="marketStatus === 'OPEN' ? 'bg-success' : 'bg-danger'"></span>
-        <span class="text-xs font-medium" :class="marketStatus === 'OPEN' ? 'text-success' : 'text-danger'">{{ marketStatus }}</span>
-      </div>
 
       <!-- Broker Connection Status -->
       <div v-if="brokerConnected" class="flex items-center gap-1.5 rounded-md bg-success-bg px-2.5 py-1">
@@ -63,35 +74,85 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useThemeStore } from '../stores/theme'
 import { getSettings, brokerLabels } from '../stores/settings'
-import { getFyersStatus } from '../api/client'
+import { getFyersStatus, getUpcomingHolidays } from '../api/client'
 
 
 defineProps<{ sidebarCollapsed: boolean }>()
 defineEmits<{ 'toggle-sidebar': [] }>()
 
 const route = useRoute()
+const currentPage = computed(() => {
+  const name = route.name
+  if (typeof name === 'string') {
+    return name.charAt(0).toUpperCase() + name.slice(1)
+  }
+  return 'Dashboard'
+})
+
 const currentTime = ref('')
 const themeStore = useThemeStore()
 const settings = getSettings()
 const brokerConnected = ref(false)
 const brokerName = computed(() => brokerLabels[settings.selectedBroker] || 'Trader')
 
-const currentPage = computed(() => {
-  const name = route.name as string | undefined
-  return name ? name.charAt(0).toUpperCase() + name.slice(1).toLowerCase() : 'Dashboard'
-})
+const nextHoliday = ref<{ occasion: string; date: string } | null>(null)
+const holidayLoading = ref(true)
 
-const marketStatus = computed(() => {
-  const hour = new Date().getHours()
-  return (hour >= 9 && hour < 16) ? 'OPEN' : 'CLOSED'
-})
+interface MarketState {
+  label: string
+  class: string
+}
+const marketCountdownState = ref<MarketState>({ label: '', class: '' })
+const marketPillClass = computed(() => marketCountdownState.value.class)
+
+const IST_OFFSET = 5.5 * 60 * 60 * 1000
+
+const updateMarketStatus = (ist: Date) => {
+  const hour = ist.getHours()
+  const minute = ist.getMinutes()
+  const day = ist.getDay()
+  const nowMinutes = hour * 60 + minute
+
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const todayStr = `${ist.getFullYear()}-${pad(ist.getMonth() + 1)}-${pad(ist.getDate())}`
+  const isHoliday = nextHoliday.value && nextHoliday.value.date === todayStr
+
+  if (day === 0 || day === 6 || isHoliday) {
+    marketCountdownState.value = { label: 'Market closed', class: 'text-text-muted' }
+    return
+  }
+
+  const marketOpen = 9 * 60 + 15
+  const marketClose = 15 * 60 + 30
+
+  if (nowMinutes < marketOpen) {
+    const diff = marketOpen - nowMinutes
+    const h = Math.floor(diff / 60)
+    const m = diff % 60
+    marketCountdownState.value = { label: `Opens in ${h}h ${m}m`, class: 'text-warning' }
+  } else if (nowMinutes >= marketOpen && nowMinutes < marketClose) {
+    const diff = marketClose - nowMinutes
+    const h = Math.floor(diff / 60)
+    const m = diff % 60
+    marketCountdownState.value = { label: `Closes in ${h}h ${m}m`, class: 'text-success' }
+  } else {
+    marketCountdownState.value = { label: 'Closed', class: 'text-text-muted' }
+  }
+}
+
+const updateTime = () => {
+  const now = new Date()
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000
+  const ist = new Date(utc + IST_OFFSET)
+
+  currentTime.value = ist.toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+  })
+
+  updateMarketStatus(ist)
+}
 
 let timer: number
-const updateTime = () => {
-  currentTime.value = new Date().toLocaleTimeString('en-US', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  })
-}
 
 const checkBroker = async () => {
   if (settings.selectedBroker !== 'fyers') {
@@ -104,6 +165,22 @@ const checkBroker = async () => {
   }
 }
 
-onMounted(() => { updateTime(); timer = window.setInterval(updateTime, 1000); checkBroker() })
+onMounted(async () => {
+  updateTime()
+  timer = window.setInterval(updateTime, 1000)
+  checkBroker()
+
+  try {
+    const resp = await getUpcomingHolidays()
+    if (resp.success && resp.data?.holidays && resp.data.holidays.length > 0) {
+      nextHoliday.value = { occasion: resp.data.holidays[0].occasion, date: resp.data.holidays[0].date }
+    }
+  } catch {
+    // Ignore — still shows time
+  } finally {
+    holidayLoading.value = false
+  }
+})
+
 onUnmounted(() => { clearInterval(timer) })
 </script>

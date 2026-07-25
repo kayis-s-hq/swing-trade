@@ -2,7 +2,7 @@ package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.PositionManager;
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -201,7 +201,7 @@ public class DailyLossCircuitBreaker {
         BigDecimal total = BigDecimal.ZERO;
 
         for (Position position : positionManager.getOpenPositions()) {
-            total = total.add(position.getProfitLoss());
+            total = total.add(position.unrealizedPnL());
         }
 
         return total;

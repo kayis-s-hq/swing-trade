@@ -59,7 +59,7 @@ public class PaperTradingOrderEntity {
 
     public PaperTradingOrderEntity() {}
 
-    public PaperTradingOrderEntity(com.swingtrade.broker.model.Order order) {
+    public PaperTradingOrderEntity(com.swingtrade.domain.Order order) {
         this.orderId = order.getOrderId();
         this.symbol = order.getSymbol();
         this.type = order.getType() != null ? order.getType().name() : null;

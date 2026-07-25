@@ -129,7 +129,7 @@ public class ScanResponse {
      */
     public static class ScanSignalResult {
         private String symbol;
-        private SignalResponse.SignalType signalType;
+        private com.swingtrade.domain.Signal.SignalType signalType;
         private java.math.BigDecimal confidence;
         private String reasoning;
         private java.math.BigDecimal entryPrice;
@@ -140,7 +140,7 @@ public class ScanResponse {
         public ScanSignalResult() {
         }
 
-        public ScanSignalResult(String symbol, SignalResponse.SignalType signalType,
+        public ScanSignalResult(String symbol, com.swingtrade.domain.Signal.SignalType signalType,
                                 java.math.BigDecimal confidence, String reasoning) {
             this.symbol = symbol;
             this.signalType = signalType;
@@ -157,11 +157,11 @@ public class ScanResponse {
             this.symbol = symbol;
         }
 
-        public SignalResponse.SignalType getSignalType() {
+        public com.swingtrade.domain.Signal.SignalType getSignalType() {
             return signalType;
         }
 
-        public void setSignalType(SignalResponse.SignalType signalType) {
+        public void setSignalType(com.swingtrade.domain.Signal.SignalType signalType) {
             this.signalType = signalType;
         }
 

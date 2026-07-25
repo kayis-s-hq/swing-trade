@@ -3,14 +3,15 @@ package com.swingtrade.broker.service;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
-import com.swingtrade.broker.model.Order;
-import com.swingtrade.broker.model.OrderStatus;
-import com.swingtrade.broker.model.Position;
-import com.swingtrade.broker.model.PositionStatus;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.broker.entity.*;
 import com.swingtrade.broker.repository.*;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -38,7 +39,7 @@ public class PaperTradingStateService {
     private final PaperTradingOrderRepository orderRepo;
     private final PaperTradingSnapshotRepository snapshotRepo;
 
-    public PaperTradingStateService(PaperTradingEngine engine,
+    public PaperTradingStateService(@Lazy PaperTradingEngine engine,
                                     PositionManager positionManager,
                                     OrderManager orderManager,
                                     PaperTradingPortfolioRepository portfolioRepo,
@@ -56,7 +57,6 @@ public class PaperTradingStateService {
         this.snapshotRepo = snapshotRepo;
     }
 
-    @PostConstruct
     public void loadState() {
         try {
             loadPortfolio();
@@ -86,9 +86,8 @@ public class PaperTradingStateService {
             try {
                 Position pos = e.toDomain();
                 engine.getPortfolio().addPosition(pos);
-                positionManager.getPosition(pos.getPositionId());
-                // Position already in engine's map from create flow; this ensures state consistency
-                logger.info("Loaded open position: {} for {}", pos.getPositionId(), pos.getSymbol());
+                positionManager.getPositions().put(pos.positionId(), pos);
+                logger.info("Loaded open position: {} for {}", pos.positionId(), pos.symbol());
             } catch (Exception ex) {
                 logger.warn("Failed to load position {}: {}", e.getPositionId(), ex.getMessage());
             }
@@ -101,8 +100,7 @@ public class PaperTradingStateService {
         for (PaperTradingClosedPositionEntity e : closedEntities) {
             totalRealized = totalRealized.add(e.getRealizedPnL() != null ? e.getRealizedPnL() : BigDecimal.ZERO);
         }
-        engine.getPortfolio().setCurrentCapital(
-            engine.getPortfolio().getCurrentCapital().add(totalRealized));
+        // currentCapital from DB already includes realized P&L — do NOT add again
         logger.info("Loaded {} closed positions, total realized P&L: {}", closedEntities.size(), totalRealized);
     }
 
@@ -118,30 +116,30 @@ public class PaperTradingStateService {
             entity.setOpenPositionCount(engine.getOpenPositionCount());
             portfolioRepo.save(entity);
         } catch (Exception e) {
-            logger.warn("Failed to save portfolio state: {}", e.getMessage());
+            throw new RuntimeException("Failed to save portfolio state", e);
         }
     }
 
     public void savePosition(Position position) {
         try {
-            PaperTradingPositionEntity entity = positionRepo.findByPositionId(position.getPositionId()).orElse(null);
+            PaperTradingPositionEntity entity = positionRepo.findByPositionId(position.positionId()).orElse(null);
             if (entity == null) {
                 entity = new PaperTradingPositionEntity(position);
             } else {
-                entity.setCurrentPrice(position.getCurrentPrice());
-                entity.setPnl(position.getProfitLoss());
-                entity.setUnrealizedPnL(position.getUnrealizedPnL());
-                entity.setRealizedPnL(position.getRealizedPnL());
-                entity.setDirection(position.getDirection() != null ? position.getDirection().name() : "LONG");
-                entity.setStatus(position.getStatus() != null ? position.getStatus().name() : "OPEN");
-                if (position.getStatus() != PositionStatus.OPEN) {
+                entity.setCurrentPrice(position.currentPrice());
+                entity.setPnl(position.unrealizedPnL());
+                entity.setUnrealizedPnL(position.unrealizedPnL());
+                entity.setRealizedPnL(position.realizedPnL());
+                entity.setDirection(position.direction() != null ? position.direction().name() : "LONG");
+                entity.setStatus(position.status() != null ? position.status().name() : "OPEN");
+                if (position.status() != PositionStatus.OPEN) {
                     entity.setExitTime(LocalDateTime.now());
                     entity.setExitReason("auto");
                 }
             }
             positionRepo.save(entity);
         } catch (Exception e) {
-            logger.warn("Failed to save position {}: {}", position.getPositionId(), e.getMessage());
+            throw new RuntimeException("Failed to save position " + position.positionId(), e);
         }
     }
 
@@ -150,16 +148,16 @@ public class PaperTradingStateService {
             PaperTradingPositionEntity openEntity = positionRepo.findByPositionId(positionId).orElse(null);
             if (openEntity != null) {
                 PaperTradingClosedPositionEntity closed = new PaperTradingClosedPositionEntity(openEntity);
-                closed.setExitPrice(closedPos.getCurrentPrice());
-                closed.setPnl(closedPos.getProfitLoss());
-                closed.setRealizedPnL(closedPos.getProfitLoss());
-                closed.setExitReason(closedPos.getExitTime() != null ? "auto" : "manual");
+                closed.setExitPrice(closedPos.currentPrice());
+                closed.setPnl(closedPos.unrealizedPnL());
+                closed.setRealizedPnL(closedPos.unrealizedPnL());
+                closed.setExitReason(closedPos.exitTime() != null ? "auto" : "manual");
                 closedPositionRepo.save(closed);
                 positionRepo.deleteByPositionId(positionId);
                 logger.info("Closed position {} moved to history", positionId);
             }
         } catch (Exception e) {
-            logger.warn("Failed to close position {} in DB: {}", positionId, e.getMessage());
+            throw new RuntimeException("Failed to close position " + positionId + " in DB", e);
         }
     }
 
@@ -177,7 +175,7 @@ public class PaperTradingStateService {
             }
             orderRepo.save(entity);
         } catch (Exception e) {
-            logger.warn("Failed to save order {}: {}", order.getOrderId(), e.getMessage());
+            throw new RuntimeException("Failed to save order " + order.getOrderId(), e);
         }
     }
 
@@ -194,7 +192,7 @@ public class PaperTradingStateService {
             logger.debug("Saved portfolio snapshot: total={}, cash={}, pnl={}",
                 entity.getTotalValue(), entity.getCashBalance(), entity.getTotalPnL());
         } catch (Exception e) {
-            logger.warn("Failed to save portfolio snapshot: {}", e.getMessage());
+            throw new RuntimeException("Failed to save portfolio snapshot", e);
         }
     }
 

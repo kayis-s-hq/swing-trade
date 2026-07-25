@@ -67,6 +67,43 @@ public record Stock(
         TELECOM,
         TEXTILES,
         UTILITIES,
-        OTHERS
+        OTHERS;
+
+        private static final java.util.Map<String, Sector> DB_NAME_MAP;
+        static {
+            DB_NAME_MAP = new java.util.HashMap<>();
+            DB_NAME_MAP.put("Oil & Gas", OIL_GAS);
+            DB_NAME_MAP.put("Oil and Gas", OIL_GAS);
+            DB_NAME_MAP.put("Banking", BANK);
+            DB_NAME_MAP.put("Banks", BANK);
+            DB_NAME_MAP.put("Pharmaceuticals", PHARMA);
+            DB_NAME_MAP.put("Pharma", PHARMA);
+            DB_NAME_MAP.put("Healthcare", HEALTHCARE);
+            DB_NAME_MAP.put("Information Technology", IT);
+            DB_NAME_MAP.put("Software", IT);
+            DB_NAME_MAP.put("Metals", METALS);
+            DB_NAME_MAP.put("Cement", CONSUMER_GOODS);
+            DB_NAME_MAP.put("Fast Moving Consumer Goods", FMCG);
+            DB_NAME_MAP.put("Power", ENERGY);
+            DB_NAME_MAP.put("Electricity", ENERGY);
+            DB_NAME_MAP.put("Power & Energy", ENERGY);
+            DB_NAME_MAP.put("Telecommunications", TELECOM);
+            DB_NAME_MAP.put("Real Estate", REAL_ESTATE);
+            DB_NAME_MAP.put("Textiles", TEXTILES);
+            DB_NAME_MAP.put("Chemicals", CHEMICAL);
+            DB_NAME_MAP.put("Consumer Goods", CONSUMER_GOODS);
+            DB_NAME_MAP.put("Financial Services", FINANCIAL_SERVICES);
+        }
+
+        public static Sector fromDbName(String name) {
+            if (name == null) return OTHERS;
+            try {
+                return Sector.valueOf(name.toUpperCase().replace(" ", "_").replace("&", ""));
+            } catch (IllegalArgumentException e) {
+                Sector mapped = DB_NAME_MAP.get(name);
+                if (mapped != null) return mapped;
+                return OTHERS;
+            }
+        }
     }
 }

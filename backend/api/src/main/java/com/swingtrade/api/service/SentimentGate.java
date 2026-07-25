@@ -1,0 +1,112 @@
+/*
+ * Copyright 2026 Swing Trade
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.swingtrade.api.service;
+
+import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.Signal;
+import com.swingtrade.llm.service.SentimentService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
+
+/**
+ * Decides whether to allow, suppress, or flag a BUY signal based on LLM sentiment analysis.
+ *
+ * <p>Sentiment check failures are non-blocking: the signal is saved anyway with a
+ * {@code WARNING_NONE} flag. This ensures that LLM outages never prevent signal generation.</p>
+ */
+@Component
+public class SentimentGate {
+
+    private static final Logger logger = LoggerFactory.getLogger(SentimentGate.class);
+
+    private final SentimentService sentimentService;
+
+    public SentimentGate(SentimentService sentimentService) {
+        this.sentimentService = sentimentService;
+    }
+
+    /**
+     * Evaluates sentiment for a BUY signal.
+     *
+     * @param symbol the stock symbol
+     * @param date the signal date
+     * @return a {@link SentimentVerdict} indicating whether to suppress, flag, or allow
+     */
+    public SentimentVerdict evaluate(String symbol, LocalDate date) {
+        try {
+            SentimentResult sentiment = sentimentService.analyzeStockSentiment(symbol, date);
+
+            if (sentiment.isNegative()) {
+                logger.info("Suppressing BUY signal for {} on {} due to NEGATIVE sentiment (reasoning: {})",
+                        symbol, date, sentiment.summary());
+                return SentimentVerdict.suppress(sentiment.summary());
+            }
+
+            if (sentiment.isNeutral()) {
+                logger.info("Saving NEUTRAL sentiment signal for {} on {} (reasoning: {})",
+                        symbol, date, sentiment.summary());
+                return SentimentVerdict.flagNeutral(sentiment.summary());
+            }
+
+            return SentimentVerdict.allow();
+
+        } catch (Exception e) {
+            logger.warn("Failed to check sentiment for {} on {}: {}, saving signal anyway",
+                    symbol, date, e.getMessage());
+            return SentimentVerdict.allowGraceful(e.getMessage());
+        }
+    }
+
+    /**
+     * Immutable verdict for a sentiment gate evaluation.
+     *
+     * @param action {@code ALLOW}, {@code SUPPRESS}, or {@code FLAG_NEUTRAL}
+     * @param reason the sentiment reasoning (if available)
+     * @param errorMessage the error message if sentiment check failed (if applicable)
+     */
+    public record SentimentVerdict(
+        Action action,
+        String reason,
+        String errorMessage
+    ) {
+        public enum Action {
+            ALLOW,
+            SUPPRESS,
+            FLAG_NEUTRAL,
+            ALLOW_GRACEFUL
+        }
+
+        public static SentimentVerdict allow() {
+            return new SentimentVerdict(Action.ALLOW, null, null);
+        }
+
+        public static SentimentVerdict suppress(String reason) {
+            return new SentimentVerdict(Action.SUPPRESS, reason, null);
+        }
+
+        public static SentimentVerdict flagNeutral(String reason) {
+            return new SentimentVerdict(Action.FLAG_NEUTRAL, reason, null);
+        }
+
+        public static SentimentVerdict allowGraceful(String errorMessage) {
+            return new SentimentVerdict(Action.ALLOW_GRACEFUL, null, errorMessage);
+        }
+    }
+}

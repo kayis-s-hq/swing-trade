@@ -1,7 +1,7 @@
 package com.swingtrade.broker.telegram;
 
 import com.swingtrade.broker.config.BrokerProperties;
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Position;
 import com.swingtrade.domain.Trade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -222,7 +222,7 @@ public class SignalNotificationService {
         }
 
         String message = messageFormatter.formatTradeOpen(position, signal);
-        log.info("Sending trade open notification for {}", position.getSymbol());
+        log.info("Sending trade open notification for {}", position.symbol());
         return sendMessage(message);
     }
 
@@ -261,7 +261,7 @@ public class SignalNotificationService {
         }
 
         String message = messageFormatter.formatStopLossHit(position, exitPrice, pnl);
-        log.warn("Sending stop loss hit notification for {}", position.getSymbol());
+        log.warn("Sending stop loss hit notification for {}", position.symbol());
         return sendMessage(message);
     }
 
@@ -281,7 +281,7 @@ public class SignalNotificationService {
         }
 
         String message = messageFormatter.formatTargetHit(position, exitPrice, pnl);
-        log.info("Sending target hit notification for {}", position.getSymbol());
+        log.info("Sending target hit notification for {}", position.symbol());
         return sendMessage(message);
     }
 

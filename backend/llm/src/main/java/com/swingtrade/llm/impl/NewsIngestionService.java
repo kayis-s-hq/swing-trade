@@ -1,9 +1,11 @@
 package com.swingtrade.llm.impl;
 
+import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.llm.LlmService;
-import com.swingtrade.llm.TechnicalSignal;
 
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,101 +40,99 @@ public class NewsIngestionService implements LlmService {
     
     /**
      * Analyzes fetched news for technical buy signals.
-     * 
+     *
      * @param newsArticles List of news articles to analyze
-     * @return List of technical signals derived from news analysis
+     * @return List of signals derived from news analysis
      */
     @Override
-    public List<TechnicalSignal> analyzeNewsForBuySignals(List<String> newsArticles) {
-        List<TechnicalSignal> buySignals = new ArrayList<>();
-        
+    public List<Signal> analyzeNewsForBuySignals(List<String> newsArticles) {
+        List<Signal> buySignals = new ArrayList<>();
+
         // In a real implementation, this would be more sophisticated
         for (String article : newsArticles) {
-            if (article.toLowerCase().contains("strong") || 
+            if (article.toLowerCase().contains("strong") ||
                 article.toLowerCase().contains("bullish") ||
                 article.toLowerCase().contains("revenue increase") ||
                 article.toLowerCase().contains("success") ||
                 article.toLowerCase().contains("surge")) {
-                
-                TechnicalSignal signal = new TechnicalSignal(
-                    "AAPL", // Placeholder symbol
-                    "BUY",
+
+                buySignals.add(new Signal(
+                    null,
+                    "AAPL",
+                    LocalDate.now(),
+                    SignalType.BUY,
+                    BigDecimal.valueOf(0.8),
                     "Positive news sentiment detected: " + article.substring(0, Math.min(50, article.length())) + "...",
-                    LocalDateTime.now(),
-                    0.8 // High confidence for positive signals
-                );
-                buySignals.add(signal);
+                    null, null, null, null, null, LocalDate.now()
+                ));
             }
         }
-        
+
         return buySignals;
     }
-    
+
     /**
      * Processes news and generates trading signals.
-     * 
+     *
      * @param newsArticles List of news articles to process
      * @return List of processed trading signals
      */
     @Override
-    public List<TechnicalSignal> processNewsForTradingSignals(List<String> newsArticles) {
-        List<TechnicalSignal> signals = new ArrayList<>();
-        
+    public List<Signal> processNewsForTradingSignals(List<String> newsArticles) {
+        List<Signal> signals = new ArrayList<>();
+
         // Process each article and generate signals
         for (String article : newsArticles) {
-            TechnicalSignal signal = processSingleArticle(article);
+            Signal signal = processSingleArticle(article);
             if (signal != null) {
                 signals.add(signal);
             }
         }
-        
+
         return signals;
     }
-    
+
     /**
      * Processes a single news article and generates a trading signal.
-     * 
+     *
      * @param article The news article text
      * @return Trading signal or null if no signal generated
      */
-    private TechnicalSignal processSingleArticle(String article) {
+    private Signal processSingleArticle(String article) {
         // Determine signal type based on keywords
         String lowerArticle = article.toLowerCase();
-        
-        if (lowerArticle.contains("strong") || 
+
+        if (lowerArticle.contains("strong") ||
             lowerArticle.contains("bullish") ||
             lowerArticle.contains("increase") ||
             lowerArticle.contains("success") ||
             lowerArticle.contains("surge")) {
-            
-            return new TechnicalSignal(
-                "AAPL",
-                "BUY",
+
+            return new Signal(
+                null, "AAPL", LocalDate.now(), SignalType.BUY,
+                BigDecimal.valueOf(0.8),
                 "Positive sentiment detected: " + article.substring(0, Math.min(50, article.length())) + "...",
-                LocalDateTime.now(),
-                0.8
+                null, null, null, null, null, LocalDate.now()
             );
-        } else if (lowerArticle.contains("weak") || 
+        } else if (lowerArticle.contains("weak") ||
                    lowerArticle.contains("bearish") ||
                    lowerArticle.contains("decline") ||
                    lowerArticle.contains("disappoint") ||
                    lowerArticle.contains("sell")) {
-            
-            return new TechnicalSignal(
-                "AAPL",
-                "SELL",
+
+            return new Signal(
+                null, "AAPL", LocalDate.now(), SignalType.SELL,
+                BigDecimal.valueOf(0.7),
                 "Negative sentiment detected: " + article.substring(0, Math.min(50, article.length())) + "...",
-                LocalDateTime.now(),
-                0.7
+                null, null, null, null, null, LocalDate.now()
             );
         } else {
             // Neutral signal
-            return new TechnicalSignal(
-                "AAPL",
-                "HOLD",
+            return new Signal(
+                null, "AAPL", LocalDate.now(), SignalType.HOLD,
+                BigDecimal.valueOf(0.5),
                 "Neutral sentiment detected: " + article.substring(0, Math.min(50, article.length())) + "...",
-                LocalDateTime.now(),
-                0.5
+                null, null, null, null, null, LocalDate.now()
             );
         }
     }

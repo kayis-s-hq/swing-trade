@@ -1,8 +1,8 @@
 package com.swingtrade.broker.service;
 
-import com.swingtrade.broker.model.Order;
+import com.swingtrade.domain.Order;
 import com.swingtrade.broker.model.Portfolio;
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Position;
 
 import java.math.BigDecimal;
 import java.util.List;

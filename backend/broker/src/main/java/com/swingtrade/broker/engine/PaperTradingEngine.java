@@ -4,14 +4,21 @@ import com.swingtrade.broker.config.BrokerMode;
 import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
-import com.swingtrade.broker.model.*;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.broker.service.PaperTradingStateService;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.broker.model.Portfolio;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -53,6 +60,13 @@ public class PaperTradingEngine {
     @Autowired
     public void setStateService(PaperTradingStateService stateService) {
         this.stateService = stateService;
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void initState() {
+        if (stateService != null) {
+            stateService.loadState();
+        }
     }
 
     /**
@@ -197,8 +211,8 @@ public class PaperTradingEngine {
 
         for (Position position : updatedPositions) {
             logger.debug("Updated position {} for {} at price {}: P&L={}",
-                position.getPositionId(), position.getSymbol(), position.getCurrentPrice(),
-                position.getProfitLoss());
+                position.positionId(), position.symbol(), position.currentPrice(),
+                position.unrealizedPnL());
         }
     }
 
@@ -211,7 +225,7 @@ public class PaperTradingEngine {
     public void checkPositionTriggers(String symbol, OhlcvCandle candle) {
         List<Position> openPositions = positionManager.getOpenPositions();
         for (Position position : openPositions) {
-            if (position.getSymbol().equals(symbol)) {
+            if (position.symbol().equals(symbol)) {
                 positionManager.checkPositionTriggers(position, candle);
             }
         }
@@ -235,7 +249,7 @@ public class PaperTradingEngine {
             updatePortfolioAfterEntry(order, position);
 
             logger.info("Position {} created from order {} at {}",
-                position.getPositionId(), orderId, executionPrice);
+                position.positionId(), orderId, executionPrice);
 
             // Persist
             if (stateService != null) {
@@ -394,15 +408,19 @@ public class PaperTradingEngine {
      * @return the updated position
      */
     public Position partialExitPosition(String positionId, BigDecimal exitRatio, BigDecimal exitPrice) {
+        // Capture quantity before partial exit (this is the original at call time)
+        BigDecimal currentQty = BigDecimal.valueOf(positionManager.getPosition(positionId).quantity());
+        BigDecimal exitedQuantity = currentQty.multiply(exitRatio);
+
         Position position = positionManager.partialExitPosition(positionId, exitRatio, exitPrice);
 
-        // Update portfolio with proceeds
-        BigDecimal exitValue = position.getQuantity()
-            .add(position.getProfitLoss().divide(exitPrice, 0, RoundingMode.FLOOR));
-        portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(exitValue));
+        // Update portfolio with cash proceeds from exited shares
+        BigDecimal exitValue = exitedQuantity.multiply(exitPrice);
+        BigDecimal commission = exitedQuantity.multiply(commissionRate);
+        portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(exitValue.subtract(commission)));
 
-        logger.info("Partial exit completed for position {}: remaining={}",
-            positionId, position.getQuantity());
+        logger.info("Partial exit completed for position {}: exited={}, remaining={}",
+            positionId, exitedQuantity, position.quantity());
 
         // Persist
         if (stateService != null) {
@@ -428,7 +446,7 @@ public class PaperTradingEngine {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
 
-        BigDecimal exitPrice = position.get().getCurrentPrice();
+        BigDecimal exitPrice = position.get().currentPrice();
         String reason = "manual_close";
 
         closePosition(posId, exitPrice, reason);
@@ -446,14 +464,14 @@ public class PaperTradingEngine {
         Position position = positionManager.closePosition(positionId, exitPrice, reason);
 
         // Update portfolio
-        BigDecimal exitValue = exitPrice.multiply(position.getQuantity());
+        BigDecimal exitValue = exitPrice.multiply(BigDecimal.valueOf(position.quantity()));
         BigDecimal commission = calculateCommissionForPosition(position);
         BigDecimal netProceeds = exitValue.subtract(commission);
 
         portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(netProceeds));
 
         logger.info("Position {} closed: P&L={}, Reason={}",
-            positionId, position.getProfitLoss(), reason);
+            positionId, position.unrealizedPnL(), reason);
 
         // Persist
         if (stateService != null) {
@@ -469,7 +487,7 @@ public class PaperTradingEngine {
      * @return commission amount
      */
     private BigDecimal calculateCommissionForPosition(Position position) {
-        BigDecimal quantity = position.getQuantity() != null ? position.getQuantity() : BigDecimal.ZERO;
+        BigDecimal quantity = BigDecimal.valueOf(position.quantity() != null ? position.quantity() : 0);
         return quantity.multiply(commissionRate);
     }
 
@@ -636,7 +654,7 @@ public class PaperTradingEngine {
 
         // Check triggers for each updated position
         for (Position position : updated) {
-            if (position.getStatus() == PositionStatus.OPEN) {
+            if (position.status() == PositionStatus.OPEN) {
                 // Persist updated price/P&L
                 if (stateService != null) {
                     stateService.savePosition(position);
@@ -645,11 +663,11 @@ public class PaperTradingEngine {
             }
 
             logger.info("Position {} status changed to: {}",
-                position.getPositionId(), position.getStatus());
+                position.positionId(), position.status());
 
             // Persist closed position
             if (stateService != null) {
-                stateService.closePosition(position.getPositionId(), position);
+                stateService.closePosition(position.positionId(), position);
                 stateService.savePortfolio();
             }
         }

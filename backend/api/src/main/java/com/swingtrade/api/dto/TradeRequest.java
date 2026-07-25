@@ -1,7 +1,7 @@
 package com.swingtrade.api.dto;
 
-import com.swingtrade.broker.model.OrderType;
-import com.swingtrade.broker.model.TradeDirection;
+import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.TradeDirection;
 import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;

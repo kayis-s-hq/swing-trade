@@ -185,7 +185,7 @@ class BrokerServiceFactoryTest {
         // Given
         when(mockClientProvider.getIfAvailable()).thenReturn(mockClient);
         BrokerProperties props = new BrokerProperties(); // default "paper" to avoid live service in constructor
-        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch, props);
+        BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch, mockStateService, props);
         factory.setModeString("live");
 
         // When

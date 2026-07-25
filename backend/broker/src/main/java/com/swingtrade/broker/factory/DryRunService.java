@@ -1,8 +1,14 @@
 package com.swingtrade.broker.factory;
 
 import com.swingtrade.broker.kite.BrokerClient;
-import com.swingtrade.broker.model.*;
+import com.swingtrade.broker.model.OrderResponse;
+import com.swingtrade.broker.model.Portfolio;
 import com.swingtrade.broker.risk.RiskCheckResult;
+import com.swingtrade.domain.Exchange;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.broker.service.BrokerService;
 import org.slf4j.Logger;
@@ -77,7 +83,6 @@ public class DryRunService implements BrokerService {
         logger.info("DRY RUN: Order would be placed with broker");
         logger.info("DRY RUN: No actual order sent (dry-run mode)");
 
-        // Simulate order acceptance
         order.setStatus(OrderStatus.ACCEPTED);
 
         return order;
@@ -110,7 +115,7 @@ public class DryRunService implements BrokerService {
 
     @Override
     public BigDecimal calculateProfitLoss(Position position) {
-        logger.debug("DRY RUN: Calculating P&L for position: {}", position.getSymbol());
+        logger.debug("DRY RUN: Calculating P&L for position: {}", position.symbol());
         return BigDecimal.ZERO; // No real P&L in dry-run mode
     }
 

@@ -3,7 +3,7 @@ package com.swingtrade.broker.risk;
 import com.swingtrade.broker.kite.KiteConnectClient;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.OrderResponse;
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

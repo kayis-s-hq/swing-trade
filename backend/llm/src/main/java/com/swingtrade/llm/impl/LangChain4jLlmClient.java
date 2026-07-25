@@ -1,13 +1,15 @@
 package com.swingtrade.llm.impl;
 
+import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.llm.LlmClient;
 import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
-import com.swingtrade.llm.TechnicalSignal;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -76,37 +78,45 @@ public class LangChain4jLlmClient implements LlmClient {
     }
     
     @Override
-    public List<TechnicalSignal> processNewsForSignals(List<String> newsArticles) {
-        List<TechnicalSignal> signals = new ArrayList<>();
-        
+    public List<Signal> processNewsForSignals(List<String> newsArticles) {
+        List<Signal> signals = new ArrayList<>();
+
         for (String article : newsArticles) {
             // Analyze each article for technical signals
             SentimentOutput sentimentResult = analyzeSentiment(article);
-            
-            // Convert sentiment to technical signal based on rules
+
+            // Convert sentiment to domain signal based on rules
             if (sentimentResult.getSentiment() == SentimentType.POSITIVE) {
                 // Generate positive signal with some strength
-                TechnicalSignal signal = new TechnicalSignal(
-                    "AAPL", // Simplified - in real implementation, extract symbol from article
-                    "BUY",
+                Signal signal = new Signal(
+                    null, // id — will be assigned by DB
+                    "AAPL", // Simplified — in real implementation, extract symbol from article
+                    LocalDate.now(),
+                    SignalType.BUY,
+                    BigDecimal.valueOf(sentimentResult.getConfidence() * 0.8 + 0.2), // Normalize to 0.2-1.0 range
                     sentimentResult.getReasoning(),
-                    LocalDateTime.now(),
-                    sentimentResult.getConfidence() * 0.8 + 0.2 // Normalize to 0.2-1.0 range
+                    null, null, null, null, // entryPrice, stopLoss, target, riskReward
+                    null, // indicators
+                    LocalDate.now()
                 );
                 signals.add(signal);
             } else if (sentimentResult.getSentiment() == SentimentType.NEGATIVE) {
                 // Generate negative signal
-                TechnicalSignal signal = new TechnicalSignal(
+                Signal signal = new Signal(
+                    null,
                     "AAPL",
-                    "SELL",
+                    LocalDate.now(),
+                    SignalType.SELL,
+                    BigDecimal.valueOf(sentimentResult.getConfidence() * 0.8 + 0.2),
                     sentimentResult.getReasoning(),
-                    LocalDateTime.now(),
-                    sentimentResult.getConfidence() * 0.8 + 0.2
+                    null, null, null, null,
+                    null,
+                    LocalDate.now()
                 );
                 signals.add(signal);
             }
         }
-        
+
         return signals;
     }
     

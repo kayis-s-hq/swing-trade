@@ -1,26 +1,18 @@
 package com.swingtrade.api.dto;
 
+import com.swingtrade.domain.Signal;
+
 import java.time.LocalDate;
 import java.util.List;
 
 /**
- * DTO classes formerly nested in SignalService.
+ * DTO classes for signal query results.
  */
 public final class SignalQueryResult {
     private SignalQueryResult() {} // prevent instantiation
 
     public static List<String> allSignalTypes() {
         return List.of("BUY", "SELL", "HOLD");
-    }
-
-    public record Signal(String symbol, SignalType type, Double confidence, LocalDate date, String reasoning) {
-        public Signal(String symbol, String type, Double confidence, LocalDate date, String reasoning) {
-            this(symbol, SignalType.valueOf(type), confidence, date, reasoning);
-        }
-    }
-
-    public enum SignalType {
-        BUY, SELL, HOLD
     }
 
     public record TechnicalAnalysis(String symbol, LocalDate date, List<String> indicators, double strength) {
@@ -30,6 +22,6 @@ public final class SignalQueryResult {
     }
 
     public record CombinedSignal(String symbol, LocalDate date, Signal technicalSignal, SentimentAnalysis sentiment,
-                                 SignalType finalSignal) {
+                                 Signal.SignalType finalSignal) {
     }
 }

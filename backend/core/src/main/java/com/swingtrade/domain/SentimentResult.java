@@ -29,7 +29,8 @@ public record SentimentResult(
     List<String> redFlags,
     List<String> catalysts,
     String promptHash,
-    String modelVersion
+    String modelVersion,
+    int articleCount
 ) {
     /**
      * Enum representing the different sentiment scores.
@@ -97,7 +98,8 @@ public record SentimentResult(
             redFlags != null ? redFlags : List.of(),
             catalysts != null ? catalysts : List.of(),
             null,
-            null
+            null,
+            0
         );
     }
 

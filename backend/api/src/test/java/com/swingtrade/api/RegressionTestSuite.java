@@ -2,8 +2,8 @@ package com.swingtrade.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swingtrade.api.dto.*;
-import com.swingtrade.broker.model.OrderType;
-import com.swingtrade.broker.model.TradeDirection;
+import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

@@ -9,12 +9,13 @@ import com.swingtrade.api.dto.TradeResponse;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
-import com.swingtrade.broker.model.Order;
-import com.swingtrade.broker.model.OrderStatus;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.store.PositionStore;
 import com.swingtrade.domain.store.StockStore;
 import org.slf4j.Logger;
@@ -104,11 +105,11 @@ public class PositionService {
      * @return List of positions with the given status
      */
     public List<PositionResponse> getPositionsByStatus(String status) {
-        Position.PositionStatus ps = switch (status.toUpperCase(Locale.ROOT)) {
-            case "OPEN" -> Position.PositionStatus.OPEN;
-            case "CLOSED" -> Position.PositionStatus.CLOSED;
-            case "STOPPED" -> Position.PositionStatus.STOPPED;
-            case "TARGET_HIT" -> Position.PositionStatus.TARGET_HIT;
+        PositionStatus ps = switch (status.toUpperCase(Locale.ROOT)) {
+            case "OPEN" -> PositionStatus.OPEN;
+            case "CLOSED" -> PositionStatus.CLOSED;
+            case "STOPPED" -> PositionStatus.STOPPED;
+            case "TARGET_HIT" -> PositionStatus.TARGET_HIT;
             default -> throw new IllegalArgumentException("Unknown status: " + status);
         };
         return positionStore.findByStatus(ps).stream()
@@ -172,7 +173,7 @@ public class PositionService {
                 closedCount++;
                 if ("STOPPED".equals(status)) stoppedCount++;
                 if ("TARGET_HIT".equals(status)) targetHitCount++;
-                if (p.getPnl() != null && p.getPnl().compareTo(BigDecimal.ZERO) > 0) winCount++;
+                if (p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) > 0) winCount++;
                 if (p.getCurrentPrice() != null && p.getEntryPrice() != null && p.getQuantity() != null) {
                     totalPnL = totalPnL.add(
                         p.getCurrentPrice().subtract(p.getEntryPrice())
@@ -225,12 +226,12 @@ public class PositionService {
 
         // Close in engine first (updates portfolio capital, calculates P&L)
         try {
-            com.swingtrade.broker.model.Position enginePos =
+            com.swingtrade.domain.Position enginePos =
                 paperTradingEngine.findOpenPositionBySymbol(symbol);
             if (enginePos == null) {
                 throw new RuntimeException("No open position found in engine for symbol: " + symbol);
             }
-            paperTradingEngine.closePosition(enginePos.getPositionId(), exitPrice, reason);
+            paperTradingEngine.closePosition(enginePos.positionId(), exitPrice, reason);
         } catch (Exception e) {
             logger.error("PaperTradingEngine failed to close position {} for symbol {}: {}",
                 entity.getId(), symbol, e.getMessage(), e);
@@ -277,8 +278,8 @@ public class PositionService {
             request.getSymbol(), request.getQuantity(), entryPrice);
         order = paperTradingEngine.executePendingOrder(order.getOrderId(), entryPrice);
         if (order.getStatus() == OrderStatus.FILLED) {
-            com.swingtrade.broker.model.Position pos = paperTradingEngine.createPositionFromOrder(order);
-            positionId = pos.getPositionId();
+            com.swingtrade.domain.Position pos = paperTradingEngine.createPositionFromOrder(order);
+            positionId = pos.positionId();
         } else {
             throw new RuntimeException("Order not filled for symbol " + request.getSymbol() + ": status=" + order.getStatus());
         }

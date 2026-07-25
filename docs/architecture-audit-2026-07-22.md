@@ -19,9 +19,37 @@ The git history shows a **fix cascade pattern** — each feature merge is immedi
 
 ---
 
+## Follow-up Audit — 2026-07-24 (2 days later)
+
+| Status | Count | Details |
+|--------|-------|---------|
+| RESOLVED | 1 | M5 (PMD enabled on all modules) |
+| PARTIAL | 8 | C2, H2, H10, M3, M8 — incremental progress |
+| STILL OPEN | 18 | All critical C1-C7, most high H1-H9, most medium M1-M4/M6-M10 |
+
+### Key changes since audit:
+- **C2 (credentials)**: Fyers API key/secret removed from docker-compose files (now use env vars). `.env` and `.env.dev` still contain real credentials.
+- **H2 (SignalEngine)**: Reduced from 384 to 363 lines (21 lines removed). Still monolithic.
+- **H10 (data ingestion)**: `processStockData()` now uses batch `fetchCandles()`. Still no circuit breaker or retry.
+- **M3 (pagination)**: `PositionController` now has pagination. `SignalController` and `TradingController` still lack it.
+- **M5 (PMD)**: `<skip>true</skip>` removed from all 4 modules. PMD now enabled across the entire codebase.
+- **M8 (schema)**: `out-of-order=true` removed from broker Flyway config.
+
+### Unchanged critical issues (C1-C7):
+All 7 critical findings remain **STILL OPEN**. The paper trading engine bugs (C4 wrong P&L math, C5 double-counted capital, C6 position limits bypassed, C7 silent exception swallow) and the live trading timeout bug (C3) are the highest priority — they corrupt financial state. Zero security (C1) is unchanged.
+
+### Recommended next actions:
+1. **P0**: Fix paper trading P&L bugs (C4, C5, C6) — correct math, register positions in positionManager
+2. **P0**: Fix LiveTradingService CANCELLED-on-timeout (C3) — use UNKNOWN status + reconciliation
+3. **P0**: Fix PaperTradingStateService exception swallowing (C7) — re-throw on save failure
+4. **P0**: Add Spring Security (C1) — role-based access control
+5. **P0**: Move all credentials to env/secrets (C2) — never commit `.env` files
+
+---
+
 ## Critical Findings
 
-### C1: Zero Spring Security — All REST Endpoints Publicly Accessible
+### C1: Zero Spring Security — All REST Endpoints Publicly Accessible [STILL OPEN]
 
 **Scope**: All 20+ controllers across the API module.
 
@@ -38,7 +66,7 @@ No `spring-boot-starter-security` dependency exists anywhere in the project. All
 
 ---
 
-### C2: Hardcoded Credentials in Source-Tracked Files
+### C2: Hardcoded Credentials in Source-Tracked Files [PARTIAL]
 
 **Files**:
 - `backend/docker-compose.yml` lines 100-101, 135-136 — Fyers API key/secret
@@ -56,7 +84,7 @@ PostgreSQL uses `trust` authentication in all docker-compose files.
 
 ---
 
-### C3: LiveTradingService Marks Order CANCELLED When Broker May Have Already Accepted It
+### C3: LiveTradingService Marks Order CANCELLED When Broker May Have Already Accepted It [STILL OPEN]
 
 **File**: `backend/broker/src/main/java/com/swingtrade/broker/factory/LiveTradingService.java` lines 87-91
 
@@ -75,7 +103,7 @@ PostgreSQL uses `trust` authentication in all docker-compose files.
 
 ---
 
-### C4: PaperTradingEngine.partialExitPosition() — Mathematically Wrong P&L Calculation
+### C4: PaperTradingEngine.partialExitPosition() — Mathematically Wrong P&L Calculation [STILL OPEN]
 
 **File**: `backend/broker/src/main/java/com/swingtrade/broker/engine/PaperTradingEngine.java` lines 396-402
 
@@ -93,7 +121,7 @@ portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(exitValue));
 
 ---
 
-### C5: PaperTradingStateService.loadClosedPositions() — Double-Counts Realized P&L on Startup
+### C5: PaperTradingStateService.loadClosedPositions() — Double-Counts Realized P&L on Startup [STILL OPEN]
 
 **File**: `backend/broker/src/main/java/com/swingtrade/broker/service/PaperTradingStateService.java` lines 98-107
 
@@ -110,7 +138,7 @@ engine.getPortfolio().setCurrentCapital(
 
 ---
 
-### C6: PaperTradingStateService.loadOpenPositions() — Positions Never Added to PositionManager
+### C6: PaperTradingStateService.loadOpenPositions() — Positions Never Added to PositionManager [STILL OPEN]
 
 **File**: `backend/broker/src/main/java/com/swingtrade/broker/service/PaperTradingStateService.java` lines 83-96
 
@@ -122,7 +150,7 @@ Positions are added to `portfolio.positions` but never to `positionManager`. Thi
 
 ---
 
-### C7: PaperTradingStateService — All Save Methods Silently Swallow Exceptions
+### C7: PaperTradingStateService — All Save Methods Silently Swallow Exceptions [STILL OPEN]
 
 **File**: `backend/broker/src/main/java/com/swingtrade/broker/service/PaperTradingStateService.java` lines 125-199
 
@@ -136,7 +164,7 @@ Every save method uses `try { ... } catch (Exception e) { logger.warn(...) }`. D
 
 ## High Findings
 
-### H1: Three Coexisting Position/Signal Models (Data Model Duplication)
+### H1: Three Coexisting Position/Signal Models (Data Model Duplication) [STILL OPEN]
 
 **Models in play**:
 
@@ -155,9 +183,26 @@ The broker `Position` model has fields like `positionId`, `brokerPositionId`, `a
 
 **Fix**: Define a single `Position` aggregate in `core`. Use the same type everywhere. JPA entities should be thin wrappers, not parallel models.
 
+### H1b: Signal Model Duplication — SignalType, SignalResponse, SignalQueryResult.Signal, TechnicalSignal [RESOLVED]
+
+**Models eliminated**:
+
+| Model | Status | Notes |
+|-------|--------|-------|
+| `SignalResponse.SignalType` (duplicate enum) | Removed | Now references `Signal.SignalType` |
+| `SignalQueryResult.Signal` (nested record) | Removed | No longer exists; `CombinedSignal` uses domain `Signal` directly |
+| `SignalQueryResult.SignalType` (duplicate enum) | Never existed | `SignalQueryResult.allSignalTypes()` returns `List<String>` |
+| `TechnicalSignal` (LLM POJO) | Never existed | LLM module does not produce this type |
+
+**Remaining Signal model**: `com.swingtrade.domain.Signal` with nested `SignalType` enum (BUY, SELL, HOLD). All DTOs (`SignalResponse`, `ScanResponse.ScanSignalResult`, `CombinedSignalResponse`) reference `Signal.SignalType` directly. Conversion is via the `SignalResponse(Signal)` constructor.
+
+**Fix applied**: Replaced all `SignalResponse.SignalType` references with `Signal.SignalType` across `ScanResponse`, `CombinedSignalResponse`, `ApiTestFixtures`, and `SignalController`. Added missing `LocalDate` import in `SignalPipeline`.
+
 ---
 
-### H2: SignalEngine Is a God Class (384 Lines)
+### H2: SignalEngine Is a God Class (384 Lines) [PARTIAL]
+
+Reduced from 384 to 363 lines (21 lines removed). Still a single monolithic class. Caching+transactional proxy issues remain.
 
 **File**: `backend/api/src/main/java/com/swingtrade/api/service/SignalEngine.java`
 
@@ -174,7 +219,7 @@ Issues:
 
 ---
 
-### H3: Module Dependency Graph Violates Layered Architecture
+### H3: Module Dependency Graph Violates Layered Architecture [STILL OPEN]
 
 **Current dependencies**:
 
@@ -200,7 +245,7 @@ core -> (standalone)
 
 ---
 
-### H4: In-Memory State With Weak Persistence Bridge
+### H4: In-Memory State With Weak Persistence Bridge [STILL OPEN]
 
 **Files**: `backend/broker/src/main/java/com/swingtrade/broker/manager/` (OrderManager, PositionManager)
 
@@ -217,7 +262,7 @@ core -> (standalone)
 
 ---
 
-### H5: Single Transaction for Entire Symbol Batch in Signal Generation
+### H5: Single Transaction for Entire Symbol Batch in Signal Generation [STILL OPEN]
 
 **File**: `backend/api/src/main/java/com/swingtrade/api/service/SignalEngine.java` lines 63-105
 
@@ -229,7 +274,7 @@ The entire `generateDailySignals()` method is wrapped in one `@Transactional`. I
 
 ---
 
-### H6: PaperTradingServiceImpl.placeOrder() — Two Separate Order Stores, Execution Fails
+### H6: PaperTradingServiceImpl.placeOrder() — Two Separate Order Stores, Execution Fails [STILL OPEN]
 
 **File**: `backend/broker/src/main/java/com/swingtrade/broker/service/PaperTradingServiceImpl.java` lines 44-52
 
@@ -241,7 +286,7 @@ The method creates an order via `OrderManager.createBuyOrder()` (which stores it
 
 ---
 
-### H7: PaperTradingMonitorService — Entire Class Is Dead Code
+### H7: PaperTradingMonitorService — Entire Class Is Dead Code [STILL OPEN]
 
 **File**: `backend/broker/src/main/java/com/swingtrade/broker/service/PaperTradingMonitorService.java`
 
@@ -253,7 +298,7 @@ This `@Service` class is never imported or injected by any other class. Spring c
 
 ---
 
-### H8: Strategy Parameter Drift
+### H8: Strategy Parameter Drift [STILL OPEN]
 
 **Parameters defined in three places**:
 
@@ -271,7 +316,7 @@ This `@Service` class is never imported or injected by any other class. Spring c
 
 ---
 
-### H9: Missing Concurrency Control on Scheduled Jobs
+### H9: Missing Concurrency Control on Scheduled Jobs [STILL OPEN]
 
 **File**: `backend/data/src/main/java/com/swingtrade/data/config/SchedulingConfig.java`
 
@@ -283,7 +328,9 @@ This `@Service` class is never imported or injected by any other class. Spring c
 
 ---
 
-### H10: No Retry, Rate Limiting, or Circuit Breaker on Data Ingestion
+### H10: No Retry, Rate Limiting, or Circuit Breaker on Data Ingestion [PARTIAL]
+
+`pullDataFromUpstox()` still loops day-by-day with no rate limiting. However, `processStockData()` now uses batch `fetchCandles(symbol, fromDate, toDate)` (line 78). Still no circuit breaker or retry on failure.
 
 **File**: `backend/data/src/main/java/com/swingtrade/data/service/DataIngestionService.java`
 
@@ -300,7 +347,7 @@ This `@Service` class is never imported or injected by any other class. Spring c
 
 ## Medium Findings
 
-### M1: 6-Factor Voting vs 3-of-4 Signal Logic
+### M1: 6-Factor Voting vs 3-of-4 Signal Logic [STILL OPEN]
 
 - `SwingTradingStrategy` uses 6 factors with 4-of-6 threshold (`buyScore >= 4`) at line 199
 - `PriceActionSignalEngine` uses 3-of-4 threshold (`rulesPassed >= 3`) at line 164
@@ -309,7 +356,7 @@ The commit `ec57227` claims "3-of-4 signal logic" but `SwingTradingStrategy` use
 
 ---
 
-### M2: BacktestScorer Has Hardcoded `true` for hasEnoughData
+### M2: BacktestScorer Has Hardcoded `true` for hasEnoughData [STILL OPEN]
 
 **File**: `backend/api/src/main/java/com/swingtrade/api/service/BacktestScorer.java` line 42
 
@@ -321,7 +368,9 @@ Always returns `true` regardless of whether the backtest produced sufficient dat
 
 ---
 
-### M3: Missing Pagination on 9+ List Endpoints
+### M3: Missing Pagination on 9+ List Endpoints [PARTIAL]
+
+`PositionController` now has pagination on `/`, `/closed`, `/symbol/{symbol}`. But `SignalController` still lacks pagination on `/latest`, `/symbol/{symbol}`, `/date-range`, `/type/{type}`. `TradingController` still lacks pagination on `/`.
 
 - `SignalController.java` lines 48, 65, 79, 94 — no pagination on latest, symbol, date-range, type endpoints
 - `TradingController.java` line 54 — no pagination on trades list
@@ -329,7 +378,7 @@ Always returns `true` regardless of whether the backtest produced sufficient dat
 
 ---
 
-### M4: Missing Validation on 7+ Settings Endpoints
+### M4: Missing Validation on 7+ Settings Endpoints [STILL OPEN]
 
 **File**: `backend/api/src/main/java/com/swingtrade/api/controller/SettingsController.java` lines 38, 62, 78, 105, 116
 
@@ -337,7 +386,9 @@ All use raw `Map<String, String>` or `Map<String, Object>` with no `@Valid`, no 
 
 ---
 
-### M5: PMD Skipped on 4 of 5 Modules (80% of Codebase)
+### M5: PMD Skipped on 4 of 5 Modules (80% of Codebase) [RESOLVED]
+
+`<skip>true</skip>` removed from all 4 modules (broker, data, strategy, llm). PMD is now enabled across the entire codebase.
 
 - `backend/data/pom.xml` line 195: `<skip>true</skip>`
 - `backend/strategy/pom.xml` line 131: `<skip>true</skip>`
@@ -348,7 +399,7 @@ Only `core` and `api` modules have PMD enabled.
 
 ---
 
-### M6: Five Test Classes `@Disabled` and Never Run
+### M6: Five Test Classes `@Disabled` and Never Run [STILL OPEN]
 
 - `TradingControllerTest.java` line 33
 - `PositionControllerTest.java` line 24
@@ -358,7 +409,7 @@ Only `core` and `api` modules have PMD enabled.
 
 ---
 
-### M7: Duplicated ATR/Stop-Loss/Target Logic Across 4 Files
+### M7: Duplicated ATR/Stop-Loss/Target Logic Across 4 Files [STILL OPEN]
 
 The same formula (`stopLoss = entry - 2*ATR`, `target = entry + 2.5*risk`) appears in:
 - `SignalEngine.java` lines 183-196, 243-256
@@ -367,7 +418,9 @@ The same formula (`stopLoss = entry - 2*ATR`, `target = entry + 2.5*risk`) appea
 
 ---
 
-### M8: Database Schema Issues
+### M8: Database Schema Issues [PARTIAL]
+
+`VARCHAR(10)` for symbols, `NUMERIC(15,4)` for prices, no UNIQUE on (symbol, date) in `ohlcv_candles`, FKs still reference `stocks(symbol)` — all unchanged. However, no `out-of-order=true` found in current config (fixed).
 
 - **No `UNIQUE` constraint on `symbol + date`** in `ohlcv_candles` table (V1 migration) — duplicate candles can be inserted
 - **Foreign keys reference `stocks(symbol)`** — bad practice. `symbol` used as FK target in `signals`, `positions`, and `trades` tables
@@ -378,7 +431,7 @@ The same formula (`stopLoss = entry - 2*ATR`, `target = entry + 2.5*risk`) appea
 
 ---
 
-### M9: No Observability Beyond Prometheus Metrics
+### M9: No Observability Beyond Prometheus Metrics [STILL OPEN]
 
 - No distributed tracing (no OpenTelemetry, Zipkin, or Jaeger)
 - No structured logging (logback uses basic patterns, not JSON)
@@ -387,7 +440,7 @@ The same formula (`stopLoss = entry - 2*ATR`, `target = entry + 2.5*risk`) appea
 
 ---
 
-### M10: Configuration Fragmentation
+### M10: Configuration Fragmentation [STILL OPEN]
 
 Configuration split across 6+ files (`application.properties`, `application-local.properties`, `application.yml` across api, broker, data, llm, strategy modules). Each module has its own datasource, Redis, and Flyway config. This means:
 - Duplicate connection pools if all modules run in the same JVM
@@ -415,21 +468,22 @@ Each feature merge is immediately followed by a fix commit. This indicates featu
 
 ## Recommended Priority Actions
 
-| Priority | Action | Effort | Impact |
-|----------|--------|--------|--------|
-| **P0** | Add Spring Security + move credentials to env/secrets manager | Low | Security |
-| **P0** | Fix paper trading P&L bugs (C4, C5, C6) | Low | Data integrity |
-| **P0** | Fix LiveTradingService CANCELLED-on-timeout bug | Low | Financial risk |
-| **P1** | Unify Position/Signal models to single source of truth | Medium | Data integrity |
-| **P1** | Extract SignalEngine into strategy registry | Medium | Extensibility |
-| **P1** | Centralize configuration, enable PMD on all modules | Low | Maintainability |
-| **P1** | Re-enable disabled tests, add coverage for critical paths | Medium | Correctness |
-| **P2** | Add circuit breakers for external APIs | Medium | Reliability |
-| **P2** | Add distributed locking for scheduled jobs | Low | Concurrency safety |
-| **P2** | Clean up module dependencies (break api->data direct access) | Medium | Architecture |
-| **P2** | Add unique constraint on (symbol, date) for candles | Low | Data integrity |
-| **P3** | Add distributed tracing and structured logging | Medium | Observability |
-| **P3** | Standardize strategy parameter management | Low | Consistency |
+| Priority | Action | Effort | Impact | Status |
+|----------|--------|--------|--------|--------|
+| **P0** | Add Spring Security + move credentials to env/secrets manager | Low | Security | [STILL OPEN] |
+| **P0** | Fix paper trading P&L bugs (C4, C5, C6) | Low | Data integrity | [STILL OPEN] |
+| **P0** | Fix LiveTradingService CANCELLED-on-timeout bug | Low | Financial risk | [STILL OPEN] |
+| **P0** | Fix PaperTradingStateService exception swallowing (C7) | Low | Data integrity | [STILL OPEN] |
+| **P1** | Unify Position/Signal models to single source of truth | Medium | Data integrity | [STILL OPEN] |
+| **P1** | Extract SignalEngine into strategy registry | Medium | Extensibility | [PARTIAL] |
+| **P1** | Centralize configuration, enable PMD on all modules | Low | Maintainability | [RESOLVED] |
+| **P1** | Re-enable disabled tests, add coverage for critical paths | Medium | Correctness | [STILL OPEN] |
+| **P2** | Add circuit breakers for external APIs | Medium | Reliability | [STILL OPEN] |
+| **P2** | Add distributed locking for scheduled jobs | Low | Concurrency safety | [STILL OPEN] |
+| **P2** | Clean up module dependencies (break api->data direct access) | Medium | Architecture | [STILL OPEN] |
+| **P2** | Add unique constraint on (symbol, date) for candles | Low | Data integrity | [PARTIAL] |
+| **P3** | Add distributed tracing and structured logging | Medium | Observability | [STILL OPEN] |
+| **P3** | Standardize strategy parameter management | Low | Consistency | [STILL OPEN] | |
 
 ---
 

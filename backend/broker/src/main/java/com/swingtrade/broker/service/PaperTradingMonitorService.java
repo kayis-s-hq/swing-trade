@@ -1,7 +1,7 @@
 package com.swingtrade.broker.service;
 
 import com.swingtrade.broker.engine.PaperTradingEngine;
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Position;
 import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.service.FyersServiceClient;
@@ -47,7 +47,7 @@ public class PaperTradingMonitorService {
 
         for (Position pos : openPositions) {
             try {
-                OhlcvCandle candle = fetchLatestCandle(pos.getSymbol());
+                OhlcvCandle candle = fetchLatestCandle(pos.symbol());
                 if (candle == null) continue;
 
                 // Persist candle to DB for signal engine use
@@ -64,7 +64,7 @@ public class PaperTradingMonitorService {
 
             } catch (Exception e) {
                 logger.warn("Failed to monitor position {} for {}: {}",
-                    pos.getPositionId(), pos.getSymbol(), e.getMessage());
+                    pos.positionId(), pos.symbol(), e.getMessage());
                 // Best-effort: skip failed symbol, continue with others
             }
         }

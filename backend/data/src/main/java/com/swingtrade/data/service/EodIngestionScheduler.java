@@ -2,6 +2,7 @@ package com.swingtrade.data.service;
 
 import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.data.repository.WatchlistRepository;
+import com.swingtrade.data.service.NseHolidayService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,13 +25,15 @@ public class EodIngestionScheduler {
 
     private final DataIngestionService dataIngestionService;
     private final WatchlistRepository watchlistRepository;
+    private final NseHolidayService holidayService;
 
     @Value("${yahoo.finance.rate-limit-ms:500}")
     private long rateLimitMs;
 
-    public EodIngestionScheduler(DataIngestionService dataIngestionService, WatchlistRepository watchlistRepository) {
+    public EodIngestionScheduler(DataIngestionService dataIngestionService, WatchlistRepository watchlistRepository, NseHolidayService holidayService) {
         this.dataIngestionService = dataIngestionService;
         this.watchlistRepository = watchlistRepository;
+        this.holidayService = holidayService;
     }
 
     @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Kolkata")
@@ -42,6 +45,12 @@ public class EodIngestionScheduler {
         int day = today.getDayOfWeek().getValue();
         if (day > 5) {
             logger.debug("Today is {} — skipping scheduled EOD ingestion", today);
+            return;
+        }
+
+        // Skip NSE holidays
+        if (holidayService.isMarketClosed(yesterday)) {
+            logger.info("EOD ingestion skipped: {} is an NSE market holiday", yesterday);
             return;
         }
 

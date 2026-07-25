@@ -5,6 +5,13 @@ import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.*;
 import com.swingtrade.broker.service.PaperTradingServiceImpl;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.Exchange;
 import com.swingtrade.broker.service.PaperTradingStateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,14 +74,11 @@ public class BrokerModuleIntegrationTest {
         assertEquals(new BigDecimal("0.20"), maxCapital);
 
         // Test 6: P&L calculation
-        Position position = new Position();
-        position.setPositionId("pos_1");
-        position.setSymbol("AAPL");
-        position.setDirection(TradeDirection.LONG);
-        position.setQuantity(new BigDecimal("100"));
-        position.setEntryPrice(new BigDecimal("150.00"));
-        position.setCurrentPrice(new BigDecimal("155.00"));
-        position.setProfitLoss(new BigDecimal("500.00"));
+        Position position = Position.of(1L, "AAPL", new BigDecimal("150.00"), null, 100,
+            new BigDecimal("140.00"), new BigDecimal("170.00"),
+            PositionStatus.OPEN, "Signal", new BigDecimal("155.00"),
+            "pos_1", null, Exchange.NSE, TradeDirection.LONG,
+            null, null, null, null, null, null, null, null);
 
         BigDecimal profitLoss = brokerService.calculateProfitLoss(position);
         assertEquals(new BigDecimal("500.00"), profitLoss);
@@ -90,13 +94,11 @@ public class BrokerModuleIntegrationTest {
 
     @Test
     void testPositionManagement_FunctionalTest() {
-        Position position = new Position();
-        position.setPositionId("pos_1");
-        position.setSymbol("AAPL");
-        position.setDirection(TradeDirection.LONG);
-        position.setQuantity(new BigDecimal("100"));
-        position.setEntryPrice(new BigDecimal("150.00"));
-        position.setCurrentPrice(new BigDecimal("155.00"));
+        Position position = Position.of(1L, "AAPL", new BigDecimal("150.00"), null, 100,
+            new BigDecimal("140.00"), new BigDecimal("170.00"),
+            PositionStatus.OPEN, "Signal", new BigDecimal("155.00"),
+            "pos_1", null, Exchange.NSE, TradeDirection.LONG,
+            null, null, null, null, null, null, null, null);
 
         BigDecimal profitLoss = brokerService.calculateProfitLoss(position);
         assertEquals(new BigDecimal("500.00"), profitLoss);

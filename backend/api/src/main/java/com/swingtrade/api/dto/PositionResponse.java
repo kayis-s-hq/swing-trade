@@ -1,6 +1,7 @@
 package com.swingtrade.api.dto;
 
 import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -168,23 +169,4 @@ public class PositionResponse {
         this.totalValue = totalValue;
     }
 
-    /**
-     * Enum mapping for PositionStatus.
-     */
-    public enum PositionStatus {
-        OPEN("Open"),
-        CLOSED("Closed"),
-        STOPPED("Stopped"),
-        TARGET_HIT("Target Hit");
-
-        private final String displayName;
-
-        PositionStatus(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
     }
-}

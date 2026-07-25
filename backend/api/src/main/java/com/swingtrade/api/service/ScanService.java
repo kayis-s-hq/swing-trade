@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -24,17 +25,20 @@ public class ScanService {
     private final SignalEngine signalEngine;
     private final StockStore stockStore;
     private final SignalStore signalStore;
+    private final com.swingtrade.domain.store.CandleStore candleStore;
 
-    public ScanService(SignalEngine signalEngine, StockStore stockStore, SignalStore signalRepository) {
+    public ScanService(SignalEngine signalEngine, StockStore stockStore,
+                       SignalStore signalRepository, com.swingtrade.domain.store.CandleStore candleStore) {
         this.signalEngine = signalEngine;
         this.stockStore = stockStore;
         this.signalStore = signalRepository;
+        this.candleStore = candleStore;
     }
 
     /**
      * Trigger manual scan for trading opportunities.
-     * Generates signals for all stocks via the signal engine, then queries
-     * today's BUY signals from the repository.
+     * Generates signals for all stocks via both swing and price-action engines,
+     * then queries the latest candle date's BUY signals from the repository.
      *
      * @return Scan result
      */
@@ -45,12 +49,21 @@ public class ScanService {
 
         for (String symbol : symbols) {
             signalEngine.generateSignalForSymbolNow(symbol);
+            signalEngine.generatePriceActionSignalForSymbolNow(symbol);
         }
 
-        LocalDate today = LocalDate.now();
+        // Use the latest candle date across all symbols (signals are generated for that date)
+        LocalDate latestDate = symbols.stream()
+                .map(candleStore::findLatestBySymbol)
+                .filter(java.util.Optional::isPresent)
+                .map(opt -> opt.get().date())
+                .filter(java.util.Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+
         List<String> opportunities = new ArrayList<>();
         for (String symbol : symbols) {
-            List<Signal> signals = signalStore.findBySymbolAndDate(symbol, today);
+            List<Signal> signals = signalStore.findBySymbolAndDate(symbol, latestDate);
             for (Signal signal : signals) {
                 if (Signal.SignalType.BUY == signal.type()) {
                     opportunities.add(symbol);
@@ -61,6 +74,7 @@ public class ScanService {
 
         return new ScanResult(
             LocalDateTime.now(),
+            symbols.size(),
             opportunities.size(),
             opportunities,
             "SUCCESS"
@@ -125,6 +139,7 @@ public class ScanService {
 
         return new ScanResult(
             LocalDateTime.now(),
+            symbols.size(),
             opportunities.size(),
             opportunities,
             "SUCCESS"
@@ -138,7 +153,7 @@ public class ScanService {
         ScanResponse response = new ScanResponse();
         response.setScanTime(result.scanTime());
         response.setStatus(ScanResponse.ScanStatus.COMPLETED);
-        response.setSymbolsScanned(result.opportunityCount());
+        response.setSymbolsScanned(result.symbolsScanned());
         response.setSignalsFound(result.opportunityCount());
         response.setBuySignals(result.opportunityCount());
         response.setSellSignals(0);
@@ -148,6 +163,6 @@ public class ScanService {
         return response;
     }
 
-    public record ScanResult(LocalDateTime scanTime, int opportunityCount, List<String> opportunities, String status) {
+    public record ScanResult(LocalDateTime scanTime, int symbolsScanned, int opportunityCount, List<String> opportunities, String status) {
     }
 }

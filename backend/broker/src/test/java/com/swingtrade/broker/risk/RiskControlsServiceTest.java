@@ -3,7 +3,7 @@ package com.swingtrade.broker.risk;
 import com.swingtrade.broker.kite.KiteConnectClient;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.OrderResponse;
-import com.swingtrade.broker.model.TradeDirection;
+import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

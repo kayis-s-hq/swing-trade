@@ -58,6 +58,9 @@ public class SentimentResultEntity {
     @Column(name = "model_version", length = 50)
     private String modelVersion;
 
+    @Column(name = "article_count")
+    private int articleCount;
+
     /**
      * Default constructor for JPA.
      */
@@ -84,6 +87,7 @@ public class SentimentResultEntity {
         entity.setCatalysts(result.catalysts() != null ? result.catalysts().toArray(new String[0]) : null);
         entity.setPromptHash(result.promptHash());
         entity.setModelVersion(result.modelVersion());
+        entity.setArticleCount(result.articleCount());
         return entity;
     }
 
@@ -105,7 +109,8 @@ public class SentimentResultEntity {
             redFlags != null ? List.of(redFlags) : List.of(),
             catalysts != null ? List.of(catalysts) : List.of(),
             promptHash,
-            modelVersion
+            modelVersion,
+            articleCount
         );
     }
 
@@ -221,5 +226,13 @@ public class SentimentResultEntity {
 
     public void setModelVersion(String modelVersion) {
         this.modelVersion = modelVersion;
+    }
+
+    public int getArticleCount() {
+        return articleCount;
+    }
+
+    public void setArticleCount(int articleCount) {
+        this.articleCount = articleCount;
     }
 }

@@ -1,9 +1,9 @@
 package com.swingtrade.broker.manager;
 
-import com.swingtrade.broker.model.Order;
-import com.swingtrade.broker.model.OrderStatus;
-import com.swingtrade.broker.model.OrderType;
-import com.swingtrade.broker.model.TradeDirection;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.TradeDirection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -464,6 +464,15 @@ public class OrderManager {
      */
     public Order getOrder(String orderId) {
         return orders.get(orderId);
+    }
+
+    /**
+     * Gets the internal order map. Used by state persistence layer.
+     *
+     * @return the order map
+     */
+    public Map<String, Order> getOrders() {
+        return orders;
     }
 
     /**

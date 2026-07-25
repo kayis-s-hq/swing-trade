@@ -90,4 +90,12 @@ public class SignalStoreImpl implements SignalStore {
     public long countBySymbolAndDate(String symbol, LocalDate date) {
         return repository.countBySymbolAndDate(symbol, date);
     }
+
+    @Override
+    public List<Signal> findBuySignalsSince(LocalDate sinceDate) {
+        return repository.findBuySignalsSince(sinceDate,
+                org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).stream()
+            .map(SignalEntity::toDomain)
+            .toList();
+    }
 }

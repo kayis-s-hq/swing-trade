@@ -5,6 +5,13 @@ import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.model.*;
 import com.swingtrade.broker.risk.RiskCheckResult;
 import com.swingtrade.broker.risk.RiskControls;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.domain.Exchange;
+import com.swingtrade.domain.PositionStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -181,8 +188,11 @@ class LiveTradingServiceTest {
     void testGetPositions_callsBrokerClient() {
         // Given
         List<Position> mockPositions = List.of(
-            new Position("pos-1", "RELIANCE-EQ", TradeDirection.LONG,
-                new BigDecimal("100"), new BigDecimal("2500"), null, null)
+            Position.of(1L, "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
+                new BigDecimal("2400"), new BigDecimal("2700"),
+                PositionStatus.OPEN, "Signal", new BigDecimal("2550"),
+                "pos-1", null, Exchange.NSE, TradeDirection.LONG,
+                null, null, null, null, null, null, null, null)
         );
         when(brokerClient.getPositions()).thenReturn(mockPositions);
 
@@ -197,8 +207,11 @@ class LiveTradingServiceTest {
     @Test
     void testGetPosition_callsBrokerClient() {
         // Given
-        Position position = new Position("pos-1", "RELIANCE-EQ", TradeDirection.LONG,
-            new BigDecimal("100"), new BigDecimal("2500"), null, null);
+        Position position = Position.of(1L, "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
+            new BigDecimal("2400"), new BigDecimal("2700"),
+            PositionStatus.OPEN, "Signal", new BigDecimal("2550"),
+            "pos-1", null, Exchange.NSE, TradeDirection.LONG,
+            null, null, null, null, null, null, null, null);
         when(brokerClient.getPositions()).thenReturn(List.of(position));
 
         // When
@@ -206,18 +219,17 @@ class LiveTradingServiceTest {
 
         // Then
         assertThat(result).isPresent();
-        assertThat(result.get().getSymbol()).isEqualTo("RELIANCE-EQ");
+        assertThat(result.get().symbol()).isEqualTo("RELIANCE-EQ");
     }
 
     @Test
     void testCalculateProfitLoss_calculatesCorrectly() {
         // Given
-        Position position = new Position();
-        position.setSymbol("RELIANCE-EQ");
-        position.setDirection(TradeDirection.LONG);
-        position.setQuantity(new BigDecimal("100"));
-        position.setEntryPrice(new BigDecimal("2500"));
-        position.setCurrentPrice(new BigDecimal("2550"));
+        Position position = Position.of(1L, "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
+            new BigDecimal("2400"), new BigDecimal("2700"),
+            PositionStatus.OPEN, "Signal", new BigDecimal("2550"),
+            "pos-1", null, Exchange.NSE, TradeDirection.LONG,
+            null, null, null, null, null, null, null, null);
 
         // When
         BigDecimal result = service.calculateProfitLoss(position);
@@ -339,12 +351,11 @@ class LiveTradingServiceTest {
     @Test
     void testCalculateProfitLoss_shortPosition() {
         // Given
-        Position position = new Position();
-        position.setSymbol("TCS-EQ");
-        position.setDirection(TradeDirection.SHORT);
-        position.setQuantity(new BigDecimal("50"));
-        position.setEntryPrice(new BigDecimal("3500"));
-        position.setCurrentPrice(new BigDecimal("3450"));
+        Position position = Position.of(1L, "TCS-EQ", new BigDecimal("3500"), null, 50,
+            new BigDecimal("3400"), new BigDecimal("3700"),
+            PositionStatus.OPEN, "Signal", new BigDecimal("3450"),
+            "pos-1", null, Exchange.NSE, TradeDirection.SHORT,
+            null, null, null, null, null, null, null, null);
 
         // When
         BigDecimal result = service.calculateProfitLoss(position);

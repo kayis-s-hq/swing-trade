@@ -29,4 +29,12 @@ public interface SignalStore {
     List<String> findAllDistinctSymbols();
 
     long countBySymbolAndDate(String symbol, LocalDate date);
+
+    /**
+     * Finds all BUY signals generated on or after a date (DB-level filtering).
+     *
+     * @param sinceDate the start date
+     * @return list of BUY signals
+     */
+    List<Signal> findBuySignalsSince(LocalDate sinceDate);
 }

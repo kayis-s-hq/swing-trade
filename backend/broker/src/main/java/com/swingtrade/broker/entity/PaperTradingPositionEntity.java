@@ -1,13 +1,9 @@
 package com.swingtrade.broker.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.Table;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.TradeDirection;
+import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -76,24 +72,24 @@ public class PaperTradingPositionEntity {
 
     public PaperTradingPositionEntity() {}
 
-    public PaperTradingPositionEntity(com.swingtrade.broker.model.Position pos) {
-        this.positionId = pos.getPositionId();
-        this.symbol = pos.getSymbol();
-        this.direction = pos.getDirection() != null ? pos.getDirection().name() : "LONG";
-        this.quantity = pos.getQuantity() != null ? pos.getQuantity().intValue() : 0;
-        this.entryPrice = pos.getEntryPrice();
-        this.averagePrice = pos.getAveragePrice();
-        this.currentPrice = pos.getCurrentPrice();
-        this.stopLoss = pos.getSlPrice();
-        this.targetPrice = pos.getTargetPrice();
-        this.pnl = pos.getProfitLoss();
-        this.unrealizedPnL = pos.getUnrealizedPnL();
-        this.realizedPnL = pos.getRealizedPnL();
-        this.status = pos.getStatus() != null ? pos.getStatus().name() : "OPEN";
-        this.entryTime = pos.getEntryTime();
-        this.exitTime = pos.getExitTime();
-        this.entryReason = pos.getEntryReason();
-        this.exitReason = null;
+    public PaperTradingPositionEntity(Position pos) {
+        this.positionId = pos.positionId();
+        this.symbol = pos.symbol();
+        this.direction = pos.direction() != null ? pos.direction().name() : "LONG";
+        this.quantity = pos.quantity() != null ? pos.quantity() : 0;
+        this.entryPrice = pos.entryPrice();
+        this.averagePrice = pos.averagePrice();
+        this.currentPrice = pos.currentPrice();
+        this.stopLoss = pos.stopLoss();
+        this.targetPrice = pos.target();
+        this.pnl = pos.unrealizedPnL();
+        this.unrealizedPnL = pos.unrealizedPnL();
+        this.realizedPnL = pos.realizedPnL();
+        this.status = pos.status() != null ? pos.status().name() : "OPEN";
+        this.entryTime = pos.entryTime();
+        this.exitTime = pos.exitTime();
+        this.entryReason = pos.entryReason();
+        this.exitReason = pos.exitReason();
         this.lastUpdated = LocalDateTime.now();
     }
 
@@ -142,24 +138,30 @@ public class PaperTradingPositionEntity {
     public LocalDateTime getLastUpdated() { return lastUpdated; }
     public void setLastUpdated(LocalDateTime lastUpdated) { this.lastUpdated = lastUpdated; }
 
-    public com.swingtrade.broker.model.Position toDomain() {
-        com.swingtrade.broker.model.Position pos = new com.swingtrade.broker.model.Position();
-        pos.setPositionId(positionId);
-        pos.setSymbol(symbol);
-        pos.setDirection(direction != null ? com.swingtrade.broker.model.TradeDirection.valueOf(direction) : com.swingtrade.broker.model.TradeDirection.LONG);
-        pos.setQuantity(quantity != null ? java.math.BigDecimal.valueOf(quantity) : java.math.BigDecimal.ZERO);
-        pos.setEntryPrice(entryPrice);
-        pos.setAveragePrice(averagePrice);
-        pos.setCurrentPrice(currentPrice);
-        pos.setProfitLoss(pnl);
-        pos.setUnrealizedPnL(unrealizedPnL);
-        pos.setRealizedPnL(realizedPnL);
-        pos.setSlPrice(stopLoss);
-        pos.setTargetPrice(targetPrice);
-        pos.setStatus(status != null ? com.swingtrade.broker.model.PositionStatus.valueOf(status) : com.swingtrade.broker.model.PositionStatus.OPEN);
-        pos.setEntryTime(entryTime);
-        pos.setExitTime(exitTime);
-        pos.setEntryReason(entryReason);
-        return pos;
+    public Position toDomain() {
+        return Position.of(
+            null,
+            symbol,
+            entryPrice,
+            null, // entryDate not stored in paper trading table
+            quantity,
+            stopLoss,
+            targetPrice,
+            status != null ? PositionStatus.valueOf(status) : PositionStatus.OPEN,
+            entryReason,
+            currentPrice,
+            positionId,
+            null, // brokerPositionId not stored here
+            null, // exchange not stored here
+            direction != null ? TradeDirection.valueOf(direction) : TradeDirection.LONG,
+            averagePrice,
+            unrealizedPnL,
+            realizedPnL,
+            null, // marginUtilized not stored here
+            entryTime,
+            exitTime,
+            exitReason,
+            null  // orders not stored here
+        );
     }
 }

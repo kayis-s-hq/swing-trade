@@ -1,8 +1,8 @@
 package com.swingtrade.broker.telegram;
 
-import com.swingtrade.broker.model.Order;
-import com.swingtrade.broker.model.Position;
-import com.swingtrade.broker.model.TradeDirection;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.broker.telegram.TelegramNotificationService.DailySummary;
 import com.swingtrade.broker.telegram.TelegramNotificationService.ErrorSeverity;
 import com.swingtrade.domain.Signal;
@@ -142,33 +142,33 @@ public class TelegramMessageFormatter {
         StringBuilder sb = new StringBuilder();
         sb.append("📝 <b>POSITION ENTERED</b>\n\n");
         sb.append("📈 <b>Symbol:</b> <code>")
-          .append(position.getSymbol())
+          .append(position.symbol())
           .append("</code>\n");
         sb.append("🚩 <b>Direction:</b> ")
-          .append(formatDirection(position.getDirection()))
+          .append(formatDirection(position.direction()))
           .append("\n");
         sb.append("🔢 <b>Quantity:</b> <code>")
-          .append(position.getQuantity())
+          .append(position.quantity())
           .append("</code>\n");
         sb.append("💰 <b>Entry Price:</b> <code>")
-          .append(formatPrice(position.getEntryPrice()))
+          .append(formatPrice(position.entryPrice()))
           .append("</code>\n");
         sb.append("💵 <b>Total Value:</b> <code>")
-          .append(formatPrice(position.getEntryPrice().multiply(
-              position.getQuantity())))
+          .append(formatPrice(position.entryPrice().multiply(
+              BigDecimal.valueOf(position.quantity()))))
           .append("</code>\n");
         sb.append("🛑 <b>Stop Loss:</b> <code>")
-          .append(formatPrice(position.getSlPrice()))
+          .append(formatPrice(position.stopLoss()))
           .append("</code>\n");
         sb.append("🎯 <b>Target:</b> <code>")
-          .append(formatPrice(position.getTargetPrice()))
+          .append(formatPrice(position.target()))
           .append("</code>\n");
         sb.append("📅 <b>Entry Time:</b> ")
-          .append(position.getEntryTime().format(DATE_TIME_FORMATTER))
+          .append(position.entryTime().format(DATE_TIME_FORMATTER))
           .append("\n");
-        if (position.getProfitLoss() != null) {
+        if (position.unrealizedPnL() != null) {
             sb.append("📈 <b>Initial P&L:</b> <code>")
-              .append(formatCurrency(position.getProfitLoss()))
+              .append(formatCurrency(position.unrealizedPnL()))
               .append("</code>\n");
         }
         return sb.toString();
@@ -184,19 +184,19 @@ public class TelegramMessageFormatter {
         StringBuilder sb = new StringBuilder();
         sb.append("📊 <b>POSITION UPDATE</b>\n\n");
         sb.append("📈 <b>Symbol:</b> <code>")
-          .append(position.getSymbol())
+          .append(position.symbol())
           .append("</code>\n");
         sb.append("💵 <b>Current Price:</b> <code>")
-          .append(formatPrice(position.getCurrentPrice()))
+          .append(formatPrice(position.currentPrice()))
           .append("</code>\n");
         sb.append("💰 <b>Entry Price:</b> <code>")
-          .append(formatPrice(position.getEntryPrice()))
+          .append(formatPrice(position.entryPrice()))
           .append("</code>\n");
         sb.append("📉 <b>Change:</b> <code>")
-          .append(formatPrice(position.getCurrentPrice().subtract(position.getEntryPrice())))
+          .append(formatPrice(position.currentPrice().subtract(position.entryPrice())))
           .append("</code>\n");
         sb.append("📈 <b>P&L:</b> <code>")
-          .append(formatCurrency(position.getProfitLoss()))
+          .append(formatCurrency(position.unrealizedPnL()))
           .append("</code>\n");
 
         BigDecimal pnlPercent = calculatePnLPercent(position);
@@ -210,20 +210,20 @@ public class TelegramMessageFormatter {
 
         if (stopLossPct != null) {
             sb.append("📉 <b>Stop Loss:</b> <code>")
-              .append(formatPrice(position.getSlPrice()))
+              .append(formatPrice(position.stopLoss()))
               .append("</code> (")
               .append(formatDistancePercentage(stopLossPct))
               .append(")\n");
         }
         if (targetPct != null) {
             sb.append("🎯 <b>Target:</b> <code>")
-              .append(formatPrice(position.getTargetPrice()))
+              .append(formatPrice(position.target()))
               .append("</code> (")
               .append(formatDistancePercentage(targetPct))
               .append(")\n");
         }
         sb.append("⏱️ <b>Time:</b> ")
-          .append(position.getEntryTime().format(TIME_FORMATTER));
+          .append(position.entryTime().format(TIME_FORMATTER));
         return sb.toString();
     }
 
@@ -285,24 +285,24 @@ public class TelegramMessageFormatter {
         StringBuilder sb = new StringBuilder();
         sb.append("🔴 <b>STOP LOSS HIT</b>\n\n");
         sb.append("📉 <b>Symbol:</b> <code>")
-          .append(position.getSymbol())
+          .append(position.symbol())
           .append("</code>\n");
         sb.append("💥 <b>Exit Price:</b> <code>")
           .append(formatPrice(exitPrice))
           .append("</code>\n");
         sb.append("🛑 <b>Expected SL:</b> <code>")
-          .append(formatPrice(position.getSlPrice()))
+          .append(formatPrice(position.stopLoss()))
           .append("</code>\n");
         sb.append("📅 <b>Exit Time:</b> ")
-          .append(position.getExitTime() != null
-              ? position.getExitTime().format(DATE_TIME_FORMATTER)
+          .append(position.exitTime() != null
+              ? position.exitTime().format(DATE_TIME_FORMATTER)
               : LocalDateTime.now().format(DATE_TIME_FORMATTER))
           .append("\n");
         sb.append("❌ <b>Loss:</b> <code>")
           .append(formatCurrency(pnl))
           .append("</code>\n");
         sb.append("📊 <b>Loss %:</b> <b>")
-          .append(formatPercentage(calculatePnLPercentForPrice(position.getEntryPrice(), exitPrice, position.getQuantity())))
+          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice, BigDecimal.valueOf(position.quantity()))))
           .append("</b>\n");
         return sb.toString();
     }
@@ -319,24 +319,24 @@ public class TelegramMessageFormatter {
         StringBuilder sb = new StringBuilder();
         sb.append("✅ <b>TARGET HIT!</b>\n\n");
         sb.append("📈 <b>Symbol:</b> <code>")
-          .append(position.getSymbol())
+          .append(position.symbol())
           .append("</code>\n");
         sb.append("🎯 <b>Exit Price:</b> <code>")
           .append(formatPrice(exitPrice))
           .append("</code>\n");
         sb.append("🎯 <b>Expected Target:</b> <code>")
-          .append(formatPrice(position.getTargetPrice()))
+          .append(formatPrice(position.target()))
           .append("</code>\n");
         sb.append("📅 <b>Exit Time:</b> ")
-          .append(position.getExitTime() != null
-              ? position.getExitTime().format(DATE_TIME_FORMATTER)
+          .append(position.exitTime() != null
+              ? position.exitTime().format(DATE_TIME_FORMATTER)
               : LocalDateTime.now().format(DATE_TIME_FORMATTER))
           .append("\n");
         sb.append("💰 <b>Profit:</b> <code>")
           .append(formatCurrency(pnl))
           .append("</code>\n");
         sb.append("📊 <b>Profit %:</b> <b>")
-          .append(formatPercentage(calculatePnLPercentForPrice(position.getEntryPrice(), exitPrice, position.getQuantity())))
+          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice, BigDecimal.valueOf(position.quantity()))))
           .append("</b>\n");
         return sb.toString();
     }
@@ -770,12 +770,12 @@ public class TelegramMessageFormatter {
      * @return the P&L percentage (0-1 scale)
      */
     private BigDecimal calculatePnLPercent(Position position) {
-        if (position == null || position.getEntryPrice() == null || position.getEntryPrice().compareTo(BigDecimal.ZERO) == 0) {
+        if (position == null || position.entryPrice() == null || position.entryPrice().compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }
 
-        BigDecimal priceChange = position.getCurrentPrice().subtract(position.getEntryPrice());
-        return priceChange.divide(position.getEntryPrice(), 4, BigDecimal.ROUND_HALF_UP);
+        BigDecimal priceChange = position.currentPrice().subtract(position.entryPrice());
+        return priceChange.divide(position.entryPrice(), 4, BigDecimal.ROUND_HALF_UP);
     }
 
     /**

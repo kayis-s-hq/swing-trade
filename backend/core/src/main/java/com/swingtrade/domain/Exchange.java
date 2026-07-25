@@ -1,4 +1,4 @@
-package com.swingtrade.broker.model;
+package com.swingtrade.domain;
 
 /**
  * Enum representing Indian stock exchanges.

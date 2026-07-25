@@ -26,8 +26,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public class AnalysisOrchestratorService {
 
     private static final Logger logger = LoggerFactory.getLogger(AnalysisOrchestratorService.class);
-    private static final int MIN_CANDLES = 100;
-
     private final DataIngestionService dataIngestionService;
     private final NewsIngestionService newsIngestionService;
     private final SentimentService sentimentService;
@@ -73,22 +71,17 @@ public class AnalysisOrchestratorService {
                 String.format("Found %d candles", candleCount)));
             logger.info("Stage 1 done in {}ms", System.currentTimeMillis() - s1);
 
-            // Stage 2: Backfill if needed
-            if (candleCount < MIN_CANDLES) {
-                long s2 = System.currentTimeMillis();
-                emitProgress(emitter, progress, AnalysisProgress.running(2, "backfilling OHLCV"));
-                try {
-                    dataIngestionService.backfillStockData(sym, backfillYears);
-                    int newCount = (int) candleRepository.countBySymbol(sym);
-                    emitProgress(emitter, progress, AnalysisProgress.completed(2, "backfilling OHLCV",
-                        String.format("Backfilled: %d → %d candles", candleCount, newCount)));
-                    stageDurations.addAndGet(System.currentTimeMillis() - s2);
-                } catch (Exception e) {
-                    emitProgress(emitter, progress, AnalysisProgress.error(2, "backfilling OHLCV", e.getMessage()));
-                }
-            } else {
-                emitProgress(emitter, progress, AnalysisProgress.skipped(2, "backfilling OHLCV",
-                    String.format("Already %d candles, skipping", candleCount)));
+            // Stage 2: Backfill 3 years of OHLCV
+            long s2 = System.currentTimeMillis();
+            emitProgress(emitter, progress, AnalysisProgress.running(2, "backfilling OHLCV"));
+            try {
+                dataIngestionService.backfillStockData(sym, backfillYears);
+                int newCount = (int) candleStore.countBySymbol(sym);
+                emitProgress(emitter, progress, AnalysisProgress.completed(2, "backfilling OHLCV",
+                    String.format("Backfilled: %d → %d candles", candleCount, newCount)));
+                stageDurations.addAndGet(System.currentTimeMillis() - s2);
+            } catch (Exception e) {
+                emitProgress(emitter, progress, AnalysisProgress.error(2, "backfilling OHLCV", e.getMessage()));
             }
 
             // Stage 3: Fetch news if needed
@@ -154,8 +147,17 @@ public class AnalysisOrchestratorService {
 
             // Stage 7: Backtest
             long s7 = System.currentTimeMillis();
-            emitProgress(emitter, progress, AnalysisProgress.skipped(7, "backtest",
-                "Included in composite analysis"));
+            emitProgress(emitter, progress, AnalysisProgress.running(7, "backtest"));
+            CompositeAnalysis.BacktestScore backtestScore;
+            try {
+                backtestScore = backtestScorer.compute(sym);
+                emitProgress(emitter, progress, AnalysisProgress.completed(7, "backtest",
+                    String.format("%d trades, win rate: %.1f%%, return: %.1f%%",
+                        backtestScore.totalTrades(), backtestScore.winRate(), backtestScore.totalReturn())));
+            } catch (Exception e) {
+                backtestScore = new com.swingtrade.api.dto.CompositeAnalysis.BacktestScore(0, 0, 0, 0, 0, 0, false);
+                emitProgress(emitter, progress, AnalysisProgress.error(7, "backtest", e.getMessage()));
+            }
             logger.info("Stage 7 done in {}ms", System.currentTimeMillis() - s7);
 
             long duration = System.currentTimeMillis() - startTime;

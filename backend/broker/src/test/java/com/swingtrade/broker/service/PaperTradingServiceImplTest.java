@@ -4,6 +4,11 @@ import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.*;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -169,7 +174,7 @@ class PaperTradingServiceImplTest {
 
         var portfolio = localService.getPortfolio();
         assertThat(portfolio).isNotNull();
-        assertThat(position.getSymbol()).isEqualTo("KOTAKBANK-EQ");
+        assertThat(position.symbol()).isEqualTo("KOTAKBANK-EQ");
 
         var pnl = localService.calculateProfitLoss(position);
         assertThat(pnl).isNotNull();
@@ -186,9 +191,16 @@ class PaperTradingServiceImplTest {
         localService.placeOrder(order);
 
         Position position = pair.engine.getOpenPositions().get(0);
-        position.setCurrentPrice(new BigDecimal("1500.00"));
+        Position updated = Position.of(
+            position.id(), position.symbol(), position.entryPrice(), position.entryDate(),
+            position.quantity(), position.stopLoss(), position.target(), position.status(),
+            position.entryReason(), new BigDecimal("1500.00"),
+            position.positionId(), position.brokerPositionId(), position.exchange(),
+            position.direction(), position.averagePrice(), new BigDecimal("250.00"),
+            position.realizedPnL(), position.marginUtilized(), position.entryTime(),
+            position.exitTime(), position.exitReason(), position.orders());
 
-        BigDecimal result = localService.calculateProfitLoss(position);
+        BigDecimal result = localService.calculateProfitLoss(updated);
         assertThat(result).isNotNull();
         assertThat(result).isEqualByComparingTo(new BigDecimal("250.00"));
     }
@@ -202,9 +214,16 @@ class PaperTradingServiceImplTest {
         localService.placeOrder(order);
 
         Position position = pair.engine.getOpenPositions().get(0);
-        position.setCurrentPrice(new BigDecimal("1050.00"));
+        Position updated = Position.of(
+            position.id(), position.symbol(), position.entryPrice(), position.entryDate(),
+            position.quantity(), position.stopLoss(), position.target(), position.status(),
+            position.entryReason(), new BigDecimal("1050.00"),
+            position.positionId(), position.brokerPositionId(), position.exchange(),
+            position.direction(), position.averagePrice(), new BigDecimal("-250.00"),
+            position.realizedPnL(), position.marginUtilized(), position.entryTime(),
+            position.exitTime(), position.exitReason(), position.orders());
 
-        BigDecimal result = localService.calculateProfitLoss(position);
+        BigDecimal result = localService.calculateProfitLoss(updated);
         assertThat(result).isNegative();
         assertThat(result).isEqualByComparingTo(new BigDecimal("-250.00"));
     }
@@ -218,11 +237,11 @@ class PaperTradingServiceImplTest {
         localService.placeOrder(order);
 
         Position position = pair.engine.getOpenPositions().get(0);
-        String positionId = position.getPositionId();
+        String positionId = position.positionId();
 
         var result = localService.getPosition(positionId);
         assertThat(result).isPresent();
-        assertThat(result.get().getSymbol()).isEqualTo("INFY-EQ");
+        assertThat(result.get().symbol()).isEqualTo("INFY-EQ");
     }
 
     @Test
@@ -260,7 +279,7 @@ class PaperTradingServiceImplTest {
 
         List<Position> positions = localService.getOpenPositions();
         assertThat(positions).hasSize(1);
-        assertThat(positions.get(0).getSymbol()).isEqualTo("SBIN-EQ");
+        assertThat(positions.get(0).symbol()).isEqualTo("SBIN-EQ");
     }
 
     private Order createOrder(EnginePair pair, String symbol, BigDecimal price) {

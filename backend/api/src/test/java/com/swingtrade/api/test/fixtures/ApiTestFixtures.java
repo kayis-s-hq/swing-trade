@@ -4,6 +4,7 @@ import com.swingtrade.api.dto.PerformanceResponse;
 import com.swingtrade.api.dto.PositionResponse;
 import com.swingtrade.api.dto.ScanResponse;
 import com.swingtrade.api.dto.SignalResponse;
+import com.swingtrade.domain.PositionStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -17,7 +18,7 @@ public class ApiTestFixtures {
         SignalResponse response = new SignalResponse();
         response.setSymbol(symbol);
         response.setDate(LocalDate.now());
-        response.setSignalType(SignalResponse.SignalType.BUY);
+        response.setSignalType(com.swingtrade.domain.Signal.SignalType.BUY);
         response.setConfidence(new BigDecimal("0.85"));
         response.setReasoning("Strong bullish momentum with RSI oversold");
         response.setEntryPrice(new BigDecimal("2500.00"));
@@ -33,7 +34,7 @@ public class ApiTestFixtures {
         SignalResponse response = new SignalResponse();
         response.setSymbol(symbol);
         response.setDate(LocalDate.now());
-        response.setSignalType(SignalResponse.SignalType.SELL);
+        response.setSignalType(com.swingtrade.domain.Signal.SignalType.SELL);
         response.setConfidence(new BigDecimal("0.75"));
         response.setReasoning("Bearish divergence detected");
         response.setEntryPrice(new BigDecimal("3800.00"));
@@ -49,7 +50,7 @@ public class ApiTestFixtures {
         SignalResponse response = new SignalResponse();
         response.setSymbol(symbol);
         response.setDate(LocalDate.now());
-        response.setSignalType(SignalResponse.SignalType.HOLD);
+        response.setSignalType(com.swingtrade.domain.Signal.SignalType.HOLD);
         response.setConfidence(new BigDecimal("0.55"));
         response.setReasoning("Mixed signals, wait for confirmation");
         response.setEntryPrice(new BigDecimal("1500.00"));
@@ -71,7 +72,7 @@ public class ApiTestFixtures {
         response.setQuantity(quantity);
         response.setStopLoss(entryPrice.multiply(new BigDecimal("0.95")));
         response.setTarget(entryPrice.multiply(new BigDecimal("1.10")));
-        response.setStatus(PositionResponse.PositionStatus.OPEN);
+        response.setStatus(PositionStatus.OPEN);
         response.setEntryReason("Breakout above resistance");
         response.setCurrentPrice(entryPrice);
         response.setUnrealizedPnL(BigDecimal.ZERO);

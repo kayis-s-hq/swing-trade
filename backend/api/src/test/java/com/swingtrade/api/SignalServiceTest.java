@@ -1,7 +1,6 @@
 package com.swingtrade.api;
 
-import com.swingtrade.api.dto.SignalQueryResult;
-import com.swingtrade.api.dto.SignalQueryResult.Signal;
+import com.swingtrade.api.dto.SignalResponse;
 import com.swingtrade.api.service.SignalService;
 import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.SignalRepository;
@@ -75,7 +74,7 @@ class SignalServiceTest {
     @Test
     void testGetLatestSignals_ReturnsNonEmptyList() {
         // Act
-        List<Signal> signals = signalService.getLatestSignals();
+        List<SignalResponse> signals = signalService.getLatestSignals();
 
         // Assert
         assertNotNull(signals, "Signals list should not be null");
@@ -86,25 +85,25 @@ class SignalServiceTest {
     @Test
     void testGetLatestSignals_ReturnsCorrectSignalTypes() {
         // Arrange - the service returns BUY and SELL signals
-        List<Signal> signals = signalService.getLatestSignals();
+        List<SignalResponse> signals = signalService.getLatestSignals();
 
         // Act & Assert
-        assertTrue(signals.stream().anyMatch(s -> "BUY".equals(s.type().name())), "Should contain at least one BUY signal");
-        assertTrue(signals.stream().anyMatch(s -> "SELL".equals(s.type().name())), "Should contain at least one SELL signal");
+        assertTrue(signals.stream().anyMatch(s -> "BUY".equals(s.getSignalType().name())), "Should contain at least one BUY signal");
+        assertTrue(signals.stream().anyMatch(s -> "SELL".equals(s.getSignalType().name())), "Should contain at least one SELL signal");
     }
 
     @Test
     void testGetLatestSignals_ValidatesSignalProperties() {
         // Act
-        List<Signal> signals = signalService.getLatestSignals();
+        List<SignalResponse> signals = signalService.getLatestSignals();
 
         // Assert
-        for (Signal signal : signals) {
-            assertNotNull(signal.symbol(), "Signal symbol should not be null");
-            assertNotNull(signal.type(), "Signal type should not be null");
-            assertNotNull(signal.date(), "Signal date should not be null");
-            assertNotNull(signal.reasoning(), "Signal reason should not be null");
-            assertTrue("BUY".equalsIgnoreCase(signal.type().name()) || "SELL".equalsIgnoreCase(signal.type().name()),
+        for (SignalResponse signal : signals) {
+            assertNotNull(signal.getSymbol(), "Signal symbol should not be null");
+            assertNotNull(signal.getSignalType(), "Signal type should not be null");
+            assertNotNull(signal.getDate(), "Signal date should not be null");
+            assertNotNull(signal.getReasoning(), "Signal reason should not be null");
+            assertTrue("BUY".equalsIgnoreCase(signal.getSignalType().name()) || "SELL".equalsIgnoreCase(signal.getSignalType().name()),
                     "Signal type should be BUY or SELL");
         }
     }
@@ -112,37 +111,37 @@ class SignalServiceTest {
     @Test
     void testGetLatestSignals_AllSignalsHaveReasons() {
         // Act
-        List<Signal> signals = signalService.getLatestSignals();
+        List<SignalResponse> signals = signalService.getLatestSignals();
 
         // Assert
-        for (Signal signal : signals) {
-            assertNotNull(signal.reasoning());
-            assertFalse(signal.reasoning().trim().isEmpty(), "Signal reason should not be empty");
-            assertTrue(signal.reasoning().length() > 5, "Signal reason should have meaningful content");
+        for (SignalResponse signal : signals) {
+            assertNotNull(signal.getReasoning());
+            assertFalse(signal.getReasoning().trim().isEmpty(), "Signal reason should not be empty");
+            assertTrue(signal.getReasoning().length() > 5, "Signal reason should have meaningful content");
         }
     }
 
     @Test
     void testGetLatestSignals_TimestampsAreRecent() {
         // Act
-        List<Signal> signals = signalService.getLatestSignals();
+        List<SignalResponse> signals = signalService.getLatestSignals();
 
         // Assert
         LocalDate today = LocalDate.now();
-        for (Signal signal : signals) {
-            assertNotNull(signal.date());
+        for (SignalResponse signal : signals) {
+            assertNotNull(signal.getDate());
             // Timestamps should be today
-            assertEquals(today, signal.date(), "Signal date should be today");
+            assertEquals(today, signal.getDate(), "Signal date should be today");
         }
     }
 
     @Test
     void testGetLatestSignals_ReturnsDistinctSymbols() {
         // Act
-        List<Signal> signals = signalService.getLatestSignals();
+        List<SignalResponse> signals = signalService.getLatestSignals();
 
         // Assert
-        List<String> symbols = signals.stream().map(Signal::symbol).toList();
+        List<String> symbols = signals.stream().map(SignalResponse::getSymbol).toList();
         assertTrue(symbols.stream().distinct().count() == symbols.size(),
                 "All signals should have distinct symbols");
     }
@@ -150,14 +149,14 @@ class SignalServiceTest {
     @Test
     void testGetLatestSignals_SymbolFormat() {
         // Act
-        List<Signal> signals = signalService.getLatestSignals();
+        List<SignalResponse> signals = signalService.getLatestSignals();
 
         // Assert
-        for (Signal signal : signals) {
-            assertNotNull(signal.symbol());
-            assertTrue(signal.symbol().matches("[A-Z]+"),
+        for (SignalResponse signal : signals) {
+            assertNotNull(signal.getSymbol());
+            assertTrue(signal.getSymbol().matches("[A-Z]+"),
                     "Symbol should consist of uppercase letters");
-            assertTrue(signal.symbol().length() <= 5,
+            assertTrue(signal.getSymbol().length() <= 5,
                     "Symbol should be reasonably short");
         }
     }
@@ -165,7 +164,7 @@ class SignalServiceTest {
     @Test
     void testGetLatestSignals_ListIsMutable() {
         // Act
-        List<Signal> signals = signalService.getLatestSignals();
+        List<SignalResponse> signals = signalService.getLatestSignals();
 
         // Assert
         assertDoesNotThrow(signals::clear,
@@ -175,7 +174,7 @@ class SignalServiceTest {
     @Test
     void testGetLatestSignals_NoNullElements() {
         // Act
-        List<Signal> signals = signalService.getLatestSignals();
+        List<SignalResponse> signals = signalService.getLatestSignals();
 
         // Assert
         assertFalse(signals.contains(null), "List should not contain null elements");

@@ -15,7 +15,7 @@ public class SignalResponse {
     private Long id;
     private String symbol;
     private LocalDate date;
-    private SignalType signalType;
+    private Signal.SignalType signalType;
     private BigDecimal confidence;
     private String reasoning;
     private BigDecimal entryPrice;
@@ -29,7 +29,7 @@ public class SignalResponse {
     public SignalResponse() {
     }
 
-    public SignalResponse(String symbol, LocalDate date, SignalType signalType,
+    public SignalResponse(String symbol, LocalDate date, Signal.SignalType signalType,
                           BigDecimal confidence, String reasoning, BigDecimal entryPrice,
                           BigDecimal stopLoss, BigDecimal target, BigDecimal riskRewardRatio,
                           List<String> indicators, java.time.LocalDateTime generatedAt) {
@@ -50,7 +50,7 @@ public class SignalResponse {
         this.id = signal.id();
         this.symbol = signal.symbol();
         this.date = signal.date();
-        this.signalType = SignalType.valueOf(signal.type().name());
+        this.signalType = signal.type();
         this.confidence = signal.confidence();
         this.reasoning = signal.reasoning();
         this.entryPrice = signal.entryPrice();
@@ -86,11 +86,11 @@ public class SignalResponse {
         this.date = date;
     }
 
-    public SignalType getSignalType() {
+    public Signal.SignalType getSignalType() {
         return signalType;
     }
 
-    public void setSignalType(SignalType signalType) {
+    public void setSignalType(Signal.SignalType signalType) {
         this.signalType = signalType;
     }
 
@@ -176,22 +176,4 @@ public class SignalResponse {
         return List.of(indicators.split(","));
     }
 
-    /**
-     * Enum mapping for SignalType.
-     */
-    public enum SignalType {
-        BUY("Buy Signal"),
-        SELL("Sell Signal"),
-        HOLD("Hold");
-
-        private final String description;
-
-        SignalType(String description) {
-            this.description = description;
-        }
-
-        public String getDescription() {
-            return description;
-        }
     }
-}

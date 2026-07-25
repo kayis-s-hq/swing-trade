@@ -30,7 +30,7 @@ class PositionTest {
 
         @Test
         void shouldCreatePositionWithDefaultConstructor() {
-            Position position = new Position(
+            Position position = Position.of(
                 1L,
                 "RELIANCE",
                 ENTRY_PRICE,
@@ -38,9 +38,12 @@ class PositionTest {
                 QUANTITY,
                 EXPECTED_STOP_LOSS,
                 EXPECTED_TARGET,
-                Position.PositionStatus.OPEN,
+                PositionStatus.OPEN,
                 ENTRY_REASON,
-                ENTRY_PRICE
+                ENTRY_PRICE,
+                "POS_001", null, null, TradeDirection.LONG,
+                null, null, null, null,
+                null, null, null, null
             );
 
             assertThat(position.id()).isEqualTo(1L);
@@ -50,14 +53,14 @@ class PositionTest {
             assertThat(position.quantity()).isEqualTo(QUANTITY);
             assertThat(position.stopLoss()).isEqualTo(EXPECTED_STOP_LOSS);
             assertThat(position.target()).isEqualTo(EXPECTED_TARGET);
-            assertThat(position.status()).isEqualTo(Position.PositionStatus.OPEN);
+            assertThat(position.status()).isEqualTo(PositionStatus.OPEN);
             assertThat(position.entryReason()).isEqualTo(ENTRY_REASON);
             assertThat(position.currentPrice()).isEqualTo(ENTRY_PRICE);
         }
 
         @Test
         void shouldCreatePositionWithNullId() {
-            Position position = new Position(
+            Position position = Position.of(
                 null,
                 "TCS",
                 BigDecimal.valueOf(1500.00),
@@ -65,9 +68,12 @@ class PositionTest {
                 50,
                 BigDecimal.valueOf(1450.00),
                 BigDecimal.valueOf(1600.00),
-                Position.PositionStatus.OPEN,
+                PositionStatus.OPEN,
                 "Trend following",
-                BigDecimal.valueOf(1500.00)
+                BigDecimal.valueOf(1500.00),
+                null, null, null, TradeDirection.LONG,
+                null, null, null, null,
+                null, null, null, null
             );
 
             assertThat(position.id()).isNull();
@@ -117,7 +123,7 @@ class PositionTest {
                 ENTRY_REASON
             );
 
-            assertThat(position.status()).isEqualTo(Position.PositionStatus.OPEN);
+            assertThat(position.status()).isEqualTo(PositionStatus.OPEN);
         }
 
         @Test
@@ -384,7 +390,7 @@ class PositionTest {
 
         @Test
         void shouldReturnTrueForOpenPositionIsOpen() {
-            openPosition = new Position(
+            openPosition = Position.of(
                 1L,
                 "RELIANCE",
                 ENTRY_PRICE,
@@ -392,9 +398,12 @@ class PositionTest {
                 QUANTITY,
                 EXPECTED_STOP_LOSS,
                 EXPECTED_TARGET,
-                Position.PositionStatus.OPEN,
+                PositionStatus.OPEN,
                 ENTRY_REASON,
-                ENTRY_PRICE
+                ENTRY_PRICE,
+                "POS_001", null, null, TradeDirection.LONG,
+                null, null, null, null,
+                null, null, null, null
             );
 
             assertThat(openPosition.isOpen()).isTrue();
@@ -403,7 +412,7 @@ class PositionTest {
 
         @Test
         void shouldReturnFalseForClosedPositionIsOpen() {
-            closedPosition = new Position(
+            closedPosition = Position.of(
                 1L,
                 "RELIANCE",
                 ENTRY_PRICE,
@@ -411,9 +420,12 @@ class PositionTest {
                 QUANTITY,
                 EXPECTED_STOP_LOSS,
                 EXPECTED_TARGET,
-                Position.PositionStatus.CLOSED,
+                PositionStatus.CLOSED,
                 ENTRY_REASON,
-                EXPECTED_TARGET
+                EXPECTED_TARGET,
+                "POS_001", null, null, TradeDirection.LONG,
+                null, null, null, null,
+                null, null, null, null
             );
 
             assertThat(closedPosition.isOpen()).isFalse();
@@ -422,7 +434,7 @@ class PositionTest {
 
         @Test
         void shouldReturnFalseForStoppedPositionIsOpen() {
-            stoppedPosition = new Position(
+            stoppedPosition = Position.of(
                 1L,
                 "RELIANCE",
                 ENTRY_PRICE,
@@ -430,9 +442,12 @@ class PositionTest {
                 QUANTITY,
                 EXPECTED_STOP_LOSS,
                 EXPECTED_TARGET,
-                Position.PositionStatus.STOPPED,
+                PositionStatus.STOPPED,
                 ENTRY_REASON,
-                EXPECTED_STOP_LOSS
+                EXPECTED_STOP_LOSS,
+                "POS_001", null, null, TradeDirection.LONG,
+                null, null, null, null,
+                null, null, null, null
             );
 
             assertThat(stoppedPosition.isOpen()).isFalse();
@@ -441,7 +456,7 @@ class PositionTest {
 
         @Test
         void shouldReturnFalseForTargetHitPositionIsOpen() {
-            targetHitPosition = new Position(
+            targetHitPosition = Position.of(
                 1L,
                 "RELIANCE",
                 ENTRY_PRICE,
@@ -449,9 +464,12 @@ class PositionTest {
                 QUANTITY,
                 EXPECTED_STOP_LOSS,
                 EXPECTED_TARGET,
-                Position.PositionStatus.TARGET_HIT,
+                PositionStatus.TARGET_HIT,
                 ENTRY_REASON,
-                EXPECTED_TARGET
+                EXPECTED_TARGET,
+                "POS_001", null, null, TradeDirection.LONG,
+                null, null, null, null,
+                null, null, null, null
             );
 
             assertThat(targetHitPosition.isOpen()).isFalse();
@@ -577,10 +595,16 @@ class PositionTest {
 
         @Test
         void shouldReturnTrueWhenBothNull() {
-            position1 = new Position(null, "RELIANCE", ENTRY_PRICE, ENTRY_DATE, QUANTITY,
-                EXPECTED_STOP_LOSS, EXPECTED_TARGET, Position.PositionStatus.OPEN, ENTRY_REASON, ENTRY_PRICE);
-            position2 = new Position(null, "RELIANCE", ENTRY_PRICE, ENTRY_DATE, QUANTITY,
-                EXPECTED_STOP_LOSS, EXPECTED_TARGET, Position.PositionStatus.OPEN, ENTRY_REASON, ENTRY_PRICE);
+            position1 = Position.of(null, "RELIANCE", ENTRY_PRICE, ENTRY_DATE, QUANTITY,
+                EXPECTED_STOP_LOSS, EXPECTED_TARGET, PositionStatus.OPEN, ENTRY_REASON, ENTRY_PRICE,
+                null, null, null, TradeDirection.LONG,
+                null, null, null, null,
+                null, null, null, null);
+            position2 = Position.of(null, "RELIANCE", ENTRY_PRICE, ENTRY_DATE, QUANTITY,
+                EXPECTED_STOP_LOSS, EXPECTED_TARGET, PositionStatus.OPEN, ENTRY_REASON, ENTRY_PRICE,
+                null, null, null, TradeDirection.LONG,
+                null, null, null, null,
+                null, null, null, null);
 
             assertThat(position1).isEqualTo(position2);
         }
@@ -608,7 +632,7 @@ class PositionTest {
             assertThat(toString).contains(QUANTITY.toString());
             assertThat(toString).contains("96.0");
             assertThat(toString).contains("110.0");
-            assertThat(toString).contains(Position.PositionStatus.OPEN.toString());
+            assertThat(toString).contains(PositionStatus.OPEN.toString());
             assertThat(toString).contains(ENTRY_REASON);
         }
 

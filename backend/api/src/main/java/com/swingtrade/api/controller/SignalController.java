@@ -2,7 +2,9 @@ package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.*;
 import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.SentimentStore;
+import com.swingtrade.domain.store.SignalStore;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,10 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -47,11 +47,12 @@ public class SignalController {
     @GetMapping("/latest")
     public ResponseEntity<List<SignalResponse>> getLatestSignals() {
         logger.debug("Fetching latest signals from DB");
-        List<com.swingtrade.domain.Signal> all = signalStore.findAll();
-        all.sort(java.util.Comparator.comparing(
-            (com.swingtrade.domain.Signal s) -> s.date() != null ? s.date() : java.time.LocalDate.now()
-        ).reversed());
-        List<SignalResponse> signals = all.stream().map(this::domainSignalToResponse).collect(Collectors.toList());
+        List<Signal> all = signalStore.findAll().stream()
+            .sorted(java.util.Comparator.comparing(
+                (Signal s) -> s.date() != null ? s.date() : java.time.LocalDate.now()
+            ).reversed())
+            .toList();
+        List<SignalResponse> signals = all.stream().map(SignalResponse::new).collect(Collectors.toList());
         return ResponseEntity.ok(signals);
     }
 
@@ -64,7 +65,7 @@ public class SignalController {
     @GetMapping("/symbol/{symbol}")
     public ResponseEntity<List<SignalResponse>> getSignalsBySymbol(@PathVariable String symbol) {
         logger.debug("Fetching signals for symbol: {}", symbol);
-        List<SignalResponse> signals = convertSignalsToResponses(signalService.getSignalsBySymbol(symbol));
+        List<SignalResponse> signals = signalService.getSignalsBySymbol(symbol);
         return ResponseEntity.ok(signals);
     }
 
@@ -81,7 +82,7 @@ public class SignalController {
             @RequestParam LocalDate endDate
     ) {
         logger.debug("Fetching signals for date range: {} to {}", startDate, endDate);
-        List<SignalResponse> signals = convertSignalsToResponses(signalService.getSignalsByDateRange(startDate, endDate));
+        List<SignalResponse> signals = signalService.getSignalsByDateRange(startDate, endDate);
         return ResponseEntity.ok(signals);
     }
 
@@ -92,9 +93,9 @@ public class SignalController {
      * @return List of signals of specified type
      */
     @GetMapping("/type/{type}")
-    public ResponseEntity<List<SignalResponse>> getSignalsByType(@PathVariable SignalResponse.SignalType type) {
+    public ResponseEntity<List<SignalResponse>> getSignalsByType(@PathVariable Signal.SignalType type) {
         logger.debug("Fetching signals of type: {}", type);
-        List<SignalResponse> signals = convertSignalsToResponses(signalService.getSignalsByType(type.name()));
+        List<SignalResponse> signals = signalService.getSignalsByType(type.name());
         return ResponseEntity.ok(signals);
     }
 
@@ -114,7 +115,7 @@ public class SignalController {
             return ResponseEntity.badRequest().build();
         }
 
-        List<SignalResponse> signals = convertSignalsToResponses(signalService.getHighConfidenceSignals(minConfidence));
+        List<SignalResponse> signals = signalService.getHighConfidenceSignals(minConfidence);
         return ResponseEntity.ok(signals);
     }
 
@@ -134,9 +135,8 @@ public class SignalController {
             return ResponseEntity.badRequest().build();
         }
 
-        com.swingtrade.domain.Signal domainSignal = signalService.generateSignal(request.getSymbol());
-        SignalResponse signal = signalService.convertSignalToResponse(domainSignal);
-        return ResponseEntity.ok(signal);
+        Signal domainSignal = signalService.generateSignal(request.getSymbol());
+        return ResponseEntity.ok(new SignalResponse(domainSignal));
     }
 
     /**
@@ -150,7 +150,7 @@ public class SignalController {
         logger.info("Generating price-action signal for symbol: {}", symbol);
 
         return signalService.generatePriceActionSignal(symbol)
-                .map(signal -> ResponseEntity.ok(domainSignalToResponse(signal)))
+                .map(signal -> ResponseEntity.ok(new SignalResponse(signal)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -253,58 +253,7 @@ public class SignalController {
         return ResponseEntity.ok(combined);
     }
 
-    /**
-     * Convert SignalService.Signal to SignalResponse DTO
-     */
-    private SignalResponse convertSignalToResponse(com.swingtrade.api.dto.SignalQueryResult.Signal signal) {
-        if (signal == null) {
-            return null;
-        }
-        SignalResponse response = new SignalResponse();
-        response.setSymbol(signal.symbol());
-        response.setSignalType(SignalResponse.SignalType.valueOf(signal.type().toString()));
-        response.setConfidence(signal.confidence() != null ? BigDecimal.valueOf(signal.confidence()) : null);
-        response.setGeneratedAt(signal.date());
-        response.setReasoning(signal.reasoning());
-        return response;
-    }
-
-    /**
-     * Convert domain Signal to SignalResponse DTO
-     */
-    private SignalResponse domainSignalToResponse(com.swingtrade.domain.Signal signal) {
-        if (signal == null) return null;
-        SignalResponse response = new SignalResponse();
-        response.setId(signal.id());
-        response.setSymbol(signal.symbol());
-        response.setDate(signal.date());
-        response.setSignalType(SignalResponse.SignalType.valueOf(signal.type().name()));
-        response.setConfidence(signal.confidence());
-        response.setReasoning(signal.reasoning());
-        response.setEntryPrice(signal.entryPrice());
-        response.setStopLoss(signal.stopLoss());
-        response.setTarget(signal.target());
-        response.setRiskRewardRatio(signal.riskReward());
-        if (signal.indicators() != null) {
-            response.setIndicators(java.util.List.of(signal.indicators().split(",")));
-        }
-        response.setGeneratedAt(signal.generatedAt());
-        return response;
-    }
-
-    /**
-     * Convert list of SignalService.Signal to SignalResponse DTOs
-     */
-    private List<SignalResponse> convertSignalsToResponses(List<com.swingtrade.api.dto.SignalQueryResult.Signal> signals) {
-        if (signals == null) {
-            return List.of();
-        }
-        return List.copyOf(signals).stream()
-                .map(this::convertSignalToResponse)
-                .filter(Objects::nonNull)
-                .toList();
-    }
-
+    
     /**
      * Convert SignalService.TechnicalAnalysis to TechnicalAnalysisResponse DTO
      */
@@ -345,7 +294,7 @@ public class SignalController {
         CombinedSignalResponse response = new CombinedSignalResponse();
         response.setSymbol(combined.symbol());
         response.setAnalysisDate(combined.date());
-        response.setSignalType(SignalResponse.SignalType.valueOf(combined.finalSignal().toString()));
+        response.setSignalType(Signal.SignalType.valueOf(combined.finalSignal().name()));
         response.setTechnicalAnalysis(convertTechnicalAnalysis(null)); // Placeholder
         response.setSentimentAnalysis(convertSentimentAnalysis(combined.sentiment()));
         return response;

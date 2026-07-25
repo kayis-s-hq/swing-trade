@@ -1,7 +1,13 @@
 package com.swingtrade.broker.kite;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.swingtrade.broker.model.*;
+import com.swingtrade.broker.model.OrderResponse;
+import com.swingtrade.broker.model.Portfolio;
+import com.swingtrade.domain.Exchange;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.TradeDirection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -383,7 +389,7 @@ public class KiteConnectClient implements BrokerClient {
     public Optional<Position> getPosition(String symbol) {
         List<Position> positions = getPositions();
         return positions.stream()
-                .filter(p -> p.getSymbol().equals(symbol))
+                .filter(p -> p.symbol().equals(symbol))
                 .findFirst();
     }
 
@@ -391,23 +397,19 @@ public class KiteConnectClient implements BrokerClient {
      * Map holding from Kite API to Position model.
      */
     private Position mapHoldingToPosition(Map<String, Object> holding) {
-        Position position = new Position();
-        position.setPositionId((String) holding.get("instrument_key"));
-        position.setSymbol((String) holding.get("tradingsymbol"));
         String exchangeValue = holding.get("exchange") != null ? (String) holding.get("exchange") : "NSE";
-        position.setExchange(exchangeValue.equals("NSE") ? Exchange.NSE : Exchange.BSE);
-
-        if (holding.get("quantity") != null) {
-            position.setQuantity(new BigDecimal(holding.get("quantity").toString()));
-        }
-        if (holding.get("average_price") != null) {
-            position.setEntryPrice(new BigDecimal(holding.get("average_price").toString()));
-        }
-        if (holding.get("net_quantity") != null) {
-            position.setAveragePrice(new BigDecimal(holding.get("net_quantity").toString()));
-        }
-
-        return position;
+        return new Position(
+                null,
+                (String) holding.get("tradingsymbol"),
+                holding.get("average_price") != null ? new BigDecimal(holding.get("average_price").toString()) : BigDecimal.ZERO,
+                null,
+                holding.get("quantity") != null ? Integer.valueOf(holding.get("quantity").toString()) : 0,
+                null, null, null, null, null,
+                (String) holding.get("instrument_key"), null,
+                exchangeValue.equals("NSE") ? Exchange.NSE : Exchange.BSE,
+                TradeDirection.LONG,
+                null, null, null, null, null, null, null, null
+        );
     }
 
     /**

@@ -1,23 +1,41 @@
 package com.swingtrade.domain;
 
+import com.swingtrade.domain.Exchange;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.TradeDirection;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
- * Represents an open position in a stock, capturing the details of a trade currently held.
- * This record stores information about the current holding, including entry details,
- * risk parameters (stop loss, target), and current status.
+ * Represents a trading position in a stock, capturing entry details,
+ * risk parameters, execution metadata, and current status.
  *
- * @param id         the unique identifier for the position (database auto-generated)
- * @param symbol     the stock symbol (e.g., "RELIANCE", "TCS")
- * @param entryPrice the price at which the position was entered
- * @param entryDate  the date when the position was entered
- * @param quantity   the number of shares held
- * @param stopLoss   the stop-loss price to limit losses
- * @param target     the target price for profit taking
- * @param status     the current status of the position (OPEN, CLOSED, STOPPED)
- * @param entryReason the reason for entering the position
- * @param currentPrice the current market price of the stock
+ * @param id             the unique database identifier
+ * @param symbol         the stock symbol (e.g., "RELIANCE", "TCS")
+ * @param entryPrice     the price at which the position was entered
+ * @param entryDate      the date when the position was entered
+ * @param quantity       the number of shares held
+ * @param stopLoss       the stop-loss price to limit losses
+ * @param target         the target price for profit taking
+ * @param status         the current status of the position
+ * @param entryReason    the reason for entering the position
+ * @param currentPrice   the current market price of the stock
+ * @param positionId     the internal position identifier (e.g., "POS_00000001")
+ * @param brokerPositionId the broker-assigned position identifier
+ * @param exchange       the exchange where the position was traded
+ * @param direction      LONG or SHORT
+ * @param averagePrice   weighted average entry price (for partial fills)
+ * @param unrealizedPnL  current unrealized profit/loss
+ * @param realizedPnL    realized profit/loss from partial exits
+ * @param marginUtilized margin consumed for this position
+ * @param entryTime      precise entry timestamp
+ * @param exitTime       precise exit timestamp
+ * @param exitReason     reason for position exit
+ * @param orders         list of orders associated with this position
  */
 public record Position(
     Long id,
@@ -29,26 +47,33 @@ public record Position(
     BigDecimal target,
     PositionStatus status,
     String entryReason,
-    BigDecimal currentPrice
+    BigDecimal currentPrice,
+    // Broker-enriched fields
+    String positionId,
+    String brokerPositionId,
+    Exchange exchange,
+    TradeDirection direction,
+    BigDecimal averagePrice,
+    BigDecimal unrealizedPnL,
+    BigDecimal realizedPnL,
+    BigDecimal marginUtilized,
+    LocalDateTime entryTime,
+    LocalDateTime exitTime,
+    String exitReason,
+    List<Order> orders
 ) {
-    /**
-     * Enum representing the different statuses of a position.
-     */
-    public enum PositionStatus {
-        OPEN("Open"),
-        CLOSED("Closed"),
-        STOPPED("Stopped"),
-        TARGET_HIT("Target Hit");
 
-        private final String displayName;
-
-        PositionStatus(String displayName) {
-            this.displayName = displayName;
+    // Compact constructor: fills broker-enriched defaults when not provided
+    public Position {
+        if (positionId == null && id != null) {
+            positionId = "POS_" + String.format("%08d", id);
         }
-
-        public String getDisplayName() {
-            return displayName;
-        }
+        if (exchange == null) exchange = Exchange.NSE;
+        if (direction == null) direction = TradeDirection.LONG;
+        if (averagePrice == null) averagePrice = entryPrice;
+        if (unrealizedPnL == null) unrealizedPnL = BigDecimal.ZERO;
+        if (realizedPnL == null) realizedPnL = BigDecimal.ZERO;
+        if (marginUtilized == null) marginUtilized = BigDecimal.ZERO;
     }
 
     /**
@@ -87,24 +112,70 @@ public record Position(
             target,
             PositionStatus.OPEN,
             entryReason,
-            entryPrice
+            entryPrice,
+            null, null, null,
+            TradeDirection.LONG,
+            null, null, null, null,
+            null, null, null, null
+        );
+    }
+
+    /**
+     * Creates a full-position instance with broker-enriched fields.
+     */
+    public static Position of(
+        Long id,
+        String symbol,
+        BigDecimal entryPrice,
+        LocalDate entryDate,
+        Integer quantity,
+        BigDecimal stopLoss,
+        BigDecimal target,
+        PositionStatus status,
+        String entryReason,
+        BigDecimal currentPrice,
+        String positionId,
+        String brokerPositionId,
+        Exchange exchange,
+        TradeDirection direction,
+        BigDecimal averagePrice,
+        BigDecimal unrealizedPnL,
+        BigDecimal realizedPnL,
+        BigDecimal marginUtilized,
+        LocalDateTime entryTime,
+        LocalDateTime exitTime,
+        String exitReason,
+        List<Order> orders
+    ) {
+        return new Position(
+            id, symbol, entryPrice, entryDate, quantity,
+            stopLoss, target, status, entryReason, currentPrice,
+            positionId, brokerPositionId, exchange, direction,
+            averagePrice, unrealizedPnL, realizedPnL, marginUtilized,
+            entryTime, exitTime, exitReason, orders
         );
     }
 
     /**
      * Calculates the unrealized P&L for this position.
+     * Supports both LONG and SHORT directions.
      *
      * @param currentPrice the current market price
      * @return the unrealized P&L as a BigDecimal
      */
     public BigDecimal calculateUnrealizedPnL(BigDecimal currentPrice) {
-        BigDecimal positionValue = currentPrice.multiply(BigDecimal.valueOf(quantity));
-        BigDecimal costBasis = entryPrice.multiply(BigDecimal.valueOf(quantity));
-        return positionValue.subtract(costBasis);
+        BigDecimal priceDifference;
+        if (direction == TradeDirection.SHORT) {
+            priceDifference = entryPrice.subtract(currentPrice);
+        } else {
+            priceDifference = currentPrice.subtract(entryPrice);
+        }
+        return priceDifference.multiply(BigDecimal.valueOf(quantity));
     }
 
     /**
      * Calculates the percentage P&L for this position.
+     * Supports both LONG and SHORT directions.
      *
      * @param currentPrice the current market price
      * @return the percentage P&L as a BigDecimal (0-100 scale)
@@ -120,19 +191,17 @@ public record Position(
 
     /**
      * Returns true if the position is open.
-     *
-     * @return true if OPEN status
      */
     public boolean isOpen() {
         return PositionStatus.OPEN == status;
     }
 
     /**
-     * Returns true if the position has been closed (either by target or stop loss).
-     *
-     * @return true if closed
+     * Returns true if the position has been closed (either by target, stop loss, or manual).
      */
     public boolean isClosed() {
-        return PositionStatus.CLOSED == status || PositionStatus.STOPPED == status || PositionStatus.TARGET_HIT == status;
+        return PositionStatus.CLOSED == status
+            || PositionStatus.STOPPED == status
+            || PositionStatus.TARGET_HIT == status;
     }
 }

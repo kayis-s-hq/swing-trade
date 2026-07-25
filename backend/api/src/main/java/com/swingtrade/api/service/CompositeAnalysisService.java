@@ -145,7 +145,7 @@ public class CompositeAnalysisService {
                 sentiment.summary() != null ? sentiment.summary() : "No summary available",
                 catalysts,
                 redFlags,
-                0 // article count from sentiment service if available
+                sentiment.articleCount()
             );
         } catch (Exception e) {
             logger.warn("News sentiment fetch failed for {}: {}", symbol, e.getMessage());

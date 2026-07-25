@@ -1,7 +1,7 @@
 package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.config.BrokerProperties;
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -218,8 +218,8 @@ public class CapitalTracker {
             return BigDecimal.ZERO;
         }
 
-        BigDecimal quantity = position.getQuantity() != null ? position.getQuantity() : BigDecimal.ZERO;
-        BigDecimal entryPrice = position.getEntryPrice() != null ? position.getEntryPrice() : BigDecimal.ZERO;
+        BigDecimal quantity = position.quantity() != null ? BigDecimal.valueOf(position.quantity()) : BigDecimal.ZERO;
+        BigDecimal entryPrice = position.entryPrice() != null ? position.entryPrice() : BigDecimal.ZERO;
 
         return quantity.multiply(entryPrice);
     }

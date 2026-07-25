@@ -314,3 +314,24 @@ export interface FullAnalysisResult {
   durationMs: number
   symbol: string
 }
+
+// ---------------------------------------------------------------------------
+// NSE Holidays
+// ---------------------------------------------------------------------------
+
+export interface NseHoliday {
+  date: string
+  occasion: string
+  type: string
+}
+
+export interface HolidayListResponse {
+  count: number
+  holidays: NseHoliday[]
+}
+
+export interface TodayHolidayStatus {
+  date: string
+  marketClosed: boolean
+  reason: Record<string, string>
+}

@@ -34,8 +34,6 @@
           <span>{{ settings.tradingConfig.mode === 'live' ? 'Live Trading' : 'Paper Trading' }}</span>
         </div>
         <div class="flex items-center gap-3">
-          <span>Market {{ marketStatus }}</span>
-          <span class="text-border-subtle">│</span>
           <span>{{ currentTime }}</span>
           <span class="text-border-subtle">│</span>
           <span>v1.0.0</span>
@@ -46,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import Header from './components/Header.vue'
 import BackendDownBanner from './components/BackendDownBanner.vue'
@@ -57,11 +55,6 @@ const appState = getAppState()
 const settings = getSettings()
 const sidebarCollapsed = ref(false)
 const currentTime = ref('')
-
-const marketStatus = computed(() => {
-  const hour = new Date().getHours()
-  return (hour >= 9 && hour < 16) ? 'OPEN' : 'CLOSED'
-})
 
 let timer: number
 const updateTime = () => {

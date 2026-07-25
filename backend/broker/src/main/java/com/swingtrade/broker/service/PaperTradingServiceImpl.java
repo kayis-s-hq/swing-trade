@@ -2,10 +2,10 @@ package com.swingtrade.broker.service;
 
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.manager.OrderManager;
-import com.swingtrade.broker.model.Order;
+import com.swingtrade.domain.Order;
 import com.swingtrade.broker.model.Portfolio;
-import com.swingtrade.broker.model.Position;
-import com.swingtrade.broker.model.TradeDirection;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.broker.service.PaperTradingStateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,7 +85,7 @@ public class PaperTradingServiceImpl implements BrokerService {
         if (position == null) {
             throw new IllegalArgumentException("Position cannot be null");
         }
-        return position.getProfitLoss() != null ? position.getProfitLoss() : BigDecimal.ZERO;
+        return position.unrealizedPnL() != null ? position.unrealizedPnL() : BigDecimal.ZERO;
     }
 
     @Override

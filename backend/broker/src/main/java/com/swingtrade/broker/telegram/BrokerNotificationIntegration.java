@@ -1,6 +1,6 @@
 package com.swingtrade.broker.telegram;
 
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Position;
 import com.swingtrade.broker.service.BrokerService;
 import com.swingtrade.domain.Trade;
 import org.slf4j.Logger;
@@ -54,7 +54,7 @@ public class BrokerNotificationIntegration {
      * @return true if message was sent, false otherwise
      */
     public boolean onPositionEntry(Position position) {
-        log.debug("Sending position entry notification for {}", position.getSymbol());
+        log.debug("Sending position entry notification for {}", position.symbol());
         // Note: This method is kept for API compatibility but is not used
         // Trade open notifications are sent via sendTradeOpen in SignalNotificationService
         return false;
@@ -95,7 +95,7 @@ public class BrokerNotificationIntegration {
      * @return true if message was sent, false otherwise
      */
     public boolean onStopLossHit(Position position, BigDecimal exitPrice, BigDecimal pnl) {
-        log.warn("Stop loss hit for position {}: exitPrice={}, pnl={}", position.getSymbol(), exitPrice, pnl);
+        log.warn("Stop loss hit for position {}: exitPrice={}, pnl={}", position.symbol(), exitPrice, pnl);
         return signalService.sendStopLossHit(position, exitPrice, pnl);
     }
 
@@ -108,7 +108,7 @@ public class BrokerNotificationIntegration {
      * @return true if message was sent, false otherwise
      */
     public boolean onTargetHit(Position position, BigDecimal exitPrice, BigDecimal pnl) {
-        log.info("Target hit for position {}: exitPrice={}, pnl={}", position.getSymbol(), exitPrice, pnl);
+        log.info("Target hit for position {}: exitPrice={}, pnl={}", position.symbol(), exitPrice, pnl);
         return signalService.sendTargetHit(position, exitPrice, pnl);
     }
 
@@ -141,19 +141,19 @@ public class BrokerNotificationIntegration {
      * Order notifications are deferred.
      */
     @Deprecated
-    public boolean onOrderExecution(com.swingtrade.broker.model.Order order) {
+    public boolean onOrderExecution(com.swingtrade.domain.Order order) {
         log.debug("Order execution notifications are deferred");
         return false;
     }
 
     @Deprecated
-    public boolean onOrderFill(com.swingtrade.broker.model.Order order) {
+    public boolean onOrderFill(com.swingtrade.domain.Order order) {
         log.debug("Order fill notifications are deferred");
         return false;
     }
 
     @Deprecated
-    public boolean onOrderCancellation(com.swingtrade.broker.model.Order order) {
+    public boolean onOrderCancellation(com.swingtrade.domain.Order order) {
         log.debug("Order cancellation notifications are deferred");
         return false;
     }

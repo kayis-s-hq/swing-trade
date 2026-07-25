@@ -151,42 +151,42 @@ public class MonthlyReportService {
     private double calculateWinRate(List<PositionEntity> positions) {
         if (positions.isEmpty()) return 0.0;
         long profitable = positions.stream()
-            .filter(p -> "TARGET_HIT".equals(p.getStatus()) || (p.getPnl() != null && p.getPnl().compareTo(BigDecimal.ZERO) > 0))
+            .filter(p -> "TARGET_HIT".equals(p.getStatus()) || (p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) > 0))
             .count();
         return (profitable * 100.0) / positions.size();
     }
 
     private double calculateAvgWinAmount(List<PositionEntity> positions) {
         return positions.stream()
-            .filter(p -> p.getPnl() != null && p.getPnl().compareTo(BigDecimal.ZERO) > 0)
-            .mapToDouble(p -> p.getPnl().doubleValue())
+            .filter(p -> p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) > 0)
+            .mapToDouble(p -> p.getRealizedPnL().doubleValue())
             .average()
             .orElse(0.0);
     }
 
     private double calculateAvgLossAmount(List<PositionEntity> positions) {
         return positions.stream()
-            .filter(p -> p.getPnl() != null && p.getPnl().compareTo(BigDecimal.ZERO) < 0)
-            .mapToDouble(p -> Math.abs(p.getPnl().doubleValue()))
+            .filter(p -> p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) < 0)
+            .mapToDouble(p -> Math.abs(p.getRealizedPnL().doubleValue()))
             .average()
             .orElse(0.0);
     }
 
     private double calculateTotalPnL(List<PositionEntity> positions) {
         return positions.stream()
-            .mapToDouble(p -> p.getPnl() != null ? p.getPnl().doubleValue() : 0.0)
+            .mapToDouble(p -> p.getRealizedPnL() != null ? p.getRealizedPnL().doubleValue() : 0.0)
             .sum();
     }
 
     private double calculateProfitFactor(List<PositionEntity> positions) {
         double totalWins = positions.stream()
-            .filter(p -> p.getPnl() != null && p.getPnl().compareTo(BigDecimal.ZERO) > 0)
-            .mapToDouble(p -> p.getPnl().doubleValue())
+            .filter(p -> p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) > 0)
+            .mapToDouble(p -> p.getRealizedPnL().doubleValue())
             .sum();
 
         double totalLosses = positions.stream()
-            .filter(p -> p.getPnl() != null && p.getPnl().compareTo(BigDecimal.ZERO) < 0)
-            .mapToDouble(p -> Math.abs(p.getPnl().doubleValue()))
+            .filter(p -> p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) < 0)
+            .mapToDouble(p -> Math.abs(p.getRealizedPnL().doubleValue()))
             .sum();
 
         return totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? 999.99 : 0.0;

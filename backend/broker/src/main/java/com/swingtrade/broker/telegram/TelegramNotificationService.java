@@ -1,8 +1,8 @@
 package com.swingtrade.broker.telegram;
 
 import com.swingtrade.broker.config.BrokerProperties;
-import com.swingtrade.broker.model.Order;
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.Position;
 import com.swingtrade.broker.risk.RiskControlsService;
 import com.swingtrade.domain.NotificationService;
 import com.swingtrade.domain.Signal;

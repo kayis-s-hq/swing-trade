@@ -17,7 +17,7 @@ public interface PositionStore {
 
     List<Position> findBySymbolOrderByEntryDateDesc(String symbol);
 
-    List<Position> findByStatus(Position.PositionStatus status);
+    List<Position> findByStatus(com.swingtrade.domain.PositionStatus status);
 
     Position save(Position position);
 

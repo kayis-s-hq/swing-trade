@@ -2,7 +2,7 @@ package com.swingtrade.api.scheduler;
 
 import com.swingtrade.api.service.SignalFilterService;
 import com.swingtrade.broker.engine.PaperTradingEngine;
-import com.swingtrade.broker.model.Order;
+import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.CandleStore;

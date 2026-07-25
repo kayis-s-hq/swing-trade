@@ -5,6 +5,13 @@ import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.model.*;
 import com.swingtrade.broker.risk.RiskCheckResult;
 import com.swingtrade.broker.risk.RiskControls;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.Exchange;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -134,12 +141,11 @@ class DryRunServiceTest {
     @Test
     void testCalculateProfitLoss_returnsZero() {
         // Given
-        Position position = new Position();
-        position.setSymbol("RELIANCE-EQ");
-        position.setDirection(TradeDirection.LONG);
-        position.setQuantity(new BigDecimal("100"));
-        position.setEntryPrice(new BigDecimal("2500"));
-        position.setCurrentPrice(new BigDecimal("2550"));
+        Position position = Position.of(1L, "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
+            new BigDecimal("2400"), new BigDecimal("2700"),
+            PositionStatus.OPEN, "Signal", new BigDecimal("2550"),
+            "pos-1", null, Exchange.NSE, TradeDirection.LONG,
+            null, null, null, null, null, null, null, null);
 
         // When
         BigDecimal result = service.calculateProfitLoss(position);

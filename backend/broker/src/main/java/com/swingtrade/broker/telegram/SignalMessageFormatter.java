@@ -1,6 +1,6 @@
 package com.swingtrade.broker.telegram;
 
-import com.swingtrade.broker.model.Position;
+import com.swingtrade.domain.Position;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Trade;
 import org.springframework.stereotype.Component;
@@ -57,30 +57,30 @@ public class SignalMessageFormatter {
 
         // Symbol and direction
         sb.append("📈 <b>Symbol:</b> <code>")
-          .append(position.getSymbol())
+          .append(position.symbol())
           .append("</code>\n");
         sb.append("🚩 <b>Direction:</b> ")
-          .append(formatDirection(position.getDirection()))
+          .append(formatDirection(position.direction()))
           .append("\n");
 
         // Quantity and price
         sb.append("🔢 <b>Quantity:</b> <code>")
-          .append(position.getQuantity())
+          .append(position.quantity())
           .append("</code>\n");
         sb.append("💰 <b>Entry Price:</b> <code>")
-          .append(formatPrice(position.getEntryPrice()))
+          .append(formatPrice(position.entryPrice()))
           .append("</code>\n");
         sb.append("💵 <b>Total Value:</b> <code>")
-          .append(formatPrice(position.getEntryPrice().multiply(
-              position.getQuantity())))
+          .append(formatPrice(position.entryPrice().multiply(
+              BigDecimal.valueOf(position.quantity()))))
           .append("</code>\n");
 
         // Stop loss and target
         sb.append("🛑 <b>Stop Loss:</b> <code>")
-          .append(formatPrice(position.getSlPrice()))
+          .append(formatPrice(position.stopLoss()))
           .append("</code>\n");
         sb.append("🎯 <b>Target:</b> <code>")
-          .append(formatPrice(position.getTargetPrice()))
+          .append(formatPrice(position.target()))
           .append("</code>\n");
 
         // Signal information
@@ -108,7 +108,7 @@ public class SignalMessageFormatter {
 
         // Entry time
         sb.append("\n⏰ <b>Entry Time:</b> ")
-          .append(position.getEntryTime().format(DATE_TIME_FORMATTER));
+          .append(position.entryTime().format(DATE_TIME_FORMATTER));
 
         return sb.toString();
     }
@@ -186,24 +186,24 @@ public class SignalMessageFormatter {
         sb.append("🔴 <b>STOP LOSS HIT</b>\n\n");
 
         sb.append("📉 <b>Symbol:</b> <code>")
-          .append(position.getSymbol())
+          .append(position.symbol())
           .append("</code>\n");
         sb.append("💥 <b>Exit Price:</b> <code>")
           .append(formatPrice(exitPrice))
           .append("</code>\n");
         sb.append("🛑 <b>Expected SL:</b> <code>")
-          .append(formatPrice(position.getSlPrice()))
+          .append(formatPrice(position.stopLoss()))
           .append("</code>\n");
         sb.append("📅 <b>Exit Time:</b> ")
-          .append(position.getExitTime() != null
-              ? position.getExitTime().format(DATE_TIME_FORMATTER)
+          .append(position.exitTime() != null
+              ? position.exitTime().format(DATE_TIME_FORMATTER)
               : LocalDateTime.now().format(DATE_TIME_FORMATTER))
           .append("\n");
         sb.append("❌ <b>Loss:</b> <code>")
           .append(formatCurrency(pnl))
           .append("</code>\n");
         sb.append("📊 <b>Loss %:</b> <b>")
-          .append(formatPercentage(calculatePnLPercentForPrice(position.getEntryPrice(), exitPrice, position.getQuantity())))
+          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice, BigDecimal.valueOf(position.quantity()))))
           .append("</b>\n");
 
         return sb.toString();
@@ -223,24 +223,24 @@ public class SignalMessageFormatter {
         sb.append("✅ <b>TARGET HIT!</b>\n\n");
 
         sb.append("📈 <b>Symbol:</b> <code>")
-          .append(position.getSymbol())
+          .append(position.symbol())
           .append("</code>\n");
         sb.append("🎯 <b>Exit Price:</b> <code>")
           .append(formatPrice(exitPrice))
           .append("</code>\n");
         sb.append("🎯 <b>Expected Target:</b> <code>")
-          .append(formatPrice(position.getTargetPrice()))
+          .append(formatPrice(position.target()))
           .append("</code>\n");
         sb.append("📅 <b>Exit Time:</b> ")
-          .append(position.getExitTime() != null
-              ? position.getExitTime().format(DATE_TIME_FORMATTER)
+          .append(position.exitTime() != null
+              ? position.exitTime().format(DATE_TIME_FORMATTER)
               : LocalDateTime.now().format(DATE_TIME_FORMATTER))
           .append("\n");
         sb.append("💰 <b>Profit:</b> <code>")
           .append(formatCurrency(pnl))
           .append("</code>\n");
         sb.append("📊 <b>Profit %:</b> <b>")
-          .append(formatPercentage(calculatePnLPercentForPrice(position.getEntryPrice(), exitPrice, position.getQuantity())))
+          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice, BigDecimal.valueOf(position.quantity()))))
           .append("</b>\n");
 
         return sb.toString();
@@ -311,14 +311,14 @@ public class SignalMessageFormatter {
      * @param direction the direction to format
      * @return formatted direction string
      */
-    private String formatDirection(com.swingtrade.broker.model.TradeDirection direction) {
+    private String formatDirection(com.swingtrade.domain.TradeDirection direction) {
         if (direction == null) {
             return "N/A";
         }
 
-        if (direction == com.swingtrade.broker.model.TradeDirection.LONG) {
+        if (direction == com.swingtrade.domain.TradeDirection.LONG) {
             return "📈 LONG (Buy)";
-        } else if (direction == com.swingtrade.broker.model.TradeDirection.SHORT) {
+        } else if (direction == com.swingtrade.domain.TradeDirection.SHORT) {
             return "📉 SHORT (Sell)";
         }
         return direction.toString();

@@ -1,8 +1,14 @@
 package com.swingtrade.broker.factory;
 
 import com.swingtrade.broker.kite.BrokerClient;
-import com.swingtrade.broker.model.*;
+import com.swingtrade.broker.model.OrderResponse;
+import com.swingtrade.broker.model.Portfolio;
 import com.swingtrade.broker.risk.RiskCheckResult;
+import com.swingtrade.domain.Exchange;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.broker.service.BrokerService;
 import org.slf4j.Logger;
@@ -66,8 +72,7 @@ public class LiveTradingService implements BrokerService {
                 logger.warn("Pre-trade risk checks failed: {}", riskResult.getMessages());
                 orderResponse.setStatus(OrderStatus.CANCELLED);
                 orderResponse.setMessage("Risk check failed: " + String.join(", ", riskResult.getMessages()));
-                order.setStatus(OrderStatus.CANCELLED); // Update order status before returning
-                orderResponse.setMessage("Risk check failed: " + String.join(", ", riskResult.getMessages()));
+                order.setStatus(OrderStatus.CANCELLED);
                 return order;
             }
 
@@ -111,23 +116,23 @@ public class LiveTradingService implements BrokerService {
     public Optional<Position> getPosition(String positionId) {
         List<Position> positions = getOpenPositions();
         return positions.stream()
-                .filter(p -> p.getPositionId().equals(positionId))
+                .filter(p -> p.positionId().equals(positionId))
                 .findFirst();
     }
 
     @Override
     public BigDecimal calculateProfitLoss(Position position) {
-        if (position.getEntryPrice() != null && position.getCurrentPrice() != null &&
-            position.getQuantity() != null) {
+        if (position.entryPrice() != null && position.currentPrice() != null &&
+            position.quantity() != null) {
 
-            BigDecimal priceChange = position.getCurrentPrice()
-                    .subtract(position.getEntryPrice());
+            BigDecimal priceChange = position.currentPrice()
+                    .subtract(position.entryPrice());
 
-            if (position.getDirection() == TradeDirection.SHORT) {
+            if (position.direction() == TradeDirection.SHORT) {
                 priceChange = priceChange.negate();
             }
 
-            return priceChange.multiply(position.getQuantity());
+            return priceChange.multiply(BigDecimal.valueOf(position.quantity()));
         }
 
         return BigDecimal.ZERO;

@@ -1,7 +1,7 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.broker.engine.PaperTradingEngine;
-import com.swingtrade.broker.model.Order;
+import com.swingtrade.domain.Order;
 import com.swingtrade.broker.service.DiscordNotificationService;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
@@ -86,19 +86,19 @@ public class SignalFilterService {
         ZoneId ist = ZoneId.of("Asia/Kolkata");
         List<?> openPositions = paperTradingEngine.getOpenPositions();
         for (var pos : openPositions) {
-            if (!(pos instanceof com.swingtrade.broker.model.Position p)) continue;
+            if (!(pos instanceof com.swingtrade.domain.Position p)) continue;
             try {
                 SentimentResult sentiment = sentimentService.analyzeStockSentiment(
-                        p.getSymbol(), LocalDate.now(ist));
+                        p.symbol(), LocalDate.now(ist));
                 if (sentiment.isNegative()) {
                     discordService.sendEmbed(
-                            "Position Alert — " + p.getSymbol(),
-                            "Sentiment turned NEGATIVE. Position: " + p.getPositionId() +
+                            "Position Alert — " + p.symbol(),
+                            "Sentiment turned NEGATIVE. Position: " + p.positionId() +
                             "\nRecommendation: Review position manually.",
                             DiscordNotificationService.COLOR_YELLOW);
                 }
             } catch (Exception e) {
-                log.warn("Reanalysis failed for {}: {}", p.getSymbol(), e.getMessage());
+                log.warn("Reanalysis failed for {}: {}", p.symbol(), e.getMessage());
             }
         }
     }

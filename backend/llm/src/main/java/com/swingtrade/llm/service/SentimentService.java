@@ -50,7 +50,7 @@ public class SentimentService {
 
     private final int maxCacheSize;
     private final long cacheExpiryMinutes;
-    private final boolean enableCaching;
+    private boolean enableCaching = false; // temporarily disabled
     private final double defaultConfidence;
 
     /**
@@ -66,7 +66,7 @@ public class SentimentService {
             StockStore stockStore,
             @Value("${llm.sentiment.cache.max-size:100}") int maxCacheSize,
             @Value("${llm.sentiment.cache.expiry-minutes:60}") long cacheExpiryMinutes,
-            @Value("${llm.sentiment.cache.enabled:true}") boolean enableCaching,
+            @Value("${llm.sentiment.cache.enabled:false}") boolean enableCaching,
             @Value("${llm.sentiment.default-confidence:0.75}") double defaultConfidence) {
 
         this.vllmClient = vllmClient;
@@ -156,7 +156,8 @@ public class SentimentService {
             }
 
             // Build and cache result
-            SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult);
+            int articleCount = newsContent.size();
+            SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult, articleCount);
 
             // Persist to database
             try {
@@ -249,7 +250,8 @@ public class SentimentService {
     private SentimentResult buildSentimentResult(
             String stockSymbol,
             LocalDate date,
-            SentimentOutput analysisResult) {
+            SentimentOutput analysisResult,
+            int articleCount) {
 
         SentimentResult.SentimentScore score;
         switch (analysisResult.getSentiment()) {
@@ -263,15 +265,20 @@ public class SentimentService {
                 score = SentimentResult.SentimentScore.NEUTRAL;
         }
 
-        return SentimentResult.create(
+        return new SentimentResult(
+                null,
                 stockSymbol,
                 date,
                 score,
                 analysisResult.getReasoning(),
                 "",
                 analysisResult.getConfidence(),
-                analysisResult.getRedFlags(),
-                analysisResult.getCatalysts()
+                LocalDate.now(),
+                analysisResult.getRedFlags() != null ? analysisResult.getRedFlags() : List.of(),
+                analysisResult.getCatalysts() != null ? analysisResult.getCatalysts() : List.of(),
+                null,
+                null,
+                articleCount
         );
     }
 
@@ -347,7 +354,8 @@ public class SentimentService {
                 cached.redFlags(),
                 cached.catalysts(),
                 null,
-                null
+                null,
+                cached.articleCount()
         );
     }
 
@@ -374,7 +382,8 @@ public class SentimentService {
                 analysisResult.getReasoning(),
                 analysisResult.getRedFlags(),
                 analysisResult.getCatalysts(),
-                analysisResult.getConfidence()
+                analysisResult.getConfidence(),
+                result.articleCount()
         );
 
         sentimentCacheService.cache(cacheKey, cached, cacheExpiryMinutes);
@@ -548,7 +557,7 @@ public class SentimentService {
                         SentimentResult.SentimentScore.NEUTRAL,
                         cs.reasoning(), "", cs.confidence(),
                         LocalDate.now(), cs.redFlags(), cs.catalysts(),
-                        null, null);
+                        null, null, cs.articleCount());
             }
         }
 
@@ -570,7 +579,7 @@ public class SentimentService {
             }
 
             SentimentOutput result = sentimentAnalyzer.parseResponse(llmResponse);
-            SentimentResult sr = buildSentimentResult(symbol, LocalDate.now(), result);
+            SentimentResult sr = buildSentimentResult(symbol, LocalDate.now(), result, headlines.size());
 
             // Persist
             try {
@@ -1093,7 +1102,8 @@ public class SentimentService {
             String reasoning,
             List<String> redFlags,
             List<String> catalysts,
-            Double confidence
+            Double confidence,
+            int articleCount
     ) {}
 
     /**

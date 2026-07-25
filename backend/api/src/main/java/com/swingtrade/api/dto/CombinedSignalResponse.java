@@ -9,7 +9,7 @@ public class CombinedSignalResponse {
 
     private String symbol;
     private LocalDate analysisDate;
-    private SignalResponse.SignalType signalType;
+    private com.swingtrade.domain.Signal.SignalType signalType;
     private TechnicalAnalysisResponse technicalAnalysis;
     private SentimentAnalysisResponse sentimentAnalysis;
 
@@ -32,11 +32,11 @@ public class CombinedSignalResponse {
         this.analysisDate = analysisDate;
     }
 
-    public SignalResponse.SignalType getSignalType() {
+    public com.swingtrade.domain.Signal.SignalType getSignalType() {
         return signalType;
     }
 
-    public void setSignalType(SignalResponse.SignalType signalType) {
+    public void setSignalType(com.swingtrade.domain.Signal.SignalType signalType) {
         this.signalType = signalType;
     }
 
