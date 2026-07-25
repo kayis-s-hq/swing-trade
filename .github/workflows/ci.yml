@@ -74,7 +74,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dashboard/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
 
