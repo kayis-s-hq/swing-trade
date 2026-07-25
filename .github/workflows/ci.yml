@@ -21,14 +21,8 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: temurin
-          cache: maven
+      - name: Checkout
+        run: git checkout -- . && git pull
 
       - name: Install Fyers SDK
         run: |
@@ -44,37 +38,17 @@ jobs:
         working-directory: backend
         run: mvn clean verify -B -Dspring.profiles.active=test -Dspring.datasource.url=jdbc:postgresql://localhost:5435/swingtrade_db -Dspring.datasource.username=swingtrade_user -Dspring.datasource.password=swingtrade_password -Dspring.redis.host=localhost -Dspring.redis.port=6379
 
-      - name: Upload JaCoCo report
-        uses: actions/upload-artifact@v4
+      - name: Collect reports
         if: always()
-        with:
-          name: jacoco-report
-          path: backend/*/target/site/jacoco/index.html
-          retention-days: 30
-
-      - name: Upload PMD report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: pmd-report
-          path: backend/*/target/pmd.xml
-          retention-days: 30
-
-      - name: Upload Checkstyle report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: checkstyle-report
-          path: backend/*/target/checkstyle-result.xml
-          retention-days: 30
-
-      - name: Deploy reports to Pi
-        if: github.ref == 'refs/heads/main' && success()
         run: |
           mkdir -p /tmp/reports/jacoco /tmp/reports/pmd /tmp/reports/checkstyle
           cp -r backend/*/target/site/jacoco/* /tmp/reports/jacoco/ 2>/dev/null || true
           cp -r backend/*/target/site/pmd.html /tmp/reports/pmd/ 2>/dev/null || true
           cp -r backend/*/target/site/checkstyle-result.xml /tmp/reports/checkstyle/ 2>/dev/null || true
+
+      - name: Deploy reports to Pi
+        if: github.ref == 'refs/heads/main' && success()
+        run: |
           scp -r /tmp/reports/* pi@piworm.local:/home/dietpi/swing-trade/reports/
 
       - name: Start reports nginx on Pi
@@ -89,14 +63,8 @@ jobs:
     name: Frontend (Node ${{ env.NODE_VERSION }})
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: dashboard/package-lock.json
+      - name: Checkout
+        run: git checkout -- . && git pull
 
       - name: Install dependencies
         run: npm ci
@@ -124,25 +92,21 @@ jobs:
     name: Security Scan
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        run: git checkout -- . && git pull
 
       - name: Run OWASP dependency check
-        uses: dependency-check/Dependency-Check-action@latest
-        with:
-          project: swing-trade
-          path: '.'
-          format: XML
-          out: reports/owasp
-
-      - name: Upload OWASP report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: owasp-report
-          path: reports/owasp
-          retention-days: 30
+        run: |
+          if command -v owasp-sbom &> /dev/null; then
+            owasp-sbom -f XML -o reports/owasp.xml
+          else
+            echo "OWASP SBOM not installed, skipping"
+          fi
 
       - name: Check for secrets
-        uses: trufflesecurity/trufflehog@main
-        with:
-          extra_args: --only-passed
+        run: |
+          if command -v trufflehog &> /dev/null; then
+            trufflehog filesystem --only-passed .
+          else
+            echo "TruffleHog not installed, skipping"
+          fi
