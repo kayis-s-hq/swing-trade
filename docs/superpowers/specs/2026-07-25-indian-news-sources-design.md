@@ -3,6 +3,7 @@
 **Date:** 2026-07-25
 **Status:** Approved
 **Scope:** Integrate 6 free-tier Indian market news sources into the sentiment pipeline
+**Note:** NSE announcements are web-scraped (no REST API) — rate limiting/CAPTCHA risk. All sources reuse existing `NewsArticle` record from `service/NewsIngestionService.java`. DB persistence uses a separate `NewsArticleEntity` JPA entity.
 
 ## Decisions
 
@@ -105,6 +106,7 @@ CORPORATE FILINGS for {symbol}:
 | Source timeout (10s) | Log warning, skip source, continue |
 | Source returns 0 articles | Log info, continue |
 | NSE/BSE no filings | Log debug, no filings section |
+| NSE CAPTCHA/rate limit | Log warning, skip NSE. BSE continues. |
 | Reddit OAuth expired | Refresh token, retry once. If fails, skip Reddit. |
 | All 6 sources fail | Return neutral sentiment (existing fallback) |
 | DB insert fails | Log warning, don't fail sentiment analysis |
@@ -120,13 +122,9 @@ news.source.nse.enabled=true
 news.source.bse.enabled=true
 news.source.reddit.enabled=true
 
-# Reddit OAuth (personal use script)
+# Reddit OAuth (personal use script — client_id + client_secret only)
 news.reddit.client-id=
 news.reddit.client-secret=
-news.reddit.username=
-news.reddit.password=
-news.reddit.app-id=
-news.reddit.app-secret=
 ```
 
 ## Testing
