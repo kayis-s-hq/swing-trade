@@ -119,7 +119,7 @@ class SignalEngineIntegrationTest {
                 .thenReturn(negativeSentiment);
 
         // When: generating signals
-        signalEngine.generateSignalsForSymbol(symbol);
+        signalEngine.generateSignalForSymbolNow(symbol);
 
         // Then: signal should NOT be saved (suppressed)
         verify(signalRepository, never()).save(any(SignalEntity.class));
@@ -157,7 +157,7 @@ class SignalEngineIntegrationTest {
                 .thenReturn(neutralSentiment);
 
         // When: generating signals
-        signalEngine.generateSignalsForSymbol(symbol);
+        signalEngine.generateSignalForSymbolNow(symbol);
 
         // Then: signal SHOULD be saved but with WARNING_NEUTRAL_SENTIMENT flag
         ArgumentCaptor<SignalEntity> captor = ArgumentCaptor.forClass(SignalEntity.class);
@@ -201,7 +201,7 @@ class SignalEngineIntegrationTest {
                 .thenReturn(positiveSentiment);
 
         // When: generating signals
-        signalEngine.generateSignalsForSymbol(symbol);
+        signalEngine.generateSignalForSymbolNow(symbol);
 
         // Then: signal SHOULD be saved with WARNING_NONE flag
         ArgumentCaptor<SignalEntity> captor = ArgumentCaptor.forClass(SignalEntity.class);
@@ -239,7 +239,7 @@ class SignalEngineIntegrationTest {
                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
         // When: generating signals
-        signalEngine.generateSignalsForSymbol(symbol);
+        signalEngine.generateSignalForSymbolNow(symbol);
 
         // Then: signal SHOULD be saved anyway (graceful degradation with WARNING_NONE)
         ArgumentCaptor<SignalEntity> captor = ArgumentCaptor.forClass(SignalEntity.class);

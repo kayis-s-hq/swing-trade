@@ -51,7 +51,7 @@ class CompositeAnalysisServiceTest {
                 null, "TEST", LocalDate.now(), score, summary,
                 "Raw content", 0.7, LocalDate.now(),
                 List.of(), List.of("catalyst"),
-                null, null
+                null, null, 0
         );
     }
 

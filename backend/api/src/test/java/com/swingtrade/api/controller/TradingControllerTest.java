@@ -5,6 +5,7 @@ import com.swingtrade.api.app.SwingTradeApiApplication;
 import com.swingtrade.api.dto.PositionResponse;
 import com.swingtrade.api.dto.TradeRequest;
 import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -72,7 +73,7 @@ class TradingControllerTest {
         response.setQuantity(100);
         response.setStopLoss(new BigDecimal("145.00"));
         response.setTarget(new BigDecimal("160.00"));
-        response.setStatus(PositionResponse.PositionStatus.OPEN);
+        response.setStatus(PositionStatus.OPEN);
         response.setEntryReason("Technical breakout");
         response.setCurrentPrice(new BigDecimal("152.00"));
         return response;

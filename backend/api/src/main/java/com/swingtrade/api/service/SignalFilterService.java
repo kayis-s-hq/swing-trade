@@ -3,6 +3,7 @@ package com.swingtrade.api.service;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.domain.Order;
 import com.swingtrade.broker.service.DiscordNotificationService;
+import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.llm.service.NewsIngestionService;
@@ -45,7 +46,7 @@ public class SignalFilterService {
      * Filters a signal through sentiment analysis. Returns null if suppressed.
      */
     public Order filterAndProcess(Signal signal, BigDecimal currentPrice) {
-        List<NewsIngestionService.NewsArticle> news = newsService.fetchAllNews(signal.symbol());
+        List<NewsArticle> news = newsService.fetchAllNews(signal.symbol());
         List<String> headlines = news.stream()
                 .map(newsService::cleanNewsText)
                 .toList();

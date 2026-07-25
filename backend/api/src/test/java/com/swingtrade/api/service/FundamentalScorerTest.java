@@ -1,8 +1,8 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.CompositeAnalysis;
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.strategy.TechnicalIndicators;
 import org.junit.jupiter.api.Test;
 
@@ -17,24 +17,17 @@ import static org.mockito.Mockito.*;
 
 class FundamentalScorerTest {
 
-    private static OhlcvCandleEntity makeCandle(BigDecimal open, BigDecimal high, BigDecimal low,
+    private static OhlcvCandle makeCandle(BigDecimal open, BigDecimal high, BigDecimal low,
                                                  BigDecimal close, long volume, LocalDate date) {
-        OhlcvCandleEntity c = new OhlcvCandleEntity();
-        c.setOpenPrice(open);
-        c.setHighPrice(high);
-        c.setLowPrice(low);
-        c.setClosePrice(close);
-        c.setVolume(volume);
-        c.setDate(date);
-        return c;
+        return new OhlcvCandle("TEST", date, open, high, low, close, volume, close);
     }
 
     @Test
     void compute_bullish_fundamentals_returns_score_100() {
         // Setup: create mocks directly
-        OhlcvCandleRepository candleRepository = mock(OhlcvCandleRepository.class);
+        CandleStore candleStore = mock(CandleStore.class);
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
-        FundamentalScorer scorer = new FundamentalScorer(candleRepository, technicalIndicators);
+        FundamentalScorer scorer = new FundamentalScorer(candleStore, technicalIndicators);
 
         // Setup: 60 candles with increasing volume trend
         // Historical (first 50): volume=500000, Recent (last 10): volume=1000000
@@ -43,7 +36,7 @@ class FundamentalScorerTest {
         // Momentum: candle[29]=12.9, candle[59]=15.9 -> 23.3% > 5% -> +25
         // SMA mock: 12.0, price=15.9 > 12.0 -> +25
         // Total: 25+25+25+25 = 100
-        List<OhlcvCandleEntity> candles = new ArrayList<>();
+        List<OhlcvCandle> candles = new ArrayList<>();
         for (int i = 0; i < 50; i++) {
             candles.add(makeCandle(
                     BigDecimal.valueOf(10 + i / 10.0),
@@ -64,7 +57,7 @@ class FundamentalScorerTest {
                     LocalDate.now().minusDays(59 - i)
             ));
         }
-        when(candleRepository.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
+        when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
 
         when(technicalIndicators.calculateATR(anyList(), eq(14))).thenReturn(0.4);
         when(technicalIndicators.calculateSMA(anyList(), eq(50))).thenReturn(12.0);
@@ -81,9 +74,9 @@ class FundamentalScorerTest {
     @Test
     void compute_bearish_fundamentals_returns_score_minus100() {
         // Setup: create mocks directly
-        OhlcvCandleRepository candleRepository = mock(OhlcvCandleRepository.class);
+        CandleStore candleStore = mock(CandleStore.class);
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
-        FundamentalScorer scorer = new FundamentalScorer(candleRepository, technicalIndicators);
+        FundamentalScorer scorer = new FundamentalScorer(candleStore, technicalIndicators);
 
         // Setup: 60 candles with declining volume trend
         // Historical (first 50): volume=500000, Recent (last 10): volume=200000
@@ -92,7 +85,7 @@ class FundamentalScorerTest {
         // Momentum: candle[29]=12.9, candle[59]=10.9 -> -15.5% < -5% -> -25
         // SMA mock: 15.0, price=10.9 < 15.0 -> -25
         // Total: -25-25-25-25 = -100
-        List<OhlcvCandleEntity> candles = new ArrayList<>();
+        List<OhlcvCandle> candles = new ArrayList<>();
         for (int i = 0; i < 50; i++) {
             candles.add(makeCandle(
                     BigDecimal.valueOf(10 + i / 10.0),
@@ -113,7 +106,7 @@ class FundamentalScorerTest {
                     LocalDate.now().minusDays(59 - i)
             ));
         }
-        when(candleRepository.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
+        when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
 
         when(technicalIndicators.calculateATR(anyList(), eq(14))).thenReturn(6.0);
         when(technicalIndicators.calculateSMA(anyList(), eq(50))).thenReturn(15.0);
@@ -129,12 +122,12 @@ class FundamentalScorerTest {
     @Test
     void compute_insufficient_data_returns_score_0() {
         // Setup: create mocks directly
-        OhlcvCandleRepository candleRepository = mock(OhlcvCandleRepository.class);
+        CandleStore candleStore = mock(CandleStore.class);
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
-        FundamentalScorer scorer = new FundamentalScorer(candleRepository, technicalIndicators);
+        FundamentalScorer scorer = new FundamentalScorer(candleStore, technicalIndicators);
 
         // Setup: only 20 candles, below threshold of 30
-        List<OhlcvCandleEntity> candles = new ArrayList<>();
+        List<OhlcvCandle> candles = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
             candles.add(makeCandle(
                     BigDecimal.valueOf(100),
@@ -145,7 +138,7 @@ class FundamentalScorerTest {
                     LocalDate.now().minusDays(19 - i)
             ));
         }
-        when(candleRepository.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
+        when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
 
         // Act
         CompositeAnalysis.FundamentalScore result = scorer.compute("test");
@@ -158,12 +151,12 @@ class FundamentalScorerTest {
     @Test
     void compute_factors_are_not_empty() {
         // Setup: create mocks directly
-        OhlcvCandleRepository candleRepository = mock(OhlcvCandleRepository.class);
+        CandleStore candleStore = mock(CandleStore.class);
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
-        FundamentalScorer scorer = new FundamentalScorer(candleRepository, technicalIndicators);
+        FundamentalScorer scorer = new FundamentalScorer(candleStore, technicalIndicators);
 
         // Setup: 60 candles
-        List<OhlcvCandleEntity> candles = new ArrayList<>();
+        List<OhlcvCandle> candles = new ArrayList<>();
         for (int i = 0; i < 60; i++) {
             candles.add(makeCandle(
                     BigDecimal.valueOf(100 + i),
@@ -174,7 +167,7 @@ class FundamentalScorerTest {
                     LocalDate.now().minusDays(59 - i)
             ));
         }
-        when(candleRepository.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
+        when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
         when(technicalIndicators.calculateATR(anyList(), eq(14))).thenReturn(2.5);
         when(technicalIndicators.calculateSMA(anyList(), eq(50))).thenReturn(102.0);
 

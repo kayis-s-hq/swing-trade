@@ -27,7 +27,10 @@ public record CompositeAnalysis(
     BacktestScore backtest,
 
     // Summary reasoning
-    String reasoning
+    String reasoning,
+
+    // Stage 9: LLM synthesis of all stages
+    com.swingtrade.domain.SynthesisResult synthesis
 ) {
     public record SourceScore(String name, int score, double weight, String description) {}
     public record NewsScore(int score, String summary, List<String> catalysts, List<String> redFlags, int articleCount) {}

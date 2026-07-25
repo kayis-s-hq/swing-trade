@@ -2,9 +2,12 @@ package com.swingtrade.llm.config;
 
 import com.swingtrade.llm.LlmClient;
 import com.swingtrade.llm.impl.LangChain4jLlmClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.annotation.Value;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Configuration class for LLM module.
@@ -23,5 +26,14 @@ public class LlmConfig {
     @Bean
     public LlmClient llmClient() {
         return new LangChain4jLlmClient(baseUrl);
+    }
+
+    @Bean
+    public ExecutorService newsExecutor() {
+        return Executors.newFixedThreadPool(4, r -> {
+            Thread t = new Thread(r, "news-fetcher");
+            t.setDaemon(true);
+            return t;
+        });
     }
 }
