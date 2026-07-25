@@ -29,13 +29,21 @@ public class PositionManager {
 
     // Configuration
     private static final BigDecimal PARTIAL_EXIT_RATIO = BigDecimal.valueOf(0.5); // Exit 50% at partial
-    private static final int MAX_POSITIONS = 10;
+    private final int maxPositions;
 
     /**
      * Creates a new PositionManager with empty position storage.
      */
     public PositionManager() {
+        this(5);
+    }
+
+    /**
+     * Creates a new PositionManager with specified max positions.
+     */
+    public PositionManager(int maxPositions) {
         this.positions = new ConcurrentHashMap<>();
+        this.maxPositions = maxPositions;
     }
 
     /**
@@ -479,14 +487,21 @@ public class PositionManager {
      * Checks if position limit has been reached.
      */
     public boolean hasReachedPositionLimit() {
-        return getOpenPositionCount() >= MAX_POSITIONS;
+        return getOpenPositionCount() >= maxPositions;
+    }
+
+    /**
+     * Checks if position limit has been reached for a specific max.
+     */
+    public boolean hasReachedPositionLimit(int maxPositions) {
+        return getOpenPositionCount() >= maxPositions;
     }
 
     /**
      * Gets the maximum number of concurrent positions allowed.
      */
     public int getMaxPositions() {
-        return MAX_POSITIONS;
+        return maxPositions;
     }
 
     /**

@@ -54,6 +54,13 @@ public class WatchlistStoreImpl implements WatchlistStore {
             .toList();
     }
 
+    @Override
+    public List<String> getActiveWatchlistSymbols() {
+        return repository.findByIsActiveTrueOrderBySymbolAsc().stream()
+            .map(WatchlistEntity::getSymbol)
+            .toList();
+    }
+
     private Stock toDomain(WatchlistEntity entity) {
         return new Stock(
             entity.getSymbol(),

@@ -11,6 +11,8 @@ public class SentimentAnalysisResponse {
     private LocalDate analyzedAt;
     private SentimentScore score;
     private String summary;
+    private Double confidence;
+    private Integer articleCount;
 
     public SentimentAnalysisResponse() {
     }
@@ -45,6 +47,22 @@ public class SentimentAnalysisResponse {
 
     public void setSummary(String summary) {
         this.summary = summary;
+    }
+
+    public Double getConfidence() {
+        return confidence;
+    }
+
+    public void setConfidence(Double confidence) {
+        this.confidence = confidence;
+    }
+
+    public Integer getArticleCount() {
+        return articleCount;
+    }
+
+    public void setArticleCount(Integer articleCount) {
+        this.articleCount = articleCount;
     }
 
     /**

@@ -5,6 +5,7 @@ import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.SignalStore;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -97,5 +98,17 @@ public class SignalStoreImpl implements SignalStore {
                 org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).stream()
             .map(SignalEntity::toDomain)
             .toList();
+    }
+
+    @Override
+    @Transactional
+    public int deleteByDate(LocalDate date) {
+        return repository.deleteByDate(date);
+    }
+
+    @Override
+    @Transactional
+    public int deleteAllSignals() {
+        return repository.deleteAllSignals();
     }
 }

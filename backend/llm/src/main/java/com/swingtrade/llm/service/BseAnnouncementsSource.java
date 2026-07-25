@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 public class BseAnnouncementsSource implements NewsSource {
 
     private static final Logger log = LoggerFactory.getLogger(BseAnnouncementsSource.class);
-    private static final String URL = "https://www.bseindia.com/Corporate.aspx";
+    private static final String URL = "https://www.bseindia.com/Corporate";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private final int maxArticles;

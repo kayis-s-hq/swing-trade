@@ -37,4 +37,19 @@ public interface SignalStore {
      * @return list of BUY signals
      */
     List<Signal> findBuySignalsSince(LocalDate sinceDate);
+
+    /**
+     * Deletes all signals for a given date. Used to clear stale signals before regeneration.
+     *
+     * @param date the signal date
+     * @return number of signals deleted
+     */
+    int deleteByDate(LocalDate date);
+
+    /**
+     * Deletes all signals. Used to clear all stale signals before full regeneration.
+     *
+     * @return number of signals deleted
+     */
+    int deleteAllSignals();
 }

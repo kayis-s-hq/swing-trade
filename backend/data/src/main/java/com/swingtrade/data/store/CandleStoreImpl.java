@@ -86,7 +86,7 @@ public class CandleStoreImpl implements CandleStore {
 
     @Override
     public Optional<OhlcvCandle> findLatestBySymbolBeforeDate(String symbol, LocalDate date) {
-        return repository.findLatestBySymbolBeforeDate(symbol, date.atStartOfDay())
+        return repository.findLatestBySymbolBeforeDate(symbol, date)
             .map(OhlcvCandleEntity::toDomain);
     }
 

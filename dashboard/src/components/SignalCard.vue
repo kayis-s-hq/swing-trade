@@ -4,7 +4,7 @@
     <div class="flex items-center justify-between border-b border-border-subtle/50 px-4 py-3">
       <div class="flex items-center gap-2">
         <span class="text-sm font-bold text-text-primary">{{ signal.symbol }}</span>
-        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold" :class="signal.direction === 'BUY' ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'">{{ signal.direction }}</span>
+        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold" :class="signal.direction === 'BUY' ? 'bg-success-bg text-success' : signal.direction === 'SELL' ? 'bg-danger-bg text-danger' : 'bg-info-bg text-info'">{{ signal.direction }}</span>
         <span v-if="strategyLabel" class="inline-flex items-center rounded-full bg-brand-subtle px-2 py-0.5 text-xs font-medium text-brand">{{ strategyLabel }}</span>
       </div>
       <span class="text-xs font-medium" :class="statusColor">{{ signal.status }}</span>
@@ -62,7 +62,7 @@ import { computed } from 'vue'
 const props = defineProps<{
   signal: {
     symbol: string
-    direction: 'BUY' | 'SELL'
+    direction: 'BUY' | 'SELL' | 'HOLD'
     confidence: number
     reason: string
     entryPrice: number

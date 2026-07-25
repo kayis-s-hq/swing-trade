@@ -3,6 +3,7 @@ package com.swingtrade.data.repository;
 import com.swingtrade.data.entity.SignalEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -167,4 +168,18 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
     List<SignalEntity> findUnprocessedBuySignalsSince(
         @Param("since") LocalDate since
     );
+
+    /**
+     * Deletes all signals for a specific date.
+     */
+    @Modifying
+    @Query("DELETE FROM SignalEntity s WHERE s.date = :date")
+    int deleteByDate(@Param("date") LocalDate date);
+
+    /**
+     * Deletes all signals.
+     */
+    @Modifying
+    @Query("DELETE FROM SignalEntity")
+    int deleteAllSignals();
 }

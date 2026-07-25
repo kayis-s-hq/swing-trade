@@ -36,7 +36,7 @@ export interface Position {
 export interface Signal {
   id: string
   symbol: string
-  direction: 'BUY' | 'SELL'
+  direction: 'BUY' | 'SELL' | 'HOLD'
   confidence: number
   reason: string
   entryPrice: number

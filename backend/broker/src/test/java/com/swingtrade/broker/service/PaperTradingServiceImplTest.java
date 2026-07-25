@@ -1,5 +1,6 @@
 package com.swingtrade.broker.service;
 
+import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
@@ -29,10 +30,10 @@ class PaperTradingServiceImplTest {
     private OrderManager orderManager;
 
     private EnginePair createPair(BigDecimal initialCapital) {
+        PaperTradingProperties props = new PaperTradingProperties();
+        props.setInitialBalance(initialCapital);
         OrderManager om = new OrderManager();
-        PaperTradingEngine pe = new PaperTradingEngine(
-            om, new PositionManager(),
-            initialCapital, 5, BigDecimal.valueOf(0.20));
+        PaperTradingEngine pe = new PaperTradingEngine(om, new PositionManager(5), props);
         return new EnginePair(pe, om);
     }
 
@@ -96,7 +97,7 @@ class PaperTradingServiceImplTest {
 
     @Test
     void testGetMaxCapitalPerPosition_returnsFromEngine() {
-        assertThat(service.getMaxCapitalPerPosition()).isEqualByComparingTo(new BigDecimal("0.20"));
+        assertThat(service.getMaxCapitalPerPosition()).isEqualByComparingTo(new BigDecimal("20"));
     }
 
     @Test
@@ -179,7 +180,7 @@ class PaperTradingServiceImplTest {
         var pnl = localService.calculateProfitLoss(position);
         assertThat(pnl).isNotNull();
         assertThat(localService.getMaxConcurrentPositions()).isEqualTo(5);
-        assertThat(localService.getMaxCapitalPerPosition()).isEqualByComparingTo(new BigDecimal("0.20"));
+        assertThat(localService.getMaxCapitalPerPosition()).isEqualByComparingTo(new BigDecimal("20"));
     }
 
     @Test

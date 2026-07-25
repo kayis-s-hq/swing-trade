@@ -1,17 +1,17 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
-  testDir: './tests/e2e',
-  fullyParallel: false,
-  forbidOnly: !!process.env.CI,
-  retries: 0,
-  timeout: 30000,
+  testDir: 'tests/e2e',
   use: {
     baseURL: 'http://localhost:3003',
-    trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    trace: 'off',
   },
-  projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-  ],
+  webServer: {
+    command: 'npm run dev',
+    port: 3003,
+    reuseExistingServer: true,
+  },
+  timeout: 30000,
+  reporter: 'list',
 })

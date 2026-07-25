@@ -1,5 +1,6 @@
 package com.swingtrade.broker;
 
+import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
@@ -33,8 +34,10 @@ public class BrokerModuleIntegrationTest {
     @BeforeEach
     void setUp() {
         OrderManager orderManager = new OrderManager();
-        PositionManager positionManager = new PositionManager();
-        paperTradingEngine = new PaperTradingEngine(orderManager, positionManager, INITIAL_CAPITAL, 5, BigDecimal.valueOf(0.20));
+        PositionManager positionManager = new PositionManager(5);
+        PaperTradingProperties props = new PaperTradingProperties();
+        props.setInitialBalance(INITIAL_CAPITAL);
+        paperTradingEngine = new PaperTradingEngine(orderManager, positionManager, props);
         brokerService = new PaperTradingServiceImpl(paperTradingEngine, orderManager, null);
     }
 
@@ -71,7 +74,7 @@ public class BrokerModuleIntegrationTest {
 
         // Test 5: Max capital per position constraint
         BigDecimal maxCapital = brokerService.getMaxCapitalPerPosition();
-        assertEquals(new BigDecimal("0.20"), maxCapital);
+        assertEquals(new BigDecimal("20"), maxCapital);
 
         // Test 6: P&L calculation
         Position position = Position.of(1L, "AAPL", new BigDecimal("150.00"), null, 100,
@@ -107,6 +110,6 @@ public class BrokerModuleIntegrationTest {
     @Test
     void testConstraintEnforcement() {
         assertEquals(5, brokerService.getMaxConcurrentPositions());
-        assertEquals(new BigDecimal("0.20"), brokerService.getMaxCapitalPerPosition());
+        assertEquals(new BigDecimal("20"), brokerService.getMaxCapitalPerPosition());
     }
 }

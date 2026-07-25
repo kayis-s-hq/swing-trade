@@ -30,8 +30,8 @@ import java.util.stream.Collectors;
 public class NseAnnouncementsSource implements NewsSource {
 
     private static final Logger log = LoggerFactory.getLogger(NseAnnouncementsSource.class);
-    private static final String API_URL = "https://www.nseindia.com/api/corporates?symbol=";
-    private static final String HTML_URL = "https://www.nseindia.com/market-prod/corp-events?symbol=";
+    private static final String API_URL = "https://www.nseindia.com/api/corporate-announcements?symbol=";
+    private static final String HTML_URL = "https://www.nseindia.com/corporates/announcements";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
 
@@ -69,6 +69,8 @@ public class NseAnnouncementsSource implements NewsSource {
             Document doc = Jsoup.connect(API_URL + symbol)
                     .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .header("Accept", "application/json")
+                    .header("X-Index", "nseindia.com")
+                    .header("Referer", "https://www.nseindia.com/corporates/announcements")
                     .timeout(8000)
                     .ignoreContentType(true)
                     .get();

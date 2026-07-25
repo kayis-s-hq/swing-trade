@@ -2,6 +2,7 @@ package com.swingtrade.broker.engine;
 
 import com.swingtrade.broker.config.BrokerMode;
 import com.swingtrade.broker.config.BrokerProperties;
+import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.domain.Order;
@@ -45,10 +46,9 @@ public class PaperTradingEngine {
     private final Portfolio portfolio;
 
     // Configuration
-    private final int maxConcurrentPositions;
-    private final BigDecimal maxCapitalPerPosition;
-    private final BigDecimal initialCapital;
+    private final PaperTradingProperties properties;
     private final BigDecimal commissionRate;
+    private final BigDecimal initialCapital;
 
     // Position counter for unique IDs
     private final AtomicLong positionCounter;
@@ -77,28 +77,14 @@ public class PaperTradingEngine {
      * @param initialCapital the initial capital
      */
     @Autowired
-    public PaperTradingEngine(OrderManager orderManager, PositionManager positionManager) {
-        this(orderManager, positionManager, BigDecimal.valueOf(1000000), 5, BigDecimal.valueOf(0.20));
-    }
-
-    /**
-     * Creates a new PaperTradingEngine with custom configuration.
-     *
-     * @param orderManager the order manager
-     * @param positionManager the position manager
-     * @param initialCapital the initial capital
-     * @param maxConcurrentPositions maximum concurrent positions allowed
-     * @param maxCapitalPerPosition maximum capital percentage per position
-     */
-    public PaperTradingEngine(OrderManager orderManager, PositionManager positionManager,
-                              BigDecimal initialCapital, int maxConcurrentPositions,
-                              BigDecimal maxCapitalPerPosition) {
+    public PaperTradingEngine(OrderManager orderManager,
+                              PositionManager positionManager,
+                              PaperTradingProperties properties) {
         this.orderManager = orderManager;
         this.positionManager = positionManager;
-        this.initialCapital = initialCapital;
-        this.portfolio = new Portfolio("default-portfolio", initialCapital);
-        this.maxConcurrentPositions = maxConcurrentPositions;
-        this.maxCapitalPerPosition = maxCapitalPerPosition;
+        this.properties = properties;
+        this.initialCapital = properties.getInitialBalance();
+        this.portfolio = new Portfolio("default-portfolio", this.initialCapital);
         this.commissionRate = BigDecimal.valueOf(0.05); // 5 paise per share
         this.positionCounter = new AtomicLong(0);
         this.orderCounter = new AtomicLong(0);
@@ -157,17 +143,18 @@ public class PaperTradingEngine {
      * @return true if position can be opened
      */
     public boolean validatePositionCapacity(BigDecimal entryPrice, int quantity) {
-        if (positionManager.hasReachedPositionLimit()) {
-            logger.warn("Cannot open position: maximum positions ({}) reached", maxConcurrentPositions);
+        if (positionManager.hasReachedPositionLimit(properties.getMaxConcurrentPositions())) {
+            logger.warn("Cannot open position: maximum positions ({}) reached", properties.getMaxConcurrentPositions());
             return false;
         }
 
         BigDecimal positionValue = entryPrice.multiply(BigDecimal.valueOf(quantity));
         BigDecimal capitalRatio = positionValue.divide(portfolio.getCurrentCapital(), 4, RoundingMode.HALF_UP);
 
-        if (capitalRatio.compareTo(maxCapitalPerPosition) > 0) {
+        BigDecimal maxCapitalRatio = maxCapitalPerPositionDiv100();
+        if (capitalRatio.compareTo(maxCapitalRatio) > 0) {
             logger.warn("Cannot open position for {}: position value {} exceeds {}% of capital",
-                entryPrice, positionValue, maxCapitalPerPosition.multiply(BigDecimal.valueOf(100)));
+                entryPrice, positionValue, properties.getMaxCapitalPerPosition());
             return false;
         }
 
@@ -187,9 +174,9 @@ public class PaperTradingEngine {
         // Default position size calculation (simplified)
         // In production, this would use ATR and risk-per-trade parameters
 
-        BigDecimal maxRiskPercent = BigDecimal.valueOf(0.02); // 2% max risk per trade
+        BigDecimal riskPerTrade = BigDecimal.valueOf(1).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP); // 1% max risk per trade
         BigDecimal riskPerShare = entryPrice.subtract(stopLoss);
-        BigDecimal maxRiskAmount = portfolio.getCurrentCapital().multiply(maxRiskPercent);
+        BigDecimal maxRiskAmount = portfolio.getCurrentCapital().multiply(riskPerTrade);
 
         if (riskPerShare.compareTo(BigDecimal.ZERO) <= 0) {
             // Default to 100 shares if risk calculation is invalid
@@ -603,7 +590,7 @@ public class PaperTradingEngine {
      * @return maximum positions
      */
     public int getMaxConcurrentPositions() {
-        return maxConcurrentPositions;
+        return properties.getMaxConcurrentPositions();
     }
 
     /**
@@ -612,7 +599,11 @@ public class PaperTradingEngine {
      * @return max capital percentage
      */
     public BigDecimal getMaxCapitalPerPosition() {
-        return maxCapitalPerPosition;
+        return properties.getMaxCapitalPerPosition();
+    }
+
+    private BigDecimal maxCapitalPerPositionDiv100() {
+        return properties.getMaxCapitalPerPosition().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
     }
 
     /**

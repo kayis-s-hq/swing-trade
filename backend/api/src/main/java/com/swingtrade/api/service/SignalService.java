@@ -27,15 +27,18 @@ public class SignalService {
     private final SentimentStore sentimentStore;
     private final TechnicalAnalysisService technicalAnalysisService;
     private final SignalEngine signalEngine;
+    private final com.swingtrade.domain.store.CandleStore candleStore;
 
     public SignalService(SignalStore signalStore,
                          SentimentStore sentimentStore,
                          TechnicalAnalysisService technicalAnalysisService,
-                         SignalEngine signalEngine) {
+                         SignalEngine signalEngine,
+                         com.swingtrade.domain.store.CandleStore candleStore) {
         this.signalStore = signalStore;
         this.sentimentStore = sentimentStore;
         this.technicalAnalysisService = technicalAnalysisService;
         this.signalEngine = signalEngine;
+        this.candleStore = candleStore;
     }
 
     /**
@@ -142,6 +145,13 @@ public class SignalService {
                 .filter(s -> "PRICE_ACTION".equals(s.indicators()) || true) // all signals for now
                 .max(java.util.Comparator.comparing(com.swingtrade.domain.Signal::date))
                 .or(() -> signalStore.findLatestBySymbol(symbol));
+    }
+
+    /**
+     * Returns the candle count for a symbol (used for generate-all diagnostics).
+     */
+    public List<com.swingtrade.domain.OhlcvCandle> getCandleCount(String symbol) {
+        return candleStore.findTopBySymbolOrderByDateDesc(symbol, 1000);
     }
 
     /**

@@ -20,6 +20,17 @@
           </svg>
           Refresh
         </button>
+        <button
+          v-if="selectedCount > 0"
+          @click="executeSelected"
+          :disabled="executing"
+          class="flex items-center gap-2 rounded-md bg-success px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-success/90 disabled:opacity-50"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          {{ executing ? 'Executing...' : `Execute ${selectedCount}` }}
+        </button>
       </div>
     </div>
 
@@ -31,30 +42,83 @@
 
     <template v-else>
       <!-- Filters -->
-      <div class="mb-4 flex items-center gap-3">
-        <div class="flex rounded-md border border-border-subtle">
-          <button v-for="dir in ['ALL', 'BUY', 'SELL']" :key="dir" @click="directionFilter = dir" class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md" :class="directionFilter === dir ? 'bg-brand-subtle text-brand' : 'text-text-muted hover:bg-bg-hover'">{{ dir }}</button>
+      <div class="mb-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              :checked="isSelectAll"
+              @change="toggleSelectAll"
+              class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
+            />
+            <span class="text-xs font-medium text-text-muted">Select all ({{ filteredSignals.length }})</span>
+          </label>
+          <div class="flex rounded-md border border-border-subtle">
+            <button v-for="dir in ['ALL', 'BUY', 'SELL']" :key="dir" @click="directionFilter = dir" class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md" :class="directionFilter === dir ? 'bg-brand-subtle text-brand' : 'text-text-muted hover:bg-bg-hover'">{{ dir }}</button>
+          </div>
+          <div class="flex rounded-md border border-border-subtle">
+            <button v-for="st in ['ALL', 'ACTIVE', 'PENDING']" :key="st" @click="statusFilter = st" class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md" :class="statusFilter === st ? 'bg-brand-subtle text-brand' : 'text-text-muted hover:bg-bg-hover'">{{ st }}</button>
+          </div>
         </div>
-        <div class="flex rounded-md border border-border-subtle">
-          <button v-for="st in ['ALL', 'ACTIVE', 'PENDING']" :key="st" @click="statusFilter = st" class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md" :class="statusFilter === st ? 'bg-brand-subtle text-brand' : 'text-text-muted hover:bg-bg-hover'">{{ st }}</button>
-        </div>
+        <span v-if="selectedCount > 0" class="text-xs font-medium text-brand">{{ selectedCount }} selected</span>
       </div>
 
       <!-- Signal Grid -->
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <SignalCard v-for="signal in filteredSignals" :key="signal.id" :signal="signal" />
+        <div
+          v-for="signal in filteredSignals"
+          :key="signal.id"
+          class="relative transition-all"
+          :class="isSelected(signal.id) ? 'ring-2 ring-brand/50 rounded-lg' : ''"
+        >
+          <div class="absolute top-2 left-2 z-10">
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input
+                type="checkbox"
+                :checked="isSelected(signal.id)"
+                @change="toggleSignal(signal.id)"
+                class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
+              />
+            </label>
+          </div>
+          <div class="ml-7">
+            <SignalCard :signal="signal" />
+          </div>
+        </div>
       </div>
 
       <div v-if="filteredSignals.length === 0" class="flex flex-col items-center justify-center py-16">
         <p class="text-sm text-text-muted">No signals matching filter</p>
       </div>
     </template>
+
+    <!-- Execution results toast -->
+    <div v-if="execResult" class="fixed bottom-4 right-4 z-50 max-w-md">
+      <div class="rounded-lg border border-border-subtle bg-bg-surface p-4 shadow-lg">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold text-text-primary">
+              {{ execResult.success > 0 ? 'Executed' : 'Failed' }}
+            </p>
+            <p class="mt-1 text-xs text-text-muted">
+              {{ execResult.success }} succeeded, {{ execResult.failed }} failed
+              <span v-if="execResult.errors.length">{{ execResult.errors.slice(0, 3).join('; ') }}</span>
+            </p>
+          </div>
+          <button @click="execResult = null" class="text-text-muted hover:text-text-primary">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getSignals, generateAllSignals } from '../api/client'
+import { getSignals, generateAllSignals, executeTrade } from '../api/client'
 import type { Signal } from '../api/types'
 import SignalCard from '../components/SignalCard.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
@@ -62,11 +126,14 @@ import LoadingSpinner from '../components/LoadingSpinner.vue'
 
 const loading = ref(true)
 const generating = ref(false)
+const executing = ref(false)
 const error = ref(false)
 const errorMessage = ref('')
 const signals = ref<Signal[]>([])
 const directionFilter = ref('ALL')
 const statusFilter = ref('ALL')
+const selectedSignalIds = ref(new Set<string>())
+const execResult = ref<{ success: number; failed: number; errors: string[] } | null>(null)
 
 const filteredSignals = computed(() => {
   return signals.value.filter(s => {
@@ -75,6 +142,73 @@ const filteredSignals = computed(() => {
     return matchesDir && matchesStatus
   })
 })
+
+const selectedCount = computed(() => selectedSignalIds.value.size)
+
+const isSelectAll = computed(() => {
+  if (filteredSignals.value.length === 0) return false
+  return filteredSignals.value.every(s => selectedSignalIds.value.has(s.id))
+})
+
+const isSelected = (id: string) => selectedSignalIds.value.has(id)
+
+const toggleSignal = (id: string) => {
+  if (selectedSignalIds.value.has(id)) {
+    selectedSignalIds.value.delete(id)
+  } else {
+    selectedSignalIds.value.add(id)
+  }
+  // Trigger reactivity — Set is mutable
+  selectedSignalIds.value = new Set(selectedSignalIds.value)
+}
+
+const toggleSelectAll = () => {
+  const allIds = new Set(filteredSignals.value.map(s => s.id))
+  const allSelected = allIds.size > 0 && filteredSignals.value.every(s => selectedSignalIds.value.has(s.id))
+
+  if (allSelected) {
+    allIds.forEach(id => selectedSignalIds.value.delete(id))
+  } else {
+    filteredSignals.value.forEach(s => selectedSignalIds.value.add(s.id))
+  }
+  selectedSignalIds.value = new Set(selectedSignalIds.value)
+}
+
+const executeSelected = async () => {
+  executing.value = true
+  const selected = signals.value.filter(s => selectedSignalIds.value.has(s.id))
+  let successCount = 0
+  const errors: string[] = []
+
+  for (const signal of selected) {
+    // Calculate quantity: allocate ~Rs.1,00,000 per position
+    const allocation = 100000
+    const quantity = Math.max(1, Math.floor(allocation / signal.entryPrice))
+
+    try {
+      await executeTrade({
+        symbol: signal.symbol,
+        quantity,
+        direction: signal.direction === 'BUY' ? 'LONG' : 'SHORT',
+        orderType: 'MARKET',
+        price: signal.entryPrice,
+        target: signal.target,
+        entryReason: `Signal: ${signal.symbol} — ${signal.reason.slice(0, 100)}`,
+      })
+      successCount++
+    } catch {
+      errors.push(signal.symbol)
+    }
+  }
+
+  selectedSignalIds.value.clear()
+  selectedSignalIds.value = new Set()
+  execResult.value = { success: successCount, failed: selected.length - successCount, errors }
+
+  // Auto-dismiss after 5s
+  setTimeout(() => { execResult.value = null }, 5000)
+  executing.value = false
+}
 
 const doRefresh = async () => {
   loading.value = true
@@ -100,8 +234,10 @@ const generateAll = async () => {
     const res = await generateAllSignals()
     console.log('generateAllSignals result:', res)
     if (res.success && res.data) {
-      console.log('Signals loaded:', res.data.length, res.data.map(s => s.symbol))
-      signals.value = res.data
+      const data = res.data as unknown as { signals: Signal[]; skipped: Array<{ symbol: string; reason: string }> }
+      console.log('Signals loaded:', data.signals.length, data.signals.map(s => s.symbol))
+      console.log('Skipped:', data.skipped)
+      signals.value = data.signals
     }
     if (res.error) throw new Error(res.error)
   } catch (err: unknown) {

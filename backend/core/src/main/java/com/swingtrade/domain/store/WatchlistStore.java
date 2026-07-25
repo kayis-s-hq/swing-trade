@@ -15,4 +15,9 @@ public interface WatchlistStore {
     boolean existsBySymbol(String symbol);
 
     List<Stock> getWatchlistByExchange(String exchange);
+
+    /**
+     * Returns active watchlist symbols in alphabetical order.
+     */
+    List<String> getActiveWatchlistSymbols();
 }

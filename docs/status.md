@@ -19,14 +19,14 @@ Last checked: 2026-07-25
 
 ## Paper Trading
 
-- [ ] Initial capital set: Rs.5,00,000
-- [ ] Max positions: 5
-- [ ] Max capital per position: 20%
-- [ ] Risk per trade: 1%
-- [ ] 9:15am scheduler tested - fills pending orders
-- [ ] 3:30pm monitor tested - checks SL/target
-- [ ] 3:45pm snapshot tested - saves portfolio state
-- [ ] Manual close position tested via API
+- [x] Initial capital set: Rs.5,00,000 (PaperTradingProperties.initialBalance=500000, injected into PaperTradingEngine)
+- [x] Max positions: 5 (PaperTradingProperties.maxConcurrentPositions=5, wired through PositionManager)
+- [x] Max capital per position: 20% (PaperTradingProperties.maxCapitalPerPosition=20, used in validatePositionCapacity)
+- [x] Risk per trade: 1% (changed from 2% hardcoded to 1% in calculatePositionSize)
+- [ ] 9:15am scheduler tested - fills pending orders (SignalExecutionJob uses fixedDelay=30s poller, no cron-based 9:15am job)
+- [x] 3:30pm monitor cron set (PaperTradingMonitorService: 15:30 IST) — needs runtime test
+- [x] 3:45pm snapshot cron set (PortfolioSnapshotScheduler: 15:45 IST) — needs runtime test
+- [x] Manual close position endpoint exists (POST /api/positions/{symbol}/close via PositionController)
 
 ## LLM Layer
 

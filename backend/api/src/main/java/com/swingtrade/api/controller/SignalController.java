@@ -1,16 +1,20 @@
 package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.*;
+import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.SignalStore;
+import com.swingtrade.llm.service.NewsIngestionService;
+import com.swingtrade.llm.service.SentimentService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -43,6 +47,15 @@ public class SignalController {
 
     @Autowired
     private com.swingtrade.domain.store.StockStore stockStore;
+
+    @Autowired
+    private com.swingtrade.domain.store.WatchlistStore watchlistStore;
+
+    @Autowired
+    private NewsIngestionService newsIngestionService;
+
+    @Autowired
+    private SentimentService sentimentService;
 
     /**
      * Get the latest trading signals for today.
@@ -161,26 +174,46 @@ public class SignalController {
 
     /**
      * Generate price-action signals for all active watchlist symbols.
-     *
-     * @return List of generated signals
+     * Clears existing signals for today before regenerating.
      */
     @PostMapping("/generate-all")
-    public ResponseEntity<List<SignalResponse>> generateAllSignals() {
+    @Transactional
+    public ResponseEntity<GenerateAllResponse> generateAllSignals() {
         logger.info("Generating signals for all watchlist symbols");
-        List<String> symbols = stockStore.findAllActive().stream()
-            .map(Stock::symbol)
-            .toList();
-        List<SignalResponse> results = new ArrayList<>();
+        // Clear all existing signals so all stocks regenerate fresh
+        int cleared = signalStore.deleteAllSignals();
+        if (cleared > 0) {
+            logger.info("Cleared {} stale signals", cleared);
+        }
+        List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
+        List<SignalResponse> signals = new ArrayList<>();
+        List<GenerateAllResponse.SymbolResult> skipped = new ArrayList<>();
         for (String symbol : symbols) {
             try {
-                signalService.generatePriceActionSignal(symbol)
-                    .ifPresent(signal -> results.add(new SignalResponse(signal)));
+                java.util.Optional<Signal> result = signalService.generatePriceActionSignal(symbol);
+                if (result.isPresent()) {
+                    signals.add(new SignalResponse(result.get()));
+                } else {
+                    List<com.swingtrade.domain.OhlcvCandle> candles =
+                        signalService.getCandleCount(symbol);
+                    if (candles.isEmpty() || candles.size() < 50) {
+                        skipped.add(new GenerateAllResponse.SymbolResult(symbol,
+                            "Insufficient candle data (" + candles.size() + " available)"));
+                    } else {
+                        skipped.add(new GenerateAllResponse.SymbolResult(symbol,
+                            "Signal already exists for latest date"));
+                    }
+                }
+            } catch (IllegalStateException e) {
+                skipped.add(new GenerateAllResponse.SymbolResult(symbol, e.getMessage()));
             } catch (Exception e) {
-                logger.warn("Signal generation failed for {}: {}", symbol, e.getMessage());
+                skipped.add(new GenerateAllResponse.SymbolResult(symbol,
+                    "Generation error: " + e.getMessage()));
             }
         }
-        logger.info("Generated {} signals for {} symbols", results.size(), symbols.size());
-        return ResponseEntity.ok(results);
+        logger.info("Generated {} signals, skipped {} of {} symbols",
+            signals.size(), skipped.size(), symbols.size());
+        return ResponseEntity.ok(GenerateAllResponse.of(signals, skipped));
     }
 
     /**
@@ -268,15 +301,23 @@ public class SignalController {
         combined.setSymbol(symbol);
         combined.setAnalysisDate(LocalDate.now());
 
-        Optional<com.swingtrade.domain.SentimentResult> sentimentOpt = sentimentStore.findLatestBySymbol(symbol);
-        if (sentimentOpt.isPresent()) {
-            com.swingtrade.domain.SentimentResult result = sentimentOpt.get();
+        // Fetch fresh news from all sources
+        try {
+            List<NewsArticle> articles = newsIngestionService.fetchStockNews(symbol);
+            logger.info("Fetched {} articles for {} from all sources", articles.size(), symbol);
+
+            // Run sentiment analysis with fresh news
+            com.swingtrade.domain.SentimentResult result = sentimentService.analyzeStockSentiment(symbol, LocalDate.now());
             SentimentAnalysisResponse sa = new SentimentAnalysisResponse();
             sa.setSymbol(result.symbol());
             sa.setAnalyzedAt(result.analyzedAt());
             sa.setScore(SentimentAnalysisResponse.SentimentScore.valueOf(result.score().name()));
             sa.setSummary(result.summary());
+            sa.setConfidence(result.confidence() != null ? result.confidence().doubleValue() : null);
+            sa.setArticleCount(result.articleCount());
             combined.setSentimentAnalysis(sa);
+        } catch (Exception e) {
+            logger.warn("Combined signal fetch failed for {}: {}", symbol, e.getMessage());
         }
 
         return ResponseEntity.ok(combined);

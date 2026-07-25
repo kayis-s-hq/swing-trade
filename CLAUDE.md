@@ -57,6 +57,8 @@ swing-trade/
 │   └── tests/              # Vitest unit tests + Playwright E2E tests
 │
 ├── docs/                   # Project documentation
+│   ├── plans/              # Implementation plans (handoff artifacts)
+│   └── specs/              # Design specs
 └── dev-stack.sh            # Dev stack orchestration script
 ```
 
@@ -230,7 +232,7 @@ All project documentation goes in `docs/` as Markdown files.
 
 ## Planning Artifacts
 
-When a multi-step implementation plan is decided (after research and clarification), write it to `claude/plans/<slug>.md`. This file serves as a handoff — paste its contents into a new Claude Code session to continue work after a context cutoff or session restart.
+When a multi-step implementation plan is decided (after research and clarification), write it to `docs/plans/<slug>.md`. This file serves as a handoff — paste its contents into a new Claude Code session to continue work after a context cutoff or session restart.
 
 **Structure:**
 - Section 1: "What's already done" — list completed backend renames, refactors, or changes
@@ -243,6 +245,34 @@ When a multi-step implementation plan is decided (after research and clarificati
 - Include the full code to add (not "add X to Y")
 - Reference existing patterns from the codebase (don't invent new patterns)
 - Keep the file under 300 lines so it fits in a new session's context
+
+## Interaction Rules
+
+### Decision Rule — Ask Before Deciding
+**STRICT:** Before making ANY non-obvious, non-trivial, or irreversible decision, you MUST use the `AskUserQuestion` tool to present options and get user approval. This includes but is not limited to:
+- Architecture choices (framework, library, pattern, module structure)
+- UI/UX changes (layout, styling, component design, state management)
+- API changes (endpoints, DTOs, request/response shapes)
+- Data model changes (schema, entities, migrations)
+- Bug fix approach (quick fix vs proper fix, refactor vs patch)
+- Anything with more than one valid implementation path
+
+**How to apply:** Call `AskUserQuestion` with clear options. The first option MUST be your recommended choice. Do NOT proceed until the user selects.
+
+**Exception:** Trivial, reversible changes with a single obvious answer (typos, single-argument fixes, formatting) do not require asking.
+
+### LLM Ambiguity Rule
+**STRICT:** When LLM output is ambiguous, contradictory, incomplete, or potentially wrong, you MUST use the `AskUserQuestion` tool to clarify with the user before acting on it. Do NOT guess, assume, or silently correct LLM output.
+
+### Documentation Organization Rule
+**STRICT:** All project documentation, plans, and specs live exclusively under `docs/`. No other location is permitted:
+- `docs/` — knowledge docs (API refs, architecture, backtesting, etc.)
+- `docs/plans/` — implementation plans (handoff artifacts)
+- `docs/specs/` — design specs
+
+**Forbidden locations:** `claude/plans/`, `.claude/plans/`, `docs/superpowers/`, `.claude/worktrees/`, or any other ad-hoc directory.
+
+**How to apply:** When creating plans or specs, write to `docs/plans/` or `docs/specs/`. When moving files from forbidden locations to `docs/`, do it immediately. Never create new plan/doc directories outside `docs/`. Never leave stale copies in worktrees or session directories.
 
 ## Market Data Clients
 

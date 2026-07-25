@@ -62,7 +62,6 @@ public class SignalPersistenceService {
      * @param atr the ATR value for risk calculation
      * @return the saved signal
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Signal buildAndSave(String symbol, LocalDate date, Signal.SignalType type,
                                BigDecimal confidence, String reasoning,
                                String indicators, BigDecimal atr) {
@@ -115,7 +114,6 @@ public class SignalPersistenceService {
      * @param indicators the indicator string
      * @return the saved signal
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Signal buildAndSave(Signal baseSignal, BigDecimal entryPrice,
                                BigDecimal stopLoss, BigDecimal target,
                                BigDecimal riskReward, String indicators) {

@@ -129,6 +129,11 @@ interface BackendSignal {
   strategy?: string
 }
 
+interface BackendGenerateAllResponse {
+  signals: BackendSignal[]
+  skipped: Array<{ symbol: string; reason: string }>
+}
+
 interface BackendPerformance {
   totalReturn: number | string
   annualizedReturn: number | string
@@ -190,7 +195,7 @@ const mapPosition = (p: BackendPosition): Position => ({
 const mapSignal = (s: BackendSignal): Signal => ({
   id: String(s.id),
   symbol: s.symbol,
-  direction: s.signalType as 'BUY' | 'SELL',
+  direction: s.signalType as 'BUY' | 'SELL' | 'HOLD',
   confidence: Math.round(toNum(s.confidence) * 100),
   reason: s.reasoning,
   entryPrice: toNum(s.entryPrice),
@@ -270,21 +275,22 @@ export async function getSignals(): Promise<ApiResponse<Signal[]>> {
   const raw = await rawFetch('/signals/latest')
   if (!raw.ok) return errResponse(raw.error!)
 
-  return { success: true, data: (raw.data as BackendSignal[]).filter(s => s.signalType !== 'HOLD').map(mapSignal) }
+  return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
 }
 
-export async function generateAllSignals(): Promise<ApiResponse<Signal[]>> {
+export async function generateAllSignals(): Promise<ApiResponse<{ signals: Signal[]; skipped: Array<{ symbol: string; reason: string }> }>> {
   const raw = await rawFetch('/signals/generate-all', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
 
-  return { success: true, data: (raw.data as BackendSignal[]).filter(s => s.signalType !== 'HOLD').map(mapSignal) }
+  const resp = raw.data as BackendGenerateAllResponse
+  return { success: true, data: { signals: (resp.signals ?? []).map(mapSignal), skipped: resp.skipped ?? [] } }
 }
 
-export async function getSignalsByType(type: 'BUY' | 'SELL'): Promise<ApiResponse<Signal[]>> {
+export async function getSignalsByType(type: 'BUY' | 'SELL' | 'HOLD'): Promise<ApiResponse<Signal[]>> {
   const raw = await rawFetch(`/signals/type/${type}`)
   if (!raw.ok) return errResponse(raw.error!)
 
-  return { success: true, data: (raw.data as BackendSignal[]).filter(s => s.signalType !== 'HOLD').map(mapSignal) }
+  return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
 }
 
 export async function getLatestSignalForSymbol(symbol: string): Promise<ApiResponse<Signal | null>> {
@@ -293,7 +299,7 @@ export async function getLatestSignalForSymbol(symbol: string): Promise<ApiRespo
 
   const data = (raw.data as BackendSignal[])
   const latest = data.length > 0 ? data[data.length - 1] : null
-  if (!latest || latest.signalType === 'HOLD') return { success: true, data: null }
+  if (!latest) return { success: true, data: null }
 
   return { success: true, data: mapSignal(latest) }
 }
@@ -302,7 +308,7 @@ export async function getHighConfidenceSignals(minConfidence: number = 0.7): Pro
   const raw = await rawFetch(`/signals/high-confidence?minConfidence=${minConfidence}`)
   if (!raw.ok) return errResponse(raw.error!)
 
-  return { success: true, data: (raw.data as BackendSignal[]).filter(s => s.signalType !== 'HOLD').map(mapSignal) }
+  return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
 }
 
 export async function getTradeHistory(limit: number = 10): Promise<ApiResponse<Position[]>> {

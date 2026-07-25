@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
+import java.net.http.HttpClient;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
@@ -32,10 +33,21 @@ public class GoogleNewsSource implements NewsSource {
     private static final String BASE = "https://news.google.com/rss/search?q=";
     private static final String PARAMS = "&hl=en-IN&gl=IN&ceid=IN:en";
 
-    private final int maxArticles;
+    private HttpClient httpClient;
 
-    public GoogleNewsSource(@Value("${news.source.google.max-articles:20}") int maxArticles) {
+    @Value("${news.source.google.max-articles:20}")
+    private int maxArticles;
+
+    public GoogleNewsSource() {
+        this.httpClient = HttpClient.newHttpClient();
+    }
+
+    /**
+     * Package-private constructor for testing with an injectable HttpClient.
+     */
+    GoogleNewsSource(int maxArticles, HttpClient httpClient) {
         this.maxArticles = maxArticles;
+        this.httpClient = httpClient;
     }
 
     @Override
@@ -48,7 +60,9 @@ public class GoogleNewsSource implements NewsSource {
         List<String> queries = List.of(
                 symbol + "+NSE+stock",
                 symbol + "+India+market",
-                symbol + "+earnings+result"
+                symbol + "+earnings+result",
+                symbol + "+share+price",
+                symbol + "+NSE+BSE"
         );
 
         Set<String> seen = new HashSet<>();

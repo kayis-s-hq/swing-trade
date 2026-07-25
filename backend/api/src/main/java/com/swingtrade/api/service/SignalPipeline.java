@@ -127,7 +127,6 @@ public class SignalPipeline {
      * @param symbol the stock symbol
      * @return the saved signal, or empty if skipped
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public java.util.Optional<Signal> generatePriceActionSignal(String symbol) {
         logger.debug("Generating price-action signal for {}", symbol);
 
@@ -136,11 +135,6 @@ public class SignalPipeline {
             result = priceActionEngine.generateSignal(symbol);
         } catch (IllegalStateException e) {
             logger.debug("Not enough candles for price-action signal on {}: {}", symbol, e.getMessage());
-            return java.util.Optional.empty();
-        }
-
-        if (persistenceService.existsForDate(result.symbol(), result.date())) {
-            logger.debug("Price-action signal already exists for {} on {}", result.symbol(), result.date());
             return java.util.Optional.empty();
         }
 

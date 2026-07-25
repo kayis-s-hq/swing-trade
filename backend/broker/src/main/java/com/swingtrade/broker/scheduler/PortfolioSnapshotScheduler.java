@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Daily portfolio snapshot scheduler for P&L chart data.
- * Runs at 16:30 IST (same time as EOD candle ingestion).
+ * Runs at 15:45 IST.
  */
 @Service
 public class PortfolioSnapshotScheduler {
@@ -21,7 +21,7 @@ public class PortfolioSnapshotScheduler {
         this.stateService = stateService;
     }
 
-    @Scheduled(cron = "${paper.trading.snapshot-cron:0 30 16 * * MON-FRI}", zone = "Asia/Kolkata")
+    @Scheduled(cron = "${paper.trading.snapshot-cron:0 45 15 * * MON-FRI}", zone = "Asia/Kolkata")
     public void takeSnapshot() {
         try {
             stateService.saveSnapshot();

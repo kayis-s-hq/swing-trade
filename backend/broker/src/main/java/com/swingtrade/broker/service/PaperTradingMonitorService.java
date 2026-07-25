@@ -1,5 +1,6 @@
 package com.swingtrade.broker.service;
 
+import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.domain.Position;
 import com.swingtrade.data.entity.OhlcvCandleEntity;
@@ -14,8 +15,8 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * Fyers-specific EOD position monitor.
- * Runs after market close (16:45 IST) to fetch latest Fyers candle,
+ * EOD position monitor.
+ * Runs at 15:30 IST to fetch latest candle,
  * update position prices, and check SL/TP triggers.
  */
 @Service
@@ -26,16 +27,19 @@ public class PaperTradingMonitorService {
     private final PaperTradingEngine engine;
     private final PaperTradingStateService stateService;
     private final OhlcvCandleRepository ohlcvCandleRepository;
+    private final PaperTradingProperties properties;
 
     public PaperTradingMonitorService(PaperTradingEngine engine,
                                       PaperTradingStateService stateService,
-                                      OhlcvCandleRepository ohlcvCandleRepository) {
+                                      OhlcvCandleRepository ohlcvCandleRepository,
+                                      PaperTradingProperties properties) {
         this.engine = engine;
         this.stateService = stateService;
         this.ohlcvCandleRepository = ohlcvCandleRepository;
+        this.properties = properties;
     }
 
-    @Scheduled(cron = "${paper.trading.monitor-cron:0 45 16 * * MON-FRI}", zone = "Asia/Kolkata")
+    @Scheduled(cron = "${paper.trading.monitor-cron:0 30 15 * * MON-FRI}", zone = "Asia/Kolkata")
     public void monitorPositions() {
         List<Position> openPositions = engine.getOpenPositions();
         if (openPositions.isEmpty()) {

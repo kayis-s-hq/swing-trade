@@ -9,6 +9,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Locale;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -28,10 +32,21 @@ public class EconomicTimesNewsSource implements NewsSource {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter
             .ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
 
-    private final int maxArticles;
+    private HttpClient httpClient;
 
-    public EconomicTimesNewsSource(@Value("${news.source.et.max-articles:15}") int maxArticles) {
+    @Value("${news.source.et.max-articles:15}")
+    private int maxArticles;
+
+    public EconomicTimesNewsSource() {
+        this.httpClient = HttpClient.newHttpClient();
+    }
+
+    /**
+     * Package-private constructor for testing with an injectable HttpClient.
+     */
+    EconomicTimesNewsSource(int maxArticles, HttpClient httpClient) {
         this.maxArticles = maxArticles;
+        this.httpClient = httpClient;
     }
 
     @Override
@@ -43,11 +58,9 @@ public class EconomicTimesNewsSource implements NewsSource {
     public List<NewsArticle> fetch(String symbol) {
         String url = RSS_URL + symbol;
         try {
-            Document doc = Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0")
-                    .timeout(8000)
-                    .ignoreContentType(true)
-                    .get();
+            String html = fetchHtml(url, 8000);
+            if (html == null) return List.of();
+            Document doc = Jsoup.parse(html);
 
             List<NewsArticle> articles = new ArrayList<>();
             Set<String> seen = new HashSet<>();
@@ -97,5 +110,21 @@ public class EconomicTimesNewsSource implements NewsSource {
 
     private static String safeText(Element el) {
         return el != null ? el.text().trim() : null;
+    }
+
+    private String fetchHtml(String url, int timeoutMs) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("User-Agent", "Mozilla/5.0")
+                    .timeout(java.time.Duration.ofMillis(timeoutMs))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) return null;
+            return response.body();
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

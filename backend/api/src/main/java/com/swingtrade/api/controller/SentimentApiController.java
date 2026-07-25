@@ -181,7 +181,7 @@ public class SentimentApiController {
     @GetMapping("/news/{symbol}/latest")
     public ResponseEntity<ApiResponse<List<NewsArticle>>> getLatestNews(
             @PathVariable String symbol) {
-        List<NewsArticle> news = newsService.fetchAllNews(symbol);
+        List<NewsArticle> news = newsService.fetchStockNews(symbol);
         return ResponseEntity.ok(ApiResponse.ok(news));
     }
 
