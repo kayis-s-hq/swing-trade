@@ -125,42 +125,51 @@
 
       </div>
 
-      <!-- Old sentiment result (coexists with composite) -->
-      <div v-if="!compositeLoading && sentiment" class="mt-6">
-        <div class="mb-6 card-panel p-5">
-          <h3 class="mb-4 text-sm font-semibold text-text-primary">LLM Analysis</h3>
-          <div class="mb-4 flex items-center justify-between">
-            <h4 class="text-sm font-semibold text-text-primary">{{ sentiment.symbol }}</h4>
-            <span class="text-xs text-text-muted">{{ sentiment.date }}</span>
-          </div>
-          <div class="mb-4 flex items-center gap-4">
-            <SentimentBadge :score="sentiment.score" :confidence="sentiment.confidence" />
-          </div>
-          <div class="mb-4">
-            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">Summary</h4>
-            <p class="text-sm text-text-secondary">{{ sentiment.summary }}</p>
-          </div>
-          <div v-if="sentiment.redFlags.length" class="mb-4">
-            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-danger">Red Flags</h4>
-            <ul class="list-disc pl-4 text-sm text-text-secondary">
-              <li v-for="rf in sentiment.redFlags" :key="rf">{{ rf }}</li>
-            </ul>
-          </div>
-          <div v-if="sentiment.catalysts.length">
-            <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-success">Catalysts</h4>
-            <ul class="list-disc pl-4 text-sm text-text-secondary">
-              <li v-for="c in sentiment.catalysts" :key="c">{{ c }}</li>
-            </ul>
+      <!-- Historical Sentiment (collapsed by default) -->
+      <div v-if="sentiment" class="mt-6">
+        <button
+          @click="showHistoricalSentiment = !showHistoricalSentiment"
+          class="mb-3 flex items-center gap-2 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
+        >
+          <svg
+            class="h-4 w-4 transition-transform"
+            :class="{ 'rotate-180': showHistoricalSentiment }"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+          Historical Sentiment
+        </button>
+
+        <div v-if="showHistoricalSentiment" class="animate-fade-in">
+          <div class="card-panel p-5">
+            <div class="mb-4 flex items-center justify-between">
+              <h4 class="text-sm font-semibold text-text-primary">{{ sentiment.symbol }}</h4>
+              <span class="text-xs text-text-muted">{{ sentiment.date }}</span>
+            </div>
+            <div class="mb-4 flex items-center gap-4">
+              <SentimentBadge :score="sentiment.score" :confidence="sentiment.confidence" />
+            </div>
+            <div class="mb-4">
+              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">Summary</h4>
+              <p class="text-sm text-text-secondary">{{ sentiment.summary }}</p>
+            </div>
+            <div v-if="sentiment.redFlags.length" class="mb-4">
+              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-danger">Red Flags</h4>
+              <ul class="list-disc pl-4 text-sm text-text-secondary">
+                <li v-for="rf in sentiment.redFlags" :key="rf">{{ rf }}</li>
+              </ul>
+            </div>
+            <div v-if="sentiment.catalysts.length">
+              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-success">Catalysts</h4>
+              <ul class="list-disc pl-4 text-sm text-text-secondary">
+                <li v-for="c in sentiment.catalysts" :key="c">{{ c }}</li>
+              </ul>
+            </div>
           </div>
         </div>
-
-        <!-- Context Panel -->
-        <ContextPanel
-          :signal="latestSignal"
-          :sentiment="sentiment"
-          :article-count="newsArticles.length"
-          :trend="history.length > 0 ? history : [sentiment]"
-        />
       </div>
 
       <!-- Empty state -->
@@ -493,6 +502,8 @@ const historyLoading = ref(false)
 const history = ref<SentimentResult[]>([])
 const historyPage = ref(0)
 const hasMore = ref(true)
+
+const showHistoricalSentiment = ref(false)
 
 const watchlistSymbols = ref<WatchlistEntry[]>([])
 
