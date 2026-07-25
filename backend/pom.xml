@@ -266,7 +266,33 @@
                     <version>${maven.surefire.plugin.version}</version>
                     <configuration>
                         <argLine>-Xms256m -Xmx512m --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.math=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED</argLine>
+                        <excludes>
+                            <exclude>**/*IT.java</exclude>
+                            <exclude>**/*IntegrationTest.java</exclude>
+                            <exclude>**/*E2ETest.java</exclude>
+                        </excludes>
                     </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${maven.surefire.plugin.version}</version>
+                    <configuration>
+                        <argLine>-Xms256m -Xmx512m --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.math=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED</argLine>
+                        <includes>
+                            <include>**/*IT.java</include>
+                            <include>**/*IntegrationTest.java</include>
+                            <include>**/*E2ETest.java</include>
+                        </includes>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>integration-test</goal>
+                                <goal>verify</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.jacoco</groupId>

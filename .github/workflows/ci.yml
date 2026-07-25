@@ -15,9 +15,16 @@ env:
   JAVA_OPTS: -Xms256m -Xmx512m
 
 jobs:
-  backend:
-    name: Backend (Java 21)
+  # =====================================================================
+  # Phase 1: Static Analysis (PMD + Checkstyle) — per module, parallel
+  # =====================================================================
+  static-analysis:
+    name: Static Analysis (${{ matrix.module }})
     runs-on: self-hosted
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [core, data, strategy, llm, broker, api]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,39 +37,126 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Build and test (parallel modules)
-        working-directory: backend
-        run: MAVEN_OPTS="$JAVA_OPTS" mvn verify -B -T 1C -Dspring.profiles.active=test -Dpmd.skip=true -Dcheckstyle.skip=false
+      - name: Checkstyle + PMD
+        working-directory: backend/${{ matrix.module }}
+        run: MAVEN_OPTS="$JAVA_OPTS" mvn checkstyle:check pmd:check -B
 
-      - name: Collect reports
+      - name: Upload PMD report
         if: always()
-        run: |
-          mkdir -p /tmp/reports/jacoco /tmp/reports/pmd /tmp/reports/checkstyle
-          cp -r backend/*/target/site/jacoco/* /tmp/reports/jacoco/ 2>/dev/null || true
-          cp -r backend/*/target/site/pmd.html /tmp/reports/pmd/ 2>/dev/null || true
-          cp -r backend/*/target/site/checkstyle-result.xml /tmp/reports/checkstyle/ 2>/dev/null || true
-
-      - name: Upload reports
-        if: github.ref == 'refs/heads/main' && success()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-reports
-          path: /tmp/reports/
+          name: pmd-${{ matrix.module }}
+          path: backend/${{ matrix.module }}/target/site/pmd.html
           retention-days: 7
 
-      - name: Deploy reports to Pi
-        if: github.ref == 'refs/heads/main' && success()
-        run: |
-          scp -r /tmp/reports/* pi@piworm.local:/home/dietpi/swing-trade/reports/
+      - name: Upload Checkstyle report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkstyle-${{ matrix.module }}
+          path: backend/${{ matrix.module }}/target/checkstyle-result.xml
+          retention-days: 7
 
-      - name: Start reports nginx on Pi
-        if: github.ref == 'refs/heads/main' && success()
-        run: |
-          ssh pi@piworm.local '
-            mkdir -p ~/swing-trade/reports
-            docker compose -f ~/swing-trade/docker-compose.reports.yml up -d 2>/dev/null || true
-          '
+  # =====================================================================
+  # Phase 2: Compile — per module, parallel (depends on static-analysis)
+  # =====================================================================
+  compile:
+    name: Compile (${{ matrix.module }})
+    runs-on: self-hosted
+    needs: [static-analysis]
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [core, data, strategy, llm, broker, api]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Cache Maven repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Compile + package (skip tests)
+        working-directory: backend/${{ matrix.module }}
+        run: MAVEN_OPTS="$JAVA_OPTS" mvn compile package -B -Dmaven.test.skip=true
+
+      - name: Upload JAR
+        if: matrix.module == 'api'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-jar
+          path: backend/api/target/api-1.0.0.jar
+          retention-days: 1
+
+  # =====================================================================
+  # Phase 3: Unit Tests — per module, parallel (skip IT, PMD, Checkstyle)
+  # =====================================================================
+  unit-tests:
+    name: Unit Tests (${{ matrix.module }})
+    runs-on: self-hosted
+    needs: [compile]
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [core, data, strategy, llm, broker, api]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Maven repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Unit tests only
+        working-directory: backend/${{ matrix.module }}
+        run: MAVEN_OPTS="$JAVA_OPTS" mvn test -B -Dspring.profiles.active=test -DskipITs=true -Dpmd.skip=true -Dcheckstyle.skip=true
+
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-${{ matrix.module }}
+          path: backend/${{ matrix.module }}/target/site/jacoco-index.html
+          retention-days: 7
+
+  # =====================================================================
+  # Phase 4: Integration Tests — per module, parallel (skip unit tests)
+  # =====================================================================
+  integration-tests:
+    name: Integration Tests (${{ matrix.module }})
+    runs-on: self-hosted
+    needs: [compile]
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [api]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Maven repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Integration tests only
+        working-directory: backend/${{ matrix.module }}
+        run: MAVEN_OPTS="$JAVA_OPTS" mvn failsafe:integration-test failsafe:verify -B -Dspring.profiles.active=test -DskipTests=true -Dpmd.skip=true -Dcheckstyle.skip=true
+
+  # =====================================================================
+  # Frontend
+  # =====================================================================
   frontend:
     name: Frontend (Node 20)
     runs-on: self-hosted
@@ -107,6 +201,9 @@ jobs:
           path: dashboard/dist/
           retention-days: 7
 
+  # =====================================================================
+  # Security
+  # =====================================================================
   security:
     name: Security Scan
     runs-on: self-hosted
