@@ -28,9 +28,16 @@ public class SentimentAnalyzer {
     }
 
     /**
+     * Returns the system prompt template for hashing/A-B tracking.
+     */
+    public String getSystemPrompt() {
+        return SYSTEM_PROMPT;
+    }
+
+    /**
      * System prompt that establishes the role and task for sentiment analysis.
      */
-    private static final String SYSTEM_PROMPT = """
+    public static final String SYSTEM_PROMPT = """
             You are a financial analyst specialising in Indian equity markets.
             Analyse the following for a swing trade entry decision on {symbol}.
             Consider: earnings momentum, regulatory news, management changes,

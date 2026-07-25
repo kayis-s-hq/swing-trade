@@ -1,5 +1,6 @@
 package com.swingtrade.llm.service;
 
+import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.domain.SentimentResult;
@@ -47,6 +48,7 @@ public class SentimentService {
     private final SentimentCacheService sentimentCacheService;
     private final SentimentStore sentimentStore;
     private final StockStore stockStore;
+    private final AppSettingsStore appSettingsStore;
 
     private final int maxCacheSize;
     private final long cacheExpiryMinutes;
@@ -64,6 +66,7 @@ public class SentimentService {
             SentimentCacheService sentimentCacheService,
             SentimentStore sentimentStore,
             StockStore stockStore,
+            AppSettingsStore appSettingsStore,
             @Value("${llm.sentiment.cache.max-size:100}") int maxCacheSize,
             @Value("${llm.sentiment.cache.expiry-minutes:60}") long cacheExpiryMinutes,
             @Value("${llm.sentiment.cache.enabled:false}") boolean enableCaching,
@@ -75,6 +78,7 @@ public class SentimentService {
         this.sentimentCacheService = sentimentCacheService;
         this.sentimentStore = sentimentStore;
         this.stockStore = stockStore;
+        this.appSettingsStore = appSettingsStore;
 
         this.maxCacheSize = maxCacheSize;
         this.cacheExpiryMinutes = cacheExpiryMinutes;
@@ -253,6 +257,10 @@ public class SentimentService {
             SentimentOutput analysisResult,
             int articleCount) {
 
+        String modelVersion = appSettingsStore.get("llm.vllm.model-name")
+                .orElse("unknown");
+        String promptHash = computePromptHash();
+
         SentimentResult.SentimentScore score;
         switch (analysisResult.getSentiment()) {
             case POSITIVE:
@@ -276,10 +284,28 @@ public class SentimentService {
                 LocalDate.now(),
                 analysisResult.getRedFlags() != null ? analysisResult.getRedFlags() : List.of(),
                 analysisResult.getCatalysts() != null ? analysisResult.getCatalysts() : List.of(),
-                null,
-                null,
+                promptHash,
+                modelVersion,
                 articleCount
         );
+    }
+
+    /**
+     * Computes SHA-256 hash of the prompt template for A/B tracking.
+     */
+    private String computePromptHash() {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(sentimentAnalyzer.getSystemPrompt().getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            logger.warn("Failed to compute prompt hash: {}", e.getMessage());
+            return "unavailable";
+        }
     }
 
     /**

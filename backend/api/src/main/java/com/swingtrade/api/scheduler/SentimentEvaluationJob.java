@@ -159,12 +159,12 @@ public class SentimentEvaluationJob {
     }
 
     private String computeMarketRegime(String symbol, OhlcvCandle reference) {
-        List<OhlcvCandle> candles = candleStore.findBySymbol(symbol);
+        List<OhlcvCandle> candles = candleStore.findLastNBySymbolBeforeDateAsc(
+            symbol, reference.date(), 200);
         if (candles.size() < 200) return "NEUTRAL";
 
-        // Compute SMA of last 200 close prices
+        // candles are in ascending order — last 200 trading days up to reference
         BigDecimal sma200 = candles.stream()
-            .limit(200)
             .map(OhlcvCandle::close)
             .filter(p -> p != null)
             .reduce(BigDecimal.ZERO, BigDecimal::add)

@@ -37,4 +37,10 @@ public interface CandleStore {
     Optional<OhlcvCandle> findNthBySymbolAndDateAfterOrderByDateAsc(String symbol, LocalDate after, int n);
 
     List<OhlcvCandle> findAllBySymbolOrderByDateDesc(String symbol);
+
+    /**
+     * Finds up to N candles before a date in ascending order.
+     * Used for computing SMA-200 leading up to a reference date.
+     */
+    List<OhlcvCandle> findLastNBySymbolBeforeDateAsc(String symbol, LocalDate before, int n);
 }

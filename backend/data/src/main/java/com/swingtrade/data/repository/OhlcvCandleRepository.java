@@ -164,4 +164,15 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
         @Param("symbol") String symbol,
         @Param("date") LocalDate date
     );
+
+    /**
+     * Finds up to N candles for a symbol before a given date, in ascending order.
+     * Used for computing SMA-200 leading up to a reference date.
+     */
+    @Query(value = "SELECT * FROM ohlcv_candles WHERE symbol = :symbol AND date <= :before ORDER BY date DESC LIMIT :n", nativeQuery = true)
+    List<OhlcvCandleEntity> findLastNBySymbolBeforeDateAsc(
+        @Param("symbol") String symbol,
+        @Param("before") LocalDate before,
+        @Param("n") int n
+    );
 }

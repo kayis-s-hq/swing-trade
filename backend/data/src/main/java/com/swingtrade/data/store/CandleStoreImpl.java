@@ -108,4 +108,11 @@ public class CandleStoreImpl implements CandleStore {
             .map(OhlcvCandleEntity::toDomain)
             .toList();
     }
+
+    @Override
+    public List<OhlcvCandle> findLastNBySymbolBeforeDateAsc(String symbol, LocalDate before, int n) {
+        return repository.findLastNBySymbolBeforeDateAsc(symbol, before, n).stream()
+            .map(OhlcvCandleEntity::toDomain)
+            .toList();
+    }
 }
