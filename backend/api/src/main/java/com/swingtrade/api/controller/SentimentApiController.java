@@ -2,9 +2,11 @@ package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.ApiResponse;
 import com.swingtrade.api.dto.CompositeAnalysis;
+import com.swingtrade.api.scheduler.SentimentEvaluationJob;
 import com.swingtrade.data.entity.PdfExtractionEntity;
 import com.swingtrade.data.repository.PdfExtractionRepository;
 import com.swingtrade.data.service.SentimentAccuracyService;
+import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.llm.domain.EarningsData;
@@ -14,6 +16,7 @@ import com.swingtrade.llm.service.SentimentService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -30,19 +33,22 @@ public class SentimentApiController {
     private final SentimentAccuracyService accuracyService;
     private final SentimentStore sentimentStore;
     private final PdfExtractionRepository pdfExtractionRepo;
+    private final SentimentEvaluationJob evaluationJob;
 
     public SentimentApiController(SentimentService sentimentService,
                                   NewsIngestionService newsService,
                                   PdfExtractionService pdfService,
                                   SentimentAccuracyService accuracyService,
                                   SentimentStore sentimentStore,
-                                  PdfExtractionRepository pdfExtractionRepo) {
+                                  PdfExtractionRepository pdfExtractionRepo,
+                                  SentimentEvaluationJob evaluationJob) {
         this.sentimentService = sentimentService;
         this.newsService = newsService;
         this.pdfService = pdfService;
         this.accuracyService = accuracyService;
         this.sentimentStore = sentimentStore;
         this.pdfExtractionRepo = pdfExtractionRepo;
+        this.evaluationJob = evaluationJob;
     }
 
     @GetMapping("/sentiment/{symbol}/latest")
@@ -143,12 +149,39 @@ public class SentimentApiController {
         return ResponseEntity.ok(ApiResponse.ok(accuracyService.getECEStats()));
     }
 
+    // --- Job status & manual trigger ---
+
+    @PostMapping("/sentiment/evaluate/trigger")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> triggerEvaluation() {
+        evaluationJob.triggerEvaluation();
+        Map<String, Object> data = Map.of(
+            "message", "Evaluation triggered",
+            "lastRun", evaluationJob.getLastRun(),
+            "lastStatus", evaluationJob.getLastStatus(),
+            "lastCount", evaluationJob.getLastCount()
+        );
+        return ResponseEntity.ok(ApiResponse.ok(data));
+    }
+
+    @GetMapping("/sentiment/evaluate/status")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getJobStatus() {
+        LocalDateTime lastRun = evaluationJob.getLastRun();
+        String lastStatus = evaluationJob.getLastStatus();
+        Integer lastCount = evaluationJob.getLastCount();
+        Map<String, Object> data = Map.of(
+            "lastRun", lastRun != null ? lastRun.toString() : null,
+            "lastStatus", lastStatus != null ? lastStatus : "never run",
+            "lastCount", lastCount != null ? lastCount : 0
+        );
+        return ResponseEntity.ok(ApiResponse.ok(data));
+    }
+
     // --- Legacy endpoints ---
 
     @GetMapping("/news/{symbol}/latest")
-    public ResponseEntity<ApiResponse<List<NewsIngestionService.NewsArticle>>> getLatestNews(
+    public ResponseEntity<ApiResponse<List<NewsArticle>>> getLatestNews(
             @PathVariable String symbol) {
-        List<NewsIngestionService.NewsArticle> news = newsService.fetchAllNews(symbol);
+        List<NewsArticle> news = newsService.fetchAllNews(symbol);
         return ResponseEntity.ok(ApiResponse.ok(news));
     }
 
@@ -164,7 +197,7 @@ public class SentimentApiController {
     @PostMapping("/sentiment/{symbol}/analyse")
     public ResponseEntity<ApiResponse<SentimentResult>> triggerAnalysis(
             @PathVariable String symbol) {
-        List<NewsIngestionService.NewsArticle> news = newsService.fetchAllNews(symbol);
+        List<NewsArticle> news = newsService.fetchAllNews(symbol);
         List<String> headlines = news.stream()
             .map(newsService::cleanNewsText)
             .toList();

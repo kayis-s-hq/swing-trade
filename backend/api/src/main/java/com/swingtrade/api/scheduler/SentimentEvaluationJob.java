@@ -13,9 +13,11 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Nightly job that evaluates LLM sentiment accuracy against actual market returns.
@@ -32,6 +34,11 @@ public class SentimentEvaluationJob {
     private final SentimentAccuracyStore accuracyStore;
     private final SentimentStore sentimentStore;
 
+    // Last run tracking
+    private final AtomicReference<LocalDateTime> lastRun = new AtomicReference<>(null);
+    private final AtomicReference<String> lastStatus = new AtomicReference<>(null);
+    private final AtomicReference<Integer> lastCount = new AtomicReference<>(null);
+
     public SentimentEvaluationJob(CandleStore candleStore,
                                   SentimentAccuracyStore accuracyStore,
                                   SentimentStore sentimentStore) {
@@ -42,7 +49,33 @@ public class SentimentEvaluationJob {
 
     @Scheduled(cron = "0 0 2 * * *")
     public void evaluatePendingSentiments() {
-        log.info("Starting sentiment evaluation job");
+        runEvaluation();
+    }
+
+    /**
+     * Manual trigger for evaluation — callable from API.
+     */
+    public void triggerEvaluation() {
+        log.info("Manual trigger: starting sentiment evaluation job");
+        runEvaluation();
+    }
+
+    private void runEvaluation() {
+        LocalDateTime now = LocalDateTime.now();
+        lastRun.set(now);
+        try {
+            int processed = doEvaluate();
+            lastStatus.set("OK");
+            lastCount.set(processed);
+            log.info("Sentiment evaluation job complete: processed {} records", processed);
+        } catch (Exception e) {
+            lastStatus.set("FAILED: " + e.getMessage());
+            lastCount.set(0);
+            log.error("Sentiment evaluation job failed", e);
+        }
+    }
+
+    private int doEvaluate() {
         LocalDate today = LocalDate.now();
         int processed = 0;
 
@@ -63,7 +96,7 @@ public class SentimentEvaluationJob {
             }
         }
 
-        log.info("Sentiment evaluation job complete: processed {} records", processed);
+        return processed;
     }
 
     private void evaluateSingle(SentimentResult sentiment) {
@@ -179,5 +212,19 @@ public class SentimentEvaluationJob {
         if (price.compareTo(bullThreshold) > 0) return "BULL";
         if (price.compareTo(bearThreshold) < 0) return "BEAR";
         return "NEUTRAL";
+    }
+
+    // --- Job status ---
+
+    public LocalDateTime getLastRun() {
+        return lastRun.get();
+    }
+
+    public String getLastStatus() {
+        return lastStatus.get();
+    }
+
+    public Integer getLastCount() {
+        return lastCount.get();
     }
 }
