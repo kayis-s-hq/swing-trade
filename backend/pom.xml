@@ -57,6 +57,7 @@
         <wiremock.version>3.8.0</wiremock.version>
         <bytebuddy.version>1.17.0</bytebuddy.version>
         <maven.site.plugin.version>3.12.1</maven.site.plugin.version>
+        <maven.site.model.version>2.0.0</maven.site.model.version>
     </properties>
 
     <dependencyManagement>
@@ -386,6 +387,16 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-site-plugin</artifactId>
+                <version>${maven.site.plugin.version}</version>
+                <configuration>
+                    <outputDirectory>${project.basedir}/target/site-docs</outputDirectory>
+                </configuration>
+            </plugin>
+        </plugins>
     </build>
 
     <reporting>

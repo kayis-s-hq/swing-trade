@@ -197,6 +197,7 @@
                     <failOnViolation>true</failOnViolation>
                     <printFailingErrors>true</printFailingErrors>
                     <includeTests>true</includeTests>
+                    <linkXRef>false</linkXRef>
                     <verbose>true</verbose>
                     <targetJdk>21</targetJdk>
                 </configuration>
