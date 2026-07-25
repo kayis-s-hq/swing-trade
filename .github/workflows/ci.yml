@@ -295,3 +295,30 @@ jobs:
           else
             echo "TruffleHog not installed, skipping"
           fi
+
+  # =====================================================================
+  # Maven Site — generate aggregated reports and deploy to nginx
+  # =====================================================================
+  maven-site:
+    name: Maven Site
+    runs-on: self-hosted
+    needs: [unit-tests]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Maven repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Generate Maven Site
+        working-directory: backend
+        run: MAVEN_OPTS="$JAVA_OPTS" mvn site -B -DskipTests -Dpmd.skip=false -Dcheckstyle.skip=true
+
+      - name: Deploy to reports server
+        run: |
+          docker cp ${GITHUB_WORKSPACE}/backend/target/site/ swing-trade-reports:/usr/share/nginx/html/
