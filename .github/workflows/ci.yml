@@ -17,7 +17,8 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        run: git pull
 
       - name: Install Fyers SDK
         run: |
@@ -58,7 +59,8 @@ jobs:
     name: Frontend (Node 20)
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        run: git pull
 
       - name: Install dependencies
         run: npm ci
@@ -86,7 +88,8 @@ jobs:
     name: Security Scan
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        run: git pull
 
       - name: Run OWASP dependency check
         run: |
