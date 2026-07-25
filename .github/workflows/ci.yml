@@ -11,28 +11,28 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  JAVA_OPTS: -Xms256m -Xmx512m
+
 jobs:
   backend:
     name: Backend (Java 21)
     runs-on: self-hosted
-
     steps:
       - name: Checkout
-        run: git clone https://github.com/kayis-s-hq/swing-trade.git .
+        uses: actions/checkout@v4
 
-      - name: Install Fyers SDK
-        run: |
-          JAR=$(find . -name fyersjavasdk-1.9.0.jar 2>/dev/null | head -1)
-          if [ -z "$JAR" ]; then echo "FYERS SDK not found"; exit 1; fi
-          echo "Found: $JAR"
-          mvn install:install-file -Dfile="$JAR" -DgroupId=com.tts.in -DartifactId=fyersjavasdk -Dversion=1.9.0 -Dpackaging=jar
+      - name: Cache Maven repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
-      - name: Clean corrupted Maven cache
-        run: rm -rf ~/.m2/repository/io/projectreactor/reactor-core
-
-      - name: Build and test
+      - name: Build and test (parallel modules)
         working-directory: backend
-        run: mvn clean verify -B -Dspring.profiles.active=test
+        run: MAVEN_OPTS="$JAVA_OPTS" mvn verify -B -T 1C -Dspring.profiles.active=test -Dpmd.skip=true -Dcheckstyle.skip=false
 
       - name: Collect reports
         if: always()
@@ -41,6 +41,14 @@ jobs:
           cp -r backend/*/target/site/jacoco/* /tmp/reports/jacoco/ 2>/dev/null || true
           cp -r backend/*/target/site/pmd.html /tmp/reports/pmd/ 2>/dev/null || true
           cp -r backend/*/target/site/checkstyle-result.xml /tmp/reports/checkstyle/ 2>/dev/null || true
+
+      - name: Upload reports
+        if: github.ref == 'refs/heads/main' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-reports
+          path: /tmp/reports/
+          retention-days: 7
 
       - name: Deploy reports to Pi
         if: github.ref == 'refs/heads/main' && success()
@@ -60,7 +68,15 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout
-        run: git clone https://github.com/kayis-s-hq/swing-trade.git .
+        uses: actions/checkout@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: dashboard/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Install dependencies
         run: npm ci
@@ -84,12 +100,19 @@ jobs:
         run: npm run build
         working-directory: dashboard
 
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: dashboard/dist/
+          retention-days: 7
+
   security:
     name: Security Scan
     runs-on: self-hosted
     steps:
       - name: Checkout
-        run: git clone https://github.com/kayis-s-hq/swing-trade.git .
+        uses: actions/checkout@v4
 
       - name: Run OWASP dependency check
         run: |

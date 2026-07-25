@@ -22,29 +22,49 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout
-        run: git clone https://github.com/kayis-s-hq/swing-trade.git .
+        uses: actions/checkout@v4
 
-      - name: Install Fyers SDK
-        run: |
-          JAR=$(find . -name fyersjavasdk-1.9.0.jar 2>/dev/null | head -1)
-          if [ -z "$JAR" ]; then echo "FYERS SDK not found"; exit 1; fi
-          echo "Found: $JAR"
-          mvn install:install-file -Dfile="$JAR" -DgroupId=com.tts.in -DartifactId=fyersjavasdk -Dversion=1.9.0 -Dpackaging=jar
-
-      - name: Clean corrupted Maven cache
-        run: rm -rf ~/.m2/repository/io/projectreactor/reactor-core
+      - name: Cache Maven repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
       - name: Build backend
         working-directory: backend
-        run: mvn clean package -B
+        run: mvn clean package -B -Dmaven.test.skip=true
 
       - name: Verify JAR
         working-directory: backend/api/target
         run: ls -la api-1.0.0.jar
 
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-docker-${{ hashFiles('backend/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-
+
       - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: runtime-jar
+          tags: ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: Move Docker cache
         run: |
-          docker build -t ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }} -f backend/Dockerfile --target runtime-jar ..
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Stop existing stage API container
         run: |

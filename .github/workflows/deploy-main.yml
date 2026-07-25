@@ -20,19 +20,17 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout
-        run: git clone https://github.com/kayis-s-hq/swing-trade.git .
+        uses: actions/checkout@v4
 
-      - name: Install Fyers SDK
-        run: |
-          JAR=$(find . -name fyersjavasdk-1.9.0.jar 2>/dev/null | head -1)
-          if [ -z "$JAR" ]; then echo "FYERS SDK not found"; exit 1; fi
-          echo "Found: $JAR"
-          mvn install:install-file -Dfile="$JAR" -DgroupId=com.tts.in -DartifactId=fyersjavasdk -Dversion=1.9.0 -Dpackaging=jar
+      - name: Cache Maven repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
-      - name: Clean corrupted Maven cache
-        run: rm -rf ~/.m2/repository/io/projectreactor/reactor-core
-
-      - name: Build backend
+      - name: Build backend (with tests)
         working-directory: backend
         run: mvn clean verify -B
 
