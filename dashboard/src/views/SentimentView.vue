@@ -60,13 +60,14 @@
       </div>
 
       <!-- Full analysis orchestration progress -->
-      <div v-if="orchestrating" class="animate-fade-in">
+      <div v-if="orchestrating || analysisComplete" class="animate-fade-in">
         <AnalysisProgressComp
           :stages="analysisStages"
           :current-stage="analysisCurrentStage"
           :is-complete="analysisComplete"
           :duration-ms="analysisDurationMs"
           :error="analysisError"
+          :composite="composite"
         />
       </div>
 
@@ -87,6 +88,15 @@
 
         <!-- Source Breakdown -->
         <SourceBreakdown :sources="composite.sources" />
+
+        <!-- News Sentiment -->
+        <NewsSentimentPanel
+          :score="composite.news.score"
+          :summary="composite.news.summary"
+          :catalysts="composite.news.catalysts"
+          :red-flags="composite.news.redFlags"
+          :article-count="composite.news.articleCount"
+        />
 
         <!-- Technical Indicators -->
         <TechnicalIndicatorsComp
@@ -112,6 +122,7 @@
           :expectancy="composite.backtest.expectancy"
           :hasEnoughData="composite.backtest.hasEnoughData"
         />
+
       </div>
 
       <!-- Old sentiment result (coexists with composite) -->
@@ -445,6 +456,7 @@ import SourceBreakdown from '../components/SourceBreakdown.vue'
 import TechnicalIndicatorsComp from '../components/TechnicalIndicators.vue'
 import FundamentalsPanel from '../components/FundamentalsPanel.vue'
 import BacktestPanel from '../components/BacktestPanel.vue'
+import NewsSentimentPanel from '../components/NewsSentimentPanel.vue'
 import AnalysisProgressComp from '../components/AnalysisProgress.vue'
 
 const tabs = [

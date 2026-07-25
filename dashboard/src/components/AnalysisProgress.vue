@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { AnalysisProgress as AnalysisProgressType } from '../api/types'
+import type { AnalysisProgress as AnalysisProgressType, CompositeAnalysis } from '../api/types'
+import StageSummaryCard from './StageSummaryCard.vue'
 
 interface Props {
   stages: AnalysisProgressType[]
@@ -8,6 +9,7 @@ interface Props {
   isComplete: boolean
   durationMs?: number
   error: string | null
+  composite?: CompositeAnalysis | null
 }
 
 const props = defineProps<Props>()
@@ -166,7 +168,7 @@ const stageColors = (status: string, isCurrent: boolean) => {
 
           <!-- Summary tab -->
           <div v-if="detailView[stage.stageNumber] === 'summary'" class="space-y-2">
-            <div class="text-xs text-text-muted">Stage summary details</div>
+            <StageSummaryCard :stage="stage" :composite="composite ?? null" />
           </div>
 
           <!-- Details tab -->
