@@ -94,6 +94,7 @@ public class SentimentAccuracyEntity {
         this.marketRegime = accuracy.marketRegime();
         this.promptHash = accuracy.promptHash();
         this.modelVersion = accuracy.modelVersion();
+        this.createdAt = java.time.LocalDateTime.now();
         this.evaluatedAt = accuracy.evaluatedAt();
     }
 

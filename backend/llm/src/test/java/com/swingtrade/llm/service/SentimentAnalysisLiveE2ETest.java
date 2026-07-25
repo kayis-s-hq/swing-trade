@@ -1,5 +1,6 @@
 package com.swingtrade.llm.service;
 
+import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.data.entity.SentimentResultEntity;
 import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.repository.SentimentResultRepository;
@@ -75,7 +76,7 @@ class SentimentAnalysisLiveE2ETest {
     private void mockNewsArticles() {
         // Create sample news articles for each stock - must contain the stock symbol
         // for the containsStockSymbol() filter to pass
-        NewsIngestionService.NewsArticle relianceArticle1 = new NewsIngestionService.NewsArticle(
+        NewsArticle relianceArticle1 = new NewsArticle(
                 "Reliance Industries reports strong quarterly earnings",
                 "https://example.com/news1",
                 "Reliance Industries announces better than expected quarterly results.",
@@ -84,7 +85,7 @@ class SentimentAnalysisLiveE2ETest {
                 "Reliance Industries reports strong quarterly earnings with revenue growth."
         );
 
-        NewsIngestionService.NewsArticle tcsArticle1 = new NewsIngestionService.NewsArticle(
+        NewsArticle tcsArticle1 = new NewsArticle(
                 "TCS reports strong digital services growth",
                 "https://example.com/news2",
                 "Tata Consultancy Services shows strong performance in digital services.",
@@ -93,7 +94,7 @@ class SentimentAnalysisLiveE2ETest {
                 "TCS reports strong performance in digital services segment."
         );
 
-        NewsIngestionService.NewsArticle infyArticle1 = new NewsIngestionService.NewsArticle(
+        NewsArticle infyArticle1 = new NewsArticle(
                 "Infosys reports solid quarterly performance",
                 "https://example.com/news3",
                 "Infosys announces strong quarterly earnings beat.",
@@ -108,8 +109,8 @@ class SentimentAnalysisLiveE2ETest {
         when(newsIngestionService.fetchStockNews("INFY")).thenReturn(List.of(infyArticle1));
 
         // Clean news text returns the title and description
-        when(newsIngestionService.cleanNewsText(any(NewsIngestionService.NewsArticle.class))).thenAnswer(invocation -> {
-            NewsIngestionService.NewsArticle article = invocation.getArgument(0);
+        when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenAnswer(invocation -> {
+            NewsArticle article = invocation.getArgument(0);
             return article.title() + " " + article.description();
         });
     }

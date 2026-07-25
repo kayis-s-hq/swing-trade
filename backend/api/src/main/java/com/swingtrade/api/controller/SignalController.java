@@ -3,6 +3,7 @@ package com.swingtrade.api.controller;
 import com.swingtrade.api.dto.*;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.SignalStore;
 import jakarta.validation.Valid;
@@ -13,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -38,6 +40,9 @@ public class SignalController {
 
     @Autowired
     private SentimentStore sentimentStore;
+
+    @Autowired
+    private com.swingtrade.domain.store.StockStore stockStore;
 
     /**
      * Get the latest trading signals for today.
@@ -152,6 +157,30 @@ public class SignalController {
         return signalService.generatePriceActionSignal(symbol)
                 .map(signal -> ResponseEntity.ok(new SignalResponse(signal)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Generate price-action signals for all active watchlist symbols.
+     *
+     * @return List of generated signals
+     */
+    @PostMapping("/generate-all")
+    public ResponseEntity<List<SignalResponse>> generateAllSignals() {
+        logger.info("Generating signals for all watchlist symbols");
+        List<String> symbols = stockStore.findAllActive().stream()
+            .map(Stock::symbol)
+            .toList();
+        List<SignalResponse> results = new ArrayList<>();
+        for (String symbol : symbols) {
+            try {
+                signalService.generatePriceActionSignal(symbol)
+                    .ifPresent(signal -> results.add(new SignalResponse(signal)));
+            } catch (Exception e) {
+                logger.warn("Signal generation failed for {}: {}", symbol, e.getMessage());
+            }
+        }
+        logger.info("Generated {} signals for {} symbols", results.size(), symbols.size());
+        return ResponseEntity.ok(results);
     }
 
     /**

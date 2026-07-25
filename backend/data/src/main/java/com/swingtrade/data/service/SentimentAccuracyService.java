@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -114,7 +115,7 @@ public class SentimentAccuracyService {
     }
 
     public List<RollingICResult> getRollingIC(int windowDays) {
-        LocalDate since = LocalDate.now().minusDays(windowDays);
+        LocalDateTime since = LocalDate.now().minusDays(windowDays).atStartOfDay();
         List<Object[]> pairs = accuracyRepo.scoreReturnPairsSince(since);
 
         List<Double> scores = new ArrayList<>();
@@ -165,9 +166,9 @@ public class SentimentAccuracyService {
     }
 
     public SignalVolumeStats getSignalVolumeStats() {
-        LocalDate today = LocalDate.now();
-        LocalDate sevenDaysAgo = today.minusDays(7);
-        LocalDate thirtyDaysAgo = today.minusDays(30);
+        LocalDateTime today = LocalDate.now().atStartOfDay();
+        LocalDateTime sevenDaysAgo = today.minusDays(7);
+        LocalDateTime thirtyDaysAgo = today.minusDays(30);
 
         long todayCount = accuracyRepo.countSince(today);
         long sevenDayCount = accuracyRepo.countSince(sevenDaysAgo);
@@ -203,11 +204,11 @@ public class SentimentAccuracyService {
     }
 
     public long getDirectionalCount() {
-        return accuracyRepo.countDirectionalSince(LocalDate.of(2020, 1, 1));
+        return accuracyRepo.countDirectionalSince(LocalDate.of(2020, 1, 1).atStartOfDay());
     }
 
     public long getDirectionalCorrectCount() {
-        return accuracyRepo.countCorrectDirectionalSince(LocalDate.of(2020, 1, 1));
+        return accuracyRepo.countCorrectDirectionalSince(LocalDate.of(2020, 1, 1).atStartOfDay());
     }
 
     public double getAvgConfidence() {

@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,24 +31,24 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
         SELECT COUNT(s) FROM SentimentAccuracyEntity s
         WHERE s.wasCorrect = true AND s.groundTruthLabel IN ('UP', 'DOWN')
           AND s.evaluatedAt IS NOT NULL
-          AND DATE(s.evaluatedAt) >= :since
+          AND s.evaluatedAt >= :since
         """)
-    long countCorrectDirectionalSince(@Param("since") LocalDate since);
+    long countCorrectDirectionalSince(@Param("since") LocalDateTime since);
 
     @Query("""
         SELECT COUNT(s) FROM SentimentAccuracyEntity s
         WHERE s.groundTruthLabel IN ('UP', 'DOWN')
           AND s.evaluatedAt IS NOT NULL
-          AND DATE(s.evaluatedAt) >= :since
+          AND s.evaluatedAt >= :since
         """)
-    long countDirectionalSince(@Param("since") LocalDate since);
+    long countDirectionalSince(@Param("since") LocalDateTime since);
 
     @Query("SELECT s FROM SentimentAccuracyEntity s " +
            "WHERE s.evaluatedAt IS NOT NULL " +
            "AND s.groundTruthLabel IN ('UP', 'DOWN') " +
-           "AND DATE(s.evaluatedAt) >= :since " +
+           "AND s.evaluatedAt >= :since " +
            "ORDER BY s.evaluatedAt DESC")
-    List<SentimentAccuracyEntity> findDirectionalSince(@Param("since") LocalDate since);
+    List<SentimentAccuracyEntity> findDirectionalSince(@Param("since") LocalDateTime since);
 
     @Query("""
         SELECT s.analysisDate, s.llmScore, COUNT(s),
@@ -103,10 +104,10 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
           AND s.actualReturn5d IS NOT NULL
-          AND DATE(s.evaluatedAt) >= :since
+          AND s.evaluatedAt >= :since
         ORDER BY s.evaluatedAt DESC
         """)
-    List<Object[]> scoreReturnPairsSince(@Param("since") LocalDate since);
+    List<Object[]> scoreReturnPairsSince(@Param("since") LocalDateTime since);
 
     @Query("""
         SELECT s.groundTruthLabel, COUNT(s)
@@ -119,17 +120,17 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
 
     @Query("""
         SELECT COUNT(s) FROM SentimentAccuracyEntity s
-        WHERE DATE(s.evaluatedAt) >= :since
+        WHERE s.evaluatedAt >= :since
         """)
-    long countSince(@Param("since") LocalDate since);
+    long countSince(@Param("since") LocalDateTime since);
 
     @Query("""
         SELECT AVG(CASE WHEN s.wasCorrect THEN 1.0 ELSE 0.0 END)
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
-          AND DATE(s.evaluatedAt) >= :since
+          AND s.evaluatedAt >= :since
         """)
-    Double overallAccuracySince(@Param("since") LocalDate since);
+    Double overallAccuracySince(@Param("since") LocalDateTime since);
 
     record AccuracySummary(
         long total,

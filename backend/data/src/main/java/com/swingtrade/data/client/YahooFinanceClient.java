@@ -10,6 +10,7 @@ import com.swingtrade.data.service.QuoteData;
 import com.swingtrade.data.service.SearchResult;
 
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -42,7 +43,7 @@ public class YahooFinanceClient implements MarketDataClient {
     private final java.time.Clock clock;
 
     // Rate limiter: minimum 1s between requests to avoid Yahoo blocking
-    private volatile long lastRequestTime = 0;
+    private final AtomicLong lastRequestTime = new AtomicLong(0);
     private static final long RATE_LIMIT_MS = 1000;
 
     // Yahoo Finance API endpoints
@@ -417,15 +418,15 @@ public class YahooFinanceClient implements MarketDataClient {
      */
     private void enforceRateLimit() {
         long now = clock.millis();
-        long elapsed = now - lastRequestTime;
-        if (elapsed < RATE_LIMIT_MS && lastRequestTime > 0) {
+        long elapsed = now - lastRequestTime.get();
+        if (elapsed < RATE_LIMIT_MS && lastRequestTime.get() > 0) {
             try {
                 Thread.sleep(RATE_LIMIT_MS - elapsed);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
-        lastRequestTime = clock.millis();
+        lastRequestTime.set(clock.millis());
     }
 
     /**

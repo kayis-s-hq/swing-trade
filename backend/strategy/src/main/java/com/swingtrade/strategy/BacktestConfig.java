@@ -24,6 +24,10 @@ public record BacktestConfig(
 ) {
 
     public static BacktestConfig defaults() {
-        return new BacktestConfig(0.001, 20.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20);
+        return new BacktestConfig(
+                0.001, 20.0, 0.01,
+                500_000.0, 5, 2.0,
+                2.5, 20
+        );
     }
 }

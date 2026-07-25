@@ -43,7 +43,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -93,17 +92,9 @@ public class PriceActionSignalEngine {
             throw new IllegalArgumentException("Symbol cannot be null or blank");
         }
 
-        List<OhlcvCandle> descendingCandles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 1000);
-        if (descendingCandles.size() < MIN_REQUIRED_CANDLES) {
-            throw new IllegalStateException(
-                "Insufficient candle history for " + symbol + ": need at least "
-                    + MIN_REQUIRED_CANDLES + " candles, found " + descendingCandles.size());
-        }
+        var candles = BacktestEngine.getDescendingCandles(symbol, candleStore, MIN_REQUIRED_CANDLES);
 
-        List<OhlcvCandle> chronologicalCandles = new ArrayList<>(descendingCandles);
-        Collections.reverse(chronologicalCandles);
-
-        return analyze(symbol, chronologicalCandles);
+        return analyze(symbol, candles);
     }
 
     /**

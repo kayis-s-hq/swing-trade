@@ -16,6 +16,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,7 +33,7 @@ public class NseInstrumentService {
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private volatile Map<String, String> symbolToInstrumentKey = new HashMap<>();
+    private Map<String, String> symbolToInstrumentKey = new ConcurrentHashMap<>();
 
     public NseInstrumentService(WebClient.Builder webClientBuilder) {
         this.webClient = webClientBuilder.build();

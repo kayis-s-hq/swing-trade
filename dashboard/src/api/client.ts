@@ -273,6 +273,13 @@ export async function getSignals(): Promise<ApiResponse<Signal[]>> {
   return { success: true, data: (raw.data as BackendSignal[]).filter(s => s.signalType !== 'HOLD').map(mapSignal) }
 }
 
+export async function generateAllSignals(): Promise<ApiResponse<Signal[]>> {
+  const raw = await rawFetch('/signals/generate-all', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+
+  return { success: true, data: (raw.data as BackendSignal[]).filter(s => s.signalType !== 'HOLD').map(mapSignal) }
+}
+
 export async function getSignalsByType(type: 'BUY' | 'SELL'): Promise<ApiResponse<Signal[]>> {
   const raw = await rawFetch(`/signals/type/${type}`)
   if (!raw.ok) return errResponse(raw.error!)

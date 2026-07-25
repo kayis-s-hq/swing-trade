@@ -24,8 +24,8 @@ The git history shows a **fix cascade pattern** — each feature merge is immedi
 | Status | Count | Details |
 |--------|-------|---------|
 | RESOLVED | 1 | M5 (PMD enabled on all modules) |
-| PARTIAL | 8 | C2, H2, H10, M3, M8 — incremental progress |
-| STILL OPEN | 18 | All critical C1-C7, most high H1-H9, most medium M1-M4/M6-M10 |
+| PARTIAL | 5 | C2, H10, M3, M8 — incremental progress |
+| STILL OPEN | 15 | All critical C1-C7, most high H1-H9, most medium M1-M4/M6-M10 |
 
 ### Key changes since audit:
 - **C2 (credentials)**: Fyers API key/secret removed from docker-compose files (now use env vars). `.env` and `.env.dev` still contain real credentials.
@@ -164,24 +164,26 @@ Every save method uses `try { ... } catch (Exception e) { logger.warn(...) }`. D
 
 ## High Findings
 
-### H1: Three Coexisting Position/Signal Models (Data Model Duplication) [STILL OPEN]
+### H1: Three Coexisting Position/Signal Models (Data Model Duplication) [PARTIAL]
 
 **Models in play**:
 
-| Model | Location | Type |
-|-------|----------|------|
-| `Position` (domain record) | `backend/core/src/main/java/com/swingtrade/domain/` | Immutable record |
-| `PositionEntity` (JPA) | `backend/data/src/main/java/com/swingtrade/data/entity/` | Mutable class with `fromDomain`/`toDomain` |
-| `Position` (broker model) | `backend/core/src/main/java/com/swingtrade/broker/model/` | Mutable, different field set |
-| `PaperTradingPositionEntity` | `backend/broker/src/main/java/com/swingtrade/broker/entity/` | JPA, mapped to `paper_trading_positions` table |
+| Model | Location | Type | Status |
+|-------|----------|------|--------|
+| `Position` (domain record) | `backend/core/src/main/java/com/swingtrade/domain/` | Immutable record (22 fields) | Unified canonical |
+| `PositionEntity` (JPA) | `backend/data/src/main/java/com/swingtrade/data/entity/` | Mutable class with `fromDomain`/`toDomain` | Thin wrapper |
+| `Position` (broker model) | `backend/core/src/main/java/com/swingtrade/broker/model/` | **Deleted** | Merged into domain |
+| `PaperTradingPositionEntity` | `backend/broker/src/main/java/com/swingtrade/broker/entity/` | JPA, mapped to `paper_trading_positions` table | To be removed |
 
-The broker `Position` model has fields like `positionId`, `brokerPositionId`, `averagePrice`, `unrealizedPnL`, `realizedPnL`, `slPrice`, `targetPrice` — none of which exist on the domain `Position` record.
+**What was done**:
+- Broker `Position` model deleted. Domain `Position` record extended from 10 to 22 fields with all broker-enriched fields: `positionId`, `brokerPositionId`, `exchange`, `direction`, `averagePrice`, `unrealizedPnL`, `realizedPnL`, `marginUtilized`, `entryTime`, `exitTime`, `exitReason`, `orders`.
+- `TradeDirection` and `Exchange` moved from `broker.model` to `core.domain`.
+- `PositionStatus` created as top-level enum in `core.domain` (replacing broker's copy).
+- `PaperTradingStateService` now uses domain `Position` record directly.
 
-`PaperTradingStateService` saves broker-model positions to `paper_trading_positions` while the domain `Position` record is saved to `positions` — two separate tables with overlapping data.
+**Remaining**: `PaperTradingPositionEntity` still exists as a separate table. The `positions` and `paper_trading_positions` tables overlap. Full consolidation requires removing one table and migrating data.
 
-**Impact**: Any change to position semantics requires updating 3+ models. Data drift between them is inevitable.
-
-**Fix**: Define a single `Position` aggregate in `core`. Use the same type everywhere. JPA entities should be thin wrappers, not parallel models.
+**Fix applied**: Single canonical `Position` record in `core.domain`. All broker-enriched fields now part of the domain record.
 
 ### H1b: Signal Model Duplication — SignalType, SignalResponse, SignalQueryResult.Signal, TechnicalSignal [RESOLVED]
 
@@ -200,9 +202,22 @@ The broker `Position` model has fields like `positionId`, `brokerPositionId`, `a
 
 ---
 
-### H2: SignalEngine Is a God Class (384 Lines) [PARTIAL]
+### H2: SignalEngine Is a God Class (384 Lines) [RESOLVED]
 
-Reduced from 384 to 363 lines (21 lines removed). Still a single monolithic class. Caching+transactional proxy issues remain.
+**Decomposed from 363 lines into 5 focused classes**:
+
+| Class | Module | Lines | Responsibility |
+|-------|--------|-------|----------------|
+| `SignalEngine` | api | ~120 | Entry point, scheduled jobs, cached queries |
+| `SignalPipeline` | api | ~225 | Generic signal generation pipeline |
+| `DailySignalOrchestrator` | api | ~111 | Cron job iterating over symbols |
+| `RiskCalculator` | core | ~140 | Pure functions: ATR, SL, target, RR ratio |
+| `SentimentGate` | api | ~112 | Evaluate BUY signals against sentiment |
+| `SignalPersistenceService` | api | ~157 | Construct and persist Signal records |
+
+**Caching issue fixed**: `generateSignalForSymbolNow()` removed `@Cacheable` annotation (stale data bug). Generation methods now use `@CacheEvict` only.
+
+**Transaction propagation**: Pipeline methods use `REQUIRES_NEW` so a failure for one symbol doesn't roll back previous ones.
 
 **File**: `backend/api/src/main/java/com/swingtrade/api/service/SignalEngine.java`
 
@@ -521,7 +536,12 @@ core ──> (standalone)                        (clean)
 ### High
 | ID | File | Lines |
 |----|------|-------|
-| H2 | `backend/api/src/main/java/com/swingtrade/api/service/SignalEngine.java` | 1-384 (entire file) |
+| H2 | `backend/api/src/main/java/com/swingtrade/api/service/SignalEngine.java` | 1-120 (entry point) |
+| H2 | `backend/api/src/main/java/com/swingtrade/api/service/SignalPipeline.java` | 1-225 |
+| H2 | `backend/api/src/main/java/com/swingtrade/api/service/DailySignalOrchestrator.java` | 1-111 |
+| H2 | `backend/core/src/main/java/com/swingtrade/domain/RiskCalculator.java` | 1-140 |
+| H2 | `backend/api/src/main/java/com/swingtrade/api/service/SentimentGate.java` | 1-112 |
+| H2 | `backend/api/src/main/java/com/swingtrade/api/service/SignalPersistenceService.java` | 1-157 |
 | H4 | `backend/broker/src/main/java/com/swingtrade/broker/manager/` | — |
 | H5 | `backend/api/src/main/java/com/swingtrade/api/service/SignalEngine.java` | 63-105 |
 | H6 | `backend/broker/src/main/java/com/swingtrade/broker/service/PaperTradingServiceImpl.java` | 44-52 |

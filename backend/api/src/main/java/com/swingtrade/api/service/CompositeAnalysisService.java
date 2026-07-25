@@ -47,20 +47,37 @@ public class CompositeAnalysisService {
         this.backtestScorer = backtestScorer;
     }
 
+    /**
+     * Backward-compatible: compute all sub-analyses internally then compose.
+     * Used by POST /api/analysis/analyze endpoint.
+     */
     public CompositeAnalysis analyze(String symbol) {
         String sym = symbol.toUpperCase(Locale.ROOT);
-        LocalDate date = LocalDate.now();
+        CompositeAnalysis.TechnicalScore technical = technicalService.compute(sym);
+        CompositeAnalysis.FundamentalScore fundamentals = fundamentalScorer.compute(sym);
+        CompositeAnalysis.BacktestScore backtest = backtestScorer.compute(sym);
+        SentimentResult sentiment = safeSentiment(sym);
+        return analyze(sym, technical, fundamentals, backtest, sentiment);
+    }
+
+    /**
+     * Compose from pre-computed sub-analyses.
+     * Used by the orchestrator pipeline where each stage runs independently.
+     */
+    public CompositeAnalysis analyze(String symbol,
+                                     CompositeAnalysis.TechnicalScore technical,
+                                     CompositeAnalysis.FundamentalScore fundamentals,
+                                     CompositeAnalysis.BacktestScore backtest,
+                                     SentimentResult sentiment) {
+        String sym = symbol.toUpperCase(Locale.ROOT);
 
         // Auto-pull data if insufficient candles for backtest
         ensureData(sym);
 
-        // Parallel fetch
-        CompositeAnalysis.NewsScore news = fetchNewsScore(sym);
-        CompositeAnalysis.TechnicalScore technical = technicalService.compute(sym);
-        CompositeAnalysis.FundamentalScore fundamentals = fundamentalScorer.compute(sym);
-        CompositeAnalysis.BacktestScore backtest = backtestScorer.compute(sym);
+        // News score from sentiment
+        CompositeAnalysis.NewsScore news = buildNewsScore(sym, sentiment);
 
-        // Weighted composite with graceful degradation
+        // Weighted composite
         int composite = computeComposite(news, technical, fundamentals);
 
         // Signal determination
@@ -77,19 +94,14 @@ public class CompositeAnalysisService {
 
         String reasoning = buildReasoning(news, technical, fundamentals, backtest, composite);
 
-        return new CompositeAnalysis(sym, date, composite, signal, confidence, sources,
-            news, technical, fundamentals, backtest, reasoning);
+        return new CompositeAnalysis(sym, LocalDate.now(), composite, signal, confidence, sources,
+            news, technical, fundamentals, backtest, reasoning, null);
     }
 
-    /**
-     * Auto-pull historical data if the symbol has insufficient candles for backtesting.
-     * Backtest needs at least MIN_CANDLES_FOR_BACKTEST candles; if fewer exist,
-     * trigger a 3-year backfill via the data ingestion service.
-     */
     private void ensureData(String symbol) {
         List<OhlcvCandle> candles = candleStore.findBySymbol(symbol);
         if (candles.size() >= MIN_CANDLES_FOR_BACKTEST) {
-            return; // enough data already
+            return;
         }
 
         logger.info("Insufficient candles for {} ({}), auto-pulling 3 years of data", symbol, candles.size());
@@ -109,28 +121,22 @@ public class CompositeAnalysisService {
                                  CompositeAnalysis.FundamentalScore fundamentals) {
         double weightedSum = 0;
 
-        // News: 30% weight (only if valid)
         if (news != null && news.articleCount() > 0) {
             weightedSum += news.score() * 0.30;
         }
 
-        // Technical: 40% weight (always available if data exists)
         weightedSum += technical.score() * 0.40;
-
-        // Fundamentals: 30% weight (always available if data exists)
         weightedSum += fundamentals.score() * 0.30;
 
         return Math.round((int) weightedSum);
     }
 
-    private CompositeAnalysis.NewsScore fetchNewsScore(String symbol) {
+    private CompositeAnalysis.NewsScore buildNewsScore(String symbol, SentimentResult sentiment) {
         try {
-            SentimentResult sentiment = sentimentService.analyzeStockSentiment(symbol, LocalDate.now());
             if (sentiment == null) {
                 return new CompositeAnalysis.NewsScore(0, "No sentiment data", List.of(), List.of(), 0);
             }
 
-            // Map categorical score to numeric: POSITIVE=75, NEUTRAL=0, NEGATIVE=-75
             int score = switch (sentiment.score()) {
                 case POSITIVE -> 75;
                 case NEGATIVE -> -75;
@@ -149,7 +155,17 @@ public class CompositeAnalysisService {
             );
         } catch (Exception e) {
             logger.warn("News sentiment fetch failed for {}: {}", symbol, e.getMessage());
-            return null; // null triggers graceful degradation
+            return new CompositeAnalysis.NewsScore(0, "News fetch failed", List.of(), List.of(), 0);
+        }
+    }
+
+    private SentimentResult safeSentiment(String symbol) {
+        try {
+            return sentimentService.analyzeStockSentiment(symbol, LocalDate.now());
+        } catch (Exception e) {
+            logger.warn("Sentiment fallback for {}: {}", symbol, e.getMessage());
+            return SentimentResult.create(symbol, LocalDate.now(),
+                SentimentResult.SentimentScore.NEUTRAL, "Sentiment analysis unavailable", "", 0.3, List.of(), List.of());
         }
     }
 

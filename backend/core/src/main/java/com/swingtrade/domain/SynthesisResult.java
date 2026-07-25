@@ -1,4 +1,4 @@
-package com.swingtrade.api.dto;
+package com.swingtrade.domain;
 
 import java.util.List;
 

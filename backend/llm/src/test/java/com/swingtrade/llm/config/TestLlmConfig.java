@@ -1,8 +1,8 @@
 package com.swingtrade.llm.config;
 
-import com.swingtrade.data.repository.SentimentResultRepository;
-import com.swingtrade.data.repository.StockRepository;
-import com.swingtrade.data.service.AppSettingsService;
+import com.swingtrade.domain.store.StockStore;
+import com.swingtrade.domain.store.AppSettingsStore;
+import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.llm.client.VLLMClient;
 import com.swingtrade.llm.service.NewsFilterService;
 import com.swingtrade.llm.service.NewsIngestionService;
@@ -46,7 +46,10 @@ import java.util.Properties;
 public class TestLlmConfig {
 
     @MockBean
-    private AppSettingsService appSettingsService;
+    private AppSettingsStore appSettingsStore;
+
+    @MockBean
+    private SentimentStore sentimentStore;
 
     @Primary
     @Bean
@@ -56,8 +59,8 @@ public class TestLlmConfig {
 
     @Primary
     @Bean
-    public VLLMClient vllmClient(WebClient.Builder webClientBuilder, AppSettingsService appSettingsService) {
-        return new VLLMClient(webClientBuilder, appSettingsService);
+    public VLLMClient vllmClient(WebClient.Builder webClientBuilder, AppSettingsStore appSettingsStore) {
+        return new VLLMClient(webClientBuilder, appSettingsStore);
     }
 
     @Primary
@@ -141,15 +144,17 @@ public class TestLlmConfig {
             SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService,
             SentimentCacheService sentimentCacheService,
-            SentimentResultRepository sentimentResultRepository,
-            StockRepository stockRepository) {
+            SentimentStore sentimentStore,
+            StockStore stockStore,
+            AppSettingsStore appSettingsStore) {
         return new SentimentService(
                 vllmClient,
                 sentimentAnalyzer,
                 newsIngestionService,
                 sentimentCacheService,
-                sentimentResultRepository,
-                stockRepository,
+                sentimentStore,
+                stockStore,
+                appSettingsStore,
                 100,
                 60,
                 false,

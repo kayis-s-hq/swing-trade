@@ -298,6 +298,7 @@ export interface CompositeAnalysis {
     hasEnoughData: boolean
   }
   reasoning: string
+  synthesis?: SynthesisResult
 }
 
 export interface AnalysisProgress {
@@ -306,6 +307,21 @@ export interface AnalysisProgress {
   status: 'running' | 'completed' | 'skipped' | 'error'
   message: string
   timestamp: string
+  details?: StageDetails
+}
+
+export interface StageDetails {
+  type: string
+  payload: Record<string, unknown>
+}
+
+export interface SynthesisResult {
+  narrative: string
+  recommendation: string
+  confidence: number
+  keyDrivers: string[]
+  bullishFactors: string[]
+  bearishFactors: string[]
 }
 
 export interface FullAnalysisResult {

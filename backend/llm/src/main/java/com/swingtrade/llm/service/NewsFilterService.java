@@ -1,5 +1,6 @@
 package com.swingtrade.llm.service;
 
+import com.swingtrade.domain.NewsArticle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -94,14 +95,14 @@ public class NewsFilterService {
      * @param articles list of articles to filter
      * @return filtered list of relevant articles
      */
-    public List<NewsIngestionService.NewsArticle> filterRelevantArticles(
-            List<NewsIngestionService.NewsArticle> articles) {
+    public List<NewsArticle> filterRelevantArticles(
+            List<NewsArticle> articles) {
 
         logger.debug("Filtering {} articles for relevance", articles.size());
 
         List<FilteredArticle> filtered = new ArrayList<>();
 
-        for (NewsIngestionService.NewsArticle article : articles) {
+        for (NewsArticle article : articles) {
             FilteredArticle filteredArticle = evaluateArticle(article);
             if (filteredArticle != null) {
                 filtered.add(filteredArticle);
@@ -128,7 +129,7 @@ public class NewsFilterService {
      * @param article the article to evaluate
      * @return FilteredArticle with score, or null if article should be filtered out
      */
-    private FilteredArticle evaluateArticle(NewsIngestionService.NewsArticle article) {
+    private FilteredArticle evaluateArticle(NewsArticle article) {
         String content = getArticleContent(article);
 
         // Check for spam patterns
@@ -164,7 +165,7 @@ public class NewsFilterService {
      * @return relevance score between 0 and 1
      */
     private double calculateRelevanceScore(
-            NewsIngestionService.NewsArticle article,
+            NewsArticle article,
             long ageHours) {
 
         double score = 1.0;
@@ -250,7 +251,7 @@ public class NewsFilterService {
      * @param article the article
      * @return combined title, description, and raw content
      */
-    private String getArticleContent(NewsIngestionService.NewsArticle article) {
+    private String getArticleContent(NewsArticle article) {
         StringBuilder sb = new StringBuilder();
         if (article.title() != null) {
             sb.append(article.title()).append(" ");
@@ -301,7 +302,7 @@ public class NewsFilterService {
      * @param article the article
      * @return true if article has sufficient content
      */
-    private boolean hasSubstance(NewsIngestionService.NewsArticle article) {
+    private boolean hasSubstance(NewsArticle article) {
         String content = getArticleContent(article);
         String[] words = content.trim().split("\\s+");
 
@@ -331,13 +332,13 @@ public class NewsFilterService {
      * @return ArticleSentimentAnalysis with positive/negative ratio
      */
     public ArticleSentimentAnalysis analyzeArticleSentiment(
-            List<NewsIngestionService.NewsArticle> articles) {
+            List<NewsArticle> articles) {
 
         int positiveCount = 0;
         int negativeCount = 0;
         int neutralCount = 0;
 
-        for (NewsIngestionService.NewsArticle article : articles) {
+        for (NewsArticle article : articles) {
             String content = getArticleContent(article).toLowerCase();
 
             boolean hasPositive = POSITIVE_KEYWORDS.stream()
@@ -371,7 +372,7 @@ public class NewsFilterService {
      * @param articles list of articles
      * @return sentiment summary string
      */
-    public String getSentimentSummary(List<NewsIngestionService.NewsArticle> articles) {
+    public String getSentimentSummary(List<NewsArticle> articles) {
         ArticleSentimentAnalysis analysis = analyzeArticleSentiment(articles);
 
         if (articles.isEmpty()) {
@@ -397,7 +398,7 @@ public class NewsFilterService {
      * Record representing a filtered article with score.
      */
     private record FilteredArticle(
-            NewsIngestionService.NewsArticle article,
+            NewsArticle article,
             double score
     ) {}
 

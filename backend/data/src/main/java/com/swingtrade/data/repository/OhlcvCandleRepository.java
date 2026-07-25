@@ -159,7 +159,7 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
     /**
      * Finds the latest candle for a symbol on or after a given date.
      */
-    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol AND c.date >= :date ORDER BY c.date ASC")
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol = :symbol AND c.date >= :date ORDER BY c.date ASC LIMIT 1")
     Optional<OhlcvCandleEntity> findFirstBySymbolAndDateAfterOrderByDateAsc(
         @Param("symbol") String symbol,
         @Param("date") LocalDate date

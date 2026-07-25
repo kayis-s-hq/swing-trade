@@ -1,5 +1,6 @@
 package com.swingtrade.llm.service;
 
+import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.StockStore;
@@ -118,7 +119,7 @@ public class SentimentService {
 
         try {
             // Fetch news articles
-            List<NewsIngestionService.NewsArticle> articles =
+            List<NewsArticle> articles =
                     newsIngestionService.fetchStockNews(stockSymbol);
 
             if (articles.isEmpty()) {
@@ -130,9 +131,9 @@ public class SentimentService {
 
             // Clean and prepare news content
             List<String> newsContent = articles.stream()
-                    .map(newsIngestionService::cleanNewsText)
-                    .filter(StringUtils::hasText)
-                    .collect(Collectors.toList());
+                    .map(a -> newsIngestionService.cleanNewsText(a))
+                    .filter(s -> s != null && !s.trim().isEmpty())
+                    .toList();
 
             if (newsContent.isEmpty()) {
                 logger.warn("No valid news content after cleaning for stock: {}", stockSymbol);

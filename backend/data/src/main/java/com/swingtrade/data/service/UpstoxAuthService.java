@@ -18,6 +18,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Map;
@@ -36,7 +37,7 @@ public class UpstoxAuthService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
-    private volatile String cachedAccessToken;
+    private final AtomicReference<String> cachedAccessToken = new AtomicReference<>(null);
 
     public UpstoxAuthService(UpstoxConfig upstoxConfig) {
         this.upstoxConfig = upstoxConfig;
@@ -49,7 +50,7 @@ public class UpstoxAuthService {
         // Priority 1: env var / config property UPSTOX_ACCESS_TOKEN
         String envToken = upstoxConfig.getAccessToken();
         if (envToken != null && !envToken.isEmpty()) {
-            this.cachedAccessToken = envToken;
+            this.cachedAccessToken.set(envToken);
             logger.info("Loaded Upstox access token from environment/config");
             return;
         }
@@ -108,11 +109,11 @@ public class UpstoxAuthService {
     }
 
     public String getAccessToken() {
-        return cachedAccessToken;
+        return cachedAccessToken.get();
     }
 
     public void setAccessToken(String token) {
-        this.cachedAccessToken = token;
+        this.cachedAccessToken.set(token);
         persistToken(token);
         logger.info("Access token updated");
     }
@@ -137,7 +138,7 @@ public class UpstoxAuthService {
     }
 
     public void clearTokens() {
-        this.cachedAccessToken = null;
+        this.cachedAccessToken.set(null);
         logger.info("Cleared cached tokens");
     }
 
@@ -167,7 +168,7 @@ public class UpstoxAuthService {
                 new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
             String token = (String) data.get("access_token");
             if (token != null && !token.isEmpty()) {
-                this.cachedAccessToken = token;
+                this.cachedAccessToken.set(token);
                 logger.info("Loaded access token from file {}", path);
             }
         } catch (IOException e) {

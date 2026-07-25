@@ -51,7 +51,9 @@ public class BacktestEngine {
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
-    /** Warm-up (50, from PriceActionSignalEngine.EMA_SLOW_PERIOD) plus a handful of tradable days. */
+    /**
+     * Warm-up (50, from PriceActionSignalEngine.EMA_SLOW_PERIOD) plus a handful of tradable days.
+     */
     private static final int MIN_CANDLES_FOR_BACKTEST = 60;
 
     private final CandleStore candleStore;
@@ -61,10 +63,10 @@ public class BacktestEngine {
     private final String reportsDir;
 
     public BacktestEngine(CandleStore candleStore,
-                           WatchlistStore watchlistStore,
-                           PriceActionSignalEngine priceActionSignalEngine,
-                           ObjectMapper objectMapper,
-                           @Value("${backtest.reports.dir:reports}") String reportsDir) {
+                          WatchlistStore watchlistStore,
+                          PriceActionSignalEngine priceActionSignalEngine,
+                          ObjectMapper objectMapper,
+                          @Value("${backtest.reports.dir:reports}") String reportsDir) {
         this.candleStore = candleStore;
         this.watchlistStore = watchlistStore;
         this.priceActionSignalEngine = priceActionSignalEngine;
@@ -92,17 +94,22 @@ public class BacktestEngine {
         }
         logger.debug("Running backtest for {} on {}", symbol, exchange);
 
+        List<OhlcvCandle> chronologicalCandles = getDescendingCandles(symbol, candleStore, MIN_CANDLES_FOR_BACKTEST);
+
+        return simulate(symbol, chronologicalCandles, config);
+    }
+
+    static List<OhlcvCandle> getDescendingCandles(String symbol, CandleStore candleStore, int minCandles) {
         List<OhlcvCandle> descendingCandles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 1000);
-        if (descendingCandles.size() < MIN_CANDLES_FOR_BACKTEST) {
+        if (descendingCandles.size() < minCandles) {
             throw new IllegalStateException(
-                "Insufficient candle history for " + symbol + ": need at least "
-                    + MIN_CANDLES_FOR_BACKTEST + " candles, found " + descendingCandles.size());
+                    "Insufficient candle history for " + symbol + ": need at least "
+                            + minCandles + " candles, found " + descendingCandles.size());
         }
 
         List<OhlcvCandle> chronologicalCandles = new ArrayList<>(descendingCandles);
         Collections.reverse(chronologicalCandles);
-
-        return simulate(symbol, chronologicalCandles, config);
+        return chronologicalCandles;
     }
 
     /**
@@ -135,38 +142,32 @@ public class BacktestEngine {
      */
     public List<BacktestResult> runBacktestAll(String exchange, BacktestConfig config) {
         List<String> symbols = watchlistStore.getWatchlist().stream()
-            .map(Stock::symbol)
-            .toList();
+                .map(Stock::symbol)
+                .toList();
         return runBacktestAll(symbols, exchange, config);
     }
 
     /**
      * Aggregates a set of backtest results into a portfolio-level summary and persists it as
-     * JSON (full summary) and CSV (flattened trade list) under the configured reports directory.
+     * JSON (full summary) and CSV (flattened trade list) under the configured reports' directory.
      */
     public BacktestReportSummary generateReport(List<BacktestResult> results) {
-        List<BacktestResult> top10ByWinRate = results.stream()
-            .sorted(Comparator.comparingDouble(BacktestResult::winRate).reversed())
-            .limit(10)
-            .toList();
-        List<BacktestResult> top10ByTotalReturn = results.stream()
-            .sorted(Comparator.comparingDouble(BacktestResult::totalReturn).reversed())
-            .limit(10)
-            .toList();
+        List<BacktestResult> top10ByWinRate = topN(results, Comparator.comparingDouble(BacktestResult::winRate).reversed(), 10);
+        List<BacktestResult> top10ByTotalReturn = topN(results, Comparator.comparingDouble(BacktestResult::totalReturn).reversed(), 10);
 
         int totalWins = results.stream().mapToInt(BacktestResult::winningTrades).sum();
         int totalTrades = results.stream().mapToInt(BacktestResult::totalTrades).sum();
         double overallWinRate = totalTrades > 0 ? (totalWins / (double) totalTrades) * 100.0 : 0.0;
 
         double overallSharpeRatio = results.stream()
-            .filter(r -> r.totalTrades() > 0)
-            .mapToDouble(BacktestResult::sharpeRatio)
-            .average()
-            .orElse(0.0);
+                .filter(r -> r.totalTrades() > 0)
+                .mapToDouble(BacktestResult::sharpeRatio)
+                .average()
+                .orElse(0.0);
 
         BacktestReportSummary summary = new BacktestReportSummary(
-            LocalDateTime.now(MARKET_ZONE), results.size(), top10ByWinRate, top10ByTotalReturn,
-            overallWinRate, overallSharpeRatio, results);
+                LocalDateTime.now(MARKET_ZONE), results.size(), top10ByWinRate, top10ByTotalReturn,
+                overallWinRate, overallSharpeRatio, results);
 
         saveReport(summary);
         return summary;
@@ -239,8 +240,8 @@ public class BacktestEngine {
             }
 
             if (open == null && i + 1 < barCount) {
-                open = tryEnter(chronologicalCandles, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
-                    weeklyHigh, i, capital, config);
+                open = tryEnter(chronologicalCandles, series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
+                        weeklyHigh, i, capital, config);
             }
         }
 
@@ -258,28 +259,24 @@ public class BacktestEngine {
     }
 
     private OpenPosition tryEnter(List<OhlcvCandle> chronologicalCandles,
-                                   ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
-                                   EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
-                                   VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
-                                   int i, double capital, BacktestConfig config) {
-        BigDecimal price = numToBigDecimal(closePrice.getValue(i));
-        BigDecimal ema20Val = numToBigDecimal(ema20.getValue(i));
-        BigDecimal ema50Val = numToBigDecimal(ema50.getValue(i));
-        BigDecimal rsiVal = numToBigDecimal(rsi.getValue(i));
-        BigDecimal volumeVal = numToBigDecimal(volume.getValue(i));
-        BigDecimal volumeMaVal = numToBigDecimal(volumeMa.getValue(i));
-        BigDecimal weeklyHighVal = numToBigDecimal(weeklyHigh.getValue(i));
+                                  BarSeries series,
+                                  ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
+                                  EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
+                                  VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
+                                  int i, double capital, BacktestConfig config) {
+        Indicators ind = Indicators.from(series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
+                weeklyHigh, i);
 
-        boolean trendAligned = price.compareTo(ema20Val) > 0 && ema20Val.compareTo(ema50Val) > 0;
-        boolean rsiInRange = rsiVal.compareTo(PriceActionSignalEngine.RSI_LOWER_BOUND) >= 0
-            && rsiVal.compareTo(PriceActionSignalEngine.RSI_UPPER_BOUND) <= 0;
-        boolean volumeSurge = volumeVal.compareTo(volumeMaVal.multiply(PriceActionSignalEngine.VOLUME_MULTIPLIER)) > 0;
-        boolean nearWeeklyHigh = price.compareTo(weeklyHighVal.multiply(PriceActionSignalEngine.HIGH_PROXIMITY_THRESHOLD)) >= 0;
+        boolean trendAligned = ind.price().compareTo(ind.ema20()) > 0 && ind.ema20().compareTo(ind.ema50()) > 0;
+        boolean rsiInRange = ind.rsi().compareTo(PriceActionSignalEngine.RSI_LOWER_BOUND) >= 0
+                && ind.rsi().compareTo(PriceActionSignalEngine.RSI_UPPER_BOUND) <= 0;
+        boolean volumeSurge = ind.volume().compareTo(ind.volumeMa().multiply(PriceActionSignalEngine.VOLUME_MULTIPLIER)) > 0;
+        boolean nearWeeklyHigh = ind.price().compareTo(ind.weeklyHigh().multiply(PriceActionSignalEngine.HIGH_PROXIMITY_THRESHOLD)) >= 0;
 
         int rulesPassed = (trendAligned ? 1 : 0)
-            + (rsiInRange ? 1 : 0)
-            + (volumeSurge ? 1 : 0)
-            + (nearWeeklyHigh ? 1 : 0);
+                + (rsiInRange ? 1 : 0)
+                + (volumeSurge ? 1 : 0)
+                + (nearWeeklyHigh ? 1 : 0);
         if (rulesPassed < 3) {
             return null;
         }
@@ -307,7 +304,7 @@ public class BacktestEngine {
     }
 
     private BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
-                                      int exitIndex, ExitReason reason, BacktestConfig config) {
+                                     int exitIndex, ExitReason reason, BacktestConfig config) {
         double grossPnl = exitPrice.subtract(open.entryPrice).doubleValue() * open.quantity;
         double netPnl = grossPnl - config.brokeragePerTrade();
         double entryCost = open.entryPrice.doubleValue() * open.quantity;
@@ -315,11 +312,11 @@ public class BacktestEngine {
         int holdingDays = exitIndex - open.entryIndex;
 
         return new BacktestTrade(symbol, open.entryDate, exitDate, open.entryPrice, exitPrice,
-            open.stopLoss, open.target, open.quantity, reason, netPnl, pnlPct, holdingDays);
+                open.stopLoss, open.target, open.quantity, reason, netPnl, pnlPct, holdingDays);
     }
 
     private BacktestResult buildResult(String symbol, List<BacktestTrade> trades, List<Double> capitalCurve,
-                                        double finalCapital, BacktestConfig config) {
+                                       double finalCapital, BacktestConfig config) {
         int totalTrades = trades.size();
         List<BacktestTrade> wins = trades.stream().filter(t -> t.pnl() > 0).toList();
         List<BacktestTrade> losses = trades.stream().filter(t -> t.pnl() <= 0).toList();
@@ -327,7 +324,7 @@ public class BacktestEngine {
         double winRate = totalTrades > 0 ? (wins.size() / (double) totalTrades) * 100.0 : 0.0;
         double avgGainPct = wins.isEmpty() ? 0.0 : wins.stream().mapToDouble(BacktestTrade::pnlPct).average().orElse(0.0);
         double avgLossPct = losses.isEmpty() ? 0.0
-            : Math.abs(losses.stream().mapToDouble(BacktestTrade::pnlPct).average().orElse(0.0));
+                : Math.abs(losses.stream().mapToDouble(BacktestTrade::pnlPct).average().orElse(0.0));
         double maxDrawdownPct = computeMaxDrawdownPct(capitalCurve);
         double sharpeRatio = computeSharpeRatio(capitalCurve);
         double totalReturn = ((finalCapital - config.initialCapital()) / config.initialCapital()) * 100.0;
@@ -335,7 +332,7 @@ public class BacktestEngine {
         double expectancy = (winRatio * avgGainPct) - ((1 - winRatio) * avgLossPct);
 
         return new BacktestResult(symbol, totalTrades, wins.size(), losses.size(), winRate, avgGainPct, avgLossPct,
-            maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades);
+                maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades);
     }
 
     private double computeSharpeRatio(List<Double> capitalCurve) {
@@ -362,7 +359,7 @@ public class BacktestEngine {
             return 0.0;
         }
 
-        double peak = capitalCurve.get(0);
+        double peak = capitalCurve.getFirst();
         double maxDrawdown = 0.0;
         for (double value : capitalCurve) {
             peak = Math.max(peak, value);
@@ -373,8 +370,32 @@ public class BacktestEngine {
         return maxDrawdown;
     }
 
-    private BigDecimal numToBigDecimal(Num value) {
+    private static BigDecimal numToBigDecimal(Num value) {
         return BigDecimal.valueOf(value.doubleValue());
+    }
+
+    private <T> List<T> topN(List<T> items, Comparator<T> comparator, int n) {
+        return items.stream()
+                .sorted(comparator)
+                .limit(n)
+                .toList();
+    }
+
+    record Indicators(BigDecimal price, BigDecimal ema20, BigDecimal ema50, BigDecimal rsi,
+                      BigDecimal volume, BigDecimal volumeMa, BigDecimal weeklyHigh) {
+        static Indicators from(BarSeries series, ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
+                               EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
+                               VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
+                               int bar) {
+            return new Indicators(
+                    numToBigDecimal(closePrice.getValue(bar)),
+                    numToBigDecimal(ema20.getValue(bar)),
+                    numToBigDecimal(ema50.getValue(bar)),
+                    numToBigDecimal(rsi.getValue(bar)),
+                    numToBigDecimal(volume.getValue(bar)),
+                    numToBigDecimal(volumeMa.getValue(bar)),
+                    numToBigDecimal(weeklyHigh.getValue(bar)));
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -405,18 +426,18 @@ public class BacktestEngine {
         for (BacktestResult result : results) {
             for (BacktestTrade trade : result.trades()) {
                 csv.append(trade.symbol()).append(',')
-                    .append(trade.entryDate()).append(',')
-                    .append(trade.exitDate()).append(',')
-                    .append(trade.entryPrice()).append(',')
-                    .append(trade.exitPrice()).append(',')
-                    .append(trade.stopLoss()).append(',')
-                    .append(trade.target()).append(',')
-                    .append(trade.quantity()).append(',')
-                    .append(trade.exitReason()).append(',')
-                    .append(trade.pnl()).append(',')
-                    .append(trade.pnlPct()).append(',')
-                    .append(trade.holdingDays())
-                    .append('\n');
+                        .append(trade.entryDate()).append(',')
+                        .append(trade.exitDate()).append(',')
+                        .append(trade.entryPrice()).append(',')
+                        .append(trade.exitPrice()).append(',')
+                        .append(trade.stopLoss()).append(',')
+                        .append(trade.target()).append(',')
+                        .append(trade.quantity()).append(',')
+                        .append(trade.exitReason()).append(',')
+                        .append(trade.pnl()).append(',')
+                        .append(trade.pnlPct()).append(',')
+                        .append(trade.holdingDays())
+                        .append('\n');
             }
         }
         Files.writeString(csvPath, csv.toString());
