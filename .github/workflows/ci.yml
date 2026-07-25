@@ -155,10 +155,10 @@ jobs:
         run: MAVEN_OPTS="$JAVA_OPTS" mvn failsafe:integration-test failsafe:verify -B -Dspring.profiles.active=test -DskipTests=true -Dpmd.skip=true -Dcheckstyle.skip=true
 
   # =====================================================================
-  # Frontend
+  # Frontend Phase 1: Static Analysis (TypeScript typecheck)
   # =====================================================================
-  frontend:
-    name: Frontend (Node 20)
+  frontend-typecheck:
+    name: Frontend Typecheck
     runs-on: self-hosted
     steps:
       - name: Checkout
@@ -176,21 +176,34 @@ jobs:
         run: npm ci
         working-directory: dashboard
 
-      - name: Run typecheck
+      - name: TypeScript typecheck
         run: npm run typecheck
         working-directory: dashboard
 
-      - name: Run unit tests
-        run: npm run test -- --run
+  # =====================================================================
+  # Frontend Phase 2: Compile (Vite build)
+  # =====================================================================
+  frontend-compile:
+    name: Frontend Compile
+    runs-on: self-hosted
+    needs: [frontend-typecheck]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: dashboard/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
         working-directory: dashboard
 
-      - name: Run E2E tests
-        run: |
-          npx playwright install --with-deps chromium
-          npx playwright test
-        working-directory: dashboard
-
-      - name: Build
+      - name: Vite build
         run: npm run build
         working-directory: dashboard
 
@@ -200,6 +213,62 @@ jobs:
           name: frontend-build
           path: dashboard/dist/
           retention-days: 7
+
+  # =====================================================================
+  # Frontend Phase 3: Unit Tests (Vitest)
+  # =====================================================================
+  frontend-unit-tests:
+    name: Frontend Unit Tests
+    runs-on: self-hosted
+    needs: [frontend-compile]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: dashboard/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: dashboard
+
+      - name: Vitest unit tests
+        run: npm run test -- --run
+        working-directory: dashboard
+
+  # =====================================================================
+  # Frontend Phase 4: Integration Tests (Playwright E2E)
+  # =====================================================================
+  frontend-integration-tests:
+    name: Frontend E2E Tests
+    runs-on: self-hosted
+    needs: [frontend-compile]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: dashboard/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: dashboard
+
+      - name: Playwright E2E tests
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
+        working-directory: dashboard
 
   # =====================================================================
   # Security
