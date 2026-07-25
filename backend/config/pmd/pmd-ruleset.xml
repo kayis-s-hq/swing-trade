@@ -13,8 +13,6 @@
     <exclude name="TestClassWithoutTestCases"/>
     <exclude name="MissingSerialVersionUID"/>
     <exclude name="AvoidFieldNameMatchingMethodName"/>
-    <exclude name="UseConcurrentHashMap"/>
-    <exclude name="DoNotUseThreads"/>
   </rule>
 
   <!-- Keep only security — critical -->

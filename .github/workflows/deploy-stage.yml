@@ -43,7 +43,7 @@ jobs:
 
       - name: Build backend
         working-directory: backend
-        run: mvn clean package -Dpmd.skip=true -Dcheckstyle.skip=true -B
+        run: mvn clean package -B
 
       - name: Verify JAR
         working-directory: backend/api/target

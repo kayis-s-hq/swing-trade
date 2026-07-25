@@ -189,12 +189,12 @@
                     <rulesets>
                         <ruleset>../config/pmd/pmd-ruleset.xml</ruleset>
                     </rulesets>
+                    <skip>true</skip>
                     <failOnViolation>true</failOnViolation>
                     <printFailingErrors>true</printFailingErrors>
                     <includeTests>true</includeTests>
                     <verbose>true</verbose>
                     <targetJdk>21</targetJdk>
-                    <skip>true</skip>
                 </configuration>
                 <executions>
                     <execution>

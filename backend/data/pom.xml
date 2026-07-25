@@ -100,6 +100,13 @@
             <version>1.11.0</version>
         </dependency>
 
+        <!-- Jsoup for HTML parsing (NSE/BSE announcements) -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.18.3</version>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -192,7 +199,6 @@
                     <includeTests>true</includeTests>
                     <verbose>true</verbose>
                     <targetJdk>21</targetJdk>
-                    <skip>true</skip>
                 </configuration>
                 <executions>
                     <execution>

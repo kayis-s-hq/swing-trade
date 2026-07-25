@@ -1,0 +1,19 @@
+services:
+  nginx-reports:
+    image: nginx:alpine
+    container_name: swing-trade-reports
+    ports:
+      - "8082:80"
+    volumes:
+      - reports:/usr/share/nginx/html
+      - ./reports-nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  reports:
+    driver: local

@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  JAVA_VERSION: 21
+  NODE_VERSION: 20
+  MAVEN_OPTS: -Xmx2g
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Java ${{ env.JAVA_VERSION }})
+    runs-on: self-hosted
+    services:
+      postgres:
+        image: timescale/timescaledb:latest
+        env:
+          POSTGRES_USER: swingtrade_user
+          POSTGRES_PASSWORD: swingtrade_password
+          POSTGRES_DB: swingtrade_db_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Install Fyers SDK
+        run: |
+          JAR=$(find . -name fyersjavasdk-1.9.0.jar 2>/dev/null | head -1)
+          if [ -z "$JAR" ]; then echo "FYERS SDK not found"; exit 1; fi
+          echo "Found: $JAR"
+          mvn install:install-file -Dfile="$JAR" -DgroupId=com.tts.in -DartifactId=fyersjavasdk -Dversion=1.9.0 -Dpackaging=jar
+
+      - name: Clean corrupted Maven cache
+        run: rm -rf ~/.m2/repository/io/projectreactor/reactor-core
+
+      - name: Build and test
+        working-directory: backend
+        run: mvn clean verify -B -Dspring.profiles.active=test -Dspring.datasource.url=jdbc:postgresql://localhost:5432/swingtrade_db_test -Dspring.datasource.username=swingtrade_user -Dspring.datasource.password=swingtrade_password -Dspring.redis.host=localhost -Dspring.redis.port=6379
+
+      - name: Upload JaCoCo report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-report
+          path: backend/*/target/site/jacoco/index.html
+          retention-days: 30
+
+      - name: Upload PMD report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pmd-report
+          path: backend/*/target/pmd.xml
+          retention-days: 30
+
+      - name: Upload Checkstyle report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checkstyle-report
+          path: backend/*/target/checkstyle-result.xml
+          retention-days: 30
+
+      - name: Deploy reports to Pi
+        if: github.ref == 'refs/heads/main' && success()
+        run: |
+          mkdir -p /tmp/reports/jacoco /tmp/reports/pmd /tmp/reports/checkstyle
+          cp -r backend/*/target/site/jacoco/* /tmp/reports/jacoco/ 2>/dev/null || true
+          cp -r backend/*/target/site/pmd.html /tmp/reports/pmd/ 2>/dev/null || true
+          cp -r backend/*/target/site/checkstyle-result.xml /tmp/reports/checkstyle/ 2>/dev/null || true
+          scp -r /tmp/reports/* pi@piworm.local:/home/dietpi/swing-trade/reports/
+
+      - name: Start reports nginx on Pi
+        if: github.ref == 'refs/heads/main' && success()
+        run: |
+          ssh pi@piworm.local '
+            mkdir -p ~/swing-trade/reports
+            docker compose -f ~/swing-trade/docker-compose.reports.yml up -d 2>/dev/null || true
+          '
+
+  frontend:
+    name: Frontend (Node ${{ env.NODE_VERSION }})
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: dashboard
+
+      - name: Run typecheck
+        run: npm run typecheck
+        working-directory: dashboard
+
+      - name: Run unit tests
+        run: npm run test -- --run
+        working-directory: dashboard
+
+      - name: Run E2E tests
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
+        working-directory: dashboard
+
+      - name: Build
+        run: npm run build
+        working-directory: dashboard
+
+  security:
+    name: Security Scan
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run OWASP dependency check
+        uses: dependency-check/Dependency-Check-action@latest
+        with:
+          project: swing-trade
+          path: '.'
+          format: XML
+          out: reports/owasp
+
+      - name: Upload OWASP report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: owasp-report
+          path: reports/owasp
+          retention-days: 30
+
+      - name: Check for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-passed
