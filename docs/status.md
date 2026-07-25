@@ -33,7 +33,7 @@ Last checked: 2026-07-24
 - [x] News ingestion fetching for all 15 stocks
 - [ ] Sentiment running on BUY signals
 - [ ] NEGATIVE signals being suppressed
-- [ ] Accuracy tracker recording outcomes
+- [x] Accuracy tracker recording outcomes - full pipeline wired: evaluation job (nightly 2 AM), 8 metric endpoints, 4-tab dashboard. Added prompt_hash/model_version tracking, fixed SMA200 regime bug
 - [x] Graceful degradation tested - kill vLLM, confirm NEUTRAL default
 
 ## Dashboard
