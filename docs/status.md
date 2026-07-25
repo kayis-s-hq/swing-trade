@@ -33,7 +33,7 @@ Last checked: 2026-07-25
 - [x] News ingestion fetching for all 15 stocks
 - [ ] Sentiment running on BUY signals
 - [ ] NEGATIVE signals being suppressed
-- [x] Accuracy tracker recording outcomes - full pipeline wired: evaluation job (nightly 2 AM), 8 metric endpoints, 4-tab dashboard. Added prompt_hash/model_version tracking, fixed SMA200 regime bug. Verified end-to-end 2026-07-25: all 8 /api/sentiment/accuracy/* endpoints responding, sentiment analysis saving to DB, evaluation job logic verified
+- [ ] Accuracy tracker recording outcomes - pipeline wired: evaluation job (nightly 2 AM), 8 metric endpoints, 4-tab dashboard. Added prompt_hash/model_version tracking, fixed SMA200 regime bug. NOT YET VERIFIED: no accuracy records in DB
 - [x] Graceful degradation tested - kill vLLM, confirm NEUTRAL default
 
 ## Dashboard
