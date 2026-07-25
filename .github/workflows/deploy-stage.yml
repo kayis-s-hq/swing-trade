@@ -21,8 +21,7 @@ jobs:
   build-and-deploy:
     runs-on: self-hosted
     steps:
-      - name: Checkout
-        run: git checkout -- . && git pull
+      - uses: actions/checkout@v4
 
       - name: Install Fyers SDK
         run: |

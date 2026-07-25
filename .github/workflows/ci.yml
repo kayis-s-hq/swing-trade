@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -16,8 +17,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout
-        run: git pull
+      - uses: actions/checkout@v4
 
       - name: Install Fyers SDK
         run: |
@@ -31,7 +31,7 @@ jobs:
 
       - name: Build and test
         working-directory: backend
-        run: mvn clean verify -B -Dspring.profiles.active=test -Dspring.datasource.url=jdbc:postgresql://localhost:5435/swingtrade_db -Dspring.datasource.username=swingtrade_user -Dspring.datasource.password=swingtrade_password -Dspring.redis.host=localhost -Dspring.redis.port=6379
+        run: mvn clean verify -B -Dspring.profiles.active=test
 
       - name: Collect reports
         if: always()
@@ -58,8 +58,7 @@ jobs:
     name: Frontend (Node 20)
     runs-on: self-hosted
     steps:
-      - name: Checkout
-        run: git pull
+      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: npm ci
@@ -87,8 +86,7 @@ jobs:
     name: Security Scan
     runs-on: self-hosted
     steps:
-      - name: Checkout
-        run: git pull
+      - uses: actions/checkout@v4
 
       - name: Run OWASP dependency check
         run: |
