@@ -22,7 +22,8 @@ jobs:
 
     steps:
       - name: Checkout
-        run: git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/kayis-s-hq/swing-trade.git .
+        run: |
+          if [ -d .git ]; then git pull; else git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/kayis-s-hq/swing-trade.git .; fi
 
       - name: Install Fyers SDK
         run: |
@@ -64,7 +65,8 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout
-        run: git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/kayis-s-hq/swing-trade.git .
+        run: |
+          if [ -d .git ]; then git pull; else git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/kayis-s-hq/swing-trade.git .; fi
 
       - name: Install dependencies
         run: npm ci
@@ -93,7 +95,8 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout
-        run: git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/kayis-s-hq/swing-trade.git .
+        run: |
+          if [ -d .git ]; then git pull; else git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/kayis-s-hq/swing-trade.git .; fi
 
       - name: Run OWASP dependency check
         run: |
