@@ -36,6 +36,13 @@ const compositeLlm = computed(() => {
   }
 })
 
+// Guard: only render LLM blocks when there is actual content
+const hasLlmContent = computed(() => {
+  if (!props.composite) return false
+  const news = props.composite.news
+  return !!(news?.summary || news?.catalysts?.length || news?.redFlags?.length)
+})
+
 // Get composite technical data
 const compositeTech = computed(() => {
   if (!props.composite) return null
@@ -212,22 +219,22 @@ const parsedData = computed<ParsedStageData>(() => {
   <!-- LLM sentiment -->
   <div v-else-if="parsedData.type === 'llm'" class="space-y-2">
     <!-- Badge from SentimentResult data -->
-    <div v-if="compositeLlm" class="flex items-center gap-2">
-      <SentimentBadge :score="compositeLlm.score" :confidence="compositeLlm.score === 'NEUTRAL' ? 0.5 : 0.85" />
+    <div v-if="hasLlmContent" class="flex items-center gap-2">
+      <SentimentBadge :score="compositeLlm!.score" :confidence="composite?.compositeConfidence ?? 0.5" />
     </div>
     <p v-if="compositeLlm?.summary" class="text-xs text-text-secondary leading-relaxed">
       {{ compositeLlm.summary }}
     </p>
     <div v-if="compositeLlm?.catalysts?.length" class="space-y-0.5">
       <p class="text-[10px] font-semibold uppercase tracking-wider text-success">Catalysts</p>
-      <div v-for="c in compositeLlm.catalysts" :key="c" class="flex items-start gap-1.5 text-xs text-text-secondary">
+      <div v-for="c in compositeLlm!.catalysts" :key="c" class="flex items-start gap-1.5 text-xs text-text-secondary">
         <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-success flex-shrink-0" />
         <span>{{ c }}</span>
       </div>
     </div>
     <div v-if="compositeLlm?.redFlags?.length" class="space-y-0.5">
       <p class="text-[10px] font-semibold uppercase tracking-wider text-danger">Red Flags</p>
-      <div v-for="r in compositeLlm.redFlags" :key="r" class="flex items-start gap-1.5 text-xs text-text-secondary">
+      <div v-for="r in compositeLlm!.redFlags" :key="r" class="flex items-start gap-1.5 text-xs text-text-secondary">
         <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-danger flex-shrink-0" />
         <span>{{ r }}</span>
       </div>
