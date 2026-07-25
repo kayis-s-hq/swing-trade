@@ -674,11 +674,6 @@ const formatDate = (dateStr: string) => {
   }
 }
 
-// Load history when switching to history tab
-watch(activeTab, (tab) => {
-  if (tab === 'history') loadHistory()
-})
-
 onMounted(async () => {
   const wr = await getWatchlist()
   if (wr.success && wr.data) watchlistSymbols.value = wr.data
