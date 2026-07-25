@@ -23,6 +23,62 @@ type ParsedStageData =
   | { type: 'complete'; durationMs: number }
   | { type: 'generic' }
 
+// Get composite LLM data from composite object
+const compositeLlm = computed(() => {
+  if (!props.composite) return null
+  const numScore = props.composite.news.score
+  const sentimentScore: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' = numScore > 0 ? 'POSITIVE' : numScore < 0 ? 'NEGATIVE' : 'NEUTRAL'
+  return {
+    score: sentimentScore,
+    summary: props.composite.news?.summary,
+    catalysts: props.composite.news?.catalysts,
+    redFlags: props.composite.news?.redFlags,
+  }
+})
+
+// Get composite technical data
+const compositeTech = computed(() => {
+  if (!props.composite) return null
+  return {
+    score: props.composite.technical.score,
+    signal: props.composite.technical.signal,
+    confidence: props.composite.technical.confidence,
+    indicators: props.composite.technical.indicators,
+  }
+})
+
+// Get composite score data
+const compositeScore = computed(() => {
+  if (!props.composite) return null
+  return {
+    score: props.composite.compositeScore,
+    signal: props.composite.compositeSignal,
+    confidence: props.composite.compositeConfidence,
+    reasoning: props.composite.reasoning,
+  }
+})
+
+// Get composite backtest data
+const compositeBacktest = computed(() => {
+  if (!props.composite) return null
+  return {
+    totalTrades: props.composite.backtest.totalTrades,
+    winRate: props.composite.backtest.winRate,
+    profitFactor: props.composite.backtest.profitFactor,
+    maxDrawdown: props.composite.backtest.maxDrawdown,
+    totalReturn: props.composite.backtest.totalReturn,
+    expectancy: props.composite.backtest.expectancy,
+  }
+})
+
+// Indicator dot color class
+const indicatorDotClass = (indicator: string) => {
+  const lower = indicator.toLowerCase()
+  if (lower.includes('bullish') || lower.includes('above') || lower.includes('positive')) return 'bg-success'
+  if (lower.includes('bearish') || lower.includes('below') || lower.includes('negative')) return 'bg-danger'
+  return 'bg-text-muted'
+}
+
 const parsedData = computed<ParsedStageData>(() => {
   const msg = props.stage.message || ''
   const name = props.stage.stageName.toLowerCase()
@@ -110,53 +166,6 @@ const parsedData = computed<ParsedStageData>(() => {
   return { type: 'generic' }
 })
 
-// Get composite LLM data from composite object
-const compositeLlm = computed(() => {
-  if (!props.composite) return null
-  const numScore = props.composite.news.score
-  const sentimentScore: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' = numScore > 0 ? 'POSITIVE' : numScore < 0 ? 'NEGATIVE' : 'NEUTRAL'
-  return {
-    score: sentimentScore,
-    summary: props.composite.news.summary,
-    catalysts: props.composite.news.catalysts,
-    redFlags: props.composite.news.redFlags,
-  }
-})
-
-// Get composite technical data
-const compositeTech = computed(() => {
-  if (!props.composite) return null
-  return {
-    score: props.composite.technical.score,
-    signal: props.composite.technical.signal,
-    confidence: props.composite.technical.confidence,
-    indicators: props.composite.technical.indicators,
-  }
-})
-
-// Get composite score data
-const compositeScore = computed(() => {
-  if (!props.composite) return null
-  return {
-    score: props.composite.compositeScore,
-    signal: props.composite.compositeSignal,
-    confidence: props.composite.compositeConfidence,
-    reasoning: props.composite.reasoning,
-  }
-})
-
-// Get composite backtest data
-const compositeBacktest = computed(() => {
-  if (!props.composite) return null
-  return {
-    totalTrades: props.composite.backtest.totalTrades,
-    winRate: props.composite.backtest.winRate,
-    profitFactor: props.composite.backtest.profitFactor,
-    maxDrawdown: props.composite.backtest.maxDrawdown,
-    totalReturn: props.composite.backtest.totalReturn,
-    expectancy: props.composite.backtest.expectancy,
-  }
-})
 </script>
 
 <template>
@@ -209,14 +218,14 @@ const compositeBacktest = computed(() => {
     <p v-if="compositeLlm?.summary" class="text-xs text-text-secondary leading-relaxed">
       {{ compositeLlm.summary }}
     </p>
-    <div v-if="compositeLlm?.catalysts.length" class="space-y-0.5">
+    <div v-if="compositeLlm?.catalysts?.length" class="space-y-0.5">
       <p class="text-[10px] font-semibold uppercase tracking-wider text-success">Catalysts</p>
       <div v-for="c in compositeLlm.catalysts" :key="c" class="flex items-start gap-1.5 text-xs text-text-secondary">
         <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-success flex-shrink-0" />
         <span>{{ c }}</span>
       </div>
     </div>
-    <div v-if="compositeLlm?.redFlags.length" class="space-y-0.5">
+    <div v-if="compositeLlm?.redFlags?.length" class="space-y-0.5">
       <p class="text-[10px] font-semibold uppercase tracking-wider text-danger">Red Flags</p>
       <div v-for="r in compositeLlm.redFlags" :key="r" class="flex items-start gap-1.5 text-xs text-text-secondary">
         <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-danger flex-shrink-0" />
@@ -264,11 +273,7 @@ const compositeBacktest = computed(() => {
         >
           <span
             class="h-1.5 w-1.5 rounded-full flex-shrink-0"
-            :class="{
-              'bg-success': indicator.toLowerCase().includes('bullish') || indicator.toLowerCase().includes('above') || indicator.toLowerCase().includes('positive'),
-              'bg-danger': indicator.toLowerCase().includes('bearish') || indicator.toLowerCase().includes('below') || indicator.toLowerCase().includes('negative'),
-              'bg-text-muted': true,
-            }"
+            :class="indicatorDotClass(indicator)"
           />
           <template v-if="indicator.includes(': ')">
             <span class="text-text-muted w-20 truncate flex-shrink-0">{{ indicator.split(': ')[0] }}</span>
