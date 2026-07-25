@@ -7,8 +7,7 @@ public enum Exchange {
     NSE("NSE"),
     BSE("BSE"),
     NSE_FO("NSE_FO"),
-    NCEI("NSE_CEG"),
-    MCX("MCX");
+    NCEI("NSE_CEG");
 
     private final String exchangeCode;
 
