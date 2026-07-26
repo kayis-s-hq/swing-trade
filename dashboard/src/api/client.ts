@@ -286,6 +286,20 @@ export async function generateAllSignals(): Promise<ApiResponse<{ signals: Signa
   return { success: true, data: { signals: (resp.signals ?? []).map(mapSignal), skipped: resp.skipped ?? [] } }
 }
 
+export async function clearAllSignals(): Promise<ApiResponse<{ cleared: number }>> {
+  const raw = await rawFetch('/signals', { method: 'DELETE' })
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { cleared: number }
+  return { success: true, data: resp }
+}
+
+export async function clearSignalsForSymbol(symbol: string): Promise<ApiResponse<{ cleared: number }>> {
+  const raw = await rawFetch(`/signals/${symbol}`, { method: 'DELETE' })
+  if (!raw.ok) return errResponse(raw.error!)
+  const resp = raw.data as { cleared: number }
+  return { success: true, data: resp }
+}
+
 export async function getSignalsByType(type: 'BUY' | 'SELL' | 'HOLD'): Promise<ApiResponse<Signal[]>> {
   const raw = await rawFetch(`/signals/type/${type}`)
   if (!raw.ok) return errResponse(raw.error!)

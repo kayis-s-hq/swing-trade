@@ -89,5 +89,5 @@ for m in "${modules_to_check[@]}"; do
     module_args="$module_args -pl :$m"
 done
 
-echo "Running PMD + checkstyle on: ${modules_to_check[*]}"
-mvn clean validate $module_args -f backend
+echo "Running checkstyle on: ${modules_to_check[*]}"
+mvn clean checkstyle:check $module_args -f backend

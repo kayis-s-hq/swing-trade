@@ -17,10 +17,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
  * Fetches stock discussions from r/IndiaInvestments Reddit.
+ * OAuth2: password grant (first-party) → client-credentials (standard bot) → unauthenticated fallback.
  */
 @Service
 public class RedditIndiaInvestmentsSource implements NewsSource {
@@ -28,7 +30,7 @@ public class RedditIndiaInvestmentsSource implements NewsSource {
     private static final Logger log = LoggerFactory.getLogger(RedditIndiaInvestmentsSource.class);
     private static final String SUBREDDIT = "IndiaInvestments";
     private static final String SEARCH_URL = "https://www.reddit.com/r/" + SUBREDDIT + "/search.json?q=";
-    private static final String LOGIN_URL = "https://www.reddit.com/api/v1/access_token";
+    private static final String TOKEN_URL = "https://www.reddit.com/api/v1/access_token";
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
 
     private final String clientId;
@@ -36,8 +38,9 @@ public class RedditIndiaInvestmentsSource implements NewsSource {
     private final String username;
     private final String password;
     private final int maxArticles;
-    private final String accessToken;
+    private final AtomicReference<String> accessToken = new AtomicReference<>();
     private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
 
     public RedditIndiaInvestmentsSource(
             @Value("${reddit.client.id:}") String clientId,
@@ -53,13 +56,32 @@ public class RedditIndiaInvestmentsSource implements NewsSource {
         this.password = password;
         this.maxArticles = maxArticles;
         this.objectMapper = objectMapper;
+        this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
 
-        // Try OAuth if credentials provided
-        String token = null;
+        // Try password grant first (first-party apps), then client-credentials (standard bots)
         if (!clientId.isBlank() && !clientSecret.isBlank()) {
-            token = fetchOAuthToken(objectMapper, clientId, clientSecret);
+            if (!username.isBlank() && !password.isBlank()) {
+                String token = fetchPasswordToken();
+                if (token != null) {
+                    accessToken.set(token);
+                    log.info("Reddit OAuth via password grant successful for {}", SUBREDDIT);
+                }
+            }
+            if (accessToken.get() == null) {
+                String token = fetchClientCredentialsToken();
+                if (token != null) {
+                    accessToken.set(token);
+                    log.info("Reddit OAuth via client-credentials successful for {}", SUBREDDIT);
+                }
+            }
         }
-        this.accessToken = token;
+
+        if (accessToken.get() == null) {
+            log.warn("Reddit OAuth unavailable — running unauthenticated (will likely be rate-limited)");
+        }
     }
 
     @Override
@@ -73,21 +95,29 @@ public class RedditIndiaInvestmentsSource implements NewsSource {
         String url = SEARCH_URL + URLEncoder.encode(query, StandardCharsets.UTF_8) + "&limit=25";
 
         try {
-            HttpClient client = HttpClient.newHttpClient();
             HttpRequest.Builder req = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .header("User-Agent", "SwingTrade/1.0");
+                    .header("User-Agent", "SwingTrade/1.0")
+                    .timeout(java.time.Duration.ofSeconds(8));
 
-            if (accessToken != null) {
-                req.header("Authorization", "Bearer " + accessToken);
+            String token = accessToken.get();
+            if (token != null) {
+                req.header("Authorization", "Bearer " + token);
             }
 
-            HttpResponse<String> resp = client.send(
+            HttpResponse<String> resp = httpClient.send(
                     req.build(),
                     HttpResponse.BodyHandlers.ofString());
 
+            if (resp.statusCode() == 429) {
+                log.warn("Reddit rate-limited for {}. Token may have expired.", symbol);
+                accessToken.set(null);
+                return List.of();
+            }
+
             if (resp.statusCode() != 200) {
-                log.warn("Reddit HTTP {} for {}", resp.statusCode(), symbol);
+                log.warn("Reddit HTTP {} for {} (body: {})", resp.statusCode(), symbol,
+                        resp.body().length() > 200 ? resp.body().substring(0, 200) : resp.body());
                 return List.of();
             }
 
@@ -136,31 +166,54 @@ public class RedditIndiaInvestmentsSource implements NewsSource {
         }
     }
 
-    private String fetchOAuthToken(ObjectMapper objectMapper, String clientId, String clientSecret) {
+    private String fetchPasswordToken() {
         try {
-            HttpClient client = HttpClient.newHttpClient();
             String auth = java.util.Base64.getEncoder()
                     .encodeToString((clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
 
-            HttpResponse<String> resp = client.send(
+            HttpResponse<String> resp = httpClient.send(
                     HttpRequest.newBuilder()
-                            .uri(URI.create(LOGIN_URL))
+                            .uri(URI.create(TOKEN_URL))
                             .header("Authorization", "Basic " + auth)
                             .header("User-Agent", "SwingTrade/1.0")
                             .header("Content-Type", "application/x-www-form-urlencoded")
                             .POST(HttpRequest.BodyPublishers.ofString(
-                                    "grant_type=password&username=" + username + "&password=" + password))
+                                    "grant_type=password&username=" + URLEncoder.encode(username, StandardCharsets.UTF_8)
+                                            + "&password=" + URLEncoder.encode(password, StandardCharsets.UTF_8)))
                             .build(),
                     HttpResponse.BodyHandlers.ofString());
 
             if (resp.statusCode() == 200) {
                 JsonNode root = objectMapper.readTree(resp.body());
-                String token = root.path("access_token").asText();
-                log.info("Reddit OAuth successful for {}", SUBREDDIT);
-                return token;
+                return root.path("access_token").asText();
             }
         } catch (Exception e) {
-            log.warn("Reddit OAuth failed, falling back to unauthenticated: {}", e.getMessage());
+            log.debug("Password grant failed: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private String fetchClientCredentialsToken() {
+        try {
+            String auth = java.util.Base64.getEncoder()
+                    .encodeToString((clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
+
+            HttpResponse<String> resp = httpClient.send(
+                    HttpRequest.newBuilder()
+                            .uri(URI.create(TOKEN_URL))
+                            .header("Authorization", "Basic " + auth)
+                            .header("User-Agent", "SwingTrade/1.0")
+                            .header("Content-Type", "application/x-www-form-urlencoded")
+                            .POST(HttpRequest.BodyPublishers.ofString("grant_type=client_credentials"))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+
+            if (resp.statusCode() == 200) {
+                JsonNode root = objectMapper.readTree(resp.body());
+                return root.path("access_token").asText();
+            }
+        } catch (Exception e) {
+            log.debug("Client-credentials grant failed: {}", e.getMessage());
         }
         return null;
     }

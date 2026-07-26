@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -174,18 +175,29 @@ public class SignalController {
 
     /**
      * Generate price-action signals for all active watchlist symbols.
-     * Clears existing signals for today before regenerating.
+     * Clears the latest signal per symbol before regenerating.
      */
     @PostMapping("/generate-all")
     @Transactional
     public ResponseEntity<GenerateAllResponse> generateAllSignals() {
         logger.info("Generating signals for all watchlist symbols");
-        // Clear all existing signals so all stocks regenerate fresh
-        int cleared = signalStore.deleteAllSignals();
+        // Clear latest signal per symbol so all stocks regenerate fresh
+        List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
+        int cleared = 0;
+        for (String symbol : symbols) {
+            List<Signal> existing = signalStore.findBySymbol(symbol);
+            if (!existing.isEmpty()) {
+                Signal latest = existing.stream()
+                    .max(java.util.Comparator.comparing(s -> s.date()))
+                    .orElse(null);
+                if (latest != null) {
+                    cleared += signalStore.deleteByDate(latest.date());
+                }
+            }
+        }
         if (cleared > 0) {
             logger.info("Cleared {} stale signals", cleared);
         }
-        List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
         List<SignalResponse> signals = new ArrayList<>();
         List<GenerateAllResponse.SymbolResult> skipped = new ArrayList<>();
         for (String symbol : symbols) {
@@ -214,6 +226,29 @@ public class SignalController {
         logger.info("Generated {} signals, skipped {} of {} symbols",
             signals.size(), skipped.size(), symbols.size());
         return ResponseEntity.ok(GenerateAllResponse.of(signals, skipped));
+    }
+
+    /**
+     * Clear all signals.
+     */
+    @DeleteMapping
+    @Transactional
+    public ResponseEntity<Map<String, Object>> clearAllSignals() {
+        logger.info("Clearing all signals");
+        int cleared = signalStore.deleteAllSignals();
+        logger.info("Cleared {} signals", cleared);
+        return ResponseEntity.ok(Map.of("cleared", cleared));
+    }
+
+    /**
+     * Clear signals for a specific symbol.
+     */
+    @DeleteMapping("/{symbol}")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> clearSignalForSymbol(@PathVariable String symbol) {
+        logger.info("Clearing signals for {}", symbol);
+        int cleared = signalStore.deleteByDate(LocalDate.now());
+        return ResponseEntity.ok(Map.of("cleared", cleared, "symbol", symbol));
     }
 
     /**
