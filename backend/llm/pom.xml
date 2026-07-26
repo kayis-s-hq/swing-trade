@@ -57,6 +57,13 @@
             <artifactId>langchain4j-web-search-engine-google-custom</artifactId>
         </dependency>
 
+        <!-- jsoup override — langchain4j brings 1.16.1, need 1.18.3+ for CookieJar -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.18.3</version>
+        </dependency>
+
         <!-- Commons Codec for HTML/URL utilities -->
         <dependency>
             <groupId>commons-codec</groupId>

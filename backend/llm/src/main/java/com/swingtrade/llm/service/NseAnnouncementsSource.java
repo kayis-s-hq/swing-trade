@@ -3,7 +3,6 @@ package com.swingtrade.llm.service;
 import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.llm.service.StructuredFiling.FilingType;
 import org.jsoup.Connection;
-import org.jsoup.CookieJar;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -13,7 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.net.HttpCookie;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -34,23 +34,13 @@ public class NseAnnouncementsSource implements NewsSource {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private final int maxArticles;
-    private final CookieJar cookieJar;
+    private final java.net.CookieStore cookieStore;
 
     public NseAnnouncementsSource(@Value("${news.source.nse.max-articles:10}") int maxArticles) {
         this.maxArticles = maxArticles;
-        this.cookieJar = new CookieJar() {
-            private final List<HttpCookie> cookies = new ArrayList<>();
-
-            @Override
-            public void saveCookies(String url, List<HttpCookie> cookies) {
-                this.cookies.addAll(cookies);
-            }
-
-            @Override
-            public List<HttpCookie> loadCookies(String url) {
-                return new ArrayList<>(this.cookies);
-            }
-        };
+        CookieManager cm = new CookieManager();
+        cm.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
+        this.cookieStore = cm.getCookieStore();
 
         // Warmup: visit homepage to get Akamai/session cookies
         warmup();
@@ -62,7 +52,7 @@ public class NseAnnouncementsSource implements NewsSource {
                     .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
                     .timeout(8000)
                     .followRedirects(true)
-                    .cookieJar(cookieJar)
+                    .cookieStore(cookieStore)
                     .execute();
             log.debug("NSE warmup successful — cookies cached");
         } catch (Exception e) {
@@ -102,7 +92,7 @@ public class NseAnnouncementsSource implements NewsSource {
                     .header("Referer", "https://www.nseindia.com/corporates/announcements")
                     .timeout(8000)
                     .ignoreContentType(true)
-                    .cookieJar(cookieJar);
+                    .cookieStore(cookieStore);
 
             Document doc = conn.get();
             String body = doc.text(); // Jsoup returns HTML even for JSON — get raw body
@@ -124,7 +114,7 @@ public class NseAnnouncementsSource implements NewsSource {
                         .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
                         .timeout(8000)
                         .header("Referer", HOME_URL)
-                        .cookieJar(cookieJar)
+                        .cookieStore(cookieStore)
                         .get();
 
                 filings = parseHtmlAnnouncements(doc);

@@ -288,6 +288,14 @@
             </properties>
             <build>
                 <plugins>
+                    <!-- Disable repackage for native build — native-image needs exploded classes -->
+                    <plugin>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-maven-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
                     <plugin>
                         <groupId>org.graalvm.buildtools</groupId>
                         <artifactId>native-maven-plugin</artifactId>
@@ -302,6 +310,7 @@
                                 <configuration>
                                     <mainClass>com.swingtrade.api.app.SwingTradeApiApplication</mainClass>
                                     <imageName>swing-trade-api</imageName>
+                                    <classpath>${project.build.outputDirectory}</classpath>
                                     <buildArgs>
                                         <buildArg>--gc=serial</buildArg>
                                         <buildArg>-O3</buildArg>
