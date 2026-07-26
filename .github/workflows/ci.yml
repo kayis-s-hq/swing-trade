@@ -155,7 +155,34 @@ jobs:
         run: MAVEN_OPTS="$JAVA_OPTS" mvn failsafe:integration-test failsafe:verify -B -Dspring.profiles.active=test -DskipTests=true -Dpmd.skip=true -Dcheckstyle.skip=true
 
   # =====================================================================
-  # Frontend Phase 1: Static Analysis (TypeScript typecheck)
+  # Frontend Phase 1: Static Analysis (ESLint + TypeScript typecheck)
+  # =====================================================================
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: dashboard/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: dashboard
+
+      - name: ESLint
+        run: npm run lint
+        working-directory: dashboard
+        continue-on-error: true
+
+  # =====================================================================
+  # Frontend Phase 2: TypeScript typecheck
   # =====================================================================
   frontend-typecheck:
     name: Frontend Typecheck
