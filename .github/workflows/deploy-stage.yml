@@ -55,7 +55,9 @@ jobs:
           mvn package -Pnative -Dmaven.test.skip=true -DskipTests -DskipITs -Dpmd.skip=true -Dcheckstyle.skip=true -B
 
       - name: Copy native binary to Docker context
-        run: cp backend/api/target/native/image/swing-trade-api backend/
+        run: |
+          find backend/api/target -name "swing-trade-api" -type f -exec cp {} backend/ \;
+          ls -lh backend/swing-trade-api
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
