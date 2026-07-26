@@ -4,13 +4,13 @@
 # Builds both GraalVM native (production) and JAR (development) images
 #
 # Build Process:
-#   1. Build native executable locally: mvn clean package -Pnative -Dmaven.test.skip=true
-#   2. Copy native binary to Docker context
-#   3. Build Docker image with pre-built binary
+#   1. CI builds native binary: mvn package -Pnative -Dmaven.test.skip=true
+#   2. Native binary copied to Docker context (backend/)
+#   3. Docker image built with pre-built binary via --target runtime-native
 #
 # Usage:
-#   # Native (production):
-#   docker build --target runtime-native -t swing-trade-api:latest .
+#   # Native (production, from CI binary):
+#   docker build --target runtime-native -t swing-trade-api:stage .
 #
 #   # JAR (development with hot reload):
 #   docker build --target runtime-jar -t swing-trade-api-dev .
@@ -21,7 +21,7 @@
 #   # 2. Configure IDE to connect to localhost:5005
 #   # 3. JVM will listen for debug connections without suspending startup
 #
-# Alternative (build native in CI/CD): Use GitHub Actions with graalvm/setup-graalvm
+# CI/CD flow: native binary is built on the runner (deploy-stage.yml), not inside Docker.
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -60,45 +60,18 @@ RUN mvn dependency:go-offline -B -N && \
     mvn clean package -Dmaven.test.skip=true -B
 
 # ------------------------------------------------------------------------------
-# Stage 2: native-build - Prepare context for native binary
+# Stage 2: runtime-native - GraalVM native production image
 # ------------------------------------------------------------------------------
-# NOTE: Native builds require GraalVM Java 21 with native-image tool
-# GraalVM Docker images (graalvm/graalvm-ce-java21) require authorization
+# The native binary is built on the runner via: mvn package -Pnative
+# Then copied to the Docker context (backend/) before docker build.
 #
-# RECOMMENDED APPROACH: Build native locally on developer machine:
-#   cd api
-#   mvn clean package -Pnative -Dmaven.test.skip=true -B
-#   cp target/swing-trade-api ../.docker/
-#
-# Then build Docker image with the pre-built binary:
-#   docker build --target runtime-native -t swing-trade-api:latest .
-#
-# ALTERNATIVE (CI/CD): Use GitHub Actions workflow to build native in container:
-#   - Use graalvm/setup-graalvm@v1 action
-#   - Run mvn package -Pnative
-#   - Build Docker image and push to registry
-# ==============================================================================
-FROM alpine:latest AS native-build
-
-WORKDIR /app
-
-# This stage is a placeholder - the native binary should be copied here
-# BEFORE running docker build (from local native build)
-#
-# To use: After building native locally, copy binary to .docker/ directory:
-#   cp api/target/swing-trade-api .docker/
-# Then use multi-stage build with: COPY --from=host .docker/swing-trade-api /app/
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# Stage 3: runtime-native - GraalVM native production image
-# ------------------------------------------------------------------------------
+# Usage:
+#   docker build --target runtime-native -t swing-trade-api:stage .
 FROM gcr.io/distroless/base-debian12 AS runtime-native
 
 WORKDIR /app
 
-# Copy native executable (pre-built locally with GraalVM)
-# IMPORTANT: Build native first with: mvn clean package -Pnative -Dmaven.test.skip=true
+# Copy native executable (built on CI runner via mvn package -Pnative, then copied to Docker context)
 COPY swing-trade-api /app/swing-trade-api
 
 # Expose API port
@@ -112,7 +85,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 CMD ["/app/swing-trade-api"]
 
 # ------------------------------------------------------------------------------
-# Stage 4: runtime-jar - JAR development image
+# Stage 3: runtime-jar - JAR development image
 # ------------------------------------------------------------------------------
 # For development with hot reload, mount source code as volume:
 #   docker run -v $(pwd):/app swing-trade-api-dev

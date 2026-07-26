@@ -15,7 +15,7 @@ concurrency:
 env:
   JAVA_VERSION: 21
   DOCKER_IMAGE: swing-trade-api
-  DOCKER_TAG: dev
+  DOCKER_TAG: stage
 
 jobs:
   build-and-deploy:
@@ -32,13 +32,25 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Build backend
-        working-directory: backend
-        run: mvn clean package -B -Dmaven.test.skip=true
+      - name: Install GraalVM 21 with native-image
+        run: |
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          sdk install graalvm 21.0.2-gr 2>/dev/null || true
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          gu install native-image
+          java -version
+          native-image --version
 
-      - name: Verify JAR
-        working-directory: backend/api/target
-        run: ls -la api-1.0.0.jar
+      - name: Build native image
+        working-directory: backend
+        run: |
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          export JAVA_HOME="$HOME/.sdkman/candidates/java/current"
+          export PATH="$HOME/.sdkman/candidates/graalvm/21.0.2-gr/bin:$PATH"
+          mvn package -Pnative -Dmaven.test.skip=true -B
+
+      - name: Copy native binary to Docker context
+        run: cp backend/api/target/native/image/swing-trade-api backend/
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
@@ -56,7 +68,7 @@ jobs:
         with:
           context: .
           file: backend/Dockerfile
-          target: runtime-jar
+          target: runtime-native
           tags: ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
@@ -104,11 +116,10 @@ jobs:
             -e STRATEGY_ENABLED=true \
             -e SIGNAL_ENABLED=false \
             -e DISCORD_WEBHOOK_ENABLED=false \
-            ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }} \
-            java -jar /app/swing-trade-api.jar
+            ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
 
       - name: Wait for startup
-        run: sleep 20
+        run: sleep 10
 
       - name: Health check
         run: |
