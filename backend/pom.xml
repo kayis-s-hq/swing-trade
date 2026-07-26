@@ -59,11 +59,9 @@
         <maven.site.plugin.version>3.12.1</maven.site.plugin.version>
         <maven.site.model.version>2.0.0</maven.site.model.version>
 
-        <!-- PMD & Checkstyle -->
-        <pmd.version>3.27.0</pmd.version>
+        <!-- Checkstyle -->
         <checkstyle.version>3.6.0</checkstyle.version>
-        <pmd.ruleset>${project.basedir}/../config/pmd/pmd-ruleset.xml</pmd.ruleset>
-        <checkstyle.config>${project.basedir}/../config/checkstyle/checkstyle.xml</checkstyle.config>
+        <checkstyle.config>${maven.multiModuleProjectDirectory}/config/checkstyle/checkstyle.xml</checkstyle.config>
     </properties>
 
     <dependencyManagement>
@@ -421,6 +419,10 @@
                     <outputDirectory>${project.basedir}/target/site-docs</outputDirectory>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+            </plugin>
         </plugins>
     </build>
 
@@ -429,17 +431,6 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-project-info-reports-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-pmd-plugin</artifactId>
-                <version>${pmd.version}</version>
-                <configuration>
-                    <linkXRef>false</linkXRef>
-                    <rulesets>
-                        <ruleset>${pmd.ruleset}</ruleset>
-                    </rulesets>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
