@@ -6,8 +6,8 @@ const STORAGE_KEY = 'swingtrade_theme'
 function loadTheme(): boolean {
   const raw = localStorage.getItem(STORAGE_KEY)
   if (raw !== null) return raw === 'true'
-  // Detect system preference
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
+  // Default to dark for trading dashboard — light mode has poor card contrast
+  return true
 }
 
 export const useThemeStore = defineStore('theme', () => {

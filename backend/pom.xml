@@ -58,6 +58,12 @@
         <bytebuddy.version>1.17.0</bytebuddy.version>
         <maven.site.plugin.version>3.12.1</maven.site.plugin.version>
         <maven.site.model.version>2.0.0</maven.site.model.version>
+
+        <!-- PMD & Checkstyle -->
+        <pmd.version>3.27.0</pmd.version>
+        <checkstyle.version>3.6.0</checkstyle.version>
+        <pmd.ruleset>${project.basedir}/../config/pmd/pmd-ruleset.xml</pmd.ruleset>
+        <checkstyle.config>${project.basedir}/../config/checkstyle/checkstyle.xml</checkstyle.config>
     </properties>
 
     <dependencyManagement>
@@ -374,6 +380,45 @@
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-pmd-plugin</artifactId>
+                    <version>${pmd.version}</version>
+                    <configuration>
+                        <linkXRef>false</linkXRef>
+                        <rulesets>
+                            <ruleset>${pmd.ruleset}</ruleset>
+                        </rulesets>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>pmd</id>
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${checkstyle.version}</version>
+                    <configuration>
+                        <configLocation>${checkstyle.config}</configLocation>
+                        <failOnViolation>true</failOnViolation>
+                        <consoleOutput>true</consoleOutput>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>checkstyle</id>
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-site-plugin</artifactId>
                     <version>${maven.site.plugin.version}</version>
                     <configuration>
@@ -407,24 +452,23 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>3.6.0</version>
-                <reportSets>
-                    <reportSet>
-                        <reports>
-                            <report>checkstyle</report>
-                        </reports>
-                    </reportSet>
-                </reportSets>
+                <artifactId>maven-pmd-plugin</artifactId>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-pmd-plugin</artifactId>
+                <version>${pmd.version}</version>
+                <configuration>
+                    <linkXRef>false</linkXRef>
+                    <rulesets>
+                        <ruleset>${pmd.ruleset}</ruleset>
+                    </rulesets>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-pmd-plugin</artifactId>
-                <version>3.27.0</version>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <version>${checkstyle.version}</version>
                 <configuration>
-                    <rulesets>
-                        <ruleset>${project.basedir}/../config/pmd/pmd-ruleset.xml</ruleset>
-                    </rulesets>
+                    <configLocation>${checkstyle.config}</configLocation>
                 </configuration>
             </plugin>
             <plugin>
