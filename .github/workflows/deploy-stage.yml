@@ -34,11 +34,15 @@ jobs:
 
       - name: Install GraalVM 21 with native-image
         run: |
-          curl -s "https://get.sdkman.io" | bash
+          sudo apt-get update -qq && sudo apt-get install -y -qq zip >/dev/null 2>&1 || true
+          if [ ! -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
+            curl -s "https://get.sdkman.io" | bash
+          fi
           source "$HOME/.sdkman/bin/sdkman-init.sh"
-          sdk install graalvm 21.0.2.gr21 2>/dev/null || true
-          source "$HOME/.sdkman/bin/sdkman-init.sh"
-          gu install native-image
+          if ! java -version 2>&1 | grep -q "GraalVM"; then
+            sdk install java 21.0.12-graal 2>/dev/null || true
+            source "$HOME/.sdkman/bin/sdkman-init.sh"
+          fi
           java -version
           native-image --version
 
@@ -46,8 +50,8 @@ jobs:
         working-directory: backend
         run: |
           source "$HOME/.sdkman/bin/sdkman-init.sh"
-          export JAVA_HOME="$HOME/.sdkman/candidates/java/current"
-          export PATH="$HOME/.sdkman/candidates/graalvm/21.0.2.gr21/bin:$PATH"
+          export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.12-graal"
+          export PATH="$JAVA_HOME/bin:$PATH"
           mvn package -Pnative -Dmaven.test.skip=true -B
 
       - name: Copy native binary to Docker context
