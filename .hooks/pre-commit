@@ -85,10 +85,11 @@ if [ ${#vue_files[@]} -gt 0 ] || [ ${#ts_files[@]} -gt 0 ]; then
     echo "Running ESLint on staged frontend files..."
     cd dashboard
 
-    # Collect all staged frontend files
+    # Collect all staged frontend files (strip dashboard/ prefix for eslint cwd)
     frontend_files=""
     for f in "${vue_files[@]}" "${ts_files[@]}"; do
-        frontend_files="$frontend_files $f"
+        stripped="${f#dashboard/}"
+        frontend_files="$frontend_files $stripped"
     done
 
     npx eslint --fix --no-warn-ignored --quiet $frontend_files 2>&1
@@ -100,7 +101,7 @@ if [ ${#vue_files[@]} -gt 0 ] || [ ${#ts_files[@]} -gt 0 ]; then
     fi
 
     # Re-stage any files modified by --fix
-    git add $frontend_files
+    git add dashboard/$frontend_files
 
     echo "ESLint passed."
 fi
