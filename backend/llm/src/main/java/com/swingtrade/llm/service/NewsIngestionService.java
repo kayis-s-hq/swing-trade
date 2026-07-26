@@ -77,12 +77,14 @@ public class NewsIngestionService {
     private final NseAnnouncementsSource nseSource;
     private final BseAnnouncementsSource bseSource;
     private final RedditIndiaInvestmentsSource redditSource;
+    private final FinnhubNewsSource finnhubSource;
     private final NewsArticleStore newsArticleStore;
     private final int timeoutSeconds;
     private final int maxMoneycontrolArticles;
     private final int maxEtArticles;
     private final int maxGoogleArticles;
     private final int maxRedditArticles;
+    private final int maxFinnhubArticles;
 
     /**
      * Constructs NewsIngestionService with all news sources and article store.
@@ -98,12 +100,14 @@ public class NewsIngestionService {
             NseAnnouncementsSource nseSource,
             BseAnnouncementsSource bseSource,
             RedditIndiaInvestmentsSource redditSource,
+            FinnhubNewsSource finnhubSource,
             NewsArticleStore newsArticleStore,
             @Value("${news.source.timeout:10}") int timeoutSeconds,
             @Value("${news.source.moneycontrol.max-articles:15}") int maxMoneycontrolArticles,
             @Value("${news.source.et.max-articles:15}") int maxEtArticles,
             @Value("${news.source.google.max-articles:20}") int maxGoogleArticles,
             @Value("${news.source.reddit.max-articles:15}") int maxRedditArticles,
+            @Value("${news.source.finnhub.max-articles:15}") int maxFinnhubArticles,
             @Value("${news.rss.feeds:#{null}}") String rssFeedUrls,
             @Value("${news.rss.max-articles-per-feed:10}") int maxArticlesPerFeed) {
 
@@ -123,12 +127,14 @@ public class NewsIngestionService {
         this.nseSource = nseSource;
         this.bseSource = bseSource;
         this.redditSource = redditSource;
+        this.finnhubSource = finnhubSource;
         this.newsArticleStore = newsArticleStore;
         this.timeoutSeconds = timeoutSeconds;
         this.maxMoneycontrolArticles = maxMoneycontrolArticles;
         this.maxEtArticles = maxEtArticles;
         this.maxGoogleArticles = maxGoogleArticles;
         this.maxRedditArticles = maxRedditArticles;
+        this.maxFinnhubArticles = maxFinnhubArticles;
 
         // Parse custom queries or use default Google News queries
         if (rssFeedUrls != null && !rssFeedUrls.isBlank()) {
@@ -440,6 +446,19 @@ public class NewsIngestionService {
             }
         }, newsExecutor).exceptionally(ex -> {
             logger.warn("Reddit timed out/failed for {}: {}", stockSymbol, ex.getMessage());
+            return List.<NewsArticle>of();
+        }));
+
+        // Finnhub
+        futures.add(CompletableFuture.supplyAsync(() -> {
+            try {
+                return finnhubSource.fetch(stockSymbol);
+            } catch (Exception e) {
+                logger.warn("Finnhub fetch failed for {}: {}", stockSymbol, e.getMessage());
+                return List.<NewsArticle>of();
+            }
+        }, newsExecutor).exceptionally(ex -> {
+            logger.warn("Finnhub timed out/failed for {}: {}", stockSymbol, ex.getMessage());
             return List.<NewsArticle>of();
         }));
 

@@ -2,8 +2,6 @@ package com.swingtrade.llm.service;
 
 import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.llm.service.StructuredFiling.FilingType;
-import org.jsoup.Connection;
-import org.jsoup.CookieJar;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -13,7 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.net.HttpCookie;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -22,7 +21,7 @@ import java.util.stream.Collectors;
 
 /**
  * Fetches corporate announcements from NSE India.
- * Uses Jsoup with shared cookie jar for session persistence across requests.
+ * Uses a shared CookieManager for session persistence across requests.
  */
 @Service
 public class NseAnnouncementsSource implements NewsSource {
@@ -34,40 +33,12 @@ public class NseAnnouncementsSource implements NewsSource {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private final int maxArticles;
-    private final CookieJar cookieJar;
+    private final CookieManager cookieManager;
 
     public NseAnnouncementsSource(@Value("${news.source.nse.max-articles:10}") int maxArticles) {
         this.maxArticles = maxArticles;
-        this.cookieJar = new CookieJar() {
-            private final List<HttpCookie> cookies = new ArrayList<>();
-
-            @Override
-            public void saveCookies(String url, List<HttpCookie> cookies) {
-                this.cookies.addAll(cookies);
-            }
-
-            @Override
-            public List<HttpCookie> loadCookies(String url) {
-                return new ArrayList<>(this.cookies);
-            }
-        };
-
-        // Warmup: visit homepage to get Akamai/session cookies
-        warmup();
-    }
-
-    private void warmup() {
-        try {
-            Jsoup.connect(HOME_URL)
-                    .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
-                    .timeout(8000)
-                    .followRedirects(true)
-                    .cookieJar(cookieJar)
-                    .execute();
-            log.debug("NSE warmup successful — cookies cached");
-        } catch (Exception e) {
-            log.debug("NSE warmup skipped: {}", e.getMessage());
-        }
+        this.cookieManager = new CookieManager();
+        this.cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
     }
 
     @Override
@@ -91,48 +62,81 @@ public class NseAnnouncementsSource implements NewsSource {
 
     @Override
     public List<StructuredFiling> fetchFilings(String symbol) {
-        List<StructuredFiling> filings = new ArrayList<>();
+        // Save and set shared cookie manager
+        CookieManager previous = HttpClientHolder.getPreviousCookieManager();
+        HttpClientHolder.setCookieManager(cookieManager);
 
-        // Try API first (uses shared cookie jar from warmup)
+        List<StructuredFiling> filings = new ArrayList<>();
         try {
-            Connection conn = Jsoup.connect(API_URL + symbol)
+            // Try API first
+            filings = fetchApi(symbol);
+        } catch (Exception e) {
+            log.debug("NSE API failed for '{}': {}", symbol, e.getMessage());
+        }
+
+        // Fallback to HTML scraping
+        if (filings.isEmpty()) {
+            try {
+                filings = fetchHtml(symbol);
+            } catch (Exception e) {
+                log.warn("NSE HTML fetch failed for '{}': {}", symbol, e.getMessage());
+            }
+        }
+
+        // Restore previous cookie manager
+        HttpClientHolder.setCookieManager(previous);
+
+        return filings;
+    }
+
+    private List<StructuredFiling> fetchApi(String symbol) {
+        List<StructuredFiling> filings = new ArrayList<>();
+        try {
+            Document doc = Jsoup.connect(API_URL + symbol)
                     .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
                     .header("Accept", "application/json")
                     .header("X-Index", "nseindia.com")
                     .header("Referer", "https://www.nseindia.com/corporates/announcements")
                     .timeout(8000)
                     .ignoreContentType(true)
-                    .cookieJar(cookieJar);
+                    .followRedirects(true)
+                    .get();
 
-            Document doc = conn.get();
-            String body = doc.text(); // Jsoup returns HTML even for JSON — get raw body
-
-            // Try parsing as JSON from the raw response
-            try {
-                filings = parseJsonResponse(doc.body().text());
-            } catch (Exception e) {
-                log.debug("NSE JSON parse failed, trying HTML: {}", e.getMessage());
-            }
+            String body = doc.body().text();
+            filings = parseJsonResponse(body);
+            log.debug("NSE API returned {} filings for {}", filings.size(), symbol);
         } catch (Exception e) {
-            log.debug("NSE API failed for '{}', trying HTML: {}", symbol, e.getMessage());
+            log.debug("NSE API fetch failed for '{}': {}", symbol, e.getMessage());
         }
+        return filings;
+    }
 
-        // Fallback to HTML scraping
-        if (filings.isEmpty()) {
+    private List<StructuredFiling> fetchHtml(String symbol) {
+        List<StructuredFiling> filings = new ArrayList<>();
+        try {
+            // Warmup: visit homepage first to get session cookies
             try {
-                Document doc = Jsoup.connect(HTML_URL)
+                Jsoup.connect(HOME_URL)
                         .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
                         .timeout(8000)
-                        .header("Referer", HOME_URL)
-                        .cookieJar(cookieJar)
+                        .followRedirects(true)
                         .get();
-
-                filings = parseHtmlAnnouncements(doc);
             } catch (Exception e) {
-                log.warn("NSE HTML fetch failed for '{}': {}", symbol, e.getMessage());
+                log.debug("NSE warmup skipped: {}", e.getMessage());
             }
-        }
 
+            Document doc = Jsoup.connect(HTML_URL)
+                    .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+                    .timeout(8000)
+                    .header("Referer", HOME_URL)
+                    .followRedirects(true)
+                    .get();
+
+            filings = parseHtmlAnnouncements(doc);
+            log.debug("NSE HTML returned {} filings for {}", filings.size(), symbol);
+        } catch (Exception e) {
+            log.debug("NSE HTML fetch failed for '{}': {}", symbol, e.getMessage());
+        }
         return filings;
     }
 
@@ -210,5 +214,33 @@ public class NseAnnouncementsSource implements NewsSource {
         if (t.contains("split") || t.contains("bonus") || t.contains("right")) return FilingType.CORPORATE_ACTION;
         if (t.contains("result") || t.contains("quarterly") || t.contains("quarter")) return FilingType.PERFORMANCE_RESULT;
         return FilingType.OTHER;
+    }
+
+    /**
+     * Thread-local holder for the global CookieManager.
+     * Jsoup uses the default CookieManager for cookie persistence.
+     */
+    private static class HttpClientHolder {
+        private static final ThreadLocal<CookieManager> CURRENT = ThreadLocal.withInitial(() -> {
+            try {
+                java.net.CookieHandler ch = java.net.CookieHandler.getDefault();
+                return ch instanceof CookieManager ? (CookieManager) ch : null;
+            } catch (Exception e) {
+                return null;
+            }
+        });
+
+        static CookieManager getPreviousCookieManager() {
+            return CURRENT.get();
+        }
+
+        static void setCookieManager(CookieManager cm) {
+            if (cm != null) {
+                java.net.CookieHandler.setDefault(cm);
+            } else {
+                java.net.CookieHandler.setDefault(null);
+            }
+            CURRENT.set(cm);
+        }
     }
 }
