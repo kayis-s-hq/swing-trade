@@ -26,6 +26,10 @@ Verify before running Maven:
 java -version  # must be Java 21, NOT 25/26
 ```
 
+## Git Hooks
+
+**STRICT: NEVER modify, override, or replace `.git/hooks/` files directly.** Git hooks are tracked in `.hooks/` and managed via `git config core.hooksPath`. All hook changes MUST go through `.hooks/` — never edit `.git/hooks/` directly.
+
 ## Project Structure
 
 ```
