@@ -1,12 +1,12 @@
-import {describe, expect, it} from 'vitest'
-import {mount} from '@vue/test-utils'
-import {defineComponent} from 'vue'
+import { describe, expect, it } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { defineComponent } from 'vue'
 import SignalCard from '../../../src/components/SignalCard.vue'
 
 const TestComponent = defineComponent({
   components: { SignalCard },
-  template: '<SignalCard v-bind="props" />',
   props: ['props'],
+  template: '<SignalCard v-bind="props" />',
 })
 
 describe('SignalCard', () => {

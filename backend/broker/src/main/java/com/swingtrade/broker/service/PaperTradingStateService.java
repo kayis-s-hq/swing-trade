@@ -5,8 +5,16 @@ import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
-import com.swingtrade.broker.entity.*;
-import com.swingtrade.broker.repository.*;
+import com.swingtrade.broker.entity.PaperTradingClosedPositionEntity;
+import com.swingtrade.broker.entity.PaperTradingOrderEntity;
+import com.swingtrade.broker.entity.PaperTradingPositionEntity;
+import com.swingtrade.broker.entity.PaperTradingPortfolioEntity;
+import com.swingtrade.broker.entity.PaperTradingSnapshotEntity;
+import com.swingtrade.broker.repository.PaperTradingClosedPositionRepository;
+import com.swingtrade.broker.repository.PaperTradingOrderRepository;
+import com.swingtrade.broker.repository.PaperTradingPositionRepository;
+import com.swingtrade.broker.repository.PaperTradingPortfolioRepository;
+import com.swingtrade.broker.repository.PaperTradingSnapshotRepository;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import org.slf4j.Logger;
@@ -14,12 +22,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Bridges in-memory PaperTradingEngine with DB persistence.

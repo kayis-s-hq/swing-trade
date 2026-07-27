@@ -7,11 +7,16 @@
         <p class="mt-1 text-sm text-text-muted">{{ watchlist.length }} stocks being monitored</p>
       </div>
       <button
-        @click="showAddForm = !showAddForm"
         class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90"
+        @click="showAddForm = !showAddForm"
       >
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 4v16m8-8H4"
+          />
         </svg>
         Add Stock
       </button>
@@ -20,7 +25,7 @@
     <!-- Add Stock Form -->
     <div v-if="showAddForm" class="mb-6 card-panel p-5">
       <h3 class="mb-3 text-sm font-semibold text-text-primary">Add Stock to Watchlist</h3>
-      <form @submit.prevent="handleSubmit" class="flex flex-col sm:flex-row gap-3">
+      <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="handleSubmit">
         <div class="flex-1">
           <label class="mb-1 block text-xs font-medium text-text-muted">Symbol</label>
           <input
@@ -32,7 +37,9 @@
           />
         </div>
         <div class="flex-1">
-          <label class="mb-1 block text-xs font-medium text-text-muted">Company Name (optional)</label>
+          <label class="mb-1 block text-xs font-medium text-text-muted"
+            >Company Name (optional)</label
+          >
           <input
             v-model="newName"
             type="text"
@@ -50,8 +57,8 @@
           </button>
           <button
             type="button"
-            @click="showAddForm = false"
             class="rounded-md border border-border-subtle px-3 py-2 text-sm text-text-muted transition-colors hover:bg-bg-hover"
+            @click="showAddForm = false"
           >
             Cancel
           </button>
@@ -65,7 +72,13 @@
     </div>
 
     <!-- Error -->
-    <ErrorMessage v-else-if="error" :message="errorMessage" :showRetry="true" retryText="Retry" @retry="loadWatchlist" />
+    <ErrorMessage
+      v-else-if="error"
+      :message="errorMessage"
+      :show-retry="true"
+      retry-text="Retry"
+      @retry="loadWatchlist"
+    />
 
     <!-- Watchlist Table -->
     <template v-else>
@@ -73,37 +86,82 @@
         <table class="min-w-full">
           <thead>
             <tr class="border-b border-border-subtle bg-bg-primary/50">
-              <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Symbol</th>
-              <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Name</th>
-              <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Exchange</th>
-              <th class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted">Status</th>
-              <th class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Candles</th>
-              <th class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Actions</th>
+              <th
+                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Symbol
+              </th>
+              <th
+                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Name
+              </th>
+              <th
+                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Exchange
+              </th>
+              <th
+                class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Status
+              </th>
+              <th
+                class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Candles
+              </th>
+              <th
+                class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border-subtle/50">
-            <tr v-for="entry in watchlist" :key="entry.symbol" class="transition-colors hover:bg-bg-hover">
-              <td class="px-5 py-4 text-sm font-semibold text-text-primary">{{ entry.symbol }}</td>
-              <td class="px-5 py-4 text-sm text-text-secondary">{{ entry.name || '—' }}</td>
-              <td class="px-5 py-4 text-sm text-text-muted">{{ entry.exchange }}</td>
+            <tr
+              v-for="entry in watchlist"
+              :key="entry.symbol"
+              class="transition-colors hover:bg-bg-hover"
+            >
+              <td class="px-5 py-4 text-sm font-semibold text-text-primary">
+                {{ entry.symbol }}
+              </td>
+              <td class="px-5 py-4 text-sm text-text-secondary">
+                {{ entry.name || '—' }}
+              </td>
+              <td class="px-5 py-4 text-sm text-text-muted">
+                {{ entry.exchange }}
+              </td>
               <td class="px-5 py-4 text-center">
                 <button
-                  @click="toggleEntry(entry.symbol)"
                   class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors"
-                  :class="entry.isActive ? 'bg-success-bg text-success hover:bg-success-bg/80' : 'bg-bg-hover text-text-muted hover:bg-border-subtle'"
+                  :class="
+                    entry.isActive
+                      ? 'bg-success-bg text-success hover:bg-success-bg/80'
+                      : 'bg-bg-hover text-text-muted hover:bg-border-subtle'
+                  "
+                  @click="toggleEntry(entry.symbol)"
                 >
                   {{ entry.isActive ? 'Active' : 'Inactive' }}
                 </button>
               </td>
-              <td class="px-5 py-4 text-right text-sm text-text-secondary">{{ entry.candleCount ?? 0 }}</td>
+              <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                {{ entry.candleCount ?? 0 }}
+              </td>
               <td class="px-5 py-4 text-right">
                 <button
-                  @click="removeEntry(entry.symbol)"
                   class="rounded-md p-1 text-text-muted transition-colors hover:bg-danger-bg hover:text-danger"
                   :title="'Remove ' + entry.symbol"
+                  @click="removeEntry(entry.symbol)"
                 >
                   <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.14A2 2 0 0116.237 21H7.763a2 2 0 01-1.896-1.86L5 7m1 0h4m-4 0V3h4v4m-4 0H5m14-4H15m4 0v4m-4-4h1m-5 0h.01" />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 7l-.867 12.14A2 2 0 0116.237 21H7.763a2 2 0 01-1.896-1.86L5 7m1 0h4m-4 0V3h4v4m-4 0H5m14-4H15m4 0v4m-4-4h1m-5 0h.01"
+                    />
                   </svg>
                 </button>
               </td>
@@ -121,7 +179,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getWatchlist, addToWatchlist, removeFromWatchlist, toggleWatchlistActive } from '../api/client'
+import {
+  getWatchlist,
+  addToWatchlist,
+  removeFromWatchlist,
+  toggleWatchlistActive,
+} from '../api/client'
 import type { WatchlistEntry } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
@@ -195,7 +258,7 @@ const removeEntry = async (symbol: string) => {
 }
 
 const toggleEntry = async (symbol: string) => {
-  const entry = watchlist.value.find(e => e.symbol === symbol)
+  const entry = watchlist.value.find((e) => e.symbol === symbol)
   if (!entry) return
   try {
     const result = await toggleWatchlistActive(symbol, entry.isActive)
@@ -209,5 +272,7 @@ const toggleEntry = async (symbol: string) => {
   }
 }
 
-onMounted(() => { loadWatchlist() })
+onMounted(() => {
+  loadWatchlist()
+})
 </script>

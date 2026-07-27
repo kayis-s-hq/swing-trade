@@ -3,11 +3,15 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="rounded-md bg-bg-elevated px-3 py-2">
         <p class="text-xs text-text-muted">Score</p>
-        <p class="text-lg font-semibold" :class="scoreColor">{{ score }}</p>
+        <p class="text-lg font-semibold" :class="scoreColor">
+          {{ score }}
+        </p>
       </div>
       <div class="rounded-md bg-bg-elevated px-3 py-2">
         <p class="text-xs text-text-muted">Signal</p>
-        <p class="text-lg font-semibold" :class="signalColor">{{ signal }}</p>
+        <p class="text-lg font-semibold" :class="signalColor">
+          {{ signal }}
+        </p>
       </div>
     </div>
 

@@ -42,11 +42,9 @@ public class YahooFinanceClient implements MarketDataClient {
     private final ObjectMapper objectMapper;
     private final java.time.Clock clock;
 
-    // Rate limiter: minimum 1s between requests to avoid Yahoo blocking
     private final AtomicLong lastRequestTime = new AtomicLong(0);
     private static final long RATE_LIMIT_MS = 1000;
 
-    // Yahoo Finance API endpoints
     public YahooFinanceClient() {
         this(new ObjectMapper(), java.time.Clock.systemUTC());
     }
@@ -54,12 +52,9 @@ public class YahooFinanceClient implements MarketDataClient {
     public YahooFinanceClient(ObjectMapper objectMapper, java.time.Clock clock) {
         this.objectMapper = objectMapper;
         this.clock = clock;
-
-        HttpClient httpClient = HttpClient.create()
-                .option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000);
-
         this.webClient = WebClient.builder()
-                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
+                    HttpClient.create().option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)))
                 .baseUrl("https://query1.finance.yahoo.com")
                 .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build();
@@ -69,7 +64,6 @@ public class YahooFinanceClient implements MarketDataClient {
     YahooFinanceClient(String baseUrl) {
         this.objectMapper = new ObjectMapper();
         this.clock = java.time.Clock.systemUTC();
-
         this.webClient = WebClient.builder()
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
                         HttpClient.create().baseUrl(baseUrl)))
@@ -77,8 +71,7 @@ public class YahooFinanceClient implements MarketDataClient {
                 .build();
     }
 
-    // Package-private constructor for testing with MockWebServer
-    // Uses daemon-thread event loops so MockWebServer tests don't hang on exit
+    // Package-private constructor for testing with MockWebServer (daemon threads)
     YahooFinanceClient(String baseUrl, reactor.netty.resources.LoopResources loop) {
         this(baseUrl, ObjectMapper::new, java.time.Clock.systemUTC(), loop);
     }
@@ -88,7 +81,6 @@ public class YahooFinanceClient implements MarketDataClient {
                        java.time.Clock clock, reactor.netty.resources.LoopResources loop) {
         this.objectMapper = mapperSupplier.get();
         this.clock = clock;
-
         this.webClient = WebClient.builder()
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
                         HttpClient.create().baseUrl(baseUrl).runOn(loop)))
@@ -123,65 +115,31 @@ public class YahooFinanceClient implements MarketDataClient {
                     .bodyToMono(String.class)
                     .block();
 
-            if (response == null || response.isEmpty()) {
-                return null;
-            }
-
+            if (response == null || response.isEmpty()) return null;
             JsonNode root = objectMapper.readTree(response);
             JsonNode result = root.path("chart").path("result");
-
-            if (!result.isArray() || result.size() == 0) {
-                return null;
-            }
-
+            if (!result.isArray() || result.size() == 0) return null;
             JsonNode quoteObj = result.get(0).path("indicators").path("quote").get(0);
             JsonNode timestamps = result.get(0).path("timestamp");
-
-            if (!quoteObj.isObject() || !timestamps.isArray() || timestamps.size() == 0) {
-                return null;
-            }
+            if (!quoteObj.isObject() || !timestamps.isArray() || timestamps.size() == 0) return null;
 
             JsonNode openArr = quoteObj.path("open");
             JsonNode highArr = quoteObj.path("high");
             JsonNode lowArr = quoteObj.path("low");
             JsonNode closeArr = quoteObj.path("close");
             JsonNode volumeArr = quoteObj.path("volume");
-            JsonNode adjcloseArr = result.get(0).path("indicators").path("adjclose");
-            JsonNode adjArr = adjcloseArr.isArray() && adjcloseArr.size() > 0
-                ? adjcloseArr.get(0).path("adjclose")
-                : null;
-
-            // Check if data is valid (not null/empty)
+            JsonNode adjArr = result.get(0).path("indicators").path("adjclose")
+                .isArray() && result.get(0).path("indicators").path("adjclose").size() > 0
+                    ? result.get(0).path("indicators").path("adjclose").get(0).path("adjclose") : null;
             double closeVal = closeArr.isNull() ? 0 : closeArr.get(0).asDouble(0);
-            if (closeVal == 0) {
-                return null;
-            }
-
+            if (closeVal == 0) return null;
             long volume = volumeArr.isNull() ? 0 : volumeArr.get(0).asLong(0);
-
-            // Skip pre-market placeholder candles with zero volume
-            if (volume == 0) {
-                return null;
-            }
-
-            BigDecimal open = parseBigDecimal(openArr.get(0));
-            BigDecimal high = parseBigDecimal(highArr.get(0));
-            BigDecimal low = parseBigDecimal(lowArr.get(0));
-            BigDecimal close = parseBigDecimal(closeArr.get(0));
-            BigDecimal adjClose = (adjArr != null && !adjArr.isNull() && adjArr.size() > 0)
-                ? parseBigDecimal(adjArr.get(0))
-                : close;
-
-            return CandleData.of(
-                symbol,
-                date,
-                open,
-                high,
-                low,
-                close,
-                volume,
-                adjClose
-            );
+            if (volume == 0) return null;
+            return CandleData.of(symbol, date,
+                parseBigDecimal(openArr.get(0)), parseBigDecimal(highArr.get(0)),
+                parseBigDecimal(lowArr.get(0)), parseBigDecimal(closeArr.get(0)), volume,
+                (adjArr != null && !adjArr.isNull()) ? parseBigDecimal(adjArr.get(0))
+                    : parseBigDecimal(closeArr.get(0)));
 
         } catch (Exception e) {
             logger.warn("Failed to fetch candle for {} on {}: {}", symbol, date, e.getMessage());
@@ -217,67 +175,38 @@ public class YahooFinanceClient implements MarketDataClient {
                     .bodyToMono(String.class)
                     .block();
 
-            if (response == null || response.isEmpty()) {
-                return candles;
-            }
-
+            if (response == null || response.isEmpty()) return candles;
             JsonNode root = objectMapper.readTree(response);
             JsonNode result = root.path("chart").path("result");
-
-            if (!result.isArray() || result.size() == 0) {
-                return candles;
-            }
-
+            if (!result.isArray() || result.size() == 0) return candles;
             JsonNode quoteObj = result.get(0).path("indicators").path("quote").get(0);
             JsonNode timestamps = result.get(0).path("timestamp");
-
-            if (!quoteObj.isObject() || !timestamps.isArray() || timestamps.size() == 0) {
-                return candles;
-            }
+            if (!quoteObj.isObject() || !timestamps.isArray() || timestamps.size() == 0) return candles;
 
             JsonNode openArr = quoteObj.path("open");
             JsonNode highArr = quoteObj.path("high");
             JsonNode lowArr = quoteObj.path("low");
             JsonNode closeArr = quoteObj.path("close");
             JsonNode volumeArr = quoteObj.path("volume");
-            JsonNode adjcloseArr = result.get(0).path("indicators").path("adjclose");
-            JsonNode adjArr = adjcloseArr.isArray() && adjcloseArr.size() > 0
-                ? adjcloseArr.get(0).path("adjclose")
-                : null;
-
+            JsonNode adjArr = result.get(0).path("indicators").path("adjclose")
+                .isArray() && result.get(0).path("indicators").path("adjclose").size() > 0
+                    ? result.get(0).path("indicators").path("adjclose").get(0).path("adjclose") : null;
             for (int i = 0; i < timestamps.size(); i++) {
-                // Skip rows with missing close price
-                double closeVal = closeArr.isNull() ? 0 : closeArr.get(i).asDouble(0);
-                if (closeVal == 0) {
-                    continue;
-                }
-
-                // Skip pre-market placeholder candles with zero volume
+                if (closeArr.isNull() || closeArr.get(i).asDouble(0) == 0) continue;
                 long volume = volumeArr.isNull() ? 0 : volumeArr.get(i).asLong(0);
-                if (volume == 0) {
-                    continue;
-                }
-
-                BigDecimal open = parseBigDecimal(openArr.get(i));
-                BigDecimal high = parseBigDecimal(highArr.get(i));
-                BigDecimal low = parseBigDecimal(lowArr.get(i));
-                BigDecimal close = parseBigDecimal(closeArr.get(i));
+                if (volume == 0) continue;
                 BigDecimal adjClose = (adjArr != null && !adjArr.isNull() && i < adjArr.size())
-                    ? parseBigDecimal(adjArr.get(i))
-                    : close;
-
-                long timestamp = timestamps.get(i).asLong();
-                LocalDate date = LocalDate.ofInstant(Instant.ofEpochSecond(timestamp), ZoneOffset.UTC);
-
-                candles.add(CandleData.of(symbol, date, open, high, low, close, volume, adjClose));
+                    ? parseBigDecimal(adjArr.get(i)) : parseBigDecimal(closeArr.get(i));
+                candles.add(CandleData.of(symbol,
+                    LocalDate.ofInstant(Instant.ofEpochSecond(timestamps.get(i).asLong()), ZoneOffset.UTC),
+                    parseBigDecimal(openArr.get(i)), parseBigDecimal(highArr.get(i)),
+                    parseBigDecimal(lowArr.get(i)), parseBigDecimal(closeArr.get(i)), volume, adjClose));
             }
-
             logger.info("Fetched {} candles for {} from {} to {}", candles.size(), symbol, startDate, endDate);
 
         } catch (Exception e) {
             logger.error("Error fetching candles for {}: {}", symbol, e.getMessage());
         }
-
         return candles;
     }
 
@@ -344,37 +273,26 @@ public class YahooFinanceClient implements MarketDataClient {
                     .bodyToMono(String.class)
                     .block();
 
-            if (response == null || response.isEmpty()) {
-                return null;
-            }
-
+            if (response == null || response.isEmpty()) return null;
             JsonNode root = objectMapper.readTree(response);
             JsonNode result = root.path("chart").path("result");
-
-            if (!result.isArray() || result.size() == 0) {
-                return null;
-            }
-
+            if (!result.isArray() || result.size() == 0) return null;
             JsonNode meta = result.get(0).path("meta");
 
             return ChartMeta.of(
-                meta.path("symbol").asText(),
-                meta.path("fullExchangeName").asText(),
-                meta.path("instrumentType").asText(),
-                meta.path("currency").asText(),
-                meta.path("longName").asText(),
-                meta.path("shortName").asText(),
+                meta.path("symbol").asText(), meta.path("fullExchangeName").asText(),
+                meta.path("instrumentType").asText(), meta.path("currency").asText(),
+                meta.path("longName").asText(), meta.path("shortName").asText(),
                 parseBigDecimalOrNull(meta.path("regularMarketPrice")),
                 parseBigDecimalOrNull(meta.path("fiftyTwoWeekHigh")),
                 parseBigDecimalOrNull(meta.path("fiftyTwoWeekLow")),
                 parseBigDecimalOrNull(meta.path("chartPreviousClose")),
                 meta.has("regularMarketTime")
-                    ? LocalDateTime.ofInstant(Instant.ofEpochSecond(meta.path("regularMarketTime").asLong()), ZoneOffset.UTC)
+                    ? LocalDateTime.ofInstant(
+                        Instant.ofEpochSecond(meta.path("regularMarketTime").asLong()), ZoneOffset.UTC)
                     : null,
                 meta.path("firstTradeDate").asInt(),
-                meta.path("timezone").asText(),
-                meta.path("gmtoffset").asInt()
-            );
+                meta.path("timezone").asText(), meta.path("gmtoffset").asInt());
 
         } catch (Exception e) {
             logger.warn("Failed to fetch chart meta for {}: {}", symbol, e.getMessage());
@@ -420,11 +338,8 @@ public class YahooFinanceClient implements MarketDataClient {
         long now = clock.millis();
         long elapsed = now - lastRequestTime.get();
         if (elapsed < RATE_LIMIT_MS && lastRequestTime.get() > 0) {
-            try {
-                Thread.sleep(RATE_LIMIT_MS - elapsed);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            try { Thread.sleep(RATE_LIMIT_MS - elapsed); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
         lastRequestTime.set(clock.millis());
     }
@@ -472,23 +387,16 @@ public class YahooFinanceClient implements MarketDataClient {
                     .bodyToMono(String.class)
                     .block();
 
-            if (response == null || response.isEmpty()) {
-                return Collections.emptyList();
-            }
-
+            if (response == null || response.isEmpty()) return Collections.emptyList();
             JsonNode root = objectMapper.readTree(response);
             JsonNode result = root.path("finance").path("result");
-
-            if (!result.isArray()) {
-                return Collections.emptyList();
-            }
+            if (!result.isArray()) return Collections.emptyList();
 
             List<QuoteData> quotes = new ArrayList<>();
             for (JsonNode item : result) {
                 QuoteData quote = parseQuote(item);
-                quotes.add(quote);
+                if (quote != null) quotes.add(quote);
             }
-
             logger.info("Fetched {} quotes for symbols: {}", quotes.size(), yahooSymbols);
             return quotes;
 
@@ -503,17 +411,9 @@ public class YahooFinanceClient implements MarketDataClient {
      */
     private QuoteData parseQuote(JsonNode node) {
         String symbol = node.path("symbol").asText(null);
-        if (symbol == null) return null;
-
-        // Skip delisted symbols
-        if ("NONE".equals(node.path("quoteType").asText(null))) {
-            return null;
-        }
-
+        if (symbol == null || "NONE".equals(node.path("quoteType").asText(null))) return null;
         return QuoteData.of(
-            symbol,
-            node.path("shortName").asText(null),
-            node.path("longName").asText(null),
+            symbol, node.path("shortName").asText(null), node.path("longName").asText(null),
             parseBigDecimalOrNull(node.path("regularMarketPrice")),
             parseBigDecimalOrNull(node.path("regularMarketChange")),
             parseBigDecimalOrNull(node.path("regularMarketChangePercent")),
@@ -524,11 +424,9 @@ public class YahooFinanceClient implements MarketDataClient {
             parseBigDecimalOrNull(node.path("fiftyTwoWeekLow")),
             node.has("regularMarketVolume") && !node.path("regularMarketVolume").isNull()
                 ? node.path("regularMarketVolume").asLong(0) : null,
-            node.path("currency").asText(null),
-            node.path("marketState").asText(null),
+            node.path("currency").asText(null), node.path("marketState").asText(null),
             parseBigDecimalOrNull(node.path("fiftyDayAverage")),
-            parseBigDecimalOrNull(node.path("twoHundredDayAverage"))
-        );
+            parseBigDecimalOrNull(node.path("twoHundredDayAverage")));
     }
 
     /**
@@ -557,42 +455,23 @@ public class YahooFinanceClient implements MarketDataClient {
                     .bodyToMono(String.class)
                     .block();
 
-            if (response == null || response.isEmpty()) {
-                return Collections.emptyList();
-            }
-
+            if (response == null || response.isEmpty()) return Collections.emptyList();
             JsonNode root = objectMapper.readTree(response);
             JsonNode quotes = root.path("quotes");
-
-            if (!quotes.isArray()) {
-                return Collections.emptyList();
-            }
+            if (!quotes.isArray()) return Collections.emptyList();
 
             List<SearchResult> results = new ArrayList<>();
             for (JsonNode quote : quotes) {
-                // Only include valid Yahoo Finance results
-                if (!quote.path("isYahooFinance").asBoolean(false)) {
-                    continue;
-                }
-
-                String exchange = quote.path("exchange").asText(null);
-                // Skip non-equity types
+                if (!quote.path("isYahooFinance").asBoolean(false)) continue;
                 String quoteType = quote.path("quoteType").asText(null);
-                if (!"EQUITY".equals(quoteType)) {
-                    continue;
-                }
-
-                SearchResult result = SearchResult.of(
+                if (!"EQUITY".equals(quoteType)) continue;
+                String exchange = quote.path("exchange").asText(null);
+                results.add(SearchResult.of(
                     quote.path("symbol").asText(null),
                     quote.path("shortname").asText(null),
                     quote.path("longname").asText(null),
-                    quoteType,
-                    exchange,
-                    quote.path("exchangeName").asText(null)
-                );
-                results.add(result);
+                    quoteType, exchange, quote.path("exchangeName").asText(null)));
             }
-
             logger.info("Search for '{}' returned {} results", query, results.size());
             return results;
 
@@ -602,53 +481,20 @@ public class YahooFinanceClient implements MarketDataClient {
         }
     }
 
-    /**
-     * Formats a stock symbol for Yahoo Finance format.
-     * NSE symbols get .NS suffix (e.g., RELIANCE -> RELIANCE.NS)
-     * BSE symbols get .BO suffix (e.g., RELIANCE -> RELIANCE.BO)
-     *
-     * @param symbol the stock symbol
-     * @return formatted symbol for Yahoo Finance
-     */
     private String formatSymbolForYahoo(String symbol) {
-        // Check if symbol already has exchange suffix
-        if (symbol.endsWith(".NS") || symbol.endsWith(".BO")) {
-            return symbol;
-        }
-
-        // Default to NSE for Indian stocks
+        if (symbol.endsWith(".NS") || symbol.endsWith(".BO")) return symbol;
         return symbol + ".NS";
     }
 
-    /**
-     * Parses a BigDecimal from a JsonNode, handling null/missing values.
-     *
-     * @param node the JSON node
-     * @return parsed BigDecimal or BigDecimal.ZERO if null/missing
-     */
     private BigDecimal parseBigDecimal(JsonNode node) {
-        if (node == null || node.isNull()) {
-            return BigDecimal.ZERO;
-        }
-
-        try {
-            return new BigDecimal(node.asText());
-        } catch (Exception e) {
-            return BigDecimal.ZERO;
-        }
+        if (node == null || node.isNull()) return BigDecimal.ZERO;
+        try { return new BigDecimal(node.asText()); }
+        catch (Exception e) { return BigDecimal.ZERO; }
     }
 
-    /**
-     * Parses a BigDecimal from a JsonNode, returning null for missing values.
-     */
     private BigDecimal parseBigDecimalOrNull(JsonNode node) {
-        if (node == null || node.isNull() || !node.isNumber()) {
-            return null;
-        }
-        try {
-            return new BigDecimal(node.asText());
-        } catch (Exception e) {
-            return null;
-        }
+        if (node == null || node.isNull() || !node.isNumber()) return null;
+        try { return new BigDecimal(node.asText()); }
+        catch (Exception e) { return null; }
     }
 }

@@ -4,12 +4,17 @@ import com.swingtrade.llm.SentimentType;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Utility class for sentiment-related operations.
  */
 public class SentimentUtils {
-    
+
+    private SentimentUtils() {
+        // Utility class
+    }
+
     /**
      * Gets all sentiment types.
      * 
@@ -27,7 +32,7 @@ public class SentimentUtils {
      */
     public static SentimentType fromString(String sentimentString) {
         try {
-            return SentimentType.valueOf(sentimentString.toUpperCase());
+            return SentimentType.valueOf(sentimentString.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             return SentimentType.NEUTRAL;
         }

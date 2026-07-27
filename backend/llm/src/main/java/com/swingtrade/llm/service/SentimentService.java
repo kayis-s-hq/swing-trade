@@ -5,7 +5,6 @@ import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.domain.SentimentResult;
-import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
@@ -15,15 +14,26 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -424,7 +434,7 @@ public class SentimentService {
      * @return cache key
      */
     private String generateCacheKey(String stockSymbol, LocalDate date) {
-        return String.format("%s_%s", stockSymbol.toUpperCase(), date);
+        return String.format("%s_%s", stockSymbol.toUpperCase(Locale.ROOT), date);
     }
 
     /**
@@ -502,7 +512,7 @@ public class SentimentService {
      * @return map of date to cached sentiment
      */
     public Map<LocalDate, CachedSentiment> getCachedSentiments(String stockSymbol) {
-        return sentimentCacheService.getCacheForSymbol(stockSymbol.toUpperCase());
+        return sentimentCacheService.getCacheForSymbol(stockSymbol.toUpperCase(Locale.ROOT));
     }
 
     /**
@@ -641,7 +651,7 @@ public class SentimentService {
         List<String> allCatalysts = new ArrayList<>();
 
         for (String h : headlines) {
-            String lower = h.toLowerCase();
+            String lower = h.toLowerCase(Locale.ROOT);
             HeadlineResult result = classifyHeadline(lower, h);
 
             if (result.classification() == Classification.POSITIVE) {
@@ -808,7 +818,7 @@ public class SentimentService {
     private Set<String> extractThemes(List<String> headlines) {
         Set<String> themes = new HashSet<>();
         for (String h : headlines) {
-            String lower = h.toLowerCase();
+            String lower = h.toLowerCase(Locale.ROOT);
             if (lower.contains("ipo") || lower.contains("listing") || lower.contains("files for") || lower.contains("near launch")) {
                 themes.add("IPO activity");
             }
@@ -933,9 +943,9 @@ public class SentimentService {
         Map<String, Stock.Sector> map = new HashMap<>();
 
         for (SentimentResult result : results) {
-            if (!map.containsKey(result.symbol().toUpperCase())) {
-                Stock.Sector sector = getSectorForSymbol(result.symbol().toUpperCase());
-                map.put(result.symbol().toUpperCase(), sector != null ? sector : Stock.Sector.OTHERS);
+            if (!map.containsKey(result.symbol().toUpperCase(Locale.ROOT))) {
+                Stock.Sector sector = getSectorForSymbol(result.symbol().toUpperCase(Locale.ROOT));
+                map.put(result.symbol().toUpperCase(Locale.ROOT), sector != null ? sector : Stock.Sector.OTHERS);
             }
         }
 
@@ -1095,7 +1105,7 @@ public class SentimentService {
      * Looks for meaningful capitalized words (skipping newspaper names and generic terms).
      */
     private String extractEntityNear(String headline, String keyword) {
-        String lower = headline.toLowerCase();
+        String lower = headline.toLowerCase(Locale.ROOT);
         int idx = lower.indexOf(keyword);
         if (idx == -1) return keyword;
 

@@ -81,7 +81,19 @@ public class SwingTradingStrategy {
         OhlcvCandle latest = candles.get(candles.size() - 1);
         OhlcvCandle previous = candles.size() > 1 ? candles.get(candles.size() - 2) : latest;
 
-        // Collect signal factors
+        // Analyze factors and compute signal
+        FactorAnalysis factorAnalysis = analyzeFactors(candles, latest, previous, emaFast, emaSlow, rsi, macd);
+        return calculateSignal(factorAnalysis.buyScore(), factorAnalysis.sellScore(),
+                factorAnalysis.buyFactors(), factorAnalysis.sellFactors(),
+                candles.get(0).symbol(), latest.date());
+    }
+
+    /**
+     * Analyzes all trading factors and returns buy/sell scores with explanations.
+     */
+    private FactorAnalysis analyzeFactors(List<OhlcvCandle> candles, OhlcvCandle latest, OhlcvCandle previous,
+                                          Double emaFast, Double emaSlow,
+                                          Double rsi, Double macd) {
         List<String> buyFactors = new ArrayList<>();
         List<String> sellFactors = new ArrayList<>();
         int buyScore = 0;
@@ -156,8 +168,7 @@ public class SwingTradingStrategy {
             sellScore++;
         }
 
-        // Calculate signal
-        return calculateSignal(buyScore, sellScore, buyFactors, sellFactors, candles.get(0).symbol(), latest.date());
+        return new FactorAnalysis(buyScore, sellScore, buyFactors, sellFactors);
     }
 
     /**
@@ -239,4 +250,10 @@ public class SwingTradingStrategy {
         Signal signal = analyze(candles);
         return signal.type() == Signal.SignalType.SELL;
     }
+
+    /**
+     * Holds the results of factor analysis: buy/sell scores and their explanations.
+     */
+    private record FactorAnalysis(int buyScore, int sellScore,
+                                  List<String> buyFactors, List<String> sellFactors) {}
 }

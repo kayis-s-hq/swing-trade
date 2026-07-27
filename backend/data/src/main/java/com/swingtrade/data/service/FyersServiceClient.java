@@ -3,9 +3,15 @@ package com.swingtrade.data.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swingtrade.data.entity.FyersSymbolEntity;
-import com.tts.in.model.*;
-import com.tts.in.utilities.Tuple;
-import org.json.JSONObject;
+import com.tts.in.model.FyersClass;
+import com.tts.in.model.OrderModel;
+import com.tts.in.model.PositionModel;
+import com.tts.in.model.TradeBookModel;
+import com.tts.in.model.HoldingModel;
+import com.tts.in.model.MarketDepthModel;
+import com.tts.in.model.MarketStatusModel;
+import com.tts.in.model.ProfileModel;
+import com.tts.in.model.FundModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -28,9 +34,8 @@ import java.util.stream.Collectors;
 /**
  * Fyers v3 market data and order management client.
  *
- * Market data (candles, quotes) goes through WebClient against the documented REST
- * endpoints (see docs/fyers-api-v3.md). The SDK singleton (FyersClass) is used only
- * for the dormant order-management methods below, which re-set credentials per call.
+ * Market data goes through WebClient against the documented REST endpoints.
+ * Order management delegates to focused sub-services.
  *
  * Auth header: {appId}:{accessToken} (colon-separated, no "token" prefix).
  */
@@ -44,6 +49,16 @@ public class FyersServiceClient implements MarketDataClient {
     private final FyersAuthService authService;
     private final FyersSymbolMasterService symbolMaster;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // Delegated order management services
+    private final FyersOrderService orderService;
+    private final FyersPositionService positionService;
+    private final FyersTradeBookService tradeBookService;
+    private final FyersHoldingService holdingService;
+    private final FyersMarketDepthService marketDepthService;
+    private final FyersMarketStatusService marketStatusService;
+    private final FyersProfileService profileService;
+    private final FyersGTTService gttService;
 
     public FyersServiceClient(WebClient.Builder webClientBuilder, FyersAuthService authService,
                               FyersSymbolMasterService symbolMaster) {
@@ -59,6 +74,14 @@ public class FyersServiceClient implements MarketDataClient {
             .build();
         this.authService = authService;
         this.symbolMaster = symbolMaster;
+        this.orderService = new FyersOrderService(authService);
+        this.positionService = new FyersPositionService(authService);
+        this.tradeBookService = new FyersTradeBookService(authService);
+        this.holdingService = new FyersHoldingService(authService);
+        this.marketDepthService = new FyersMarketDepthService(authService);
+        this.marketStatusService = new FyersMarketStatusService(authService);
+        this.profileService = new FyersProfileService(authService);
+        this.gttService = new FyersGTTService(authService);
     }
 
     // -----------------------------------------------------------------------
@@ -80,22 +103,17 @@ public class FyersServiceClient implements MarketDataClient {
     List<CandleData> fetchCandlesList(String symbol, LocalDate startDate, LocalDate endDate) {
         String fyersSymbol = "NSE:" + symbol + "-EQ";
         Map<LocalDate, CandleData> byDate = new LinkedHashMap<>();
-
         LocalDate windowStart = startDate;
         while (!windowStart.isAfter(endDate)) {
             LocalDate windowEnd = windowStart.plusDays(CHUNK_DAYS - 1);
             if (windowEnd.isAfter(endDate)) windowEnd = endDate;
-
             URI uri = UriComponentsBuilder.fromPath("/data/history")
                 .queryParam("symbol", fyersSymbol)
                 .queryParam("resolution", "D")
                 .queryParam("date_format", "1")
                 .queryParam("date[from]", windowStart)
                 .queryParam("date[to]", windowEnd)
-                .build()
-                .encode()
-                .toUri();
-
+                .build().encode().toUri();
             String body = getWithAuthRetry(uri);
             if (body != null) {
                 try {
@@ -106,41 +124,32 @@ public class FyersServiceClient implements MarketDataClient {
                     logger.error("Failed to parse candles for {}: {}", symbol, e.getMessage());
                 }
             }
-
             windowStart = windowEnd.plusDays(1);
         }
-
         return new ArrayList<>(byDate.values());
     }
 
     private List<CandleData> parseCandles(String symbol, String responseBody) throws Exception {
         if (responseBody == null) return Collections.emptyList();
-
         JsonNode root = objectMapper.readTree(responseBody);
         if (!root.has("candles") || "error".equals(root.path("s").asText())) {
-            logger.warn("Fyers API error for {}: {}", symbol, root.has("message") ? root.get("message").asText() : "unknown");
+            logger.warn("Fyers API error for {}: {}", symbol,
+                root.has("message") ? root.get("message").asText() : "unknown");
             return Collections.emptyList();
         }
-
         JsonNode candlesNode = root.get("candles");
         List<CandleData> candles = new ArrayList<>();
-
         for (JsonNode node : candlesNode) {
             long epochSeconds = node.get(0).asLong();
             LocalDate date = OffsetDateTime.ofInstant(
-                java.time.Instant.ofEpochSecond(epochSeconds),
-                ZoneId.of("Asia/Kolkata")
-            ).toLocalDate();
-
+                java.time.Instant.ofEpochSecond(epochSeconds), ZoneId.of("Asia/Kolkata")).toLocalDate();
             BigDecimal open = node.get(1).decimalValue();
             BigDecimal high = node.get(2).decimalValue();
             BigDecimal low = node.get(3).decimalValue();
             BigDecimal close = node.get(4).decimalValue();
             long volume = node.get(5).asLong();
-
             candles.add(CandleData.of(symbol, date, open, high, low, close, volume));
         }
-
         return candles;
     }
 
@@ -168,13 +177,9 @@ public class FyersServiceClient implements MarketDataClient {
         if (quote == null) return null;
         Optional<FyersSymbolEntity> match = symbolMaster.findByTradingSymbol(symbol);
         String name = match.map(FyersSymbolEntity::getName).orElse(quote.shortName());
-        return ChartMeta.of(
-            symbol, "NSE", "EQ", "INR",
-            name, quote.shortName(),
-            quote.regularMarketPrice(), null, null,
-            quote.regularMarketPreviousClose(), null,
-            0, "Asia/Kolkata", 19800
-        );
+        return ChartMeta.of(symbol, "NSE", "EQ", "INR", name, quote.shortName(),
+            quote.regularMarketPrice(), null, null, quote.regularMarketPreviousClose(), null,
+            0, "Asia/Kolkata", 19800);
     }
 
     @Override
@@ -195,23 +200,14 @@ public class FyersServiceClient implements MarketDataClient {
     @Override
     public List<QuoteData> fetchQuotes(List<String> symbols) {
         if (symbols == null || symbols.isEmpty()) return Collections.emptyList();
-
-        String joined = symbols.stream()
-            .map(s -> "NSE:" + s + "-EQ")
+        String joined = symbols.stream().map(s -> "NSE:" + s + "-EQ")
             .collect(Collectors.joining(","));
-
         URI uri = UriComponentsBuilder.fromPath("/data/quotes")
-            .queryParam("symbols", joined)
-            .build()
-            .encode()
-            .toUri();
-
+            .queryParam("symbols", joined).build().encode().toUri();
         String body = getWithAuthRetry(uri);
         if (body == null) return Collections.emptyList();
-
-        try {
-            return parseQuotes(body);
-        } catch (Exception e) {
+        try { return parseQuotes(body); }
+        catch (Exception e) {
             logger.error("Failed to parse quotes for {}: {}", symbols, e.getMessage());
             return Collections.emptyList();
         }
@@ -219,15 +215,11 @@ public class FyersServiceClient implements MarketDataClient {
 
     private List<QuoteData> parseQuotes(String responseBody) throws Exception {
         JsonNode root = objectMapper.readTree(responseBody);
-        if (!"success".equals(root.path("s").asText())) {
-            return Collections.emptyList();
-        }
-
+        if (!"success".equals(root.path("s").asText())) return Collections.emptyList();
         List<QuoteData> results = new ArrayList<>();
         for (JsonNode item : root.path("d")) {
             JsonNode v = item.path("v");
             if (v.isMissingNode()) continue;
-
             String rawSymbol = v.has("symbol") ? v.get("symbol").asText() : item.path("n").asText(null);
             QuoteData q = parseQuoteFromNode(extractTradingSymbol(rawSymbol), v);
             if (q != null) results.add(q);
@@ -251,13 +243,8 @@ public class FyersServiceClient implements MarketDataClient {
             BigDecimal prevClose = decimalOrNull(v, "prev_close_price");
             Long volume = v.has("volume") ? v.get("volume").asLong() : null;
             String shortName = v.has("short_name") ? v.get("short_name").asText() : null;
-
-            return QuoteData.of(
-                symbol, shortName, null,
-                price, change, changePct,
-                high, low, prevClose,
-                null, null, volume, null, null, null, null
-            );
+            return QuoteData.of(symbol, shortName, null, price, change, changePct,
+                high, low, prevClose, null, null, volume, null, null, null, null);
         } catch (Exception e) {
             logger.warn("Failed to parse quote for {}: {}", symbol, e.getMessage());
             return null;
@@ -286,7 +273,7 @@ public class FyersServiceClient implements MarketDataClient {
     }
 
     // -----------------------------------------------------------------------
-    // Shared auth-retry GET helper (candles + quotes)
+    // Shared auth-retry GET helper
     // -----------------------------------------------------------------------
 
     private String getWithAuthRetry(URI uri) {
@@ -296,7 +283,6 @@ public class FyersServiceClient implements MarketDataClient {
             return null;
         }
         String appId = authService.getClientId();
-
         try {
             String body = doGet(uri, appId, token);
             if (isAuthError(body)) {
@@ -321,7 +307,6 @@ public class FyersServiceClient implements MarketDataClient {
         authService.refreshToken();
         String newToken = authService.getAccessToken();
         if (newToken == null) return null;
-
         try {
             String body = doGet(uri, appId, newToken);
             if (isAuthError(body)) {
@@ -336,20 +321,15 @@ public class FyersServiceClient implements MarketDataClient {
     }
 
     private String doGet(URI uri, String appId, String token) {
-        // uri(URI) bypasses the client's configured base URL and treats the URI as absolute,
-        // which breaks since callers build a scheme/host-less URI via UriComponentsBuilder.
-        // uri(Function<UriBuilder,URI>) resolves relative to the configured base URL instead.
         return webClient.get()
-            .uri(uriBuilder -> uriBuilder.replacePath(uri.getRawPath()).replaceQuery(uri.getRawQuery()).build())
+            .uri(uriBuilder -> uriBuilder.replacePath(uri.getRawPath())
+                .replaceQuery(uri.getRawQuery()).build())
             .header("Authorization", appId + ":" + token)
-            .retrieve()
-            .bodyToMono(String.class)
-            .block();
+            .retrieve().bodyToMono(String.class).block();
     }
 
     /**
-     * Fyers returns HTTP 200 with a body like {"s":"error","code":-16} for bad/expired
-     * tokens on some endpoints instead of a 401 — treat those codes as auth failures too.
+     * Fyers returns HTTP 200 with {"s":"error","code":-16} for bad/expired tokens.
      */
     private boolean isAuthError(String body) {
         if (body == null) return false;
@@ -364,500 +344,102 @@ public class FyersServiceClient implements MarketDataClient {
     }
 
     // -----------------------------------------------------------------------
-    // Order Management
+    // Order Management — delegated to FyersOrderService
     // -----------------------------------------------------------------------
 
     public String placeOrder(String symbol, int qty, int side, int orderType,
                               double limitPrice, String productType,
                               Double stopLoss, Double takeProfit, String orderTag) {
-        String token = authService.getAccessToken();
-        if (token == null) {
-            logger.error("Fyers access token is missing.");
-            return null;
-        }
-
-        PlaceOrderModel model = new PlaceOrderModel();
-        model.Symbol = symbol;
-        model.Qty = qty;
-        model.Side = side;
-        model.OrderType = orderType;
-        model.LimitPrice = limitPrice;
-        model.ProductType = productType;
-        model.OrderValidity = "DAY";
-        if (stopLoss != null) model.StopLoss = stopLoss;
-        if (takeProfit != null) model.TakeProfit = takeProfit;
-        if (orderTag != null) model.OrderTag = orderTag;
-
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().PlaceOrder(model);
-            if (result == null) return null;
-
-            JSONObject metadata = result.Item1();
-            if (!"success".equals(metadata.optString("s"))) {
-                logger.error("Place order failed: {}", metadata.optString("message", "unknown"));
-                return null;
-            }
-
-            JSONObject body = result.Item2();
-            return body.has("id") ? body.getString("id") : null;
-        } catch (Exception e) {
-            logger.error("Place order error: {}", e.getMessage());
-            return null;
-        }
+        return orderService.placeOrder(symbol, qty, side, orderType, limitPrice,
+            productType, stopLoss, takeProfit, orderTag);
     }
 
     public boolean cancelOrder(String orderId) {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().CancelOrder(orderId);
-            if (result == null) return false;
-            return "success".equals(result.Item1().optString("s"));
-        } catch (Exception e) {
-            logger.error("Cancel order error: {}", e.getMessage());
-            return false;
-        }
+        return orderService.cancelOrder(orderId);
     }
 
     public List<OrderModel> getAllOrders() {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().GetAllOrders();
-            if (result == null) return Collections.emptyList();
-            if (!"success".equals(result.Item1().optString("s"))) return Collections.emptyList();
-            return parseOrderList(result.Item2());
-        } catch (Exception e) {
-            logger.error("Get orders error: {}", e.getMessage());
-            return Collections.emptyList();
-        }
+        return orderService.getAllOrders();
     }
 
     public List<OrderModel> getOrderHistory(String symbols) {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().GetOrderHistory(symbols);
-            if (result == null) return Collections.emptyList();
-            if (!"success".equals(result.Item1().optString("s"))) return Collections.emptyList();
-            return parseOrderList(result.Item2());
-        } catch (Exception e) {
-            logger.error("Get order history error: {}", e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private List<OrderModel> parseOrderList(JSONObject data) {
-        List<OrderModel> orders = new ArrayList<>();
-        if (data == null) return orders;
-
-        JSONObject nodes = data.has("orderBook") ? data.optJSONObject("orderBook") : data;
-        if (nodes == null) return orders;
-
-        for (int i = 0; i < nodes.length(); i++) {
-            String key = Integer.toString(i);
-            if (!nodes.has(key)) break;
-            JSONObject node = nodes.optJSONObject(key);
-            if (node == null) continue;
-
-            OrderModel model = new OrderModel();
-            model.OrderId = node.optString("id", null);
-            model.Symbol = node.optString("symbol", null);
-            model.Qty = node.optInt("qty", 0);
-            model.RemainingQuantity = node.optInt("remainingQuantity", 0);
-            model.FilledQty = node.optInt("filledQty", 0);
-            model.LimitPrice = node.optDouble("limitPrice", 0);
-            model.StopPrice = node.optDouble("stopPrice", 0);
-            model.TradedPrice = node.optDouble("tradedPrice", 0);
-            model.OrderType = node.optInt("type", 0);
-            model.ProductType = node.optString("productType", null);
-            model.Side = node.optInt("side", 0);
-            model.OrderStatus = node.optInt("status", 0);
-            model.OrderDateTime = node.optString("orderDateTime", null);
-            model.OrderValidity = node.optString("orderValidity", null);
-            model.OrderTag = node.optString("orderTag", null);
-            model.Message = node.optString("message", null);
-            orders.add(model);
-        }
-        return orders;
+        return orderService.getOrderHistory(symbols);
     }
 
     // -----------------------------------------------------------------------
-    // Position Management
+    // Position Management — delegated to FyersPositionService
     // -----------------------------------------------------------------------
 
     public List<PositionModel> getPositions() {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().GetPositions();
-            if (result == null) return Collections.emptyList();
-            if (!"success".equals(result.Item1().optString("s"))) return Collections.emptyList();
-            return parsePositionList(result.Item2());
-        } catch (Exception e) {
-            logger.error("Get positions error: {}", e.getMessage());
-            return Collections.emptyList();
-        }
+        return positionService.getPositions();
     }
 
     public boolean exitAllPositions() {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().ExitPositions(true);
-            if (result == null) return false;
-            return "success".equals(result.Item1().optString("s"));
-        } catch (Exception e) {
-            logger.error("Exit positions error: {}", e.getMessage());
-            return false;
-        }
+        return positionService.exitAllPositions();
     }
 
     public boolean exitPosition(String orderId) {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().ExitPositions(List.of(orderId));
-            if (result == null) return false;
-            return "success".equals(result.Item1().optString("s"));
-        } catch (Exception e) {
-            logger.error("Exit position error: {}", e.getMessage());
-            return false;
-        }
+        return positionService.exitPosition(orderId);
     }
 
     public boolean convertPosition(String symbol, int side, int convertQty,
                                     String fromProduct, String toProduct) {
-        PositionConversionModel model = new PositionConversionModel();
-        model.Symbol = symbol;
-        model.Side = side;
-        model.ConvertQty = convertQty;
-        model.ConvertFrom = fromProduct;
-        model.ConvertTo = toProduct;
-
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().PositionConversion(model);
-            if (result == null) return false;
-            return "success".equals(result.Item1().optString("s"));
-        } catch (Exception e) {
-            logger.error("Position conversion error: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    private List<PositionModel> parsePositionList(JSONObject data) {
-        List<PositionModel> positions = new ArrayList<>();
-        if (data == null) return positions;
-
-        JSONObject nodes = data.has("netPositions") ? data.optJSONObject("netPositions") : data;
-        if (nodes == null) return positions;
-
-        for (int i = 0; i < nodes.length(); i++) {
-            String key = Integer.toString(i);
-            if (!nodes.has(key)) break;
-            JSONObject node = nodes.optJSONObject(key);
-            if (node == null) continue;
-
-            PositionModel model = new PositionModel();
-            model.Symbol = node.optString("symbol", null);
-            model.NetQty = node.optInt("netQty", 0);
-            model.Side = node.optInt("side", 0);
-            model.AvgPrice = node.optDouble("avgPrice", 0);
-            model.NetAvg = node.optDouble("netAvg", 0);
-            model.RealizedProfit = node.optDouble("realized_profit", 0);
-            model.UnRealizedProfit = node.optDouble("unrealized_profit", 0);
-            model.LTP = node.optDouble("ltp", 0);
-            model.ProductType = node.optString("productType", null);
-            model.FyToken = node.optString("fyToken", null);
-            positions.add(model);
-        }
-        return positions;
+        return positionService.convertPosition(symbol, side, convertQty, fromProduct, toProduct);
     }
 
     // -----------------------------------------------------------------------
-    // Trade Book
+    // Trade Book — delegated to FyersTradeBookService
     // -----------------------------------------------------------------------
 
     public List<TradeBookModel> getTradeBook() {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().GetTradeBook();
-            if (result == null) return Collections.emptyList();
-            if (!"success".equals(result.Item1().optString("s"))) return Collections.emptyList();
-            return parseTradeBook(result.Item2());
-        } catch (Exception e) {
-            logger.error("Get trade book error: {}", e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private List<TradeBookModel> parseTradeBook(JSONObject data) {
-        List<TradeBookModel> trades = new ArrayList<>();
-        if (data == null) return trades;
-
-        JSONObject nodes = data.has("tradeBook") ? data.optJSONObject("tradeBook") : data;
-        if (nodes == null) return trades;
-
-        for (int i = 0; i < nodes.length(); i++) {
-            String key = Integer.toString(i);
-            if (!nodes.has(key)) break;
-            JSONObject node = nodes.optJSONObject(key);
-            if (node == null) continue;
-
-            TradeBookModel model = new TradeBookModel();
-            model.Symbol = node.optString("symbol", null);
-            model.Side = node.optInt("side", 0);
-            model.TradedQty = node.optInt("tradedQty", 0);
-            model.TradePrice = node.optDouble("tradePrice", 0);
-            model.TradeValue = node.optDouble("tradeValue", 0);
-            model.OrderNumber = node.optString("orderNumber", null);
-            model.FYToken = node.optString("fyToken", null);
-            model.ProductType = node.optString("productType", null);
-            model.OrderTag = node.optString("orderTag", null);
-            trades.add(model);
-        }
-        return trades;
+        return tradeBookService.getTradeBook();
     }
 
     // -----------------------------------------------------------------------
-    // Holdings
+    // Holdings — delegated to FyersHoldingService
     // -----------------------------------------------------------------------
 
     public List<HoldingModel> getHoldings() {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().GetHoldings();
-            if (result == null) return Collections.emptyList();
-            if (!"success".equals(result.Item1().optString("s"))) return Collections.emptyList();
-            return parseHoldingList(result.Item2());
-        } catch (Exception e) {
-            logger.error("Get holdings error: {}", e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private List<HoldingModel> parseHoldingList(JSONObject data) {
-        List<HoldingModel> holdings = new ArrayList<>();
-        if (data == null) return holdings;
-
-        JSONObject nodes = data.has("holdings") ? data.optJSONObject("holdings") : data;
-        if (nodes == null) return holdings;
-
-        for (int i = 0; i < nodes.length(); i++) {
-            String key = Integer.toString(i);
-            if (!nodes.has(key)) break;
-            JSONObject node = nodes.optJSONObject(key);
-            if (node == null) continue;
-
-            HoldingModel model = new HoldingModel();
-            model.Symbol = node.optString("symbol", null);
-            model.FyToken = node.optString("fyToken", null);
-            model.Qty = node.optInt("quantity", 0);
-            model.CostPrice = node.optDouble("costPrice", 0);
-            model.LTP = node.optDouble("ltp", 0);
-            model.PL = node.optDouble("pl", 0);
-            model.HoldingType = node.optString("holdingType", null);
-            model.ISIN = node.optString("isin", null);
-            holdings.add(model);
-        }
-        return holdings;
+        return holdingService.getHoldings();
     }
 
     // -----------------------------------------------------------------------
-    // Market Depth
+    // Market Depth — delegated to FyersMarketDepthService
     // -----------------------------------------------------------------------
 
     public MarketDepthModel getMarketDepth(String symbol) {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().GetMarketDepth(symbol, 1);
-            if (result == null) return null;
-            if (!"success".equals(result.Item1().optString("s"))) return null;
-            return parseMarketDepth(result.Item2());
-        } catch (Exception e) {
-            logger.error("Get market depth error: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    private MarketDepthModel parseMarketDepth(JSONObject data) {
-        MarketDepthModel model = new MarketDepthModel();
-        if (data == null) return model;
-
-        JSONObject first = (data.length() > 0) ? data.optJSONObject(data.keySet().iterator().next()) : null;
-        if (first == null) return model;
-
-        model.Symbol = first.optString("symbol", null);
-        model.Open = toDouble(first, "o");
-        model.High = toDouble(first, "h");
-        model.Low = toDouble(first, "l");
-        model.Close = toDouble(first, "c");
-        model.Change = toDouble(first, "ch");
-        model.ChangePercent = toDouble(first, "chp");
-        model.LTP = toDouble(first, "ltp");
-        model.LTQ = first.optInt("ltq", 0);
-        model.LTT = toDouble(first, "ltt");
-        model.V = toDouble(first, "v");
-        model.ATP = toDouble(first, "atp");
-        model.TickSize = toDouble(first, "tick_Size");
-        model.LowerCircuit = toDouble(first, "lower_ckt");
-        model.UpperCircuit = toDouble(first, "upper_ckt");
-        model.TotalBuyQty = first.optInt("totalbuyqty", 0);
-        model.TotalSellQty = first.optInt("totalsellqty", 0);
-        model.OI = toDouble(first, "oi");
-        model.OIFlag = first.optBoolean("oiflag", false);
-
-        JSONObject bidsObj = first.optJSONObject("bids");
-        if (bidsObj != null) {
-            for (int i = 0; i < bidsObj.length(); i++) {
-                String key = Integer.toString(i);
-                if (!bidsObj.has(key)) break;
-                AskBid askBid = new AskBid();
-                JSONObject bid = bidsObj.optJSONObject(key);
-                if (bid != null) {
-                    askBid.Price = bid.optDouble("price", 0);
-                    askBid.Volume = bid.optDouble("volume", 0);
-                    askBid.Ord = bid.optDouble("ord", 0);
-                    model.Bids.add(askBid);
-                }
-            }
-        }
-
-        JSONObject asksObj = first.optJSONObject("ask");
-        if (asksObj != null) {
-            for (int i = 0; i < asksObj.length(); i++) {
-                String key = Integer.toString(i);
-                if (!asksObj.has(key)) break;
-                AskBid askBid = new AskBid();
-                JSONObject ask = asksObj.optJSONObject(key);
-                if (ask != null) {
-                    askBid.Price = ask.optDouble("price", 0);
-                    askBid.Volume = ask.optDouble("volume", 0);
-                    askBid.Ord = ask.optDouble("ord", 0);
-                    model.Asks.add(askBid);
-                }
-            }
-        }
-
-        return model;
+        return marketDepthService.getMarketDepth(symbol);
     }
 
     // -----------------------------------------------------------------------
-    // Market Status
+    // Market Status — delegated to FyersMarketStatusService
     // -----------------------------------------------------------------------
 
     public List<MarketStatusModel> getMarketStatus() {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().GetMarketStatus();
-            if (result == null) return Collections.emptyList();
-            if (!"success".equals(result.Item1().optString("s"))) return Collections.emptyList();
-            return parseMarketStatusList(result.Item2());
-        } catch (Exception e) {
-            logger.error("Get market status error: {}", e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private List<MarketStatusModel> parseMarketStatusList(JSONObject data) {
-        List<MarketStatusModel> statuses = new ArrayList<>();
-        if (data == null) return statuses;
-
-        JSONObject nodes = data.has("marketStatus") ? data.optJSONObject("marketStatus") : data;
-        if (nodes == null) return statuses;
-
-        for (int i = 0; i < nodes.length(); i++) {
-            String key = Integer.toString(i);
-            if (!nodes.has(key)) break;
-            JSONObject node = nodes.optJSONObject(key);
-            if (node == null) continue;
-
-            MarketStatusModel model = new MarketStatusModel();
-            model.Exchange = node.optInt("exchange", 0);
-            model.MarketType = node.optString("market_type", null);
-            model.Segment = node.optInt("segment", 0);
-            model.Status = node.optString("status", null);
-            statuses.add(model);
-        }
-        return statuses;
+        return marketStatusService.getMarketStatus();
     }
 
     // -----------------------------------------------------------------------
-    // Profile & Funds
+    // Profile & Funds — delegated to FyersProfileService
     // -----------------------------------------------------------------------
 
     public ProfileModel getProfile() {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().GetProfile();
-            if (result == null) return null;
-            if (!"success".equals(result.Item1().optString("s"))) return null;
-
-            JSONObject body = result.Item2();
-            ProfileModel model = new ProfileModel();
-            model.Name = body.optString("name", null);
-            model.DisplayName = body.optString("display_name", null);
-            model.EmailId = body.optString("email_id", null);
-            model.PAN = body.optString("PAN", null);
-            model.FYId = body.optString("fy_id", null);
-            model.MobileNumber = body.optString("mobile_number", null);
-            return model;
-        } catch (Exception e) {
-            logger.error("Get profile error: {}", e.getMessage());
-            return null;
-        }
+        return profileService.getProfile();
     }
 
     public List<FundModel> getFunds() {
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().GetFunds();
-            if (result == null) return Collections.emptyList();
-            if (!"success".equals(result.Item1().optString("s"))) return Collections.emptyList();
-            return parseFundList(result.Item2());
-        } catch (Exception e) {
-            logger.error("Get funds error: {}", e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private List<FundModel> parseFundList(JSONObject data) {
-        List<FundModel> funds = new ArrayList<>();
-        if (data == null) return funds;
-
-        JSONObject nodes = data.has("fund_limit") ? data.optJSONObject("fund_limit") : data;
-        if (nodes == null) return funds;
-
-        for (int i = 0; i < nodes.length(); i++) {
-            String key = Integer.toString(i);
-            if (!nodes.has(key)) break;
-            JSONObject node = nodes.optJSONObject(key);
-            if (node == null) continue;
-
-            FundModel model = new FundModel();
-            model.Title = node.optString("fund_type", null);
-            model.EquityAmount = node.optDouble("equityAmount", 0);
-            model.CommodityAmount = node.optDouble("commodityAmount", 0);
-            funds.add(model);
-        }
-        return funds;
+        return profileService.getFunds();
     }
 
     // -----------------------------------------------------------------------
-    // GTT Orders
+    // GTT Orders — delegated to FyersGTTService
     // -----------------------------------------------------------------------
 
     public String placeGTTOrder(String symbol, int side, String productType,
                                  double triggerPrice, double limitPrice, int qty) {
-        GTTModel model = new GTTModel();
-        model.Side = side;
-        model.Symbol = symbol;
-        model.productType = productType;
-
-        GTTLeg leg = new GTTLeg((int) limitPrice, (int) triggerPrice, qty);
-        model.addGTTLeg("leg1", leg);
-
-        try {
-            Tuple<JSONObject, JSONObject> result = getSdk().PlaceGTTOrder(List.of(model));
-            if (result == null) return null;
-            if (!"success".equals(result.Item1().optString("s"))) return null;
-            JSONObject body = result.Item2();
-            return body.has("id") ? body.getString("id") : null;
-        } catch (Exception e) {
-            logger.error("GTT order error: {}", e.getMessage());
-            return null;
-        }
+        return gttService.placeGTTOrder(symbol, side, productType, triggerPrice, limitPrice, qty);
     }
 
-    // -----------------------------------------------------------------------
-    // Utility
-    // -----------------------------------------------------------------------
-
-    /**
-     * Get the SDK singleton instance, refreshing credentials before each call.
-     */
     private FyersClass getSdk() {
         FyersClass sdk = FyersClass.getInstance();
         sdk.clientId = authService.getClientId();
@@ -866,14 +448,5 @@ public class FyersServiceClient implements MarketDataClient {
             sdk.accessToken = token;
         }
         return sdk;
-    }
-
-    private Double toDouble(JSONObject obj, String key) {
-        if (!obj.has(key)) return null;
-        try {
-            return obj.getDouble(key);
-        } catch (Exception e) {
-            return null;
-        }
     }
 }

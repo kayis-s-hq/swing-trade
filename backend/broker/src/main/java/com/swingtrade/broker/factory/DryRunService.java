@@ -8,7 +8,6 @@ import com.swingtrade.domain.Exchange;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.Position;
-import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.broker.service.BrokerService;
 import org.slf4j.Logger;

@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -157,7 +158,7 @@ public class SentimentAnalyzer {
             }
 
             return new SentimentOutput(
-                    SentimentType.valueOf(score.toUpperCase()),
+                    SentimentType.valueOf(score.toUpperCase(Locale.ROOT)),
                     summary,
                     confidence,
                     redFlags,
@@ -178,7 +179,7 @@ public class SentimentAnalyzer {
             return new SentimentOutput(SentimentType.NEUTRAL, "Empty response", 0.1, List.of(), List.of());
         }
 
-        String lower = text.toLowerCase();
+        String lower = text.toLowerCase(Locale.ROOT);
         SentimentType sentiment;
         double confidence;
         String summary;
@@ -451,9 +452,9 @@ public class SentimentAnalyzer {
     private int countKeywords(List<String> articles, List<String> keywords) {
         int count = 0;
         for (String article : articles) {
-            String lowerArticle = article.toLowerCase();
+            String lowerArticle = article.toLowerCase(Locale.ROOT);
             for (String keyword : keywords) {
-                if (lowerArticle.contains(keyword.toLowerCase())) {
+                if (lowerArticle.contains(keyword.toLowerCase(Locale.ROOT))) {
                     count++;
                 }
             }
@@ -513,7 +514,7 @@ public class SentimentAnalyzer {
         }
 
         // Fallback: look for keywords in reasoning
-        String lowerResponse = jsonResponse.toLowerCase();
+        String lowerResponse = jsonResponse.toLowerCase(Locale.ROOT);
         if (lowerResponse.contains("positive") &&
             !lowerResponse.contains("negative")) {
             return SentimentType.POSITIVE;

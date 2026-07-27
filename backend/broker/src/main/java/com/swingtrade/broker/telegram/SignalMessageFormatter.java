@@ -203,7 +203,7 @@ public class SignalMessageFormatter {
           .append(formatCurrency(pnl))
           .append("</code>\n");
         sb.append("📊 <b>Loss %:</b> <b>")
-          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice, BigDecimal.valueOf(position.quantity()))))
+          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice)))
           .append("</b>\n");
 
         return sb.toString();
@@ -240,7 +240,7 @@ public class SignalMessageFormatter {
           .append(formatCurrency(pnl))
           .append("</code>\n");
         sb.append("📊 <b>Profit %:</b> <b>")
-          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice, BigDecimal.valueOf(position.quantity()))))
+          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice)))
           .append("</b>\n");
 
         return sb.toString();
@@ -347,7 +347,7 @@ public class SignalMessageFormatter {
      * @param quantity the quantity
      * @return the P&L percentage (0-1 scale)
      */
-    private BigDecimal calculatePnLPercentForPrice(BigDecimal entryPrice, BigDecimal exitPrice, BigDecimal quantity) {
+    private BigDecimal calculatePnLPercentForPrice(BigDecimal entryPrice, BigDecimal exitPrice) {
         if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }

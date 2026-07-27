@@ -23,19 +23,22 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.ZonedDateTime;
-import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
 
 /**
  * Service for ingesting news from multiple Indian market sources.
@@ -241,15 +244,19 @@ public class NewsIngestionService {
 
             int responseCode = connection.getResponseCode();
             if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(connection.getInputStream(), "UTF-8"));
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(connection.getInputStream(), "UTF-8"))) {
+                    StringBuilder response = new StringBuilder();
+                    String line;
+                    while (true) {
+                        line = reader.readLine();
+                        if (line == null) {
+                            break;
+                        }
+                        response.append(line);
+                    }
+                    return response.toString();
                 }
-                reader.close();
-                return response.toString();
             } else {
                 logger.warn("HTTP error {} fetching RSS from {}", responseCode, feedUrl);
                 return null;
@@ -476,7 +483,7 @@ public class NewsIngestionService {
             try {
                 results.addAll(fut.getNow(List.of()));
             } catch (Exception e) {
-                // Already handled in individual futures
+                logger.debug("Failed to collect result from future for {}: {}", stockSymbol, e.getMessage());
             }
         }
 

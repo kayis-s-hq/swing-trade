@@ -9,6 +9,7 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 
 import java.math.BigDecimal;
+import java.util.Locale;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -133,7 +134,7 @@ public class LangChain4jLlmClient implements LlmClient {
         
         if (matcher.find()) {
             try {
-                return SentimentType.valueOf(matcher.group().toUpperCase());
+                return SentimentType.valueOf(matcher.group().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 return SentimentType.NEUTRAL;
             }

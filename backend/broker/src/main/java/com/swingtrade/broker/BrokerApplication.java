@@ -9,10 +9,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 public class BrokerApplication {
-    
+
+    private BrokerApplication() {
+    }
+
     /**
      * Entry point for the broker module application.
-     * 
+     *
      * @param args command line arguments
      */
     public static void main(String[] args) {

@@ -1,5 +1,13 @@
 import { reactive } from 'vue'
-import { getLlmSettings, setLlmSettings, getDiscordSettings, setDiscordSettings, getTradingSettings, setTradingSettings, saveAllSettings } from '../api/client'
+import {
+  getLlmSettings,
+  setLlmSettings,
+  getDiscordSettings,
+  setDiscordSettings,
+  getTradingSettings,
+  setTradingSettings,
+  saveAllSettings,
+} from '../api/client'
 
 interface TradingConfig {
   mode: 'paper' | 'live'
@@ -70,16 +78,21 @@ async function loadAll(): Promise<SettingsState> {
         pdfModel: llmRes.data['llm.pdf.model'] || state.llmSettings.pdfModel,
       })
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   // Load Discord settings
   try {
     const discordRes = await getDiscordSettings()
     if (discordRes.success && discordRes.data) {
-      state.discordSettings.webhookUrl = discordRes.data['discord.webhook.url'] || state.discordSettings.webhookUrl
+      state.discordSettings.webhookUrl =
+        discordRes.data['discord.webhook.url'] || state.discordSettings.webhookUrl
       state.discordSettings.enabled = discordRes.data['discord.webhook.enabled'] === 'true'
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   // Load trading config
   try {
@@ -87,7 +100,9 @@ async function loadAll(): Promise<SettingsState> {
     if (tradingRes.success && tradingRes.data) {
       Object.assign(state.tradingConfig, parseTradingConfig(tradingRes.data))
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   return state
 }

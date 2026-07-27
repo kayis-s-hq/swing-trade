@@ -12,15 +12,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Zerodha Kite Connect client implementation using HTTP API calls.
@@ -443,14 +453,11 @@ public class KiteConnectClient implements BrokerClient {
             Portfolio portfolio = new Portfolio("kite_portfolio", new BigDecimal("50000"));
 
             if (holdingsResponse.getStatusCode() == HttpStatus.OK) {
-                List<Map<String, Object>> holdings = objectMapper.readValue(
+                // Holdings fetched but not used in current portfolio model
+                objectMapper.readValue(
                         holdingsResponse.getBody(),
                         objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class)
                 );
-                List<Position> positions = holdings.stream()
-                        .map(this::mapHoldingToPosition)
-                        .collect(Collectors.toList());
-                // Positions are already populated from holdings
             }
 
             if (marginResponse.getStatusCode() == HttpStatus.OK) {
@@ -562,7 +569,7 @@ public class KiteConnectClient implements BrokerClient {
     private OrderStatus mapOrderStatus(String status) {
         if (status == null) return OrderStatus.PENDING;
 
-        switch (status.toLowerCase()) {
+        switch (status.toLowerCase(Locale.ROOT)) {
             case "open":
             case "complete":
                 return OrderStatus.FILLED;

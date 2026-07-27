@@ -205,8 +205,8 @@ public class TelegramMessageFormatter {
           .append(pnlPercentStr)
           .append("</b>\n");
 
-        BigDecimal stopLossPct = calculateDistanceToStopLoss(pnlPercent);
-        BigDecimal targetPct = calculateDistanceToTarget(pnlPercent);
+        BigDecimal stopLossPct = calculateDistanceToStopLoss();
+        BigDecimal targetPct = calculateDistanceToTarget();
 
         if (stopLossPct != null) {
             sb.append("📉 <b>Stop Loss:</b> <code>")
@@ -302,7 +302,7 @@ public class TelegramMessageFormatter {
           .append(formatCurrency(pnl))
           .append("</code>\n");
         sb.append("📊 <b>Loss %:</b> <b>")
-          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice, BigDecimal.valueOf(position.quantity()))))
+          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice)))
           .append("</b>\n");
         return sb.toString();
     }
@@ -336,7 +336,7 @@ public class TelegramMessageFormatter {
           .append(formatCurrency(pnl))
           .append("</code>\n");
         sb.append("📊 <b>Profit %:</b> <b>")
-          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice, BigDecimal.valueOf(position.quantity()))))
+          .append(formatPercentage(calculatePnLPercentForPrice(position.entryPrice(), exitPrice)))
           .append("</b>\n");
         return sb.toString();
     }
@@ -606,10 +606,10 @@ public class TelegramMessageFormatter {
         sb.append("📉 <b>Risk to Entry:</b> <b>")
           .append(formatPercentage(riskPercent))
           .append("</b>\n");
-        if (riskPercent.compareTo(new BigDecimal("2")) >= 0) {
+        if (riskPercent.compareTo(BigDecimal.valueOf(2)) >= 0) {
             sb.append("\n🔴 <b>This position carries HIGH RISK!</b>\n");
             sb.append("💡 <b>Consider reducing position size.</b>");
-        } else if (riskPercent.compareTo(new BigDecimal("1.5")) >= 0) {
+        } else if (riskPercent.compareTo(BigDecimal.valueOf(1.5)) >= 0) {
             sb.append("\n⚠️ <b>Medium-High risk level.</b>");
         } else {
             sb.append("\n✅ <b>Risk is within acceptable limits.</b>");
@@ -714,22 +714,6 @@ public class TelegramMessageFormatter {
     }
 
     /**
-     * Format a percentage value for display (already in percentage scale).
-     *
-     * @param percentage the percentage to format (0-100 scale)
-     * @return formatted percentage string
-     */
-    private String formatPercentage(double percentage) {
-        String formatted = String.format("%.2f%%", percentage);
-        if (percentage > 0) {
-            return "🟢 " + formatted;
-        } else if (percentage < 0) {
-            return "🔴 " + formatted;
-        }
-        return "🟡 " + formatted;
-    }
-
-    /**
      * Format the distance percentage with direction indicator.
      *
      * @param percentage the percentage
@@ -798,10 +782,9 @@ public class TelegramMessageFormatter {
      *
      * @param entryPrice the entry price
      * @param exitPrice the exit price
-     * @param quantity the quantity
      * @return the P&L percentage (0-1 scale)
      */
-    private BigDecimal calculatePnLPercentForPrice(BigDecimal entryPrice, BigDecimal exitPrice, BigDecimal quantity) {
+    private BigDecimal calculatePnLPercentForPrice(BigDecimal entryPrice, BigDecimal exitPrice) {
         if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }
@@ -813,20 +796,18 @@ public class TelegramMessageFormatter {
     /**
      * Calculate the distance to stop loss as a percentage.
      *
-     * @param currentPnLPercent the current P&L percentage
      * @return the distance to stop loss (0-1 scale), or null if SL not set
      */
-    private BigDecimal calculateDistanceToStopLoss(BigDecimal currentPnLPercent) {
+    private BigDecimal calculateDistanceToStopLoss() {
         return null; // Could be implemented if needed
     }
 
     /**
      * Calculate the distance to target as a percentage.
      *
-     * @param currentPnLPercent the current P&L percentage
      * @return the distance to target (0-1 scale), or null if target not set
      */
-    private BigDecimal calculateDistanceToTarget(BigDecimal currentPnLPercent) {
+    private BigDecimal calculateDistanceToTarget() {
         return null; // Could be implemented if needed
     }
 }

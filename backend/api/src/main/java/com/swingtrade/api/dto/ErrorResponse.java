@@ -94,39 +94,6 @@ public class ErrorResponse {
         this.fieldErrors.add(new FieldError(field, message));
     }
 
-    /**
-     * Field error information.
-     */
-    public static class FieldError {
-        private String field;
-        private String message;
-
-        public FieldError() {
-        }
-
-        public FieldError(String field, String message) {
-            this.field = field;
-            this.message = message;
-        }
-
-        // Getters and Setters
-        public String getField() {
-            return field;
-        }
-
-        public void setField(String field) {
-            this.field = field;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public void setMessage(String message) {
-            this.message = message;
-        }
-    }
-
     // Static factory methods for common error types
     public static ErrorResponse badRequest(String message) {
         return new ErrorResponse(400, "BAD_REQUEST", message, LocalDateTime.now());
@@ -158,5 +125,38 @@ public class ErrorResponse {
 
     public static ErrorResponse internalError(String message, String path) {
         return new ErrorResponse(500, "INTERNAL_ERROR", message, LocalDateTime.now(), path);
+    }
+
+    /**
+     * Field error information.
+     */
+    public static class FieldError {
+        private String field;
+        private String message;
+
+        public FieldError() {
+        }
+
+        public FieldError(String field, String message) {
+            this.field = field;
+            this.message = message;
+        }
+
+        // Getters and Setters
+        public String getField() {
+            return field;
+        }
+
+        public void setField(String field) {
+            this.field = field;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
     }
 }

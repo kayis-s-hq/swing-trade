@@ -12,7 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * Main application class for Swing Trade API module
  * Enables Spring Boot auto-configuration and component scanning
  * Enables scheduled tasks for weekly sector digest and other periodic jobs
- *
+ * <p>
  * Boot's default JPA repository/entity auto-configuration only scans the package of this
  * class (com.swingtrade.api.app) and below, not the extra @ComponentScan base packages -
  * repositories/entities under com.swingtrade.data were never being registered as beans.
@@ -32,6 +32,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 @SpringBootApplication
 public class SwingTradeApiApplication {
+
+    private SwingTradeApiApplication() {
+    }
+
     public static void main(String[] args) {
         SpringApplication.run(SwingTradeApiApplication.class, args);
     }

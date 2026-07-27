@@ -5,14 +5,11 @@ import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.SignalStore;
 import com.swingtrade.domain.store.StockStore;
-import com.swingtrade.api.service.SignalEngine;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 

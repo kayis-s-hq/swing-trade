@@ -105,11 +105,11 @@ public class NseInstrumentService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class NseInstrumentRecord {
-        @JsonProperty("segment") String segment;
-        @JsonProperty("instrument_type") String instrumentType;
-        @JsonProperty("trading_symbol") String tradingSymbol;
-        @JsonProperty("instrument_key") String instrumentKey;
-        @JsonProperty("name") String name;
-        @JsonProperty("isin") String isin;
+        @JsonProperty("segment") private String segment;
+        @JsonProperty("instrument_type") private String instrumentType;
+        @JsonProperty("trading_symbol") private String tradingSymbol;
+        @JsonProperty("instrument_key") private String instrumentKey;
+        @JsonProperty("name") private String name;
+        @JsonProperty("isin") private String isin;
     }
 }

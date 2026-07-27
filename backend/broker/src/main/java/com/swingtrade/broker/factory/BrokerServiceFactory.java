@@ -3,8 +3,6 @@ package com.swingtrade.broker.factory;
 import com.swingtrade.broker.config.BrokerMode;
 import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.engine.PaperTradingEngine;
-import com.swingtrade.broker.factory.DryRunService;
-import com.swingtrade.broker.factory.LiveTradingService;
 import com.swingtrade.broker.kite.BrokerClient;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.risk.KillSwitchService;
@@ -64,7 +62,7 @@ public class BrokerServiceFactory {
     /**
      * Initialize the broker service based on configuration.
      */
-    public void initialize() {
+    private void initialize() {
         currentMode = BrokerMode.fromString(props.getMode());
         currentService = createService(currentMode);
 

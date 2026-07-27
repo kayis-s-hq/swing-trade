@@ -56,7 +56,7 @@ public class TelegramNotificationService implements NotificationService {
     private RestTemplate restTemplate;
 
     // Kill switch state
-    private volatile boolean killSwitchActive = false;
+    private boolean killSwitchActive = false;
     private LocalDateTime killSwitchActivatedTime;
     private String killSwitchReason;
 
@@ -219,32 +219,9 @@ public class TelegramNotificationService implements NotificationService {
                    .replace("\t", "\\t");
     }
 
-    /**
-     * Response object from Telegram API.
-     */
-    private static class TelegramResponse {
-        private boolean ok;
-        private Result result;
-
-        public boolean isOk() { return ok; }
-        public Result getResult() { return result; }
-
-        public static class Result {
-            private long message_id;
-            private Message message;
-
-            public long getMessageId() { return message_id; }
-            public Message getMessage() { return message; }
-
-            public static class Message {
-                private long chat_id;
-                private String text;
-
-                public long getChatId() { return chat_id; }
-                public String getText() { return text; }
-            }
-        }
-    }
+    // =================================================================
+    // Notification Methods
+    // =================================================================
 
     /**
      * Sends a BUY signal notification.
@@ -271,7 +248,7 @@ public class TelegramNotificationService implements NotificationService {
     /**
      * Sends a HOLD signal notification.
      *
-     * @param signal the trading signal to send
+     * @param signal the HOLD signal to send
      * @return true if message was sent, false otherwise
      */
     public boolean sendHoldSignal(Signal signal) {
@@ -638,6 +615,10 @@ public class TelegramNotificationService implements NotificationService {
         sendMessage(content);
     }
 
+    // =================================================================
+    // Inner Types (must be last per Checkstyle InnerTypeLast rule)
+    // =================================================================
+
     /**
      * Functional interface for command handlers.
      */
@@ -749,5 +730,32 @@ public class TelegramNotificationService implements NotificationService {
         public double getWinRate() { return winRate; }
         public int getActivePositions() { return activePositions; }
         public String getMarketSentiment() { return marketSentiment; }
+    }
+
+    /**
+     * Response object from Telegram API.
+     */
+    private static class TelegramResponse {
+        private boolean ok;
+        private Result result;
+
+        public boolean isOk() { return ok; }
+        public Result getResult() { return result; }
+
+        public static class Result {
+            private long messageId;
+            private Message message;
+
+            public long getMessageId() { return messageId; }
+            public Message getMessage() { return message; }
+
+            public static class Message {
+                private long chatId;
+                private String text;
+
+                public long getChatId() { return chatId; }
+                public String getText() { return text; }
+            }
+        }
     }
 }

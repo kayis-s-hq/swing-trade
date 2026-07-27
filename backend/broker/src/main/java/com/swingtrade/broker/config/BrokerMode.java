@@ -1,5 +1,7 @@
 package com.swingtrade.broker.config;
 
+import java.util.Locale;
+
 /**
  * Enum representing broker trading modes.
  * Controls how orders are processed and executed.
@@ -62,21 +64,21 @@ public enum BrokerMode {
      */
     public static BrokerMode fromString(String modeString) {
         if (modeString == null) {
-            return BrokerMode.PAPER;
+            return PAPER;
         }
 
-        switch (modeString.toLowerCase().trim()) {
+        switch (modeString.toLowerCase(Locale.ROOT).trim()) {
             case "paper":
             case "paper_trading":
-                return BrokerMode.PAPER;
+                return PAPER;
             case "live":
             case "production":
             case "real":
-                return BrokerMode.LIVE;
+                return LIVE;
             case "dry_run":
             case "dry-run":
             case "dry":
-                return BrokerMode.DRY_RUN;
+                return DRY_RUN;
             default:
                 throw new IllegalArgumentException("Unknown broker mode: " + modeString +
                         ". Valid modes: paper, live, dry_run");

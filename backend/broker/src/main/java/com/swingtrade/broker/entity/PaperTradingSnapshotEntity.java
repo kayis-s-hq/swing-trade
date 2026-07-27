@@ -45,6 +45,7 @@ public class PaperTradingSnapshotEntity {
 
     public PaperTradingSnapshotEntity() {}
 
+    @SuppressWarnings("PMD.UnusedPrivateMethod")
     @PrePersist
     private void setTimestamps() {
         if (snapshotTime == null) snapshotTime = LocalDateTime.now();

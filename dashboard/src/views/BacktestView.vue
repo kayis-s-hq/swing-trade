@@ -4,14 +4,16 @@
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="font-display text-2xl font-semibold text-text-primary">Backtest</h1>
-        <p class="mt-1 text-sm text-text-muted">Replay the price-action strategy against historical candles</p>
+        <p class="mt-1 text-sm text-text-muted">
+          Replay the price-action strategy against historical candles
+        </p>
       </div>
     </div>
 
     <!-- Run Form -->
     <div class="mb-6 card-panel p-5">
       <h3 class="mb-3 text-sm font-semibold text-text-primary">Run Backtest</h3>
-      <form @submit.prevent="handleRunSingle" class="flex flex-col sm:flex-row gap-3">
+      <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="handleRunSingle">
         <div class="flex-1">
           <label class="mb-1 block text-xs font-medium text-text-muted">Symbol</label>
           <input
@@ -43,14 +45,16 @@
           <button
             type="button"
             :disabled="runningAll"
-            @click="handleRunAll"
             class="rounded-md border border-border-subtle px-3 py-2 text-sm text-text-muted transition-colors hover:bg-bg-hover disabled:opacity-50"
+            @click="handleRunAll"
           >
             {{ runningAll ? 'Running Watchlist...' : 'Run Whole Watchlist' }}
           </button>
         </div>
       </form>
-      <p v-if="runError" class="mt-3 text-xs text-danger">{{ runError }}</p>
+      <p v-if="runError" class="mt-3 text-xs text-danger">
+        {{ runError }}
+      </p>
     </div>
 
     <!-- Single Result -->
@@ -73,26 +77,84 @@
         <table class="min-w-full">
           <thead>
             <tr class="border-b border-border-subtle bg-bg-primary/50">
-              <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Entry</th>
-              <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Exit</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Entry Price</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Exit Price</th>
-              <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Exit Reason</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">P&L</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">P&L %</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Days Held</th>
+              <th
+                class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Entry
+              </th>
+              <th
+                class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Exit
+              </th>
+              <th
+                class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Entry Price
+              </th>
+              <th
+                class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Exit Price
+              </th>
+              <th
+                class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Exit Reason
+              </th>
+              <th
+                class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                P&L
+              </th>
+              <th
+                class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                P&L %
+              </th>
+              <th
+                class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Days Held
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border-subtle/50">
-            <tr v-for="(t, i) in result.trades" :key="i" class="transition-colors hover:bg-bg-hover">
-              <td class="px-4 py-2 text-sm text-text-secondary">{{ t.entryDate }}</td>
-              <td class="px-4 py-2 text-sm text-text-secondary">{{ t.exitDate }}</td>
-              <td class="px-4 py-2 text-right text-sm text-text-secondary">{{ t.entryPrice.toFixed(2) }}</td>
-              <td class="px-4 py-2 text-right text-sm text-text-secondary">{{ t.exitPrice.toFixed(2) }}</td>
-              <td class="px-4 py-2 text-sm text-text-muted">{{ t.exitReason }}</td>
-              <td class="px-4 py-2 text-right text-sm font-medium" :class="t.pnl >= 0 ? 'text-success' : 'text-danger'">{{ t.pnl.toFixed(2) }}</td>
-              <td class="px-4 py-2 text-right text-sm font-medium" :class="t.pnlPct >= 0 ? 'text-success' : 'text-danger'">{{ t.pnlPct.toFixed(2) }}%</td>
-              <td class="px-4 py-2 text-right text-sm text-text-secondary">{{ t.holdingDays }}</td>
+            <tr
+              v-for="(t, i) in result.trades"
+              :key="i"
+              class="transition-colors hover:bg-bg-hover"
+            >
+              <td class="px-4 py-2 text-sm text-text-secondary">
+                {{ t.entryDate }}
+              </td>
+              <td class="px-4 py-2 text-sm text-text-secondary">
+                {{ t.exitDate }}
+              </td>
+              <td class="px-4 py-2 text-right text-sm text-text-secondary">
+                {{ t.entryPrice.toFixed(2) }}
+              </td>
+              <td class="px-4 py-2 text-right text-sm text-text-secondary">
+                {{ t.exitPrice.toFixed(2) }}
+              </td>
+              <td class="px-4 py-2 text-sm text-text-muted">
+                {{ t.exitReason }}
+              </td>
+              <td
+                class="px-4 py-2 text-right text-sm font-medium"
+                :class="t.pnl >= 0 ? 'text-success' : 'text-danger'"
+              >
+                {{ t.pnl.toFixed(2) }}
+              </td>
+              <td
+                class="px-4 py-2 text-right text-sm font-medium"
+                :class="t.pnlPct >= 0 ? 'text-success' : 'text-danger'"
+              >
+                {{ t.pnlPct.toFixed(2) }}%
+              </td>
+              <td class="px-4 py-2 text-right text-sm text-text-secondary">
+                {{ t.holdingDays }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -104,7 +166,9 @@
 
     <!-- Watchlist Summary -->
     <div v-if="summary" class="mb-6 card-panel p-5">
-      <h3 class="mb-4 text-sm font-semibold text-text-primary">Watchlist Run — {{ summary.symbolsBacktested }} symbols</h3>
+      <h3 class="mb-4 text-sm font-semibold text-text-primary">
+        Watchlist Run — {{ summary.symbolsBacktested }} symbols
+      </h3>
       <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <MetricCard title="Overall Win Rate" :value="summary.overallWinRate.toFixed(1) + '%'" />
         <MetricCard title="Overall Sharpe" :value="summary.overallSharpeRatio.toFixed(2)" />
@@ -115,20 +179,57 @@
         <table class="min-w-full">
           <thead>
             <tr class="border-b border-border-subtle bg-bg-primary/50">
-              <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Symbol</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Trades</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Win Rate</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Total Return</th>
-              <th class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Sharpe</th>
+              <th
+                class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Symbol
+              </th>
+              <th
+                class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Trades
+              </th>
+              <th
+                class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Win Rate
+              </th>
+              <th
+                class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Total Return
+              </th>
+              <th
+                class="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Sharpe
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border-subtle/50">
-            <tr v-for="r in summary.results" :key="r.symbol" class="transition-colors hover:bg-bg-hover">
-              <td class="px-4 py-2 text-sm font-semibold text-text-primary">{{ r.symbol }}</td>
-              <td class="px-4 py-2 text-right text-sm text-text-secondary">{{ r.totalTrades }}</td>
-              <td class="px-4 py-2 text-right text-sm text-text-secondary">{{ r.winRate.toFixed(1) }}%</td>
-              <td class="px-4 py-2 text-right text-sm font-medium" :class="r.totalReturn >= 0 ? 'text-success' : 'text-danger'">{{ r.totalReturn.toFixed(2) }}%</td>
-              <td class="px-4 py-2 text-right text-sm text-text-secondary">{{ r.sharpeRatio.toFixed(2) }}</td>
+            <tr
+              v-for="r in summary.results"
+              :key="r.symbol"
+              class="transition-colors hover:bg-bg-hover"
+            >
+              <td class="px-4 py-2 text-sm font-semibold text-text-primary">
+                {{ r.symbol }}
+              </td>
+              <td class="px-4 py-2 text-right text-sm text-text-secondary">
+                {{ r.totalTrades }}
+              </td>
+              <td class="px-4 py-2 text-right text-sm text-text-secondary">
+                {{ r.winRate.toFixed(1) }}%
+              </td>
+              <td
+                class="px-4 py-2 text-right text-sm font-medium"
+                :class="r.totalReturn >= 0 ? 'text-success' : 'text-danger'"
+              >
+                {{ r.totalReturn.toFixed(2) }}%
+              </td>
+              <td class="px-4 py-2 text-right text-sm text-text-secondary">
+                {{ r.sharpeRatio.toFixed(2) }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -139,15 +240,31 @@
     <div class="card-panel p-5">
       <div class="mb-3 flex items-center justify-between">
         <h3 class="text-sm font-semibold text-text-primary">Saved Reports</h3>
-        <button @click="loadReports" class="text-xs font-medium text-text-muted hover:text-text-primary">Refresh</button>
+        <button
+          class="text-xs font-medium text-text-muted hover:text-text-primary"
+          @click="loadReports"
+        >
+          Refresh
+        </button>
       </div>
       <ul class="divide-y divide-border-subtle/50">
-        <li v-for="filename in reports" :key="filename" class="flex items-center justify-between py-2">
+        <li
+          v-for="filename in reports"
+          :key="filename"
+          class="flex items-center justify-between py-2"
+        >
           <span class="text-sm text-text-secondary">{{ filename }}</span>
-          <button @click="viewReport(filename)" class="text-xs font-medium text-brand hover:underline">View</button>
+          <button
+            class="text-xs font-medium text-brand hover:underline"
+            @click="viewReport(filename)"
+          >
+            View
+          </button>
         </li>
       </ul>
-      <div v-if="reports.length === 0" class="py-4 text-center text-sm text-text-muted">No saved reports yet.</div>
+      <div v-if="reports.length === 0" class="py-4 text-center text-sm text-text-muted">
+        No saved reports yet.
+      </div>
     </div>
   </div>
 </template>
@@ -215,5 +332,7 @@ const viewReport = async (filename: string) => {
   }
 }
 
-onMounted(() => { loadReports() })
+onMounted(() => {
+  loadReports()
+})
 </script>

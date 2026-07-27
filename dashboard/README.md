@@ -81,12 +81,12 @@ cp .env.example .env
 
 ### Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_API_BASE_URL` | `http://localhost:8080/api` | Backend API endpoint |
-| `VITE_API_TIMEOUT` | `30000` | Request timeout in milliseconds |
-| `VITE_ENABLE_DEBUG` | `false` | Enable debug mode |
-| `VITE_ENABLE_ANALYTICS` | `false` | Enable analytics |
+| Variable                | Default                     | Description                     |
+| ----------------------- | --------------------------- | ------------------------------- |
+| `VITE_API_BASE_URL`     | `http://localhost:8080/api` | Backend API endpoint            |
+| `VITE_API_TIMEOUT`      | `30000`                     | Request timeout in milliseconds |
+| `VITE_ENABLE_DEBUG`     | `false`                     | Enable debug mode               |
+| `VITE_ENABLE_ANALYTICS` | `false`                     | Enable analytics                |
 
 ## Production Deployment
 

@@ -13,9 +13,13 @@
       <button
         v-for="tab in tabs"
         :key="tab.key"
-        @click="activeTab = tab.key"
         class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors"
-        :class="activeTab === tab.key ? 'bg-brand/10 text-brand' : 'text-text-muted hover:text-text-primary'"
+        :class="
+          activeTab === tab.key
+            ? 'bg-brand/10 text-brand'
+            : 'text-text-muted hover:text-text-primary'
+        "
+        @click="activeTab = tab.key"
       >
         {{ tab.label }}
       </button>
@@ -26,7 +30,7 @@
       <!-- Symbol Selector + Analyze -->
       <div class="mb-6 card-panel p-5">
         <h3 class="mb-3 text-sm font-semibold text-text-primary">Select Symbol</h3>
-        <form @submit.prevent="runAnalysis" class="flex flex-col sm:flex-row gap-3">
+        <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="runAnalysis">
           <div class="flex-1">
             <input
               v-model="symbolInput"
@@ -50,21 +54,20 @@
           <button
             type="button"
             :disabled="loading"
-            @click="loadQuick"
             class="rounded-md border border-border-subtle px-4 py-2 text-sm text-text-muted transition-colors hover:bg-bg-hover disabled:opacity-50"
+            @click="loadQuick"
           >
             {{ loading ? 'Loading...' : 'View Sentiment' }}
           </button>
         </form>
-        <p v-if="error" class="mt-3 text-xs text-danger">{{ error }}</p>
+        <p v-if="error" class="mt-3 text-xs text-danger">
+          {{ error }}
+        </p>
       </div>
 
       <!-- Pipeline accordion -->
       <div v-if="orchestrating || analysisProgress.length" class="animate-fade-in">
-        <AnalysisAccordion
-          :stages="analysisProgress"
-          :composite="composite"
-        />
+        <AnalysisAccordion :stages="analysisProgress" :composite="composite" />
       </div>
 
       <!-- Legacy composite loading -->
@@ -72,12 +75,11 @@
         <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
       </div>
 
-      
       <!-- Historical Sentiment -->
       <div v-if="sentiment" class="mt-6">
         <button
-          @click="showHistoricalSentiment = !showHistoricalSentiment"
           class="mb-3 flex items-center gap-2 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
+          @click="showHistoricalSentiment = !showHistoricalSentiment"
         >
           <svg
             class="h-4 w-4 transition-transform"
@@ -86,7 +88,12 @@
             viewBox="0 0 24 24"
             stroke="currentColor"
           >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 9l-7 7-7-7"
+            />
           </svg>
           Historical Sentiment
         </button>
@@ -94,26 +101,40 @@
         <div v-if="showHistoricalSentiment" class="animate-fade-in">
           <div class="card-panel p-5">
             <div class="mb-4 flex items-center justify-between">
-              <h4 class="text-sm font-semibold text-text-primary">{{ sentiment.symbol }}</h4>
+              <h4 class="text-sm font-semibold text-text-primary">
+                {{ sentiment.symbol }}
+              </h4>
               <span class="text-xs text-text-muted">{{ sentiment.date }}</span>
             </div>
             <div class="mb-4 flex items-center gap-4">
               <SentimentBadge :score="sentiment.score" :confidence="sentiment.confidence" />
             </div>
             <div class="mb-4">
-              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">Summary</h4>
-              <p class="text-sm text-text-secondary">{{ sentiment.summary }}</p>
+              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Summary
+              </h4>
+              <p class="text-sm text-text-secondary">
+                {{ sentiment.summary }}
+              </p>
             </div>
             <div v-if="sentiment.redFlags.length" class="mb-4">
-              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-danger">Red Flags</h4>
+              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-danger">
+                Red Flags
+              </h4>
               <ul class="list-disc pl-4 text-sm text-text-secondary">
-                <li v-for="rf in sentiment.redFlags" :key="rf">{{ rf }}</li>
+                <li v-for="rf in sentiment.redFlags" :key="rf">
+                  {{ rf }}
+                </li>
               </ul>
             </div>
             <div v-if="sentiment.catalysts.length">
-              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-success">Catalysts</h4>
+              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-success">
+                Catalysts
+              </h4>
               <ul class="list-disc pl-4 text-sm text-text-secondary">
-                <li v-for="c in sentiment.catalysts" :key="c">{{ c }}</li>
+                <li v-for="c in sentiment.catalysts" :key="c">
+                  {{ c }}
+                </li>
               </ul>
             </div>
           </div>
@@ -121,8 +142,19 @@
       </div>
 
       <!-- Empty state -->
-      <div v-if="!composite && !sentiment && !orchestrating && !compositeLoading && analysisProgress.length === 0" class="card-panel p-5">
-        <p class="text-sm text-text-muted">No data available. Enter a symbol and click Analyze or View Sentiment.</p>
+      <div
+        v-if="
+          !composite &&
+          !sentiment &&
+          !orchestrating &&
+          !compositeLoading &&
+          analysisProgress.length === 0
+        "
+        class="card-panel p-5"
+      >
+        <p class="text-sm text-text-muted">
+          No data available. Enter a symbol and click Analyze or View Sentiment.
+        </p>
       </div>
     </div>
 
@@ -130,7 +162,7 @@
     <div v-if="activeTab === 'news'">
       <div class="mb-6 card-panel p-5">
         <h3 class="mb-3 text-sm font-semibold text-text-primary">Select Symbol</h3>
-        <form @submit.prevent="loadNews" class="flex flex-col sm:flex-row gap-3">
+        <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="loadNews">
           <div class="flex-1">
             <input
               v-model="symbolInput"
@@ -152,13 +184,12 @@
             {{ newsLoading ? 'Loading...' : 'Fetch News' }}
           </button>
         </form>
-        <p v-if="error" class="mt-3 text-xs text-danger">{{ error }}</p>
+        <p v-if="error" class="mt-3 text-xs text-danger">
+          {{ error }}
+        </p>
       </div>
 
-      <ArticleBrowser
-        :articles="newsArticles"
-        :loading="newsLoading"
-      />
+      <ArticleBrowser :articles="newsArticles" :loading="newsLoading" />
     </div>
 
     <!-- History Tab -->
@@ -174,17 +205,17 @@
       <!-- Pagination -->
       <div v-if="history.length > 0" class="mt-4 flex items-center justify-center gap-2">
         <button
-          @click="historyPage = Math.max(0, historyPage - 1)"
           :disabled="historyPage === 0"
           class="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-muted transition-colors hover:bg-bg-hover disabled:opacity-50"
+          @click="historyPage = Math.max(0, historyPage - 1)"
         >
           Previous
         </button>
         <span class="text-sm text-text-muted">Page {{ historyPage + 1 }}</span>
         <button
-          @click="historyPage++"
           :disabled="!hasMore"
           class="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-muted transition-colors hover:bg-bg-hover disabled:opacity-50"
+          @click="historyPage++"
         >
           Next
         </button>
@@ -202,7 +233,14 @@ import {
   getWatchlist,
   runFullAnalysis,
 } from '../api/client'
-import type { SentimentResult, WatchlistEntry, NewsArticle, CompositeAnalysis, AnalysisProgress, FullAnalysisResult } from '../api/types'
+import type {
+  SentimentResult,
+  WatchlistEntry,
+  NewsArticle,
+  CompositeAnalysis,
+  AnalysisProgress,
+  FullAnalysisResult,
+} from '../api/types'
 import SentimentBadge from '../components/SentimentBadge.vue'
 import SentimentTimeline from '../components/SentimentTimeline.vue'
 import ArticleBrowser from '../components/ArticleBrowser.vue'
@@ -284,10 +322,9 @@ const runAnalysis = async () => {
         composite.value = result.composite
         analysisDurationMs.value = result.durationMs
         analysisComplete.value = true
-      }
-      else if (evt === 'progress') {
+      } else if (evt === 'progress') {
         const stage = data as AnalysisProgress
-        const idx = analysisProgress.value.findIndex(s => s.stageNumber === stage.stageNumber)
+        const idx = analysisProgress.value.findIndex((s) => s.stageNumber === stage.stageNumber)
         if (idx >= 0) {
           // Update existing stage entry (running → completed)
           const next = [...analysisProgress.value]
@@ -296,7 +333,7 @@ const runAnalysis = async () => {
         } else {
           analysisProgress.value = [...analysisProgress.value, stage]
         }
-        await new Promise(r => setTimeout(r, 100))
+        await new Promise((r) => setTimeout(r, 100))
       }
     }
   } catch (e) {

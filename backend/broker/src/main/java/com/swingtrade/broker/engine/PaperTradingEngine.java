@@ -1,7 +1,5 @@
 package com.swingtrade.broker.engine;
 
-import com.swingtrade.broker.config.BrokerMode;
-import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
@@ -233,7 +231,7 @@ public class PaperTradingEngine {
             Position position = createPositionFromOrder(order);
 
             // Update portfolio
-            updatePortfolioAfterEntry(order, position);
+            updatePortfolioAfterEntry(order);
 
             logger.info("Position {} created from order {} at {}",
                 position.positionId(), orderId, executionPrice);
@@ -261,10 +259,6 @@ public class PaperTradingEngine {
         }
 
         String positionId = generatePositionId();
-
-        // Calculate stop loss and target from order metadata
-        BigDecimal stopLoss = calculateStopLossFromOrder(order);
-        BigDecimal target = calculateTargetFromOrder(order);
 
         // Extract ATR if available, otherwise use default
         BigDecimal atr = getATRFromOrder(order);
@@ -357,9 +351,8 @@ public class PaperTradingEngine {
      * Updates portfolio after position entry.
      *
      * @param order the filled order
-     * @param position the created position
      */
-    private void updatePortfolioAfterEntry(Order order, Position position) {
+    private void updatePortfolioAfterEntry(Order order) {
         BigDecimal positionValue = order.getPrice().multiply(order.getQuantity());
         BigDecimal commission = calculateCommission(order);
 

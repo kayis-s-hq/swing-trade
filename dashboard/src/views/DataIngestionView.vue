@@ -4,37 +4,60 @@
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="font-display text-2xl font-semibold text-text-primary">Data Ingestion</h1>
-        <p class="mt-1 text-sm text-text-muted">Monitor data quality and pull historical market data</p>
+        <p class="mt-1 text-sm text-text-muted">
+          Monitor data quality and pull historical market data
+        </p>
       </div>
       <div class="flex items-center gap-3">
         <button
-          @click="refreshStatus"
           :disabled="loading || pulling"
           class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary disabled:opacity-50"
+          @click="refreshStatus"
         >
-          <svg class="h-4 w-4 transition-transform duration-300" :class="loading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <svg
+            class="h-4 w-4 transition-transform duration-300"
+            :class="loading ? 'animate-spin' : ''"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
           Refresh
         </button>
         <button
           v-if="!pulling"
-          @click="startPull"
           :disabled="pullDisabled"
           class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
+          @click="startPull"
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+            />
           </svg>
           Pull {{ dataSourceLabel }} Historical Data
         </button>
         <button
           v-else
-          @click="cancelPull"
           class="flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/20"
+          @click="cancelPull"
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
           Cancel Pull
         </button>
@@ -46,17 +69,24 @@
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <span class="inline-flex h-3 w-3">
-            <span class="pulse-dot inline-block h-3 w-3 rounded-full" :class="connectionReady ? 'bg-success' : 'bg-danger'"></span>
+            <span
+              class="pulse-dot inline-block h-3 w-3 rounded-full"
+              :class="connectionReady ? 'bg-success' : 'bg-danger'"
+            />
           </span>
           <div>
-            <p class="text-sm font-medium text-text-primary">{{ connectionLabel }}</p>
-            <p class="text-xs text-text-muted">{{ connectionMsg }}</p>
+            <p class="text-sm font-medium text-text-primary">
+              {{ connectionLabel }}
+            </p>
+            <p class="text-xs text-text-muted">
+              {{ connectionMsg }}
+            </p>
           </div>
         </div>
         <template v-if="needsAuth && !fyersConnected">
           <button
-            @click="openBrokerAuth"
             class="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90"
+            @click="openBrokerAuth"
           >
             Connect {{ connectionLabel }}
           </button>
@@ -72,7 +102,9 @@
       <div class="flex items-center justify-between mb-2">
         <div>
           <p class="text-sm font-medium text-text-primary">Pulling Historical Data</p>
-          <p class="text-xs text-text-muted">Processing: {{ pullProgress?.currentSymbol || '...' }}</p>
+          <p class="text-xs text-text-muted">
+            Processing: {{ pullProgress?.currentSymbol || '...' }}
+          </p>
         </div>
         <p class="text-sm font-bold text-brand">{{ pullProgress?.percentComplete || 0 }}%</p>
       </div>
@@ -80,15 +112,19 @@
         <div
           class="h-full rounded-full bg-brand transition-all duration-300"
           :style="{ width: `${pullProgress?.percentComplete || 0}%` }"
-        ></div>
+        />
       </div>
-      <p class="text-xs text-text-muted">{{ pullProgress?.completed || 0 }} / {{ pullProgress?.total || 0 }} stocks complete</p>
+      <p class="text-xs text-text-muted">
+        {{ pullProgress?.completed || 0 }} / {{ pullProgress?.total || 0 }} stocks complete
+      </p>
     </div>
 
     <!-- Pull Complete -->
     <div v-if="pullComplete" class="mb-6 rounded-md bg-success-bg p-4">
       <p class="text-sm font-medium text-success">Data pull completed!</p>
-      <p class="text-xs text-text-muted mt-1">{{ pullCompleted?.completed || 0 }} succeeded, {{ pullCompleted?.failed || 0 }} failed</p>
+      <p class="text-xs text-text-muted mt-1">
+        {{ pullCompleted?.completed || 0 }} succeeded, {{ pullCompleted?.failed || 0 }} failed
+      </p>
     </div>
 
     <!-- Loading -->
@@ -97,26 +133,40 @@
     </div>
 
     <!-- Error -->
-    <ErrorMessage v-else-if="error" :message="errorMessage" :showRetry="true" retryText="Retry" @retry="loadStatus" />
+    <ErrorMessage
+      v-else-if="error"
+      :message="errorMessage"
+      :show-retry="true"
+      retry-text="Retry"
+      @retry="loadStatus"
+    />
 
     <!-- Summary Cards -->
     <template v-else>
       <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div class="card-panel p-4">
           <p class="text-xs font-medium text-text-muted">Total Stocks</p>
-          <p class="mt-1 text-xl font-bold text-text-primary">{{ status.length }}</p>
+          <p class="mt-1 text-xl font-bold text-text-primary">
+            {{ status.length }}
+          </p>
         </div>
         <div class="card-panel p-4">
           <p class="text-xs font-medium text-text-muted">With Data</p>
-          <p class="mt-1 text-xl font-bold text-success">{{ status.filter(s => s.hasData).length }}</p>
+          <p class="mt-1 text-xl font-bold text-success">
+            {{ status.filter((s) => s.hasData).length }}
+          </p>
         </div>
         <div class="card-panel p-4">
           <p class="text-xs font-medium text-text-muted">Missing Data</p>
-          <p class="mt-1 text-xl font-bold text-danger">{{ status.filter(s => !s.hasData).length }}</p>
+          <p class="mt-1 text-xl font-bold text-danger">
+            {{ status.filter((s) => !s.hasData).length }}
+          </p>
         </div>
         <div class="card-panel p-4">
           <p class="text-xs font-medium text-text-muted">Total Candles</p>
-          <p class="mt-1 text-xl font-bold text-text-primary">{{ formatNumber(status.reduce((sum, s) => sum + s.candleCount, 0)) }}</p>
+          <p class="mt-1 text-xl font-bold text-text-primary">
+            {{ formatNumber(status.reduce((sum, s) => sum + s.candleCount, 0)) }}
+          </p>
         </div>
       </div>
 
@@ -125,31 +175,70 @@
         <table class="min-w-full">
           <thead>
             <tr class="border-b border-border-subtle bg-bg-primary/50">
-              <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Symbol</th>
-              <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Name</th>
-              <th class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">Candles</th>
-              <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Date Range</th>
-              <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">Last Sync</th>
-              <th class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted">Quality</th>
+              <th
+                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Symbol
+              </th>
+              <th
+                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Name
+              </th>
+              <th
+                class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Candles
+              </th>
+              <th
+                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Date Range
+              </th>
+              <th
+                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Last Sync
+              </th>
+              <th
+                class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
+              >
+                Quality
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border-subtle/50">
-            <tr v-for="entry in status" :key="entry.symbol" class="transition-colors hover:bg-bg-hover">
-              <td class="px-5 py-4 text-sm font-semibold text-text-primary">{{ entry.symbol }}</td>
-              <td class="px-5 py-4 text-sm text-text-secondary">{{ entry.name || '—' }}</td>
-              <td class="px-5 py-4 text-right text-sm text-text-secondary">{{ entry.candleCount }}</td>
+            <tr
+              v-for="entry in status"
+              :key="entry.symbol"
+              class="transition-colors hover:bg-bg-hover"
+            >
+              <td class="px-5 py-4 text-sm font-semibold text-text-primary">
+                {{ entry.symbol }}
+              </td>
+              <td class="px-5 py-4 text-sm text-text-secondary">
+                {{ entry.name || '—' }}
+              </td>
+              <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                {{ entry.candleCount }}
+              </td>
               <td class="px-5 py-4 text-sm text-text-muted">
                 <template v-if="entry.hasData">
                   {{ entry.earliestCandleDate }} → {{ entry.lastCandleDate }}
                 </template>
-                <template v-else>—</template>
+                <template v-else> — </template>
               </td>
               <td class="px-5 py-4 text-sm text-text-muted">
-                <template v-if="entry.lastSyncedAt">{{ formatDate(entry.lastSyncedAt) }}</template>
-                <template v-else>—</template>
+                <template v-if="entry.lastSyncedAt">
+                  {{ formatDate(entry.lastSyncedAt) }}
+                </template>
+                <template v-else> — </template>
               </td>
               <td class="px-5 py-4 text-center">
-                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" :class="qualityBadge(entry.dataQuality)">
+                <span
+                  class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                  :class="qualityBadge(entry.dataQuality)"
+                >
                   {{ entry.dataQuality }}
                 </span>
               </td>
@@ -163,7 +252,15 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { getIngestionStatus, triggerDataPull, getPullProgress, cancelDataPull, getFyersStatus, getFyersLoginUrl, setBroker as apiSetBroker } from '../api/client'
+import {
+  getIngestionStatus,
+  triggerDataPull,
+  getPullProgress,
+  cancelDataPull,
+  getFyersStatus,
+  getFyersLoginUrl,
+  setBroker as apiSetBroker,
+} from '../api/client'
 import type { IngestionStatus, PullProgress } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
@@ -184,8 +281,12 @@ const pullCompleted = ref<PullProgress | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 // Yahoo Finance needs no auth; Fyers/Upstox require connection
-const needsAuth = computed(() => backendBroker.value === 'fyers' || backendBroker.value === 'upstox')
-const pullDisabled = computed(() => loading.value || pulling.value || (needsAuth.value && !fyersConnected.value))
+const needsAuth = computed(
+  () => backendBroker.value === 'fyers' || backendBroker.value === 'upstox'
+)
+const pullDisabled = computed(
+  () => loading.value || pulling.value || (needsAuth.value && !fyersConnected.value)
+)
 
 const connectionReady = computed(() => !needsAuth.value || fyersConnected.value)
 const connectionLabel = computed(() => {
@@ -254,7 +355,9 @@ const loadStatus = async () => {
   }
 }
 
-const refreshStatus = () => { loadStatus() }
+const refreshStatus = () => {
+  loadStatus()
+}
 
 const startPull = async () => {
   pulling.value = true
@@ -369,7 +472,9 @@ const formatDate = (dateStr: string): string => {
   }
 }
 
-onMounted(() => { loadStatus() })
+onMounted(() => {
+  loadStatus()
+})
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
 })

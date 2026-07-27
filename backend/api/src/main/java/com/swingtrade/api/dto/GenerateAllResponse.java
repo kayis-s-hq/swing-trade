@@ -9,12 +9,12 @@ public record GenerateAllResponse(
     List<SignalResponse> signals,
     List<SymbolResult> skipped
 ) {
+    public static GenerateAllResponse of(List<SignalResponse> signals, List<SymbolResult> skipped) {
+        return new GenerateAllResponse(signals, skipped);
+    }
+
     public record SymbolResult(
         String symbol,
         String reason
     ) {}
-
-    public static GenerateAllResponse of(List<SignalResponse> signals, List<SymbolResult> skipped) {
-        return new GenerateAllResponse(signals, skipped);
-    }
 }

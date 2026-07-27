@@ -49,7 +49,6 @@ class BrokerServiceFactoryTest {
         BrokerProperties props = new BrokerProperties();
         props.setMode(mode);
         BrokerServiceFactory factory = new BrokerServiceFactory(mockPaperEngine, mockOrderManager, mockClientProvider, mockRisk, mockKillSwitch, mockStateService, props);
-        factory.initialize();
         return factory;
     }
 

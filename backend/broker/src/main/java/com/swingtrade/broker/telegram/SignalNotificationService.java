@@ -53,7 +53,7 @@ public class SignalNotificationService {
     private RestTemplate restTemplate;
 
     // Quiet hours state
-    private volatile boolean inQuietHours = false;
+    private boolean inQuietHours = false;
 
     @Autowired
     public SignalNotificationService(SignalMessageFormatter messageFormatter, BrokerProperties props) {
@@ -188,19 +188,6 @@ public class SignalNotificationService {
 
         // Send request
         restTemplate.postForObject(url, entity, SignalResponse.class);
-    }
-
-    /**
-     * Response object from Signal API.
-     */
-    private static class SignalResponse {
-        private boolean success;
-        private String messageId;
-        private String status;
-
-        public boolean isSuccess() { return success; }
-        public String getMessageId() { return messageId; }
-        public String getStatus() { return status; }
     }
 
     // =================================================================
@@ -410,5 +397,22 @@ public class SignalNotificationService {
      */
     public boolean shouldNotifyOnErrors() {
         return notifyOnErrors;
+    }
+
+    // =================================================================
+    // Inner Types (must be last per Checkstyle InnerTypeLast rule)
+    // =================================================================
+
+    /**
+     * Response object from Signal API.
+     */
+    private static class SignalResponse {
+        private boolean success;
+        private String messageId;
+        private String status;
+
+        public boolean isSuccess() { return success; }
+        public String getMessageId() { return messageId; }
+        public String getStatus() { return status; }
     }
 }

@@ -37,61 +37,71 @@ public class FundamentalScorer {
             return new com.swingtrade.api.dto.CompositeAnalysis.FundamentalScore(0, List.of("Insufficient data"));
         }
 
-        // Reverse to chronological order
-        List<OhlcvCandle> chrono = new ArrayList<>(candles);
-        java.util.Collections.reverse(chrono);
-
-        int lastIndex = chrono.size() - 1;
-        BigDecimal price = chrono.get(lastIndex).close();
-        List<BigDecimal> closes = chrono.stream().map(OhlcvCandle::close).toList();
-        List<CandleWithPrices> candleObjs = new ArrayList<>(chrono.size());
-        for (OhlcvCandle c : chrono) {
-            candleObjs.add(new CandleWithPrices(c.open(), c.high(), c.low(), c.close(), BigDecimal.valueOf(c.volume())));
-        }
+        List<OhlcvCandle> chrono = prepareChronological(candles);
+        BigDecimal price = chrono.get(chrono.size() - 1).close();
 
         int score = 0;
         List<String> factors = new ArrayList<>();
 
-        // 1. Volatility score (ATR/Price ratio)
-        // Low vol = stable = positive. Thresholds: <3% = +25, 3-5% = 0, >5% = -25
+        score += applyVolatilityScore(chrono, price, factors);
+        score += applyMomentumScore(chrono, price, factors);
+        score += applyVolumeTrendScore(chrono, factors);
+        score += applyPricePositionScore(chrono, price, factors);
+
+        String signal = score > 0 ? "BULLISH" : score < 0 ? "BEARISH" : "NEUTRAL";
+        return new com.swingtrade.api.dto.CompositeAnalysis.FundamentalScore(score, factors);
+    }
+
+    private List<OhlcvCandle> prepareChronological(List<OhlcvCandle> candles) {
+        List<OhlcvCandle> chrono = new ArrayList<>(candles);
+        java.util.Collections.reverse(chrono);
+        return chrono;
+    }
+
+    private int applyVolatilityScore(List<OhlcvCandle> chrono, BigDecimal price, List<String> factors) {
+        List<CandleWithPrices> candleObjs = toCandleObjs(chrono);
         Double atr = technicalIndicators.calculateATR(candleObjs, 14);
         if (atr != null && price.doubleValue() > 0) {
             double atrPct = (atr / price.doubleValue()) * 100;
             if (atrPct < 3) {
-                score += 25;
                 factors.add(String.format("Volatility (ATR/Price): low (%.1f%%) = +25", atrPct));
+                return 25;
             } else if (atrPct < 5) {
                 factors.add(String.format("Volatility (ATR/Price): moderate (%.1f%%) = 0", atrPct));
+                return 0;
             } else {
-                score -= 25;
                 factors.add(String.format("Volatility (ATR/Price): high (%.1f%%) = -25", atrPct));
+                return -25;
             }
-        } else {
-            factors.add("Volatility: insufficient data = 0");
         }
+        factors.add("Volatility: insufficient data = 0");
+        return 0;
+    }
 
-        // 2. Momentum score (30-day price change)
-        // Positive momentum = positive. >5% = +25, 0-5% = 0, <-5% = -25, -5-0% = 0
+    private int applyMomentumScore(List<OhlcvCandle> chrono, BigDecimal price, List<String> factors) {
+        List<BigDecimal> closes = chrono.stream().map(OhlcvCandle::close).toList();
         if (closes.size() >= MOMENTUM_DAYS) {
             double momentum = (price.doubleValue() - closes.get(closes.size() - MOMENTUM_DAYS).doubleValue())
                 / closes.get(closes.size() - MOMENTUM_DAYS).doubleValue() * 100;
             if (momentum > 5) {
-                score += 25;
                 factors.add(String.format("Momentum (30d): positive (+%.1f%%) = +25", momentum));
+                return 25;
             } else if (momentum > 0) {
                 factors.add(String.format("Momentum (30d): mild positive (%.1f%%) = 0", momentum));
+                return 0;
             } else if (momentum > -5) {
                 factors.add(String.format("Momentum (30d): mild negative (%.1f%%) = 0", momentum));
+                return 0;
             } else {
-                score -= 25;
                 factors.add(String.format("Momentum (30d): negative (%.1f%%) = -25", momentum));
+                return -25;
             }
-        } else {
-            factors.add("Momentum (30d): insufficient data = 0");
         }
+        factors.add("Momentum (30d): insufficient data = 0");
+        return 0;
+    }
 
-        // 3. Volume trend (recent avg vs historical avg)
-        // Increasing volume = positive
+    private int applyVolumeTrendScore(List<OhlcvCandle> chrono, List<String> factors) {
         int recentVolDays = Math.min(10, chrono.size());
         int histVolDays = Math.min(VOLUME_HISTORICAL_DAYS, chrono.size() - recentVolDays);
         if (histVolDays > 0) {
@@ -108,37 +118,42 @@ public class FundamentalScorer {
             if (histVol > 0) {
                 double volRatio = recentVol / histVol;
                 if (volRatio > 1.2) {
-                    score += 25;
                     factors.add(String.format("Volume trend: increasing (%.2fx historical) = +25", volRatio));
+                    return 25;
                 } else if (volRatio > 0.8) {
                     factors.add(String.format("Volume trend: flat (%.2fx historical) = 0", volRatio));
+                    return 0;
                 } else {
-                    score -= 25;
                     factors.add(String.format("Volume trend: declining (%.2fx historical) = -25", volRatio));
+                    return -25;
                 }
-            } else {
-                factors.add("Volume trend: insufficient data = 0");
             }
-        } else {
-            factors.add("Volume trend: insufficient data = 0");
         }
+        factors.add("Volume trend: insufficient data = 0");
+        return 0;
+    }
 
-        // 4. Price position (close vs SMA50)
-        // Above SMA50 = positive
+    private int applyPricePositionScore(List<OhlcvCandle> chrono, BigDecimal price, List<String> factors) {
+        List<BigDecimal> closes = chrono.stream().map(OhlcvCandle::close).toList();
         Double sma50 = technicalIndicators.calculateSMA(closes, 50);
         if (sma50 != null) {
             if (price.doubleValue() > sma50) {
-                score += 25;
                 factors.add(String.format("Price vs SMA50: above (%.2f > %.2f) = +25", price.doubleValue(), sma50));
+                return 25;
             } else {
-                score -= 25;
                 factors.add(String.format("Price vs SMA50: below (%.2f < %.2f) = -25", price.doubleValue(), sma50));
+                return -25;
             }
-        } else {
-            factors.add("Price vs SMA50: insufficient data = 0");
         }
+        factors.add("Price vs SMA50: insufficient data = 0");
+        return 0;
+    }
 
-        String signal = score > 0 ? "BULLISH" : score < 0 ? "BEARISH" : "NEUTRAL";
-        return new com.swingtrade.api.dto.CompositeAnalysis.FundamentalScore(score, factors);
+    private List<CandleWithPrices> toCandleObjs(List<OhlcvCandle> chrono) {
+        List<CandleWithPrices> candleObjs = new ArrayList<>(chrono.size());
+        for (OhlcvCandle c : chrono) {
+            candleObjs.add(new CandleWithPrices(c.open(), c.high(), c.low(), c.close(), BigDecimal.valueOf(c.volume())));
+        }
+        return candleObjs;
     }
 }

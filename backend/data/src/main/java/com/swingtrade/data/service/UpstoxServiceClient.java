@@ -88,7 +88,7 @@ public class UpstoxServiceClient implements MarketDataClient {
             HistoricalCandleResponse response = objectMapper.readValue(
                 responseBody, HistoricalCandleResponse.class);
 
-            if (response.data == null || response.data.candles == null) {
+            if (response.getData() == null || response.getData().getCandles() == null) {
                 return Collections.emptyList();
             }
 
@@ -170,11 +170,15 @@ public class UpstoxServiceClient implements MarketDataClient {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class HistoricalCandleResponse {
-        @JsonProperty("data") CandleResponseData data;
+        @JsonProperty("data") private CandleResponseData data;
+
+        public CandleResponseData getData() { return data; }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class CandleResponseData {
-        @JsonProperty("candles") List<List<Object>> candles;
+        @JsonProperty("candles") private List<List<Object>> candles;
+
+        public List<List<Object>> getCandles() { return candles; }
     }
 }
