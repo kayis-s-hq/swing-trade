@@ -7,7 +7,6 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import jakarta.annotation.PostConstruct;
 import java.util.Locale;
 
 
@@ -36,11 +35,7 @@ import java.util.Locale;
 @SpringBootApplication
 public class SwingTradeApiApplication {
 
-    private SwingTradeApiApplication() {
-    }
-
-    @PostConstruct
-    void init() {
+    static {
         Locale.setDefault(Locale.ROOT);
     }
 
