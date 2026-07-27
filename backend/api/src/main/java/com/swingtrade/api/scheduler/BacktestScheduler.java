@@ -10,7 +10,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Runs a full backtest across the active watchlist weekly and saves the report.
@@ -37,7 +36,7 @@ public class BacktestScheduler {
             List<BacktestResult> results = backtestEngine.runBacktestAll("NSE", BacktestConfig.defaults());
             BacktestReportSummary summary = backtestEngine.generateReport(results);
 
-            logger.info(String.format(Locale.ROOT,
+            logger.info(String.format(
                 "Weekly backtest completed: %d symbols, overall win rate %.2f%%, overall Sharpe %.2f",
                 summary.symbolsBacktested(), summary.overallWinRate(), summary.overallSharpeRatio()));
         } catch (Exception e) {

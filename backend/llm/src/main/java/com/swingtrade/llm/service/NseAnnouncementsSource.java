@@ -13,13 +13,10 @@ import org.springframework.stereotype.Service;
 
 import java.net.CookieManager;
 import java.net.CookiePolicy;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.stream.Collectors;
 
 /**
  * Fetches corporate announcements from NSE India.

@@ -7,6 +7,9 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import jakarta.annotation.PostConstruct;
+import java.util.Locale;
+
 
 /**
  * Main application class for Swing Trade API module
@@ -34,6 +37,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class SwingTradeApiApplication {
 
     private SwingTradeApiApplication() {
+    }
+
+    @PostConstruct
+    void init() {
+        Locale.setDefault(Locale.ROOT);
     }
 
     public static void main(String[] args) {

@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -61,7 +60,7 @@ public class AnalysisOrchestratorService {
     }
 
     public FullAnalysisResult runFullAnalysis(String symbol, SseEmitter emitter, int backfillYears) {
-        String sym = symbol.toUpperCase(Locale.ROOT);
+        String sym = symbol.toUpperCase();
         long startTime = System.currentTimeMillis();
         List<AnalysisProgress> progress = new ArrayList<>();
 

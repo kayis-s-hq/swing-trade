@@ -26,7 +26,6 @@ import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -569,7 +568,7 @@ public class KiteConnectClient implements BrokerClient {
     private OrderStatus mapOrderStatus(String status) {
         if (status == null) return OrderStatus.PENDING;
 
-        switch (status.toLowerCase(Locale.ROOT)) {
+        switch (status.toLowerCase()) {
             case "open":
             case "complete":
                 return OrderStatus.FILLED;

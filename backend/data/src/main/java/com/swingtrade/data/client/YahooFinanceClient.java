@@ -9,7 +9,6 @@ import com.swingtrade.data.service.MarketDataClient;
 import com.swingtrade.data.service.QuoteData;
 import com.swingtrade.data.service.SearchResult;
 
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -243,7 +242,7 @@ public class YahooFinanceClient implements MarketDataClient {
         ChartMeta meta = fetchChartMeta(symbol);
         if (meta == null) return null;
 
-        String exchange = meta.exchange().toUpperCase(Locale.ROOT) + "_EQ";
+        String exchange = meta.exchange().toUpperCase() + "_EQ";
         return InstrumentDetails.of(
             symbol,
             meta.longName(),

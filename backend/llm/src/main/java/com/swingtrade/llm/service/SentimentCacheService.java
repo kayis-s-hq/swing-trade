@@ -6,14 +6,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -216,7 +214,7 @@ public class SentimentCacheService {
      */
     public void removeBySymbol(String symbol) {
         List<String> keysToRemove = cache.keySet().stream()
-                .filter(key -> key.toUpperCase(Locale.ROOT).startsWith(symbol.toUpperCase(Locale.ROOT)))
+                .filter(key -> key.toUpperCase().startsWith(symbol.toUpperCase()))
                 .collect(java.util.stream.Collectors.toList());
 
         for (String key : keysToRemove) {
@@ -237,7 +235,7 @@ public class SentimentCacheService {
         Map<LocalDate, SentimentService.CachedSentiment> results = new HashMap<>();
 
         for (Map.Entry<String, CacheEntry<?>> entry : cache.entrySet()) {
-            if (entry.getKey().toUpperCase(Locale.ROOT).startsWith(symbol.toUpperCase(Locale.ROOT))) {
+            if (entry.getKey().toUpperCase().startsWith(symbol.toUpperCase())) {
                 if (entry.getValue().value instanceof SentimentService.CachedSentiment cached) {
                     // Parse date from key (format: SYMBOL_YYYY-MM-DD)
                     String keyDate = entry.getKey().substring(symbol.length() + 1);

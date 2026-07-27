@@ -2,7 +2,6 @@ package com.swingtrade.domain;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.Locale;
 
 /**
  * Represents a stock entity with essential identifying and descriptive information.
@@ -99,7 +98,7 @@ public record Stock(
         public static Sector fromDbName(String name) {
             if (name == null) return OTHERS;
             try {
-                return Sector.valueOf(name.toUpperCase(Locale.ROOT).replace(" ", "_").replace("&", ""));
+                return Sector.valueOf(name.toUpperCase().replace(" ", "_").replace("&", ""));
             } catch (IllegalArgumentException e) {
                 Sector mapped = DB_NAME_MAP.get(name);
                 if (mapped != null) return mapped;

@@ -57,10 +57,10 @@ public class SentimentApiController {
     @GetMapping("/sentiment/{symbol}/latest")
     public ResponseEntity<ApiResponse<SentimentResult>> getLatestSentiment(
             @PathVariable String symbol) {
-        return sentimentStore.findLatestBySymbol(symbol.toUpperCase(java.util.Locale.ROOT))
+        return sentimentStore.findLatestBySymbol(symbol.toUpperCase())
             .map(e -> ResponseEntity.ok(ApiResponse.ok(e)))
             .orElseGet(() -> ResponseEntity.ok(ApiResponse.ok(SentimentResult.create(
-                symbol.toUpperCase(java.util.Locale.ROOT), java.time.LocalDate.now(),
+                symbol.toUpperCase(), java.time.LocalDate.now(),
                 SentimentResult.SentimentScore.NEUTRAL, "No data", "", 0.0,
                 List.of(), List.of()))));
     }
@@ -71,7 +71,7 @@ public class SentimentApiController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         // Store returns all results; client pagination handled in memory
-        List<SentimentResult> results = sentimentStore.findBySymbol(symbol.toUpperCase(java.util.Locale.ROOT));
+        List<SentimentResult> results = sentimentStore.findBySymbol(symbol.toUpperCase());
         int start = page * size;
         if (start >= results.size()) {
             return ResponseEntity.ok(ApiResponse.ok(List.of()));

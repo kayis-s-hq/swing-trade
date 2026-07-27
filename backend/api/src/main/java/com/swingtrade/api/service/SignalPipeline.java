@@ -168,7 +168,7 @@ public class SignalPipeline {
     }
 
     private String buildPriceActionIndicators(SignalResult result) {
-        return String.format(java.util.Locale.ROOT,
+        return String.format(
                 "RSI=%.2f,EMA20=%.2f,EMA50=%.2f,ATR=%.2f",
                 result.rsi(), result.ema20(), result.ema50(), result.atr());
     }

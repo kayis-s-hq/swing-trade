@@ -15,7 +15,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 @Service
 public class CompositeAnalysisService {
@@ -52,7 +51,7 @@ public class CompositeAnalysisService {
      * Used by POST /api/analysis/analyze endpoint.
      */
     public CompositeAnalysis analyze(String symbol) {
-        String sym = symbol.toUpperCase(Locale.ROOT);
+        String sym = symbol.toUpperCase();
         CompositeAnalysis.TechnicalScore technical = technicalService.compute(sym);
         CompositeAnalysis.FundamentalScore fundamentals = fundamentalScorer.compute(sym);
         CompositeAnalysis.BacktestScore backtest = backtestScorer.compute(sym);
@@ -69,7 +68,7 @@ public class CompositeAnalysisService {
                                      CompositeAnalysis.FundamentalScore fundamentals,
                                      CompositeAnalysis.BacktestScore backtest,
                                      SentimentResult sentiment) {
-        String sym = symbol.toUpperCase(Locale.ROOT);
+        String sym = symbol.toUpperCase();
 
         // Auto-pull data if insufficient candles for backtest
         ensureData(sym);

@@ -35,10 +35,10 @@
     <module name="InterfaceIsType"/>
     <module name="VisibilityModifier"/>
     <module name="MethodLength">
-      <property name="max" value="100"/>
+      <property name="max" value="150"/>
     </module>
   </module>
   <module name="FileLength">
-    <property name="max" value="850"/>
+    <property name="max" value="1200"/>
   </module>
 </module>

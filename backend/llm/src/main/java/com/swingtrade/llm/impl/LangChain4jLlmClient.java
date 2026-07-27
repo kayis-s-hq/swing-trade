@@ -1,6 +1,5 @@
 package com.swingtrade.llm.impl;
 
-import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.llm.LlmClient;
 import com.swingtrade.llm.SentimentOutput;
@@ -8,9 +7,6 @@ import com.swingtrade.llm.SentimentType;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 
-import java.math.BigDecimal;
-import java.util.Locale;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -134,7 +130,7 @@ public class LangChain4jLlmClient implements LlmClient {
         
         if (matcher.find()) {
             try {
-                return SentimentType.valueOf(matcher.group().toUpperCase(Locale.ROOT));
+                return SentimentType.valueOf(matcher.group().toUpperCase());
             } catch (IllegalArgumentException e) {
                 return SentimentType.NEUTRAL;
             }

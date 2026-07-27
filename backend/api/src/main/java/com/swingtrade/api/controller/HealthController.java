@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -182,6 +181,6 @@ public class HealthController {
         long uptimeMs = java.lang.management.ManagementFactory.getRuntimeMXBean().getUptime();
         long hours = uptimeMs / (1000 * 60 * 60);
         long minutes = (uptimeMs % (1000 * 60 * 60)) / (1000 * 60);
-        return String.format(Locale.ROOT, "%dh %dm", hours, minutes);
+        return String.format( "%dh %dm", hours, minutes);
     }
 }

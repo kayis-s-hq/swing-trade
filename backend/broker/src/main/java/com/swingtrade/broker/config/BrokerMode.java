@@ -1,6 +1,5 @@
 package com.swingtrade.broker.config;
 
-import java.util.Locale;
 
 /**
  * Enum representing broker trading modes.
@@ -67,7 +66,7 @@ public enum BrokerMode {
             return PAPER;
         }
 
-        switch (modeString.toLowerCase(Locale.ROOT).trim()) {
+        switch (modeString.toLowerCase().trim()) {
             case "paper":
             case "paper_trading":
                 return PAPER;

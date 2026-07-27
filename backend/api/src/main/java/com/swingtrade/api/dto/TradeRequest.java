@@ -54,7 +54,7 @@ public class TradeRequest {
     }
 
     public TradeRequest(String symbol, Integer quantity, TradeDirection direction, OrderType orderType) {
-        this.symbol = symbol.toUpperCase(java.util.Locale.ROOT);
+        this.symbol = symbol.toUpperCase();
         this.quantity = quantity;
         this.direction = direction;
         this.orderType = orderType;
@@ -66,7 +66,7 @@ public class TradeRequest {
     }
 
     public void setSymbol(String symbol) {
-        this.symbol = symbol.toUpperCase(java.util.Locale.ROOT);
+        this.symbol = symbol.toUpperCase();
     }
 
     public Integer getQuantity() {

@@ -169,7 +169,7 @@ public class SignalService {
      * @return Sentiment analysis results
      */
     public SentimentAnalysis getSentimentAnalysis(String symbol) {
-        String sym = symbol.toUpperCase(java.util.Locale.ROOT);
+        String sym = symbol.toUpperCase();
         return sentimentStore.findLatestBySymbol(sym)
             .map(e -> new SentimentAnalysis(
                 sym, e.date(), e.score().name(), e.summary()))

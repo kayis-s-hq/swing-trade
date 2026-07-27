@@ -27,7 +27,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -105,7 +104,7 @@ public class PositionService {
      * @return List of positions with the given status
      */
     public List<PositionResponse> getPositionsByStatus(String status) {
-        PositionStatus ps = switch (status.toUpperCase(Locale.ROOT)) {
+        PositionStatus ps = switch (status.toUpperCase()) {
             case "OPEN" -> PositionStatus.OPEN;
             case "CLOSED" -> PositionStatus.CLOSED;
             case "STOPPED" -> PositionStatus.STOPPED;

@@ -4,10 +4,15 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+<<<<<<< HEAD
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
-import java.util.Locale;
+=======
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
+>>>>>>> worktree-pmd-fix
 
 /**
  * JPA entity for the app_settings key/value table.
@@ -76,7 +81,7 @@ public class AppSettingEntity {
      * Checks if a value is overridden by env var or system property.
      */
     public static String fromEnv(String key, String defaultValue) {
-        String envValue = System.getenv(key.replace('.', '_').toUpperCase(Locale.ROOT));
+        String envValue = System.getenv(key.replace('.', '_').toUpperCase());
         if (envValue != null && !envValue.isBlank()) {
             return envValue;
         }

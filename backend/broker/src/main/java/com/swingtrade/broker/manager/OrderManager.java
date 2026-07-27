@@ -12,7 +12,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -302,7 +301,7 @@ public class OrderManager {
      * @return unique order ID
      */
     private String generateOrderId() {
-        return "ORD_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+        return "ORD_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
 
     /**

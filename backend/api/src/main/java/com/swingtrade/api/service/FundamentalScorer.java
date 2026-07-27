@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 @Service
 public class FundamentalScorer {
@@ -29,7 +28,7 @@ public class FundamentalScorer {
     }
 
     public com.swingtrade.api.dto.CompositeAnalysis.FundamentalScore compute(String symbol) {
-        String sym = symbol.toUpperCase(Locale.ROOT);
+        String sym = symbol.toUpperCase();
         List<OhlcvCandle> candles = candleStore.findAllBySymbolOrderByDateDesc(sym);
 
         if (candles.size() < 30) {

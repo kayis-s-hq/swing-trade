@@ -5,13 +5,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.Locale;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * Service for filtering and ranking news articles by relevance.
@@ -204,7 +202,7 @@ public class NewsFilterService {
      * @return trading relevance score between 0 and 1
      */
     private double calculateTradingRelevanceScore(String content) {
-        String lowerContent = content.toLowerCase(Locale.ROOT);
+        String lowerContent = content.toLowerCase();
 
         // Count keyword matches with weights
         double positiveScore = 0;
@@ -213,14 +211,14 @@ public class NewsFilterService {
         int negativeCount = 0;
 
         for (TradingKeyword keyword : POSITIVE_KEYWORDS) {
-            if (lowerContent.contains(keyword.text.toLowerCase(Locale.ROOT))) {
+            if (lowerContent.contains(keyword.text.toLowerCase())) {
                 positiveScore += keyword.weight;
                 positiveCount++;
             }
         }
 
         for (TradingKeyword keyword : NEGATIVE_KEYWORDS) {
-            if (lowerContent.contains(keyword.text.toLowerCase(Locale.ROOT))) {
+            if (lowerContent.contains(keyword.text.toLowerCase())) {
                 negativeScore += keyword.weight;
                 negativeCount++;
             }
@@ -238,7 +236,7 @@ public class NewsFilterService {
 
         // Check for neutral trading-related content
         for (TradingKeyword keyword : NEUTRAL_KEYWORDS) {
-            if (lowerContent.contains(keyword.text.toLowerCase(Locale.ROOT))) {
+            if (lowerContent.contains(keyword.text.toLowerCase())) {
                 return 0.4; // Moderate relevance for neutral trading news
             }
         }
@@ -292,9 +290,9 @@ public class NewsFilterService {
             return false;
         }
 
-        String lowerSource = source.toLowerCase(Locale.ROOT);
+        String lowerSource = source.toLowerCase();
         return HIGH_QUALITY_SOURCES.stream()
-                .anyMatch(hqSource -> lowerSource.contains(hqSource.toLowerCase(Locale.ROOT)));
+                .anyMatch(hqSource -> lowerSource.contains(hqSource.toLowerCase()));
     }
 
     /**
@@ -340,13 +338,13 @@ public class NewsFilterService {
         int neutralCount = 0;
 
         for (NewsArticle article : articles) {
-            String content = getArticleContent(article).toLowerCase(Locale.ROOT);
+            String content = getArticleContent(article).toLowerCase();
 
             boolean hasPositive = POSITIVE_KEYWORDS.stream()
-                    .anyMatch(kw -> content.contains(kw.text.toLowerCase(Locale.ROOT)));
+                    .anyMatch(kw -> content.contains(kw.text.toLowerCase()));
 
             boolean hasNegative = NEGATIVE_KEYWORDS.stream()
-                    .anyMatch(kw -> content.contains(kw.text.toLowerCase(Locale.ROOT)));
+                    .anyMatch(kw -> content.contains(kw.text.toLowerCase()));
 
             if (hasPositive && !hasNegative) {
                 positiveCount++;
