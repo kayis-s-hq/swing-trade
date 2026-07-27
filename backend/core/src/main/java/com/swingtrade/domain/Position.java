@@ -1,9 +1,5 @@
 package com.swingtrade.domain;
 
-import com.swingtrade.domain.Exchange;
-import com.swingtrade.domain.Order;
-import com.swingtrade.domain.PositionStatus;
-import com.swingtrade.domain.TradeDirection;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
