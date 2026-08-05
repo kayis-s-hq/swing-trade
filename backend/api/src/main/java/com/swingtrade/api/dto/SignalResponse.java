@@ -25,6 +25,7 @@ public class SignalResponse {
     private List<String> indicators;
     private LocalDate generatedAt;
     private String strategy;
+    private String sentimentScore;
 
     public SignalResponse() {
     }
@@ -59,6 +60,7 @@ public class SignalResponse {
         this.riskRewardRatio = signal.riskReward();
         this.indicators = parseIndicators(signal.indicators());
         this.generatedAt = signal.generatedAt();
+        this.sentimentScore = signal.sentimentScore();
     }
 
     // Getters and Setters
@@ -164,6 +166,14 @@ public class SignalResponse {
 
     public void setStrategy(String strategy) {
         this.strategy = strategy;
+    }
+
+    public String getSentimentScore() {
+        return sentimentScore;
+    }
+
+    public void setSentimentScore(String sentimentScore) {
+        this.sentimentScore = sentimentScore;
     }
 
     /**

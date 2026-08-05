@@ -60,6 +60,9 @@ public class SignalEntity {
     @Column(name = "warning_flag", length = 50)
     private String warningFlag;
 
+    @Column(name = "sentiment_score", length = 12)
+    private String sentimentScore;
+
     @Column(name = "generated_at")
     private LocalDate generatedAt;
 
@@ -103,6 +106,7 @@ public class SignalEntity {
         this.indicators = signal.indicators();
         this.generatedAt = signal.generatedAt();
         this.warningFlag = warningFlag;
+        this.sentimentScore = signal.sentimentScore();
     }
 
     public static SignalEntity fromDomain(Signal signal) {
@@ -123,6 +127,7 @@ public class SignalEntity {
         entity.setIndicators(signal.indicators());
         entity.setGeneratedAt(signal.generatedAt());
         entity.setWarningFlag(warningFlag);
+        entity.setSentimentScore(signal.sentimentScore());
         return entity;
     }
 
@@ -139,7 +144,8 @@ public class SignalEntity {
             target,
             riskReward,
             indicators,
-            generatedAt
+            generatedAt,
+            sentimentScore
         );
     }
 
@@ -238,6 +244,14 @@ public class SignalEntity {
 
     public void setWarningFlag(String warningFlag) {
         this.warningFlag = warningFlag;
+    }
+
+    public String getSentimentScore() {
+        return sentimentScore;
+    }
+
+    public void setSentimentScore(String sentimentScore) {
+        this.sentimentScore = sentimentScore;
     }
 
     public LocalDate getGeneratedAt() {

@@ -1,0 +1,1 @@
+ALTER TABLE signals ADD COLUMN sentiment_score VARCHAR(12);

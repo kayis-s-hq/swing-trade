@@ -47,6 +47,7 @@ export interface Signal {
   status: 'PENDING' | 'ACTIVE' | 'EXECUTED' | 'EXPIRED'
   strategy?: string
   indicators?: string[]
+  sentimentScore?: string
 }
 
 export interface EquityPoint {

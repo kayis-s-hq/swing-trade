@@ -22,6 +22,11 @@ public interface SignalStore {
 
     Signal save(Signal signal);
 
+    /**
+     * Saves a signal with an optional warning flag (e.g., NEUTRAL_SENTIMENT).
+     */
+    Signal save(Signal signal, String warningFlag);
+
     void markProcessed(Long signalId);
 
     Optional<Signal> findLatestBySymbol(String symbol);

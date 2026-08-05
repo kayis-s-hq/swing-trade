@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
@@ -30,6 +32,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Main service for sentiment analysis of stocks using LLM.
@@ -564,72 +567,6 @@ public class SentimentService {
         } catch (InterruptedException e) {
             analysisExecutor.shutdownNow();
             Thread.currentThread().interrupt();
-        }
-    }
-
-    /**
-     * Public method to analyse sentiment for a symbol with provided headlines.
-     */
-    public SentimentResult analyseSentiment(String symbol, List<String> headlines, Object earningsData) {
-        if (headlines == null || headlines.isEmpty()) {
-            logger.warn("No headlines provided for {}", symbol);
-            return SentimentResult.create(symbol, LocalDate.now(),
-                    SentimentResult.SentimentScore.NEUTRAL, "No headlines", "", 0.0, List.of(), List.of());
-        }
-
-        String cacheKey = generateCacheKey(symbol, LocalDate.now());
-        if (enableCaching && sentimentCacheService.isCached(cacheKey)) {
-            var cached = sentimentCacheService.getValue(cacheKey);
-            if (cached.isPresent()) {
-                CachedSentiment cs = (CachedSentiment) cached.get();
-                return new SentimentResult(
-                        cs.resultId(), symbol, LocalDate.now(),
-                        cs.sentimentType() == SentimentType.POSITIVE ? SentimentResult.SentimentScore.POSITIVE :
-                        cs.sentimentType() == SentimentType.NEGATIVE ? SentimentResult.SentimentScore.NEGATIVE :
-                        SentimentResult.SentimentScore.NEUTRAL,
-                        cs.reasoning(), "", cs.confidence(),
-                        LocalDate.now(), cs.redFlags(), cs.catalysts(),
-                        null, null, cs.articleCount());
-            }
-        }
-
-        try {
-            List<Map<String, String>> messages = sentimentAnalyzer.createSentimentAnalysisPrompt(
-                    symbol, headlines, earningsData != null ? earningsData.toString() : null);
-
-            String llmResponse;
-            try {
-                llmResponse = vllmClient.generateChatCompletion(messages, 512, 0.3)
-                        .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
-            } catch (Exception llmEx) {
-                logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", symbol, llmEx.getMessage());
-                return keywordBasedSentiment(symbol, headlines);
-            }
-
-            if (llmResponse == null || llmResponse.isBlank()) {
-                return keywordBasedSentiment(symbol, headlines);
-            }
-
-            SentimentOutput result = sentimentAnalyzer.parseResponse(llmResponse);
-            SentimentResult sr = buildSentimentResult(symbol, LocalDate.now(), result, headlines.size());
-
-            // Persist
-            try {
-                sentimentStore.save(sr);
-            } catch (Exception e) {
-                logger.warn("Failed to persist sentiment for {}: {}", symbol, e.getMessage());
-            }
-
-            // Cache
-            if (enableCaching) {
-                cacheSentimentResult(cacheKey, sr, result);
-            }
-
-            return sr;
-        } catch (Exception e) {
-            logger.error("Error analysing sentiment for {}: {}", symbol, e.getMessage());
-            return SentimentResult.create(symbol, LocalDate.now(),
-                    SentimentResult.SentimentScore.NEUTRAL, "Analysis error", "", 0.2, List.of(), List.of());
         }
     }
 

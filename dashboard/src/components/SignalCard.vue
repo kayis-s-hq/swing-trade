@@ -16,6 +16,12 @@
           >{{ signal.direction }}</span
         >
         <span
+          v-if="sentimentBadge"
+          class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+          :class="sentimentBadge.class"
+          >{{ sentimentBadge.text }}</span
+        >
+        <span
           v-if="strategyLabel"
           class="inline-flex items-center rounded-full bg-brand-subtle px-2 py-0.5 text-xs font-medium text-brand"
           >{{ strategyLabel }}</span
@@ -106,6 +112,7 @@ const props = defineProps<{
     status: string
     strategy?: string
     indicators?: string[]
+    sentimentScore?: string
   }
 }>()
 
@@ -125,5 +132,17 @@ const strategyLabel = computed(() => {
     DEFAULT: 'Technical',
   }
   return props.signal.strategy ? (labels[props.signal.strategy] ?? props.signal.strategy) : ''
+})
+
+const sentimentBadge = computed(() => {
+  const s = props.signal.sentimentScore
+  if (!s) return null
+  const map: Record<string, { text: string; class: string }> = {
+    POSITIVE: { text: 'POS', class: 'bg-success-bg text-success' },
+    NEUTRAL: { text: 'NEUTRAL', class: 'bg-info-bg text-info' },
+    NEGATIVE: { text: 'NEG', class: 'bg-danger-bg text-danger' },
+    UNKNOWN: { text: 'UNK', class: 'bg-warning-bg text-warning' },
+  }
+  return map[s] ?? null
 })
 </script>

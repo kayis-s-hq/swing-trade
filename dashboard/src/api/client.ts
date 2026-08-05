@@ -132,6 +132,7 @@ interface BackendSignal {
   indicators?: string[]
   generatedAt: string
   strategy?: string
+  sentimentScore?: string
 }
 
 interface BackendGenerateAllResponse {
@@ -211,6 +212,7 @@ const mapSignal = (s: BackendSignal): Signal => ({
   status: 'ACTIVE',
   strategy: s.strategy,
   indicators: s.indicators,
+  sentimentScore: s.sentimentScore,
 })
 
 // ---------------------------------------------------------------------------

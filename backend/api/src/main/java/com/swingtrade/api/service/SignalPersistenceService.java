@@ -65,6 +65,12 @@ public class SignalPersistenceService {
     public Signal buildAndSave(String symbol, LocalDate date, Signal.SignalType type,
                                BigDecimal confidence, String reasoning,
                                String indicators, BigDecimal atr) {
+        return buildAndSave(symbol, date, type, confidence, reasoning, indicators, atr, null);
+    }
+
+    public Signal buildAndSave(String symbol, LocalDate date, Signal.SignalType type,
+                               BigDecimal confidence, String reasoning,
+                               String indicators, BigDecimal atr, String sentimentScore) {
         Signal baseSignal = Signal.create(symbol, date, type, confidence, reasoning);
 
         OhlcvCandle latestCandle = candleStore.findLatestBySymbol(symbol).orElse(null);
@@ -84,7 +90,8 @@ public class SignalPersistenceService {
                     riskParams.target(),
                     riskParams.riskReward(),
                     indicators,
-                    baseSignal.generatedAt()
+                    baseSignal.generatedAt(),
+                    sentimentScore
             );
         } else {
             toSave = new Signal(
@@ -96,7 +103,8 @@ public class SignalPersistenceService {
                     baseSignal.reasoning(),
                     null, null, null, null,
                     indicators,
-                    baseSignal.generatedAt()
+                    baseSignal.generatedAt(),
+                    sentimentScore
             );
         }
 
@@ -117,6 +125,12 @@ public class SignalPersistenceService {
     public Signal buildAndSave(Signal baseSignal, BigDecimal entryPrice,
                                BigDecimal stopLoss, BigDecimal target,
                                BigDecimal riskReward, String indicators) {
+        return buildAndSave(baseSignal, entryPrice, stopLoss, target, riskReward, indicators, null);
+    }
+
+    public Signal buildAndSave(Signal baseSignal, BigDecimal entryPrice,
+                               BigDecimal stopLoss, BigDecimal target,
+                               BigDecimal riskReward, String indicators, String sentimentScore) {
         return new Signal(
                 baseSignal.id(),
                 baseSignal.symbol(),
@@ -129,8 +143,65 @@ public class SignalPersistenceService {
                 target,
                 riskReward,
                 indicators,
-                baseSignal.generatedAt()
+                baseSignal.generatedAt(),
+                sentimentScore
         );
+    }
+
+    /**
+     * Builds and saves a signal with a warning flag.
+     *
+     * @param symbol the stock symbol
+     * @param date the signal date
+     * @param type the signal type
+     * @param confidence the confidence (0-1)
+     * @param reasoning the human-readable reasoning
+     * @param indicators the technical indicators that triggered the signal
+     * @param atr the ATR value for risk calculation
+     * @param warningFlag the warning flag (e.g., NEUTRAL_SENTIMENT)
+     * @return the saved signal
+     */
+    public Signal buildAndSaveWithWarning(String symbol, LocalDate date, Signal.SignalType type,
+                                          BigDecimal confidence, String reasoning,
+                                          String indicators, BigDecimal atr, String warningFlag, String sentimentScore) {
+        Signal baseSignal = Signal.create(symbol, date, type, confidence, reasoning);
+
+        OhlcvCandle latestCandle = candleStore.findLatestBySymbol(symbol).orElse(null);
+        Signal toSave;
+        if (latestCandle != null && latestCandle.close() != null) {
+            BigDecimal closePrice = latestCandle.close();
+            RiskCalculator.RiskParams riskParams = RiskCalculator.computeAll(closePrice, atr != null ? atr : BigDecimal.ZERO);
+            toSave = new Signal(
+                    baseSignal.id(),
+                    baseSignal.symbol(),
+                    baseSignal.date(),
+                    baseSignal.type(),
+                    baseSignal.confidence(),
+                    baseSignal.reasoning(),
+                    closePrice,
+                    riskParams.stopLoss(),
+                    riskParams.target(),
+                    riskParams.riskReward(),
+                    indicators,
+                    baseSignal.generatedAt(),
+                    sentimentScore
+            );
+        } else {
+            toSave = new Signal(
+                    baseSignal.id(),
+                    baseSignal.symbol(),
+                    baseSignal.date(),
+                    baseSignal.type(),
+                    baseSignal.confidence(),
+                    baseSignal.reasoning(),
+                    null, null, null, null,
+                    indicators,
+                    baseSignal.generatedAt(),
+                    sentimentScore
+            );
+        }
+
+        return signalStore.save(toSave, warningFlag);
     }
 
     /**

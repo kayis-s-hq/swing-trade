@@ -69,6 +69,11 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
+    public Signal save(Signal signal, String warningFlag) {
+        return repository.save(SignalEntity.fromDomain(signal, warningFlag)).toDomain();
+    }
+
+    @Override
     public void markProcessed(Long signalId) {
         Optional<SignalEntity> entity = repository.findById(signalId);
         entity.ifPresent(e -> {

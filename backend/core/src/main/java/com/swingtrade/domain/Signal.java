@@ -33,7 +33,8 @@ public record Signal(
     BigDecimal target,
     BigDecimal riskReward,
     String indicators,
-    LocalDate generatedAt
+    LocalDate generatedAt,
+    String sentimentScore
 ) {
     /**
      * Enum representing the different types of trading signals.
@@ -86,7 +87,8 @@ public record Signal(
             null,
             null,
             null,
-            LocalDate.now()
+            LocalDate.now(),
+            null
         );
     }
 
