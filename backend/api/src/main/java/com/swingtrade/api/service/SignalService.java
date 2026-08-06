@@ -1,12 +1,10 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.CompositeAnalysis;
-import com.swingtrade.api.dto.SignalQueryResult;
 import com.swingtrade.api.dto.SignalQueryResult.CombinedSignal;
 import com.swingtrade.api.dto.SignalQueryResult.SentimentAnalysis;
 import com.swingtrade.api.dto.SignalQueryResult.TechnicalAnalysis;
 import com.swingtrade.api.dto.SignalResponse;
-import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.SignalStore;
@@ -15,7 +13,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Service for managing trading signals
@@ -172,7 +169,7 @@ public class SignalService {
      * @return Sentiment analysis results
      */
     public SentimentAnalysis getSentimentAnalysis(String symbol) {
-        String sym = symbol.toUpperCase(java.util.Locale.ROOT);
+        String sym = symbol.toUpperCase();
         return sentimentStore.findLatestBySymbol(sym)
             .map(e -> new SentimentAnalysis(
                 sym, e.date(), e.score().name(), e.summary()))

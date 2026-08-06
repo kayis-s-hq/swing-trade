@@ -89,6 +89,22 @@ public class BrokerProperties {
 
     public Telegram getTelegram() { return telegram; }
 
+    // --- Signal (Signl4) ---
+
+    public Signal getSignal() { return signal; }
+
+    // --- Kite (Zerodha) ---
+
+    public Kite getKite() { return kite; }
+
+    // --- Discord ---
+
+    public Discord getDiscord() { return discord; }
+
+    // =================================================================
+    // Inner Types (must be last per Checkstyle InnerTypeLast rule)
+    // =================================================================
+
     public static class Telegram {
         private String botToken;
         private boolean botEnabled = true;
@@ -98,10 +114,6 @@ public class BrokerProperties {
         public boolean isBotEnabled() { return botEnabled; }
         public void setBotEnabled(boolean botEnabled) { this.botEnabled = botEnabled; }
     }
-
-    // --- Signal (Signl4) ---
-
-    public Signal getSignal() { return signal; }
 
     public static class Signal {
         private boolean enabled = false;
@@ -149,10 +161,6 @@ public class BrokerProperties {
         public void setEnd(int end) { this.end = end; }
     }
 
-    // --- Kite (Zerodha) ---
-
-    public Kite getKite() { return kite; }
-
     public static class Kite {
         private String apiKey;
         private String accessToken;
@@ -174,10 +182,6 @@ public class BrokerProperties {
         public boolean isSandbox() { return "sandbox".equalsIgnoreCase(environment); }
         public boolean isLive() { return "live".equalsIgnoreCase(environment); }
     }
-
-    // --- Discord ---
-
-    public Discord getDiscord() { return discord; }
 
     public static class Discord {
         private String webhookUrl;

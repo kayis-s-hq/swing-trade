@@ -35,7 +35,7 @@ public class RiskControlsService implements RiskControls {
                                DailyLossCircuitBreaker dailyLossCircuitBreaker,
                                PositionSizeValidator positionSizeValidator,
                                PositionManager positionManager,
-                               @org.springframework.beans.factory.annotation.Autowired(required = false) KiteConnectClient kiteConnectClient,
+                               @Autowired(required = false) KiteConnectClient kiteConnectClient,
                                KillSwitchService killSwitchService,
                                CapitalTracker capitalTracker) {
         this.positionLimitChecker = positionLimitChecker;

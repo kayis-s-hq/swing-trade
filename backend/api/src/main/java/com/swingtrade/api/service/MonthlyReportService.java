@@ -16,7 +16,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -151,7 +150,7 @@ public class MonthlyReportService {
     private double calculateWinRate(List<PositionEntity> positions) {
         if (positions.isEmpty()) return 0.0;
         long profitable = positions.stream()
-            .filter(p -> "TARGET_HIT".equals(p.getStatus()) || (p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) > 0))
+            .filter(p -> "TARGET_HIT".equals(p.getStatus()) || p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) > 0)
             .count();
         return (profitable * 100.0) / positions.size();
     }

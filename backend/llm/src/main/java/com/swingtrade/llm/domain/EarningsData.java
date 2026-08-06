@@ -3,8 +3,6 @@ package com.swingtrade.llm.domain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
 
 /**
  * Extracted earnings data from PDF documents.

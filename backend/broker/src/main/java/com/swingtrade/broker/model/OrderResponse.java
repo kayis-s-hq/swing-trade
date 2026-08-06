@@ -3,8 +3,6 @@ package com.swingtrade.broker.model;
 import com.swingtrade.domain.Exchange;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.OrderType;
-import com.swingtrade.domain.Position;
-import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
 
 import java.math.BigDecimal;

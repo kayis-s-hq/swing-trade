@@ -11,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -181,26 +180,15 @@ public class DataIngestionService {
         candleRepository.save(entity);
     }
 
-    /**
-     * Get all trading days between two dates (excluding weekends).
-     *
-     * @param startDate start date
-     * @param endDate end date
-     * @return list of trading days
-     */
     private List<LocalDate> getTradingDays(LocalDate startDate, LocalDate endDate) {
         List<LocalDate> tradingDays = new ArrayList<>();
         LocalDate current = startDate;
-
         while (!current.isAfter(endDate)) {
-            // Skip weekends (Saturday = 6, Sunday = 7)
-            int dayOfWeek = current.getDayOfWeek().getValue();
-            if (dayOfWeek <= 5) {
+            if (current.getDayOfWeek().getValue() <= 5) {
                 tradingDays.add(current);
             }
             current = current.plusDays(1);
         }
-
         return tradingDays;
     }
 
@@ -222,7 +210,7 @@ public class DataIngestionService {
         report.setToDate(toDate);
 
         // Calculate expected trading days
-        long expectedTradingDays = calculateTradingDays(fromDate, toDate);
+        long expectedTradingDays = getTradingDays(fromDate, toDate).size();
         report.setExpectedTradingDays(expectedTradingDays);
 
         // Get actual candles
@@ -268,17 +256,6 @@ public class DataIngestionService {
         report.setAnomalies(anomalies);
 
         return report;
-    }
-
-    /**
-     * Calculate trading days between two dates.
-     *
-     * @param startDate start date
-     * @param endDate end date
-     * @return number of trading days
-     */
-    private long calculateTradingDays(LocalDate startDate, LocalDate endDate) {
-        return getTradingDays(startDate, endDate).size();
     }
 
     /**
@@ -361,73 +338,34 @@ public class DataIngestionService {
         private List<PriceAnomaly> anomalies = new ArrayList<>();
         private boolean hasIssues = false;
 
-        public String getStockSymbol() {
-            return stockSymbol;
-        }
-
-        public void setStockSymbol(String stockSymbol) {
-            this.stockSymbol = stockSymbol;
-        }
-
-        public LocalDate getFromDate() {
-            return fromDate;
-        }
-
-        public void setFromDate(LocalDate fromDate) {
-            this.fromDate = fromDate;
-        }
-
-        public LocalDate getToDate() {
-            return toDate;
-        }
-
-        public void setToDate(LocalDate toDate) {
-            this.toDate = toDate;
-        }
-
-        public long getExpectedTradingDays() {
-            return expectedTradingDays;
-        }
-
+        public String getStockSymbol() { return stockSymbol; }
+        public void setStockSymbol(String stockSymbol) { this.stockSymbol = stockSymbol; }
+        public LocalDate getFromDate() { return fromDate; }
+        public void setFromDate(LocalDate fromDate) { this.fromDate = fromDate; }
+        public LocalDate getToDate() { return toDate; }
+        public void setToDate(LocalDate toDate) { this.toDate = toDate; }
+        public long getExpectedTradingDays() { return expectedTradingDays; }
         public void setExpectedTradingDays(long expectedTradingDays) {
             this.expectedTradingDays = expectedTradingDays;
             this.hasIssues = actualTradingDays < expectedTradingDays;
         }
-
-        public long getActualTradingDays() {
-            return actualTradingDays;
-        }
-
+        public long getActualTradingDays() { return actualTradingDays; }
         public void setActualTradingDays(long actualTradingDays) {
             this.actualTradingDays = actualTradingDays;
             this.hasIssues = actualTradingDays < expectedTradingDays;
         }
-
-        public List<DataGap> getGaps() {
-            return gaps;
-        }
-
+        public List<DataGap> getGaps() { return gaps; }
         public void setGaps(List<DataGap> gaps) {
             this.gaps = gaps;
             this.hasIssues = !gaps.isEmpty();
         }
-
-        public List<PriceAnomaly> getAnomalies() {
-            return anomalies;
-        }
-
+        public List<PriceAnomaly> getAnomalies() { return anomalies; }
         public void setAnomalies(List<PriceAnomaly> anomalies) {
             this.anomalies = anomalies;
             this.hasIssues = !anomalies.isEmpty();
         }
-
-        public boolean hasIssues() {
-            return hasIssues;
-        }
-
-        public void setHasIssues(boolean hasIssues) {
-            this.hasIssues = hasIssues;
-        }
+        public boolean hasIssues() { return hasIssues; }
+        public void setHasIssues(boolean hasIssues) { this.hasIssues = hasIssues; }
     }
 
     /**
@@ -444,29 +382,12 @@ public class DataIngestionService {
             this.endDate = endDate;
         }
 
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
-
-        public LocalDate getStartDate() {
-            return startDate;
-        }
-
-        public void setStartDate(LocalDate startDate) {
-            this.startDate = startDate;
-        }
-
-        public LocalDate getEndDate() {
-            return endDate;
-        }
-
-        public void setEndDate(LocalDate endDate) {
-            this.endDate = endDate;
-        }
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+        public LocalDate getStartDate() { return startDate; }
+        public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
+        public LocalDate getEndDate() { return endDate; }
+        public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
     }
 
     /**
@@ -485,36 +406,13 @@ public class DataIngestionService {
             this.details = details;
         }
 
-        public String getSymbol() {
-            return symbol;
-        }
-
-        public void setSymbol(String symbol) {
-            this.symbol = symbol;
-        }
-
-        public LocalDate getDate() {
-            return date;
-        }
-
-        public void setDate(LocalDate date) {
-            this.date = date;
-        }
-
-        public String getType() {
-            return type;
-        }
-
-        public void setType(String type) {
-            this.type = type;
-        }
-
-        public String getDetails() {
-            return details;
-        }
-
-        public void setDetails(String details) {
-            this.details = details;
-        }
+        public String getSymbol() { return symbol; }
+        public void setSymbol(String symbol) { this.symbol = symbol; }
+        public LocalDate getDate() { return date; }
+        public void setDate(LocalDate date) { this.date = date; }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+        public String getDetails() { return details; }
+        public void setDetails(String details) { this.details = details; }
     }
 }

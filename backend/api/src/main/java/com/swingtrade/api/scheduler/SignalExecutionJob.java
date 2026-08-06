@@ -1,7 +1,6 @@
 package com.swingtrade.api.scheduler;
 
 import com.swingtrade.api.service.SignalFilterService;
-import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Signal;
@@ -13,7 +12,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
 
 /**

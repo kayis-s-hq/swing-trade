@@ -3,8 +3,12 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">LLM Accuracy Monitoring</h1>
-        <p class="mt-1 text-sm text-text-muted">Track sentiment analysis accuracy against actual market outcomes</p>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">
+          LLM Accuracy Monitoring
+        </h1>
+        <p class="mt-1 text-sm text-text-muted">
+          Track sentiment analysis accuracy against actual market outcomes
+        </p>
       </div>
     </div>
 
@@ -13,9 +17,13 @@
       <button
         v-for="tab in tabs"
         :key="tab.key"
-        @click="activeTab = tab.key"
         class="rounded-md px-4 py-1.5 text-sm font-medium transition-colors"
-        :class="activeTab === tab.key ? 'bg-brand/10 text-brand' : 'text-text-muted hover:text-text-primary'"
+        :class="
+          activeTab === tab.key
+            ? 'bg-brand/10 text-brand'
+            : 'text-text-muted hover:text-text-primary'
+        "
+        @click="activeTab = tab.key"
       >
         {{ tab.label }}
       </button>
@@ -49,7 +57,13 @@
         <AccuracyMetricCard
           title="ECE"
           :value="formatPercent(ece?.ece)"
-          :color="ece?.ece && ece.ece > 15 ? 'text-warning' : ece?.ece && ece.ece > 25 ? 'text-danger' : 'text-success'"
+          :color="
+            ece?.ece && ece.ece > 15
+              ? 'text-warning'
+              : ece?.ece && ece.ece > 25
+                ? 'text-danger'
+                : 'text-success'
+          "
           subtext="Calibration error"
         />
       </div>
@@ -60,15 +74,21 @@
         <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
             <p class="text-xs text-text-muted">Today</p>
-            <p class="text-2xl font-bold">{{ signalVolume?.today_count ?? 0 }}</p>
+            <p class="text-2xl font-bold">
+              {{ signalVolume?.today_count ?? 0 }}
+            </p>
           </div>
           <div>
             <p class="text-xs text-text-muted">7-Day Avg</p>
-            <p class="text-2xl font-bold">{{ signalVolume?.seven_day_avg ?? 0 }}</p>
+            <p class="text-2xl font-bold">
+              {{ signalVolume?.seven_day_avg ?? 0 }}
+            </p>
           </div>
           <div>
             <p class="text-xs text-text-muted">30-Day Avg</p>
-            <p class="text-2xl font-bold">{{ signalVolume?.thirty_day_avg ?? 0 }}</p>
+            <p class="text-2xl font-bold">
+              {{ signalVolume?.thirty_day_avg ?? 0 }}
+            </p>
           </div>
         </div>
       </div>
@@ -81,12 +101,22 @@
             <LoadingSpinner />
           </div>
           <div v-else class="space-y-3">
-            <div v-for="(count, sentiment) in stats?.by_sentiment" :key="sentiment" class="flex items-center gap-3">
+            <div
+              v-for="(count, sentiment) in stats?.by_sentiment"
+              :key="sentiment"
+              class="flex items-center gap-3"
+            >
               <span class="w-14 text-sm font-medium text-text-secondary">{{ sentiment }}</span>
               <div class="flex-1 h-2 overflow-hidden rounded-full bg-bg-hover">
                 <div
                   class="h-full rounded-full"
-                  :class="sentiment === 'POSITIVE' ? 'bg-green-500' : sentiment === 'NEGATIVE' ? 'bg-red-500' : 'bg-amber-500'"
+                  :class="
+                    sentiment === 'POSITIVE'
+                      ? 'bg-green-500'
+                      : sentiment === 'NEGATIVE'
+                        ? 'bg-red-500'
+                        : 'bg-amber-500'
+                  "
                   :style="{ width: `${total > 0 ? (count / total) * 100 : 0}%` }"
                 />
               </div>
@@ -101,10 +131,19 @@
             <LoadingSpinner />
           </div>
           <div v-else class="space-y-3">
-            <div v-for="(count, symbol) in stats?.by_symbol" :key="symbol" class="flex items-center gap-3">
-              <span class="w-24 truncate text-sm font-medium text-text-secondary">{{ symbol }}</span>
+            <div
+              v-for="(count, symbol) in stats?.by_symbol"
+              :key="symbol"
+              class="flex items-center gap-3"
+            >
+              <span class="w-24 truncate text-sm font-medium text-text-secondary">{{
+                symbol
+              }}</span>
               <div class="flex-1 h-2 overflow-hidden rounded-full bg-bg-hover">
-                <div class="h-full rounded-full bg-brand" :style="{ width: `${total > 0 ? (count / total) * 100 : 0}%` }" />
+                <div
+                  class="h-full rounded-full bg-brand"
+                  :style="{ width: `${total > 0 ? (count / total) * 100 : 0}%` }"
+                />
               </div>
               <span class="text-sm text-text-muted">{{ count }}</span>
             </div>
@@ -118,8 +157,12 @@
       <!-- Accuracy by Window -->
       <div class="mb-6 card-panel p-5">
         <h3 class="mb-4 text-sm font-semibold text-text-primary">Accuracy by Evaluation Window</h3>
-        <div v-if="!byWindow" class="flex justify-center py-4"><LoadingSpinner /></div>
-        <div v-else-if="byWindow.length === 0" class="text-sm text-text-muted">No data available yet.</div>
+        <div v-if="!byWindow" class="flex justify-center py-4">
+          <LoadingSpinner />
+        </div>
+        <div v-else-if="byWindow.length === 0" class="text-sm text-text-muted">
+          No data available yet.
+        </div>
         <div v-else>
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -133,12 +176,20 @@
               </thead>
               <tbody class="text-text-secondary">
                 <tr v-for="w in byWindow" :key="w.window" class="border-t border-border-subtle">
-                  <td class="py-3">{{ w.window }}</td>
-                  <td class="py-3">{{ w.total }}</td>
                   <td class="py-3">
-                    <span :class="getAccuracyColor(w.accuracy)">{{ formatPercent(w.accuracy) }}</span>
+                    {{ w.window }}
                   </td>
-                  <td class="py-3">{{ formatPercent(w.avg_return) }}</td>
+                  <td class="py-3">
+                    {{ w.total }}
+                  </td>
+                  <td class="py-3">
+                    <span :class="getAccuracyColor(w.accuracy)">{{
+                      formatPercent(w.accuracy)
+                    }}</span>
+                  </td>
+                  <td class="py-3">
+                    {{ formatPercent(w.avg_return) }}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -149,8 +200,12 @@
       <!-- Accuracy by Regime -->
       <div class="mb-6 card-panel p-5">
         <h3 class="mb-4 text-sm font-semibold text-text-primary">Accuracy by Market Regime</h3>
-        <div v-if="!byRegime" class="flex justify-center py-4"><LoadingSpinner /></div>
-        <div v-else-if="byRegime.length === 0" class="text-sm text-text-muted">No data available yet.</div>
+        <div v-if="!byRegime" class="flex justify-center py-4">
+          <LoadingSpinner />
+        </div>
+        <div v-else-if="byRegime.length === 0" class="text-sm text-text-muted">
+          No data available yet.
+        </div>
         <div v-else>
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -165,15 +220,29 @@
               <tbody class="text-text-secondary">
                 <tr v-for="r in byRegime" :key="r.regime" class="border-t border-border-subtle">
                   <td class="py-3">
-                    <span :class="r.regime === 'BULL' ? 'text-green-500' : r.regime === 'BEAR' ? 'text-red-500' : 'text-amber-500'">
+                    <span
+                      :class="
+                        r.regime === 'BULL'
+                          ? 'text-green-500'
+                          : r.regime === 'BEAR'
+                            ? 'text-red-500'
+                            : 'text-amber-500'
+                      "
+                    >
                       {{ r.regime }}
                     </span>
                   </td>
-                  <td class="py-3">{{ r.total }}</td>
                   <td class="py-3">
-                    <span :class="getAccuracyColor(r.accuracy)">{{ formatPercent(r.accuracy) }}</span>
+                    {{ r.total }}
                   </td>
-                  <td class="py-3">{{ formatPercent(r.avg_confidence) }}</td>
+                  <td class="py-3">
+                    <span :class="getAccuracyColor(r.accuracy)">{{
+                      formatPercent(r.accuracy)
+                    }}</span>
+                  </td>
+                  <td class="py-3">
+                    {{ formatPercent(r.avg_confidence) }}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -184,8 +253,12 @@
       <!-- Accuracy by Symbol -->
       <div class="card-panel p-5">
         <h3 class="mb-4 text-sm font-semibold text-text-primary">Accuracy by Symbol</h3>
-        <div v-if="!bySymbol" class="flex justify-center py-4"><LoadingSpinner /></div>
-        <div v-else-if="bySymbol.length === 0" class="text-sm text-text-muted">No data available yet.</div>
+        <div v-if="!bySymbol" class="flex justify-center py-4">
+          <LoadingSpinner />
+        </div>
+        <div v-else-if="bySymbol.length === 0" class="text-sm text-text-muted">
+          No data available yet.
+        </div>
         <div v-else>
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -199,12 +272,20 @@
               </thead>
               <tbody class="text-text-secondary">
                 <tr v-for="s in bySymbol" :key="s.symbol" class="border-t border-border-subtle">
-                  <td class="py-3 font-medium">{{ s.symbol }}</td>
-                  <td class="py-3">{{ s.total_signals }}</td>
-                  <td class="py-3">
-                    <span :class="getAccuracyColor(s.accuracy)">{{ formatPercent(s.accuracy) }}</span>
+                  <td class="py-3 font-medium">
+                    {{ s.symbol }}
                   </td>
-                  <td class="py-3">{{ formatPercent(s.avg_confidence) }}</td>
+                  <td class="py-3">
+                    {{ s.total_signals }}
+                  </td>
+                  <td class="py-3">
+                    <span :class="getAccuracyColor(s.accuracy)">{{
+                      formatPercent(s.accuracy)
+                    }}</span>
+                  </td>
+                  <td class="py-3">
+                    {{ formatPercent(s.avg_confidence) }}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -219,7 +300,10 @@
       <div class="mb-6 card-panel p-5">
         <h3 class="mb-4 text-sm font-semibold text-text-primary">Expected Calibration Error</h3>
         <div class="flex items-end gap-3">
-          <span class="text-5xl font-bold" :class="ece?.ece && ece.ece > 15 ? 'text-warning' : 'text-success'">
+          <span
+            class="text-5xl font-bold"
+            :class="ece?.ece && ece.ece > 15 ? 'text-warning' : 'text-success'"
+          >
             {{ ece ? formatPercent(ece.ece) : '—' }}
           </span>
           <span class="mb-1.5 text-sm text-text-muted">{{ ece?.bins ?? 0 }} bins</span>
@@ -236,16 +320,28 @@
       <!-- Calibration Curve -->
       <div class="card-panel p-5">
         <h3 class="mb-4 text-sm font-semibold text-text-primary">Calibration Curve</h3>
-        <div v-if="!calibration" class="flex justify-center py-4"><LoadingSpinner /></div>
-        <div v-else-if="calibration.length === 0" class="text-sm text-text-muted">No data available yet.</div>
-        <div v-else class="relative" style="height: 320px;">
+        <div v-if="!calibration" class="flex justify-center py-4">
+          <LoadingSpinner />
+        </div>
+        <div v-else-if="calibration.length === 0" class="text-sm text-text-muted">
+          No data available yet.
+        </div>
+        <div v-else class="relative" style="height: 320px">
           <svg :viewBox="`0 0 400 300`" class="h-full w-full">
             <!-- Grid -->
             <line x1="40" y1="20" x2="40" y2="260" stroke="currentColor" stroke-opacity="0.1" />
             <line x1="40" y1="260" x2="380" y2="260" stroke="currentColor" stroke-opacity="0.1" />
             <line x1="40" y1="140" x2="380" y2="140" stroke="currentColor" stroke-opacity="0.05" />
             <!-- Diagonal (perfect calibration) -->
-            <line x1="40" y1="260" x2="360" y2="40" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="4,4" />
+            <line
+              x1="40"
+              y1="260"
+              x2="360"
+              y2="40"
+              stroke="currentColor"
+              stroke-opacity="0.3"
+              stroke-dasharray="4,4"
+            />
             <!-- Data points -->
             <circle
               v-for="d in calibration"
@@ -271,8 +367,27 @@
               stroke-opacity="0.5"
             />
             <!-- Axis labels -->
-            <text x="200" y="295" text-anchor="middle" fill="currentColor" fill-opacity="0.5" font-size="11">Predicted Confidence</text>
-            <text x="15" y="150" text-anchor="middle" fill="currentColor" fill-opacity="0.5" font-size="11" transform="rotate(-90 15 150)">Actual Accuracy</text>
+            <text
+              x="200"
+              y="295"
+              text-anchor="middle"
+              fill="currentColor"
+              fill-opacity="0.5"
+              font-size="11"
+            >
+              Predicted Confidence
+            </text>
+            <text
+              x="15"
+              y="150"
+              text-anchor="middle"
+              fill="currentColor"
+              fill-opacity="0.5"
+              font-size="11"
+              transform="rotate(-90 15 150)"
+            >
+              Actual Accuracy
+            </text>
           </svg>
         </div>
 
@@ -289,14 +404,31 @@
               </tr>
             </thead>
             <tbody class="text-text-secondary">
-              <tr v-for="d in calibration" :key="d.confidence_bin" class="border-t border-border-subtle">
-                <td class="py-2">{{ formatPercent(d.confidence_bin * 0.1) }}</td>
-                <td class="py-2">{{ formatPercent(d.predicted_confidence) }}</td>
-                <td class="py-2">{{ formatPercent(d.actual_accuracy) }}</td>
-                <td class="py-2" :class="d.error > 0.15 ? 'text-danger' : d.error > 0.1 ? 'text-warning' : 'text-success'">
+              <tr
+                v-for="d in calibration"
+                :key="d.confidence_bin"
+                class="border-t border-border-subtle"
+              >
+                <td class="py-2">
+                  {{ formatPercent(d.confidence_bin * 0.1) }}
+                </td>
+                <td class="py-2">
+                  {{ formatPercent(d.predicted_confidence) }}
+                </td>
+                <td class="py-2">
+                  {{ formatPercent(d.actual_accuracy) }}
+                </td>
+                <td
+                  class="py-2"
+                  :class="
+                    d.error > 0.15 ? 'text-danger' : d.error > 0.1 ? 'text-warning' : 'text-success'
+                  "
+                >
                   {{ formatPercent(d.error) }}
                 </td>
-                <td class="py-2">{{ d.count }}</td>
+                <td class="py-2">
+                  {{ d.count }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -309,28 +441,39 @@
       <div class="card-panel p-5">
         <h3 class="mb-4 text-sm font-semibold text-text-primary">A/B Testing & Model Comparison</h3>
         <p class="text-sm text-text-muted">
-          Compare accuracy across different prompt versions and model configurations.
-          Data is stored in prompt_hash and model_version fields.
+          Compare accuracy across different prompt versions and model configurations. Data is stored
+          in prompt_hash and model_version fields.
         </p>
-        <div v-if="!stats" class="flex justify-center py-8"><LoadingSpinner /></div>
+        <div v-if="!stats" class="flex justify-center py-8">
+          <LoadingSpinner />
+        </div>
         <div v-else-if="stats.total === 0" class="text-sm text-text-muted py-4">
           No accuracy data available yet. Run the evaluation job to populate data.
         </div>
         <div v-else>
           <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div class="rounded-lg bg-bg-hover p-4">
-              <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Total Evaluations</h4>
-              <p class="text-3xl font-bold">{{ stats.total }}</p>
+              <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Total Evaluations
+              </h4>
+              <p class="text-3xl font-bold">
+                {{ stats.total }}
+              </p>
             </div>
             <div class="rounded-lg bg-bg-hover p-4">
-              <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Evaluated</h4>
-              <p class="text-3xl font-bold text-success">{{ stats.correct }}</p>
+              <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Evaluated
+              </h4>
+              <p class="text-3xl font-bold text-success">
+                {{ stats.correct }}
+              </p>
             </div>
           </div>
           <div class="mt-6 text-xs text-text-muted">
             <p>
               The evaluation job runs nightly at 2 AM to compute ground truth returns and accuracy.
-              To compare prompts or models, ensure they are recorded in the prompt_hash and model_version fields during analysis.
+              To compare prompts or models, ensure they are recorded in the prompt_hash and
+              model_version fields during analysis.
             </p>
           </div>
         </div>
@@ -340,9 +483,9 @@
     <!-- Info -->
     <div class="mt-6 card-panel p-4">
       <p class="text-xs text-text-muted">
-        Accuracy is computed by comparing LLM sentiment direction against actual stock returns over 1/5/21-day windows.
-        Ground truth: UP if return >= +0.5%, DOWN if return <= -0.5%, FLAT otherwise.
-        Evaluation runs nightly via scheduled job.
+        Accuracy is computed by comparing LLM sentiment direction against actual stock returns over
+        1/5/21-day windows. Ground truth: UP if return ≥ +0.5%, DOWN if return ≤ -0.5%, FLAT
+        otherwise. Evaluation runs nightly via scheduled job.
       </p>
     </div>
   </div>
@@ -396,16 +539,17 @@ const total = ref(0)
 
 const loadAll = async () => {
   loadError.value = ''
-  const [statsRes, summaryRes, windowRes, regimeRes, symbolRes, calRes, volRes, eceRes] = await Promise.all([
-    getAccuracyStats(),
-    getAccuracySummary(),
-    getAccuracyByWindow(),
-    getAccuracyByRegime(),
-    getAccuracyBySymbol(),
-    getCalibration(),
-    getSignalVolume(),
-    getECE(),
-  ])
+  const [statsRes, summaryRes, windowRes, regimeRes, symbolRes, calRes, volRes, eceRes] =
+    await Promise.all([
+      getAccuracyStats(),
+      getAccuracySummary(),
+      getAccuracyByWindow(),
+      getAccuracyByRegime(),
+      getAccuracyBySymbol(),
+      getCalibration(),
+      getSignalVolume(),
+      getECE(),
+    ])
 
   if (statsRes.success && statsRes.data) {
     stats.value = statsRes.data
@@ -436,5 +580,7 @@ const getAccuracyColor = (v: number | undefined | null): string => {
   return 'text-danger'
 }
 
-onMounted(() => { loadAll() })
+onMounted(() => {
+  loadAll()
+})
 </script>

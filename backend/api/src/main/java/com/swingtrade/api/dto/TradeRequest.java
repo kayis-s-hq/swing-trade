@@ -2,7 +2,11 @@ package com.swingtrade.api.dto;
 
 import com.swingtrade.domain.OrderType;
 import com.swingtrade.domain.TradeDirection;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
@@ -50,7 +54,7 @@ public class TradeRequest {
     }
 
     public TradeRequest(String symbol, Integer quantity, TradeDirection direction, OrderType orderType) {
-        this.symbol = symbol.toUpperCase(java.util.Locale.ROOT);
+        this.symbol = symbol.toUpperCase();
         this.quantity = quantity;
         this.direction = direction;
         this.orderType = orderType;
@@ -62,7 +66,7 @@ public class TradeRequest {
     }
 
     public void setSymbol(String symbol) {
-        this.symbol = symbol.toUpperCase(java.util.Locale.ROOT);
+        this.symbol = symbol.toUpperCase();
     }
 
     public Integer getQuantity() {
@@ -153,7 +157,7 @@ public class TradeRequest {
         }
 
         // For STOP and STOP_LIMIT orders, stopPrice is required
-        return (orderType != OrderType.STOP && orderType != OrderType.STOP_LIMIT) || stopPrice != null;
+        return orderType != OrderType.STOP && orderType != OrderType.STOP_LIMIT || stopPrice != null;
     }
 
     private boolean isValidSymbol() {

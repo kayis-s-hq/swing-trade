@@ -9,7 +9,11 @@ import java.util.List;
  * Utility class for sentiment-related operations.
  */
 public class SentimentUtils {
-    
+
+    private SentimentUtils() {
+        // Utility class
+    }
+
     /**
      * Gets all sentiment types.
      * 

@@ -1,7 +1,11 @@
 <template>
   <div class="flex h-screen w-full overflow-hidden bg-bg-primary">
     <!-- Sidebar -->
-    <Sidebar :collapsed="sidebarCollapsed" :health-status="appState.healthStatus" @toggle="sidebarCollapsed = !sidebarCollapsed" />
+    <Sidebar
+      :collapsed="sidebarCollapsed"
+      :health-status="appState.healthStatus"
+      @toggle="sidebarCollapsed = !sidebarCollapsed"
+    />
 
     <!-- Main Content -->
     <div class="flex flex-1 flex-col overflow-hidden">
@@ -9,7 +13,10 @@
       <BackendDownBanner />
 
       <!-- Header -->
-      <Header :sidebar-collapsed="sidebarCollapsed" @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed" />
+      <Header
+        :sidebar-collapsed="sidebarCollapsed"
+        @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
+      />
 
       <!-- Page Content -->
       <main class="flex-1 overflow-auto bg-bg-primary">
@@ -17,21 +24,39 @@
       </main>
 
       <!-- Bottom Status Bar -->
-      <div class="flex h-8 items-center justify-between border-t border-border-subtle bg-bg-surface px-4 text-xs text-text-muted">
+      <div
+        class="flex h-8 items-center justify-between border-t border-border-subtle bg-bg-surface px-4 text-xs text-text-muted"
+      >
         <div class="flex items-center gap-3">
           <span class="flex items-center gap-1.5">
             <span
               class="inline-block h-1.5 w-1.5 rounded-full"
               :class="appState.healthStatus === 'down' ? 'bg-error' : 'bg-success pulse-dot'"
-            ></span>
-            <span :class="appState.healthStatus === 'down' ? 'text-error' : appState.healthStatus === 'degraded' ? 'text-warning' : ''">
-              {{ appState.healthStatus === 'down' ? 'Backend Down' : appState.healthStatus === 'degraded' ? 'Degraded' : 'Engine Active' }}
+            />
+            <span
+              :class="
+                appState.healthStatus === 'down'
+                  ? 'text-error'
+                  : appState.healthStatus === 'degraded'
+                    ? 'text-warning'
+                    : ''
+              "
+            >
+              {{
+                appState.healthStatus === 'down'
+                  ? 'Backend Down'
+                  : appState.healthStatus === 'degraded'
+                    ? 'Degraded'
+                    : 'Engine Active'
+              }}
             </span>
           </span>
           <span class="text-border-subtle">│</span>
           <span>NSE/BSE</span>
           <span class="text-border-subtle">│</span>
-          <span>{{ settings.tradingConfig.mode === 'live' ? 'Live Trading' : 'Paper Trading' }}</span>
+          <span>{{
+            settings.tradingConfig.mode === 'live' ? 'Live Trading' : 'Paper Trading'
+          }}</span>
         </div>
         <div class="flex items-center gap-3">
           <span>{{ currentTime }}</span>

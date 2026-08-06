@@ -4,18 +4,26 @@
     <div class="flex flex-wrap items-center gap-2">
       <span class="text-xs font-medium text-text-muted">Sources:</span>
       <button
-        @click="activeFilter = 'all'"
         class="rounded-full px-3 py-1 text-xs font-medium transition-colors"
-        :class="activeFilter === 'all' ? 'bg-brand/10 text-brand' : 'bg-bg-elevated text-text-muted hover:bg-bg-hover'"
+        :class="
+          activeFilter === 'all'
+            ? 'bg-brand/10 text-brand'
+            : 'bg-bg-elevated text-text-muted hover:bg-bg-hover'
+        "
+        @click="activeFilter = 'all'"
       >
         All ({{ articles.length }})
       </button>
       <button
         v-for="source in uniqueSources"
         :key="source"
-        @click="activeFilter = source"
         class="rounded-full px-3 py-1 text-xs font-medium transition-colors"
-        :class="activeFilter === source ? 'bg-brand/10 text-brand' : 'bg-bg-elevated text-text-muted hover:bg-bg-hover'"
+        :class="
+          activeFilter === source
+            ? 'bg-brand/10 text-brand'
+            : 'bg-bg-elevated text-text-muted hover:bg-bg-hover'
+        "
+        @click="activeFilter = source"
       >
         {{ source }} ({{ sourceCounts[source] }})
       </button>
@@ -43,11 +51,13 @@
                 {{ formatDate(article.publishedDate) }}
               </span>
             </div>
-            <h3 class="text-sm font-medium text-text-primary">{{ article.title }}</h3>
+            <h3 class="text-sm font-medium text-text-primary">
+              {{ article.title }}
+            </h3>
           </div>
           <button
-            @click="toggleExpanded(article.link || article.title)"
             class="shrink-0 text-text-muted transition-colors hover:text-text-primary"
+            @click="toggleExpanded(article.link || article.title)"
           >
             <svg
               class="h-5 w-5 transition-transform"
@@ -56,7 +66,12 @@
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           </button>
         </div>
@@ -65,7 +80,10 @@
           <p v-if="article.description" class="text-sm text-text-secondary leading-relaxed">
             {{ article.description }}
           </p>
-          <p v-if="article.rawContent && article.rawContent !== article.description" class="mt-2 text-sm text-text-secondary leading-relaxed">
+          <p
+            v-if="article.rawContent && article.rawContent !== article.description"
+            class="mt-2 text-sm text-text-secondary leading-relaxed"
+          >
             {{ article.rawContent }}
           </p>
           <a
@@ -101,13 +119,13 @@ const activeFilter = ref('all')
 const expandedKeys = ref(new Set<string>())
 
 const uniqueSources = computed(() => {
-  const sources = new Set(props.articles.map(a => a.source))
+  const sources = new Set(props.articles.map((a) => a.source))
   return Array.from(sources).sort()
 })
 
 const sourceCounts = computed(() => {
   const counts: Record<string, number> = {}
-  props.articles.forEach(a => {
+  props.articles.forEach((a) => {
     counts[a.source] = (counts[a.source] || 0) + 1
   })
   return counts
@@ -115,7 +133,7 @@ const sourceCounts = computed(() => {
 
 const filteredArticles = computed(() => {
   if (activeFilter.value === 'all') return props.articles
-  return props.articles.filter(a => a.source === activeFilter.value)
+  return props.articles.filter((a) => a.source === activeFilter.value)
 })
 
 const toggleExpanded = (key: string) => {

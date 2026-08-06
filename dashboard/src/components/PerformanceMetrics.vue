@@ -40,8 +40,10 @@ const selectRange = (range: string) => {
 const equityCoords = computed(() => {
   const pts = props.equityPoints ?? []
   if (pts.length < 2) return []
-  const W = 600, plotH = 140, top = 10
-  const vals = pts.map(p => p.value)
+  const W = 600,
+    plotH = 140,
+    top = 10
+  const vals = pts.map((p) => p.value)
   const min = Math.min(...vals)
   const max = Math.max(...vals)
   const range = max - min || 1
@@ -81,22 +83,30 @@ const pnlPositive = computed(() => (props.portfolioSummary?.totalPnlPercent ?? 0
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Total Value</p>
-        <p class="mt-1 text-xl font-bold text-text-primary">₹{{ portfolioSummary?.totalValue.toLocaleString() ?? 0 }}</p>
+        <p class="mt-1 text-xl font-bold text-text-primary">
+          ₹{{ portfolioSummary?.totalValue.toLocaleString() ?? 0 }}
+        </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Total P&L</p>
         <p class="mt-1 text-xl font-bold" :class="pnlPositive ? 'text-success' : 'text-danger'">
           ₹{{ portfolioSummary?.totalPnl.toLocaleString() ?? 0 }}
-          <span class="ml-1 text-sm font-normal opacity-70">({{ (portfolioSummary?.totalPnlPercent ?? 0).toFixed(2) }}%)</span>
+          <span class="ml-1 text-sm font-normal opacity-70"
+            >({{ (portfolioSummary?.totalPnlPercent ?? 0).toFixed(2) }}%)</span
+          >
         </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Win Rate</p>
-        <p class="mt-1 text-xl font-bold text-text-primary">{{ portfolioSummary?.winRate.toLocaleString() ?? 0 }}%</p>
+        <p class="mt-1 text-xl font-bold text-text-primary">
+          {{ portfolioSummary?.winRate.toLocaleString() ?? 0 }}%
+        </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Total Trades</p>
-        <p class="mt-1 text-xl font-bold text-text-primary">{{ portfolioSummary?.totalTrades.toLocaleString() ?? 0 }}</p>
+        <p class="mt-1 text-xl font-bold text-text-primary">
+          {{ portfolioSummary?.totalTrades.toLocaleString() ?? 0 }}
+        </p>
       </div>
     </div>
 
@@ -104,15 +114,21 @@ const pnlPositive = computed(() => (props.portfolioSummary?.totalPnlPercent ?? 0
     <div class="mt-4 grid grid-cols-3 gap-4">
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Profit Factor</p>
-        <p class="mt-1 text-lg font-bold text-text-primary">{{ (portfolioSummary?.profitFactor ?? 0).toFixed(2) }}</p>
+        <p class="mt-1 text-lg font-bold text-text-primary">
+          {{ (portfolioSummary?.profitFactor ?? 0).toFixed(2) }}
+        </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Avg Win</p>
-        <p class="mt-1 text-lg font-bold text-success">₹{{ portfolioSummary?.averageWin.toLocaleString() ?? 0 }}</p>
+        <p class="mt-1 text-lg font-bold text-success">
+          ₹{{ portfolioSummary?.averageWin.toLocaleString() ?? 0 }}
+        </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Avg Loss</p>
-        <p class="mt-1 text-lg font-bold text-danger">₹{{ portfolioSummary?.averageLoss.toLocaleString() ?? 0 }}</p>
+        <p class="mt-1 text-lg font-bold text-danger">
+          ₹{{ portfolioSummary?.averageLoss.toLocaleString() ?? 0 }}
+        </p>
       </div>
     </div>
 
@@ -124,9 +140,13 @@ const pnlPositive = computed(() => (props.portfolioSummary?.totalPnlPercent ?? 0
           <button
             v-for="range in ranges"
             :key="range"
-            @click="selectRange(range)"
             class="px-2.5 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
-            :class="selectedRange === range ? 'bg-brand-subtle text-brand' : 'text-text-muted hover:bg-bg-hover'"
+            :class="
+              selectedRange === range
+                ? 'bg-brand-subtle text-brand'
+                : 'text-text-muted hover:bg-bg-hover'
+            "
+            @click="selectRange(range)"
           >
             {{ range }}
           </button>
@@ -141,7 +161,14 @@ const pnlPositive = computed(() => (props.portfolioSummary?.totalPnlPercent ?? 0
             </linearGradient>
           </defs>
           <path :d="areaPath" fill="url(#equityFill)" />
-          <path :d="linePath" fill="none" stroke="#00d4a0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          <path
+            :d="linePath"
+            fill="none"
+            stroke="#00d4a0"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
         </svg>
         <div v-else class="flex h-full flex-col items-center justify-center">
           <p class="text-sm text-text-muted">No data available</p>

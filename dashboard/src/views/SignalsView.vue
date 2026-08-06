@@ -7,47 +7,90 @@
         <p class="mt-1 text-sm text-text-muted">Active scanning and signal generation</p>
       </div>
       <div class="flex gap-2">
-        <button @click="generateAll" :disabled="generating" class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50">
+        <button
+          :disabled="generating"
+          class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
+          @click="generateAll"
+        >
           <svg v-if="generating" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            />
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
           </svg>
           {{ generating ? 'Generating...' : 'Generate All' }}
         </button>
-        <button @click="refreshSignals" class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary">
-          <svg class="h-4 w-4 transition-transform duration-300 hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        <button
+          class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary"
+          @click="refreshSignals"
+        >
+          <svg
+            class="h-4 w-4 transition-transform duration-300 hover:rotate-180"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
           Refresh
         </button>
         <button
           v-if="selectedCount > 0"
-          @click="clearSelected"
           class="flex items-center gap-2 rounded-md border border-danger/50 bg-bg-surface px-3 py-2 text-sm font-medium text-danger transition-colors hover:border-danger hover:bg-danger/10"
+          @click="clearSelected"
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
           </svg>
           Clear {{ selectedCount }}
         </button>
         <button
-          @click="clearAll"
           v-if="signals.length > 0"
           class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-danger hover:text-danger"
+          @click="clearAll"
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
           </svg>
           Clear All
         </button>
         <button
           v-if="selectedCount > 0"
-          @click="executeSelected"
           :disabled="executing"
           class="flex items-center gap-2 rounded-md bg-success px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-success/90 disabled:opacity-50"
+          @click="executeSelected"
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M13 10V3L4 14h7v7l9-11h-7z"
+            />
           </svg>
           {{ executing ? 'Executing...' : `Execute ${selectedCount}` }}
         </button>
@@ -58,7 +101,13 @@
       <LoadingSpinner message="Scanning for signals..." />
     </div>
 
-    <ErrorMessage v-else-if="error" :message="errorMessage" :showRetry="true" retryText="Retry" @retry="refreshSignals" />
+    <ErrorMessage
+      v-else-if="error"
+      :message="errorMessage"
+      :show-retry="true"
+      retry-text="Retry"
+      @retry="refreshSignals"
+    />
 
     <template v-else>
       <!-- Filters -->
@@ -68,19 +117,47 @@
             <input
               type="checkbox"
               :checked="isSelectAll"
-              @change="toggleSelectAll"
               class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
+              @change="toggleSelectAll"
             />
-            <span class="text-xs font-medium text-text-muted">Select all ({{ filteredSignals.length }})</span>
+            <span class="text-xs font-medium text-text-muted"
+              >Select all ({{ filteredSignals.length }})</span
+            >
           </label>
           <div class="flex rounded-md border border-border-subtle">
-            <button v-for="dir in ['ALL', 'BUY', 'SELL']" :key="dir" @click="directionFilter = dir" class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md" :class="directionFilter === dir ? 'bg-brand-subtle text-brand' : 'text-text-muted hover:bg-bg-hover'">{{ dir }}</button>
+            <button
+              v-for="dir in ['ALL', 'BUY', 'SELL']"
+              :key="dir"
+              class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
+              :class="
+                directionFilter === dir
+                  ? 'bg-brand-subtle text-brand'
+                  : 'text-text-muted hover:bg-bg-hover'
+              "
+              @click="directionFilter = dir"
+            >
+              {{ dir }}
+            </button>
           </div>
           <div class="flex rounded-md border border-border-subtle">
-            <button v-for="st in ['ALL', 'ACTIVE', 'PENDING']" :key="st" @click="statusFilter = st" class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md" :class="statusFilter === st ? 'bg-brand-subtle text-brand' : 'text-text-muted hover:bg-bg-hover'">{{ st }}</button>
+            <button
+              v-for="st in ['ALL', 'ACTIVE', 'PENDING']"
+              :key="st"
+              class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
+              :class="
+                statusFilter === st
+                  ? 'bg-brand-subtle text-brand'
+                  : 'text-text-muted hover:bg-bg-hover'
+              "
+              @click="statusFilter = st"
+            >
+              {{ st }}
+            </button>
           </div>
         </div>
-        <span v-if="selectedCount > 0" class="text-xs font-medium text-brand">{{ selectedCount }} selected</span>
+        <span v-if="selectedCount > 0" class="text-xs font-medium text-brand"
+          >{{ selectedCount }} selected</span
+        >
       </div>
 
       <!-- Signal Grid -->
@@ -96,8 +173,8 @@
               <input
                 type="checkbox"
                 :checked="isSelected(signal.id)"
-                @change="toggleSignal(signal.id)"
                 class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
+                @change="toggleSignal(signal.id)"
               />
             </label>
           </div>
@@ -107,7 +184,10 @@
         </div>
       </div>
 
-      <div v-if="filteredSignals.length === 0" class="flex flex-col items-center justify-center py-16">
+      <div
+        v-if="filteredSignals.length === 0"
+        class="flex flex-col items-center justify-center py-16"
+      >
         <p class="text-sm text-text-muted">No signals matching filter</p>
       </div>
     </template>
@@ -122,12 +202,19 @@
             </p>
             <p class="mt-1 text-xs text-text-muted">
               {{ execResult.success }} succeeded, {{ execResult.failed }} failed
-              <span v-if="execResult.errors.length">{{ execResult.errors.slice(0, 3).join('; ') }}</span>
+              <span v-if="execResult.errors.length">{{
+                execResult.errors.slice(0, 3).join('; ')
+              }}</span>
             </p>
           </div>
-          <button @click="execResult = null" class="text-text-muted hover:text-text-primary">
+          <button class="text-text-muted hover:text-text-primary" @click="execResult = null">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -138,7 +225,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getSignals, generateAllSignals, executeTrade, clearAllSignals, clearSignalsForSymbol } from '../api/client'
+import {
+  getSignals,
+  generateAllSignals,
+  executeTrade,
+  clearAllSignals,
+  clearSignalsForSymbol,
+} from '../api/client'
 import type { Signal } from '../api/types'
 import SignalCard from '../components/SignalCard.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
@@ -156,7 +249,7 @@ const selectedSignalIds = ref(new Set<string>())
 const execResult = ref<{ success: number; failed: number; errors: string[] } | null>(null)
 
 const filteredSignals = computed(() => {
-  return signals.value.filter(s => {
+  return signals.value.filter((s) => {
     const matchesDir = directionFilter.value === 'ALL' || s.direction === directionFilter.value
     const matchesStatus = statusFilter.value === 'ALL' || s.status === statusFilter.value
     return matchesDir && matchesStatus
@@ -167,7 +260,7 @@ const selectedCount = computed(() => selectedSignalIds.value.size)
 
 const isSelectAll = computed(() => {
   if (filteredSignals.value.length === 0) return false
-  return filteredSignals.value.every(s => selectedSignalIds.value.has(s.id))
+  return filteredSignals.value.every((s) => selectedSignalIds.value.has(s.id))
 })
 
 const isSelected = (id: string) => selectedSignalIds.value.has(id)
@@ -183,20 +276,21 @@ const toggleSignal = (id: string) => {
 }
 
 const toggleSelectAll = () => {
-  const allIds = new Set(filteredSignals.value.map(s => s.id))
-  const allSelected = allIds.size > 0 && filteredSignals.value.every(s => selectedSignalIds.value.has(s.id))
+  const allIds = new Set(filteredSignals.value.map((s) => s.id))
+  const allSelected =
+    allIds.size > 0 && filteredSignals.value.every((s) => selectedSignalIds.value.has(s.id))
 
   if (allSelected) {
-    allIds.forEach(id => selectedSignalIds.value.delete(id))
+    allIds.forEach((id) => selectedSignalIds.value.delete(id))
   } else {
-    filteredSignals.value.forEach(s => selectedSignalIds.value.add(s.id))
+    filteredSignals.value.forEach((s) => selectedSignalIds.value.add(s.id))
   }
   selectedSignalIds.value = new Set(selectedSignalIds.value)
 }
 
 const executeSelected = async () => {
   executing.value = true
-  const selected = signals.value.filter(s => selectedSignalIds.value.has(s.id))
+  const selected = signals.value.filter((s) => selectedSignalIds.value.has(s.id))
   let successCount = 0
   const errors: string[] = []
 
@@ -226,7 +320,9 @@ const executeSelected = async () => {
   execResult.value = { success: successCount, failed: selected.length - successCount, errors }
 
   // Auto-dismiss after 5s
-  setTimeout(() => { execResult.value = null }, 5000)
+  setTimeout(() => {
+    execResult.value = null
+  }, 5000)
   executing.value = false
 }
 
@@ -254,8 +350,15 @@ const generateAll = async () => {
     const res = await generateAllSignals()
     console.log('generateAllSignals result:', res)
     if (res.success && res.data) {
-      const data = res.data as unknown as { signals: Signal[]; skipped: Array<{ symbol: string; reason: string }> }
-      console.log('Signals loaded:', data.signals.length, data.signals.map(s => s.symbol))
+      const data = res.data as unknown as {
+        signals: Signal[]
+        skipped: Array<{ symbol: string; reason: string }>
+      }
+      console.log(
+        'Signals loaded:',
+        data.signals.length,
+        data.signals.map((s) => s.symbol)
+      )
       console.log('Skipped:', data.skipped)
       signals.value = data.signals
     }
@@ -284,7 +387,7 @@ const clearAll = async () => {
 }
 
 const clearSelected = async () => {
-  const selected = signals.value.filter(s => selectedSignalIds.value.has(s.id))
+  const selected = signals.value.filter((s) => selectedSignalIds.value.has(s.id))
   for (const signal of selected) {
     try {
       await clearSignalsForSymbol(signal.symbol)
@@ -299,5 +402,7 @@ const clearSelected = async () => {
 
 const refreshSignals = doRefresh
 
-onMounted(() => { refreshSignals() })
+onMounted(() => {
+  refreshSignals()
+})
 </script>

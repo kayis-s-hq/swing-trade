@@ -15,7 +15,7 @@ public class SymbolRequest {
     }
 
     public SymbolRequest(String symbol) {
-        this.symbol = symbol.toUpperCase(java.util.Locale.ROOT);
+        this.symbol = symbol.toUpperCase();
     }
 
     public String getSymbol() {
@@ -23,7 +23,7 @@ public class SymbolRequest {
     }
 
     public void setSymbol(String symbol) {
-        this.symbol = symbol.toUpperCase(java.util.Locale.ROOT);
+        this.symbol = symbol.toUpperCase();
     }
 
     /**

@@ -3,7 +3,6 @@ package com.swingtrade.api.service;
 import com.swingtrade.data.service.WatchlistService;
 import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.strategy.BacktestConfig;
-import java.util.Locale;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
 import org.slf4j.Logger;
@@ -25,7 +24,7 @@ public class BacktestScorer {
     }
 
     public com.swingtrade.api.dto.CompositeAnalysis.BacktestScore compute(String symbol) {
-        String sym = symbol.toUpperCase(Locale.ROOT);
+        String sym = symbol.toUpperCase();
         String exchange = watchlistService.getBySymbol(sym)
             .map(WatchlistEntity::getExchange)
             .orElse(DEFAULT_EXCHANGE);

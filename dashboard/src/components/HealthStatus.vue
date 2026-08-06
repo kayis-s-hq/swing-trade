@@ -21,8 +21,8 @@ const components = computed(() => props.health.components ?? {})
 
 const overallStatus = computed(() => {
   const vals = Object.values(components.value)
-  if (vals.some(c => c.status === 'DOWN')) return 'DOWN'
-  if (vals.some(c => c.status === 'DEGRADED')) return 'DEGRADED'
+  if (vals.some((c) => c.status === 'DOWN')) return 'DOWN'
+  if (vals.some((c) => c.status === 'DEGRADED')) return 'DEGRADED'
   return props.health.status ?? 'UP'
 })
 

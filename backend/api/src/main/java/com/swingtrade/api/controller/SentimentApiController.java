@@ -1,9 +1,7 @@
 package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.ApiResponse;
-import com.swingtrade.api.dto.CompositeAnalysis;
 import com.swingtrade.api.scheduler.SentimentEvaluationJob;
-import com.swingtrade.data.entity.PdfExtractionEntity;
 import com.swingtrade.data.repository.PdfExtractionRepository;
 import com.swingtrade.data.service.SentimentAccuracyService;
 import com.swingtrade.domain.NewsArticle;
@@ -14,7 +12,12 @@ import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.PdfExtractionService;
 import com.swingtrade.llm.service.SentimentService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -54,10 +57,10 @@ public class SentimentApiController {
     @GetMapping("/sentiment/{symbol}/latest")
     public ResponseEntity<ApiResponse<SentimentResult>> getLatestSentiment(
             @PathVariable String symbol) {
-        return sentimentStore.findLatestBySymbol(symbol.toUpperCase(java.util.Locale.ROOT))
+        return sentimentStore.findLatestBySymbol(symbol.toUpperCase())
             .map(e -> ResponseEntity.ok(ApiResponse.ok(e)))
             .orElseGet(() -> ResponseEntity.ok(ApiResponse.ok(SentimentResult.create(
-                symbol.toUpperCase(java.util.Locale.ROOT), java.time.LocalDate.now(),
+                symbol.toUpperCase(), java.time.LocalDate.now(),
                 SentimentResult.SentimentScore.NEUTRAL, "No data", "", 0.0,
                 List.of(), List.of()))));
     }
@@ -68,7 +71,7 @@ public class SentimentApiController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         // Store returns all results; client pagination handled in memory
-        List<SentimentResult> results = sentimentStore.findBySymbol(symbol.toUpperCase(java.util.Locale.ROOT));
+        List<SentimentResult> results = sentimentStore.findBySymbol(symbol.toUpperCase());
         int start = page * size;
         if (start >= results.size()) {
             return ResponseEntity.ok(ApiResponse.ok(List.of()));

@@ -19,14 +19,14 @@ export default defineConfig({
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
-            console.log('[VITE PROXY]', req.method, req.url, '->', proxyReq.path);
-          });
+            console.log('[VITE PROXY]', req.method, req.url, '->', proxyReq.path)
+          })
           proxy.on('proxyRes', (proxyRes, req) => {
-            console.log('[VITE PROXY]', req.method, req.url, '->', proxyRes.statusCode);
-          });
+            console.log('[VITE PROXY]', req.method, req.url, '->', proxyRes.statusCode)
+          })
           proxy.on('error', (err, req) => {
-            console.error('[VITE PROXY ERROR]', req.method, req.url, err.message);
-          });
+            console.error('[VITE PROXY ERROR]', req.method, req.url, err.message)
+          })
         },
       },
       '/fyers': {

@@ -29,7 +29,7 @@ public class PaginatedResponse<T> {
         this.totalElements = totalElements;
         this.totalPages = totalElements != null && pageSize != 0 ? (int) ((totalElements + pageSize - 1) / pageSize) : 0;
         this.first = pageNumber == 0 || pageNumber == null;
-        this.last = totalPages != null && (pageNumber >= totalPages - 1);
+        this.last = totalPages != null && pageNumber >= totalPages - 1;
     }
 
     // Getters and Setters

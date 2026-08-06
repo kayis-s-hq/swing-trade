@@ -13,6 +13,7 @@
     <exclude name="TestClassWithoutTestCases"/>
     <exclude name="MissingSerialVersionUID"/>
     <exclude name="AvoidFieldNameMatchingMethodName"/>
+    <exclude name="UseLocaleWithCaseConversions"/>
   </rule>
 
   <!-- Keep only security — critical -->

@@ -16,6 +16,9 @@ for (const { path, label } of pages) {
   test(`${label} page`, async ({ page }) => {
     await page.goto(path)
     await page.waitForLoadState('networkidle')
-    await page.screenshot({ path: `dashboard/tests/e2e/screenshots/${label.replace(/\s+/g, '-')}.png`, fullPage: true })
+    await page.screenshot({
+      path: `dashboard/tests/e2e/screenshots/${label.replace(/\s+/g, '-')}.png`,
+      fullPage: true,
+    })
   })
 }

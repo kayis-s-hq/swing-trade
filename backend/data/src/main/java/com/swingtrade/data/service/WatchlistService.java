@@ -11,7 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -196,16 +200,16 @@ public class WatchlistService {
                 watchlistRepository.save(entry);
 
                 progress.incrementCompleted();
-                logger.info("Pull progress: {}/{} - {} complete", progress.completed.get(), progress.total, entry.getSymbol());
+                logger.info("Pull progress: {}/{} - {} complete", progress.getCompleted(), progress.getTotal(), entry.getSymbol());
             } catch (Exception e) {
                 logger.error("Failed to pull data for {}: {}", entry.getSymbol(), e.getMessage());
                 progress.incrementFailed();
             }
         }
 
-        progress.status.set("completed");
+        progress.setStatus("completed");
         activePullId.set(null);
-        logger.info("Pull {} completed: {} succeeded, {} failed", pullId, progress.completed.get(), progress.failed.get());
+        logger.info("Pull {} completed: {} succeeded, {} failed", pullId, progress.getCompleted(), progress.getFailed());
     }
 
     public Optional<PullProgress> getPullProgress(String pullId) {
@@ -223,7 +227,7 @@ public class WatchlistService {
         if (activePullId.get() != null) {
             PullProgress progress = pullProgressMap.get(activePullId.get());
             if (progress != null) {
-                progress.status.set("cancelled");
+                progress.setStatus("cancelled");
             }
             activePullId.set(null);
         }
@@ -234,17 +238,26 @@ public class WatchlistService {
     // -----------------------------------------------------------------------
 
     public static class PullProgress {
-        public final String pullId;
-        public final int total;
-        public final AtomicInteger completed = new AtomicInteger(0);
-        public final AtomicInteger failed = new AtomicInteger(0);
-        public final AtomicReference<String> currentSymbol = new AtomicReference<>("");
-        public final AtomicReference<String> status = new AtomicReference<>("running");
+        private final String pullId;
+        private final int total;
+        private final AtomicInteger completed = new AtomicInteger(0);
+        private final AtomicInteger failed = new AtomicInteger(0);
+        private final AtomicReference<String> currentSymbol = new AtomicReference<>("");
+        private final AtomicReference<String> status = new AtomicReference<>("running");
 
-        PullProgress(String pullId, int total) {
+        public PullProgress(String pullId, int total) {
             this.pullId = pullId;
             this.total = total;
         }
+
+        public String getPullId() { return pullId; }
+        public int getTotal() { return total; }
+        public int getCompleted() { return completed.get(); }
+        public int getFailed() { return failed.get(); }
+        public String getCurrentSymbol() { return currentSymbol.get(); }
+        public String getStatus() { return status.get(); }
+
+        void setStatus(String s) { status.set(s); }
 
         void updateCurrent(String symbol) {
             this.currentSymbol.set(symbol);

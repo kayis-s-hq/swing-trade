@@ -5,11 +5,15 @@
       <div class="grid grid-cols-2 gap-3">
         <div class="rounded-md bg-bg-elevated px-3 py-2">
           <p class="text-xs text-text-muted">Articles</p>
-          <p class="text-lg font-semibold text-text-primary">{{ details.payload.articleCount }}</p>
+          <p class="text-lg font-semibold text-text-primary">
+            {{ details.payload.articleCount }}
+          </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
           <p class="text-xs text-text-muted">Sources</p>
-          <p class="text-lg font-semibold text-text-primary">{{ details.payload.sourceCount }}</p>
+          <p class="text-lg font-semibold text-text-primary">
+            {{ details.payload.sourceCount }}
+          </p>
         </div>
       </div>
       <div v-if="sources.length" class="flex flex-wrap gap-1.5">
@@ -28,33 +32,45 @@
       <div class="grid grid-cols-3 gap-3">
         <div class="rounded-md bg-bg-elevated px-3 py-2">
           <p class="text-xs text-text-muted">Score</p>
-          <p class="text-lg font-semibold" :class="scoreColor">{{ scoreLabel }}</p>
+          <p class="text-lg font-semibold" :class="scoreColor">
+            {{ scoreLabel }}
+          </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
           <p class="text-xs text-text-muted">Confidence</p>
-          <p class="text-lg font-semibold text-text-primary">{{ (confidence * 100).toFixed(0) }}%</p>
+          <p class="text-lg font-semibold text-text-primary">
+            {{ (confidence * 100).toFixed(0) }}%
+          </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
           <p class="text-xs text-text-muted">Articles</p>
-          <p class="text-lg font-semibold text-text-primary">{{ articleCount }}</p>
+          <p class="text-lg font-semibold text-text-primary">
+            {{ articleCount }}
+          </p>
         </div>
       </div>
 
       <div v-if="summary">
-        <p class="text-xs text-text-secondary leading-relaxed">{{ summary }}</p>
+        <p class="text-xs text-text-secondary leading-relaxed">
+          {{ summary }}
+        </p>
       </div>
 
       <div v-if="catalysts.length" class="flex flex-col gap-1">
         <p class="text-xs font-semibold text-success">Catalysts</p>
         <ul class="list-disc pl-4 text-xs text-text-secondary">
-          <li v-for="c in catalysts" :key="c">{{ c }}</li>
+          <li v-for="c in catalysts" :key="c">
+            {{ c }}
+          </li>
         </ul>
       </div>
 
       <div v-if="redFlags.length" class="flex flex-col gap-1">
         <p class="text-xs font-semibold text-danger">Red Flags</p>
         <ul class="list-disc pl-4 text-xs text-text-secondary">
-          <li v-for="rf in redFlags" :key="rf">{{ rf }}</li>
+          <li v-for="rf in redFlags" :key="rf">
+            {{ rf }}
+          </li>
         </ul>
       </div>
     </template>

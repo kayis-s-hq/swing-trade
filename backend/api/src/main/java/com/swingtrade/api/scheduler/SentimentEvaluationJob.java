@@ -180,7 +180,7 @@ public class SentimentEvaluationJob {
         boolean llmDown = "NEGATIVE".equals(llmScore);
         boolean actualUp = "UP".equals(groundTruth);
         boolean actualDown = "DOWN".equals(groundTruth);
-        return (llmUp && actualUp) || (llmDown && actualDown);
+        return llmUp && actualUp || llmDown && actualDown;
     }
 
     private float mapToNumeric(String llmScore) {

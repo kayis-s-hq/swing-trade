@@ -1,13 +1,13 @@
-import {describe, expect, it} from 'vitest'
-import {mount} from '@vue/test-utils'
-import {defineComponent} from 'vue'
+import { describe, expect, it } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { defineComponent } from 'vue'
 import MetricCard from '../../../src/components/MetricCard.vue'
 
 // Create a test component that uses MetricCard
 const TestComponent = defineComponent({
   components: { MetricCard },
-  template: '<MetricCard v-bind="props" />',
   props: ['props'],
+  template: '<MetricCard v-bind="props" />',
 })
 
 describe('MetricCard', () => {

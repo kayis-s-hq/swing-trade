@@ -25,7 +25,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Orchestrates the daily cron job: iterates over all symbols with candle data,

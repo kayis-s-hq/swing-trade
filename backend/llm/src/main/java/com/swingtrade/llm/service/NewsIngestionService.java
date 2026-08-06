@@ -6,7 +6,6 @@ import com.swingtrade.domain.store.NewsArticleStore;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -23,19 +22,20 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.ZonedDateTime;
-import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
 
 /**
  * Service for ingesting news from multiple Indian market sources.
@@ -77,12 +77,14 @@ public class NewsIngestionService {
     private final NseAnnouncementsSource nseSource;
     private final BseAnnouncementsSource bseSource;
     private final RedditIndiaInvestmentsSource redditSource;
+    private final FinnhubNewsSource finnhubSource;
     private final NewsArticleStore newsArticleStore;
     private final int timeoutSeconds;
     private final int maxMoneycontrolArticles;
     private final int maxEtArticles;
     private final int maxGoogleArticles;
     private final int maxRedditArticles;
+    private final int maxFinnhubArticles;
 
     /**
      * Constructs NewsIngestionService with all news sources and article store.
@@ -98,12 +100,14 @@ public class NewsIngestionService {
             NseAnnouncementsSource nseSource,
             BseAnnouncementsSource bseSource,
             RedditIndiaInvestmentsSource redditSource,
+            FinnhubNewsSource finnhubSource,
             NewsArticleStore newsArticleStore,
             @Value("${news.source.timeout:10}") int timeoutSeconds,
             @Value("${news.source.moneycontrol.max-articles:15}") int maxMoneycontrolArticles,
             @Value("${news.source.et.max-articles:15}") int maxEtArticles,
             @Value("${news.source.google.max-articles:20}") int maxGoogleArticles,
             @Value("${news.source.reddit.max-articles:15}") int maxRedditArticles,
+            @Value("${news.source.finnhub.max-articles:15}") int maxFinnhubArticles,
             @Value("${news.rss.feeds:#{null}}") String rssFeedUrls,
             @Value("${news.rss.max-articles-per-feed:10}") int maxArticlesPerFeed) {
 
@@ -123,12 +127,14 @@ public class NewsIngestionService {
         this.nseSource = nseSource;
         this.bseSource = bseSource;
         this.redditSource = redditSource;
+        this.finnhubSource = finnhubSource;
         this.newsArticleStore = newsArticleStore;
         this.timeoutSeconds = timeoutSeconds;
         this.maxMoneycontrolArticles = maxMoneycontrolArticles;
         this.maxEtArticles = maxEtArticles;
         this.maxGoogleArticles = maxGoogleArticles;
         this.maxRedditArticles = maxRedditArticles;
+        this.maxFinnhubArticles = maxFinnhubArticles;
 
         // Parse custom queries or use default Google News queries
         if (rssFeedUrls != null && !rssFeedUrls.isBlank()) {
@@ -235,15 +241,19 @@ public class NewsIngestionService {
 
             int responseCode = connection.getResponseCode();
             if (responseCode == HttpURLConnection.HTTP_OK) {
-                BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(connection.getInputStream(), "UTF-8"));
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(connection.getInputStream(), "UTF-8"))) {
+                    StringBuilder response = new StringBuilder();
+                    String line;
+                    while (true) {
+                        line = reader.readLine();
+                        if (line == null) {
+                            break;
+                        }
+                        response.append(line);
+                    }
+                    return response.toString();
                 }
-                reader.close();
-                return response.toString();
             } else {
                 logger.warn("HTTP error {} fetching RSS from {}", responseCode, feedUrl);
                 return null;
@@ -443,6 +453,19 @@ public class NewsIngestionService {
             return List.<NewsArticle>of();
         }));
 
+        // Finnhub
+        futures.add(CompletableFuture.supplyAsync(() -> {
+            try {
+                return finnhubSource.fetch(stockSymbol);
+            } catch (Exception e) {
+                logger.warn("Finnhub fetch failed for {}: {}", stockSymbol, e.getMessage());
+                return List.<NewsArticle>of();
+            }
+        }, newsExecutor).exceptionally(ex -> {
+            logger.warn("Finnhub timed out/failed for {}: {}", stockSymbol, ex.getMessage());
+            return List.<NewsArticle>of();
+        }));
+
         // Wait for all to complete
         CompletableFuture<Void> all = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
         try {
@@ -457,7 +480,7 @@ public class NewsIngestionService {
             try {
                 results.addAll(fut.getNow(List.of()));
             } catch (Exception e) {
-                // Already handled in individual futures
+                logger.debug("Failed to collect result from future for {}: {}", stockSymbol, e.getMessage());
             }
         }
 

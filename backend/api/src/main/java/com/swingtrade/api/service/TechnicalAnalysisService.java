@@ -11,11 +11,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 @Service
 public class TechnicalAnalysisService {
@@ -33,7 +31,7 @@ public class TechnicalAnalysisService {
     }
 
     public CompositeAnalysis.TechnicalScore compute(String symbol) {
-        String sym = symbol.toUpperCase(Locale.ROOT);
+        String sym = symbol.toUpperCase();
         List<OhlcvCandle> candles = candleStore.findBySymbol(sym);
 
         if (candles.size() < StrategyParams.MIN_CANDLES) {

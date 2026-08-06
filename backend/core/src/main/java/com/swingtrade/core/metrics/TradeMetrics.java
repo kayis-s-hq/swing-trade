@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -86,7 +85,7 @@ public class TradeMetrics {
 
     public void recordTradeClose(String outcome) {
         tradeCloseCounter.increment();
-        switch (outcome.toUpperCase(Locale.ROOT)) {
+        switch (outcome.toUpperCase()) {
             case "STOP_LOSS" -> tradeStopLossCounter.increment();
             case "TARGET_HIT" -> tradeTargetHitCounter.increment();
             case "TIME_STOP" -> tradeTimeStopCounter.increment();

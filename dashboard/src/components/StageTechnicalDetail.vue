@@ -3,11 +3,15 @@
     <div class="grid grid-cols-3 gap-3">
       <div class="rounded-md bg-bg-elevated px-3 py-2">
         <p class="text-xs text-text-muted">Signal</p>
-        <p class="text-lg font-semibold" :class="signalColor">{{ signal }}</p>
+        <p class="text-lg font-semibold" :class="signalColor">
+          {{ signal }}
+        </p>
       </div>
       <div class="rounded-md bg-bg-elevated px-3 py-2">
         <p class="text-xs text-text-muted">Score</p>
-        <p class="text-lg font-semibold text-text-primary">{{ score }}</p>
+        <p class="text-lg font-semibold text-text-primary">
+          {{ score }}
+        </p>
       </div>
       <div class="rounded-md bg-bg-elevated px-3 py-2">
         <p class="text-xs text-text-muted">Confidence</p>
@@ -24,7 +28,10 @@
           class="flex items-center justify-between rounded-md bg-bg-elevated px-3 py-1.5"
         >
           <span class="text-xs text-text-secondary">{{ indicator.name }}</span>
-          <span class="text-xs font-mono font-semibold" :class="indicator.value >= 0 ? 'text-success' : 'text-danger'">
+          <span
+            class="text-xs font-mono font-semibold"
+            :class="indicator.value >= 0 ? 'text-success' : 'text-danger'"
+          >
             {{ indicator.value >= 0 ? '+' : '' }}{{ indicator.value }}
           </span>
         </div>
@@ -55,7 +62,7 @@ const indicators = computed(() => {
   const raw = props.details.payload.indicators
   if (!raw || !Array.isArray(raw) || raw.length === 0) return []
   if (typeof raw[0] === 'string') {
-    return (raw as string[]).map(name => ({ name, value: 0 }))
+    return (raw as string[]).map((name) => ({ name, value: 0 }))
   }
   return raw as Array<{ name: string; value: number }>
 })

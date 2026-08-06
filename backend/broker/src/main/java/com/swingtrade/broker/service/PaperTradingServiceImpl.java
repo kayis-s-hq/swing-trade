@@ -6,7 +6,6 @@ import com.swingtrade.domain.Order;
 import com.swingtrade.broker.model.Portfolio;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.TradeDirection;
-import com.swingtrade.broker.service.PaperTradingStateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

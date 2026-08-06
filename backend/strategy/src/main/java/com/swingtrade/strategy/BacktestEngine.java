@@ -208,26 +208,22 @@ public class BacktestEngine {
                 BigDecimal close = numToBigDecimal(closePrice.getValue(i));
                 BigDecimal ema20Val = numToBigDecimal(ema20.getValue(i));
 
-                ExitReason reason = null;
+                int streak = close.compareTo(ema20Val) < 0 ? open.belowEma20Streak + 1 : 0;
                 BigDecimal exitPrice = null;
+                ExitReason reason = null;
 
-                if (low.compareTo(open.stopLoss) <= 0) {
+                if (low.compareTo(open.stopLoss()) <= 0) {
                     reason = ExitReason.STOP_LOSS;
-                    exitPrice = open.stopLoss;
-                } else if (high.compareTo(open.target) >= 0) {
+                    exitPrice = open.stopLoss();
+                } else if (high.compareTo(open.target()) >= 0) {
                     reason = ExitReason.TARGET_HIT;
-                    exitPrice = open.target;
-                } else {
-                    open.belowEma20Streak = close.compareTo(ema20Val) < 0 ? open.belowEma20Streak + 1 : 0;
-                    int holdingDaysSoFar = i - open.entryIndex;
-
-                    if (open.belowEma20Streak >= 2) {
-                        reason = ExitReason.TREND_BREAK;
-                        exitPrice = close;
-                    } else if (holdingDaysSoFar >= config.maxHoldingDays()) {
-                        reason = ExitReason.TIME_STOP;
-                        exitPrice = close;
-                    }
+                    exitPrice = open.target();
+                } else if (streak >= 2) {
+                    reason = ExitReason.TREND_BREAK;
+                    exitPrice = close;
+                } else if ((i - open.entryIndex()) >= config.maxHoldingDays()) {
+                    reason = ExitReason.TIME_STOP;
+                    exitPrice = close;
                 }
 
                 if (reason != null) {
@@ -236,6 +232,9 @@ public class BacktestEngine {
                     trades.add(trade);
                     capital += trade.pnl();
                     open = null;
+                } else {
+                    open = new OpenPosition(open.entryIndex(), open.entryDate(), open.entryPrice(),
+                            open.stopLoss(), open.target(), open.quantity(), streak);
                 }
             }
 
@@ -381,23 +380,6 @@ public class BacktestEngine {
                 .toList();
     }
 
-    record Indicators(BigDecimal price, BigDecimal ema20, BigDecimal ema50, BigDecimal rsi,
-                      BigDecimal volume, BigDecimal volumeMa, BigDecimal weeklyHigh) {
-        static Indicators from(BarSeries series, ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
-                               EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
-                               VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
-                               int bar) {
-            return new Indicators(
-                    numToBigDecimal(closePrice.getValue(bar)),
-                    numToBigDecimal(ema20.getValue(bar)),
-                    numToBigDecimal(ema50.getValue(bar)),
-                    numToBigDecimal(rsi.getValue(bar)),
-                    numToBigDecimal(volume.getValue(bar)),
-                    numToBigDecimal(volumeMa.getValue(bar)),
-                    numToBigDecimal(weeklyHigh.getValue(bar)));
-        }
-    }
-
     // -----------------------------------------------------------------------
     // Report persistence
     // -----------------------------------------------------------------------
@@ -443,27 +425,41 @@ public class BacktestEngine {
         Files.writeString(csvPath, csv.toString());
     }
 
+    record Indicators(BigDecimal price, BigDecimal ema20, BigDecimal ema50, BigDecimal rsi,
+                      BigDecimal volume, BigDecimal volumeMa, BigDecimal weeklyHigh) {
+        static Indicators from(BarSeries series, ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
+                               EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
+                               VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
+                               int bar) {
+            return new Indicators(
+                    numToBigDecimal(closePrice.getValue(bar)),
+                    numToBigDecimal(ema20.getValue(bar)),
+                    numToBigDecimal(ema50.getValue(bar)),
+                    numToBigDecimal(rsi.getValue(bar)),
+                    numToBigDecimal(volume.getValue(bar)),
+                    numToBigDecimal(volumeMa.getValue(bar)),
+                    numToBigDecimal(weeklyHigh.getValue(bar)));
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Open position tracking
     // -----------------------------------------------------------------------
 
-    private static final class OpenPosition {
-        final int entryIndex;
-        final LocalDate entryDate;
-        final BigDecimal entryPrice;
-        final BigDecimal stopLoss;
-        final BigDecimal target;
-        final int quantity;
-        int belowEma20Streak = 0;
+    private record OpenPosition(int entryIndex,
+                                LocalDate entryDate,
+                                BigDecimal entryPrice,
+                                BigDecimal stopLoss,
+                                BigDecimal target,
+                                int quantity,
+                                int belowEma20Streak) {
+        OpenPosition {
+            belowEma20Streak = Math.max(0, belowEma20Streak);
+        }
 
         OpenPosition(int entryIndex, LocalDate entryDate, BigDecimal entryPrice, BigDecimal stopLoss,
                      BigDecimal target, int quantity) {
-            this.entryIndex = entryIndex;
-            this.entryDate = entryDate;
-            this.entryPrice = entryPrice;
-            this.stopLoss = stopLoss;
-            this.target = target;
-            this.quantity = quantity;
+            this(entryIndex, entryDate, entryPrice, stopLoss, target, quantity, 0);
         }
     }
 }

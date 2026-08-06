@@ -1,10 +1,6 @@
 <template>
   <div class="space-y-4">
-    <div
-      v-for="item in items"
-      :key="item.id"
-      class="relative flex gap-4"
-    >
+    <div v-for="item in items" :key="item.id" class="relative flex gap-4">
       <!-- Timeline line -->
       <div class="absolute left-3 top-0 bottom-0 w-px bg-border-subtle" />
       <!-- Timeline dot -->
@@ -21,17 +17,23 @@
           <span class="text-xs text-text-muted">{{ item.date }}</span>
         </div>
         <SentimentBadge :score="item.score" :confidence="item.confidence" />
-        <p class="mt-2 text-sm text-text-secondary line-clamp-2">{{ item.summary }}</p>
+        <p class="mt-2 text-sm text-text-secondary line-clamp-2">
+          {{ item.summary }}
+        </p>
         <div v-if="item.redFlags.length" class="mt-2">
           <span class="text-xs font-medium text-danger">Red flags:</span>
           <ul class="mt-1 list-disc pl-4 text-xs text-text-muted">
-            <li v-for="rf in item.redFlags" :key="rf">{{ rf }}</li>
+            <li v-for="rf in item.redFlags" :key="rf">
+              {{ rf }}
+            </li>
           </ul>
         </div>
         <div v-if="item.catalysts.length" class="mt-2">
           <span class="text-xs font-medium text-success">Catalysts:</span>
           <ul class="mt-1 list-disc pl-4 text-xs text-text-muted">
-            <li v-for="c in item.catalysts" :key="c">{{ c }}</li>
+            <li v-for="c in item.catalysts" :key="c">
+              {{ c }}
+            </li>
           </ul>
         </div>
       </div>
@@ -47,9 +49,10 @@ defineProps<{
   items: SentimentResult[]
 }>()
 
-const dotClass = (score: string) => ({
-  POSITIVE: 'bg-green-500 text-white',
-  NEUTRAL: 'bg-amber-500 text-white',
-  NEGATIVE: 'bg-red-500 text-white',
-}[score]) as string
+const dotClass = (score: string) =>
+  ({
+    POSITIVE: 'bg-green-500 text-white',
+    NEUTRAL: 'bg-amber-500 text-white',
+    NEGATIVE: 'bg-red-500 text-white',
+  })[score] as string
 </script>

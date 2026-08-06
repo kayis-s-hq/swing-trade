@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "format:check": "prettier --check .",
+    "format:write": "prettier --write .",
     "lint": "eslint . --fix",
-    "build": "npm run lint && vite build",
+    "build": "npm run format:check && npm run typecheck && npm run lint && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest",

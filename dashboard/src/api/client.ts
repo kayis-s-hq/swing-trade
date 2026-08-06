@@ -73,9 +73,10 @@ async function rawFetch(path: string, init?: RequestInit): Promise<RawFetchResul
       return {
         ok: false,
         data: null,
-        error: msg && msg !== 'Internal Server Error'
-          ? msg
-          : `Server responded with status ${response.status}`,
+        error:
+          msg && msg !== 'Internal Server Error'
+            ? msg
+            : `Server responded with status ${response.status}`,
       }
     }
 
@@ -85,7 +86,11 @@ async function rawFetch(path: string, init?: RequestInit): Promise<RawFetchResul
       return { ok: false, data: null, error: `Request timeout (${REQUEST_TIMEOUT}ms)` }
     }
     if (err instanceof TypeError && err.message.includes('fetch')) {
-      return { ok: false, data: null, error: 'Unable to connect to the backend server. Is it running?' }
+      return {
+        ok: false,
+        data: null,
+        error: 'Unable to connect to the backend server. Is it running?',
+      }
     }
     return { ok: false, data: null, error: err instanceof Error ? err.message : 'Network error' }
   } finally {
@@ -184,7 +189,7 @@ const mapPosition = (p: BackendPosition): Position => ({
   entryPrice: toNum(p.entryPrice),
   currentPrice: toNum(p.currentPrice),
   quantity: p.quantity,
-  status: (p.status === 'STOPPED' || p.status === 'TARGET_HIT') ? 'CLOSED' : p.status,
+  status: p.status === 'STOPPED' || p.status === 'TARGET_HIT' ? 'CLOSED' : p.status,
   pnl: toNum(p.unrealizedPnL),
   pnlPercent: toNum(p.unrealizedPnLPercent),
   entryDate: p.entryDate,
@@ -278,12 +283,17 @@ export async function getSignals(): Promise<ApiResponse<Signal[]>> {
   return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
 }
 
-export async function generateAllSignals(): Promise<ApiResponse<{ signals: Signal[]; skipped: Array<{ symbol: string; reason: string }> }>> {
+export async function generateAllSignals(): Promise<
+  ApiResponse<{ signals: Signal[]; skipped: Array<{ symbol: string; reason: string }> }>
+> {
   const raw = await rawFetch('/signals/generate-all', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
 
   const resp = raw.data as BackendGenerateAllResponse
-  return { success: true, data: { signals: (resp.signals ?? []).map(mapSignal), skipped: resp.skipped ?? [] } }
+  return {
+    success: true,
+    data: { signals: (resp.signals ?? []).map(mapSignal), skipped: resp.skipped ?? [] },
+  }
 }
 
 export async function clearAllSignals(): Promise<ApiResponse<{ cleared: number }>> {
@@ -293,32 +303,40 @@ export async function clearAllSignals(): Promise<ApiResponse<{ cleared: number }
   return { success: true, data: resp }
 }
 
-export async function clearSignalsForSymbol(symbol: string): Promise<ApiResponse<{ cleared: number }>> {
+export async function clearSignalsForSymbol(
+  symbol: string
+): Promise<ApiResponse<{ cleared: number }>> {
   const raw = await rawFetch(`/signals/${symbol}`, { method: 'DELETE' })
   if (!raw.ok) return errResponse(raw.error!)
   const resp = raw.data as { cleared: number }
   return { success: true, data: resp }
 }
 
-export async function getSignalsByType(type: 'BUY' | 'SELL' | 'HOLD'): Promise<ApiResponse<Signal[]>> {
+export async function getSignalsByType(
+  type: 'BUY' | 'SELL' | 'HOLD'
+): Promise<ApiResponse<Signal[]>> {
   const raw = await rawFetch(`/signals/type/${type}`)
   if (!raw.ok) return errResponse(raw.error!)
 
   return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
 }
 
-export async function getLatestSignalForSymbol(symbol: string): Promise<ApiResponse<Signal | null>> {
+export async function getLatestSignalForSymbol(
+  symbol: string
+): Promise<ApiResponse<Signal | null>> {
   const raw = await rawFetch(`/signals/symbol/${symbol}`)
   if (!raw.ok) return errResponse(raw.error!)
 
-  const data = (raw.data as BackendSignal[])
+  const data = raw.data as BackendSignal[]
   const latest = data.length > 0 ? data[data.length - 1] : null
   if (!latest) return { success: true, data: null }
 
   return { success: true, data: mapSignal(latest) }
 }
 
-export async function getHighConfidenceSignals(minConfidence: number = 0.7): Promise<ApiResponse<Signal[]>> {
+export async function getHighConfidenceSignals(
+  minConfidence: number = 0.7
+): Promise<ApiResponse<Signal[]>> {
   const raw = await rawFetch(`/signals/high-confidence?minConfidence=${minConfidence}`)
   if (!raw.ok) return errResponse(raw.error!)
 
@@ -339,7 +357,10 @@ export async function getTradeHistory(limit: number = 10): Promise<ApiResponse<P
 // Write operations
 // ---------------------------------------------------------------------------
 
-export async function closePosition(symbol: string, exitReason?: string): Promise<ApiResponse<Position>> {
+export async function closePosition(
+  symbol: string,
+  exitReason?: string
+): Promise<ApiResponse<Position>> {
   const raw = await rawFetch(`/trades/${symbol}/close`, {
     method: 'POST',
     body: exitReason ? JSON.stringify({ exitReason }) : undefined,
@@ -390,13 +411,17 @@ export async function generatePriceActionSignal(symbol: string): Promise<ApiResp
   return { success: true, data: mapSignal(raw.data as BackendSignal) }
 }
 
-export async function triggerScan(): Promise<ApiResponse<{ signalsFound: number; status: string }>> {
+export async function triggerScan(): Promise<
+  ApiResponse<{ signalsFound: number; status: string }>
+> {
   const raw = await rawFetch('/signals/scan', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as { signalsFound: number; status: string } }
 }
 
-export async function checkHealth(): Promise<ApiResponse<{ status: string; components: Record<string, any> }>> {
+export async function checkHealth(): Promise<
+  ApiResponse<{ status: string; components: Record<string, any> }>
+> {
   const raw = await rawFetch('/health')
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as { status: string; components: Record<string, any> } }
@@ -448,7 +473,9 @@ export async function fyersLogout(): Promise<ApiResponse<FyersStatus>> {
 // Equity curve — reconstruct from closed positions
 // ---------------------------------------------------------------------------
 
-export async function getEquityCurve(_range: string = '1M'): Promise<ApiResponse<{ data: EquityPoint[] }>> {
+export async function getEquityCurve(
+  _range: string = '1M'
+): Promise<ApiResponse<{ data: EquityPoint[] }>> {
   const raw = await rawFetch('/positions/closed')
   if (!raw.ok) return errResponse(raw.error!)
 
@@ -457,7 +484,7 @@ export async function getEquityCurve(_range: string = '1M'): Promise<ApiResponse
 
   // Build cumulative P&L from closed trades sorted by entry date
   const sorted = positions
-    .filter(p => p.status === 'CLOSED' || p.status === 'STOPPED' || p.status === 'TARGET_HIT')
+    .filter((p) => p.status === 'CLOSED' || p.status === 'STOPPED' || p.status === 'TARGET_HIT')
     .sort((a, b) => a.entryDate.localeCompare(b.entryDate))
 
   if (sorted.length === 0) {
@@ -465,7 +492,7 @@ export async function getEquityCurve(_range: string = '1M'): Promise<ApiResponse
   }
 
   let cumulative = 0
-  const points: EquityPoint[] = sorted.map(p => {
+  const points: EquityPoint[] = sorted.map((p) => {
     const pnl = toNum(p.unrealizedPnL)
     cumulative += pnl
     return { date: p.entryDate, value: cumulative }
@@ -484,7 +511,11 @@ export async function getWatchlist(): Promise<ApiResponse<WatchlistEntry[]>> {
   return { success: true, data: (raw.data as any).data as WatchlistEntry[] }
 }
 
-export async function addToWatchlist(symbol: string, name?: string, exchange?: string): Promise<ApiResponse<WatchlistEntry>> {
+export async function addToWatchlist(
+  symbol: string,
+  name?: string,
+  exchange?: string
+): Promise<ApiResponse<WatchlistEntry>> {
   const params = new URLSearchParams({ symbol: symbol.toUpperCase().trim() })
   if (name) params.set('name', name)
   if (exchange) params.set('exchange', exchange)
@@ -499,8 +530,13 @@ export async function removeFromWatchlist(symbol: string): Promise<ApiResponse<s
   return { success: true, data: (raw.data as any).data as string }
 }
 
-export async function toggleWatchlistActive(symbol: string, activate: boolean): Promise<ApiResponse<WatchlistEntry>> {
-  const raw = await rawFetch(`/watchlist/${symbol}/toggle?activate=${activate}`, { method: 'PATCH' })
+export async function toggleWatchlistActive(
+  symbol: string,
+  activate: boolean
+): Promise<ApiResponse<WatchlistEntry>> {
+  const raw = await rawFetch(`/watchlist/${symbol}/toggle?activate=${activate}`, {
+    method: 'PATCH',
+  })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: (raw.data as any).data as WatchlistEntry }
 }
@@ -515,7 +551,9 @@ export async function getIngestionStatus(): Promise<ApiResponse<IngestionStatus[
   return { success: true, data: (raw.data as any).data as IngestionStatus[] }
 }
 
-export async function triggerDataPull(yearsBack: number = 1): Promise<ApiResponse<{ pullId: string; message: string }>> {
+export async function triggerDataPull(
+  yearsBack: number = 1
+): Promise<ApiResponse<{ pullId: string; message: string }>> {
   const raw = await rawFetch(`/data/pull?yearsBack=${yearsBack}`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: (raw.data as any).data as { pullId: string; message: string } }
@@ -560,7 +598,9 @@ export async function getLlmSettings(): Promise<ApiResponse<Record<string, strin
   return { success: true, data: (raw.data as any).data as Record<string, string> }
 }
 
-export async function setLlmSettings(settings: Record<string, string>): Promise<ApiResponse<Record<string, string>>> {
+export async function setLlmSettings(
+  settings: Record<string, string>
+): Promise<ApiResponse<Record<string, string>>> {
   const raw = await rawFetch('/settings/llm', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -576,7 +616,9 @@ export async function getDiscordSettings(): Promise<ApiResponse<Record<string, s
   return { success: true, data: (raw.data as any).data as Record<string, string> }
 }
 
-export async function setDiscordSettings(settings: Record<string, string>): Promise<ApiResponse<Record<string, string>>> {
+export async function setDiscordSettings(
+  settings: Record<string, string>
+): Promise<ApiResponse<Record<string, string>>> {
   const raw = await rawFetch('/settings/discord', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -602,7 +644,9 @@ export async function getTradingSettings(): Promise<ApiResponse<Record<string, s
   return { success: true, data: (raw.data as any).data as Record<string, string> }
 }
 
-export async function setTradingSettings(settings: Record<string, string>): Promise<ApiResponse<Record<string, string>>> {
+export async function setTradingSettings(
+  settings: Record<string, string>
+): Promise<ApiResponse<Record<string, string>>> {
   const raw = await rawFetch('/settings/trading', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -642,7 +686,11 @@ export async function getSentimentLatest(symbol: string): Promise<ApiResponse<Se
   return { success: true, data: resp.data }
 }
 
-export async function getSentimentHistory(symbol: string, page = 0, size = 20): Promise<ApiResponse<SentimentResult[]>> {
+export async function getSentimentHistory(
+  symbol: string,
+  page = 0,
+  size = 20
+): Promise<ApiResponse<SentimentResult[]>> {
   const raw = await rawFetch(`/sentiment/${symbol}/history?page=${page}&size=${size}`)
   if (!raw.ok) return errResponse(raw.error!)
   const resp = raw.data as { success: boolean; data: SentimentResult[]; error?: string }
@@ -712,7 +760,9 @@ export async function getECE(): Promise<ApiResponse<ECEStats>> {
   return { success: true, data: resp.data }
 }
 
-export async function triggerSentimentAnalysis(symbol: string): Promise<ApiResponse<SentimentResult>> {
+export async function triggerSentimentAnalysis(
+  symbol: string
+): Promise<ApiResponse<SentimentResult>> {
   const raw = await rawFetch(`/sentiment/${symbol}/analyse`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   const resp = raw.data as { success: boolean; data: SentimentResult; error?: string }
@@ -730,14 +780,19 @@ export async function getLatestNews(symbol: string): Promise<ApiResponse<NewsArt
 // Backtest
 // ---------------------------------------------------------------------------
 
-export async function runBacktest(symbol: string, exchange: string = 'NSE'): Promise<ApiResponse<BacktestResult>> {
+export async function runBacktest(
+  symbol: string,
+  exchange: string = 'NSE'
+): Promise<ApiResponse<BacktestResult>> {
   const params = new URLSearchParams({ symbol: symbol.toUpperCase().trim(), exchange })
   const raw = await rawFetch(`/backtest/run?${params}`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as BacktestResult }
 }
 
-export async function runBacktestAll(exchange: string = 'NSE'): Promise<ApiResponse<BacktestReportSummary>> {
+export async function runBacktestAll(
+  exchange: string = 'NSE'
+): Promise<ApiResponse<BacktestReportSummary>> {
   const raw = await rawFetch(`/backtest/run-all?exchange=${exchange}`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as BacktestReportSummary }
@@ -749,20 +804,32 @@ export async function listBacktestReports(): Promise<ApiResponse<string[]>> {
   return { success: true, data: raw.data as string[] }
 }
 
-export async function getBacktestReport(filename: string): Promise<ApiResponse<BacktestReportSummary>> {
+export async function getBacktestReport(
+  filename: string
+): Promise<ApiResponse<BacktestReportSummary>> {
   const raw = await rawFetch(`/backtest/reports/${filename}`)
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as BacktestReportSummary }
 }
 
-export async function getCompositeAnalysis(symbol: string): Promise<ApiResponse<CompositeAnalysis>> {
-  const raw = await rawFetch(`/analysis/analyze?symbol=${encodeURIComponent(symbol)}`, { method: 'POST' })
+export async function getCompositeAnalysis(
+  symbol: string
+): Promise<ApiResponse<CompositeAnalysis>> {
+  const raw = await rawFetch(`/analysis/analyze?symbol=${encodeURIComponent(symbol)}`, {
+    method: 'POST',
+  })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as CompositeAnalysis }
 }
 
-export async function backfillSymbol(symbol: string, years: number = 3): Promise<ApiResponse<string>> {
-  const raw = await rawFetch(`/ingestion/backfill?symbol=${encodeURIComponent(symbol)}&years=${years}`, { method: 'POST' })
+export async function backfillSymbol(
+  symbol: string,
+  years: number = 3
+): Promise<ApiResponse<string>> {
+  const raw = await rawFetch(
+    `/ingestion/backfill?symbol=${encodeURIComponent(symbol)}&years=${years}`,
+    { method: 'POST' }
+  )
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: (raw.data as any).data as string }
 }
@@ -773,7 +840,7 @@ export async function backfillSymbol(symbol: string, years: number = 3): Promise
 
 export async function* runFullAnalysis(
   symbol: string,
-  years: number = 3,
+  years: number = 3
 ): AsyncIterable<AnalysisProgress | FullAnalysisResult> {
   const params = new URLSearchParams({
     symbol: encodeURIComponent(symbol),

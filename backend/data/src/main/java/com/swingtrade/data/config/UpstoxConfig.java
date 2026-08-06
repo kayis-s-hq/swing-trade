@@ -16,13 +16,6 @@ public class UpstoxConfig {
     private int maxRetries = 3;
     private long retryDelayMillis = 1000;
 
-    public static class Api {
-        private String baseUrl = "https://api.upstox.com";
-
-        public String getBaseUrl() { return baseUrl; }
-        public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
-    }
-
     public Api getApi() { return api; }
     public void setApi(Api api) { this.api = api; }
 
@@ -46,4 +39,11 @@ public class UpstoxConfig {
 
     public long getRetryDelayMillis() { return retryDelayMillis; }
     public void setRetryDelayMillis(long retryDelayMillis) { this.retryDelayMillis = retryDelayMillis; }
+
+    public static class Api {
+        private String baseUrl = "https://api.upstox.com";
+
+        public String getBaseUrl() { return baseUrl; }
+        public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+    }
 }

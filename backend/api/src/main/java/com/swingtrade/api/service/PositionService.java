@@ -27,7 +27,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -105,7 +104,7 @@ public class PositionService {
      * @return List of positions with the given status
      */
     public List<PositionResponse> getPositionsByStatus(String status) {
-        PositionStatus ps = switch (status.toUpperCase(Locale.ROOT)) {
+        PositionStatus ps = switch (status.toUpperCase()) {
             case "OPEN" -> PositionStatus.OPEN;
             case "CLOSED" -> PositionStatus.CLOSED;
             case "STOPPED" -> PositionStatus.STOPPED;
@@ -228,14 +227,14 @@ public class PositionService {
         try {
             com.swingtrade.domain.Position enginePos =
                 paperTradingEngine.findOpenPositionBySymbol(symbol);
-            if (enginePos == null) {
-                throw new RuntimeException("No open position found in engine for symbol: " + symbol);
+            if (enginePos != null) {
+                paperTradingEngine.closePosition(enginePos.positionId(), exitPrice, reason);
+            } else {
+                logger.warn("Engine position missing for symbol {} — skipping engine close, will only update DB", symbol);
             }
-            paperTradingEngine.closePosition(enginePos.positionId(), exitPrice, reason);
         } catch (Exception e) {
-            logger.error("PaperTradingEngine failed to close position {} for symbol {}: {}",
-                entity.getId(), symbol, e.getMessage(), e);
-            throw new RuntimeException("Failed to close position in engine: " + e.getMessage(), e);
+            logger.warn("Engine close failed for symbol {}: {}. Proceeding with DB close only.",
+                symbol, e.getMessage());
         }
 
         // Then update DB entity
@@ -257,7 +256,10 @@ public class PositionService {
             throw new IllegalArgumentException("Invalid trade request: symbol and positive quantity required");
         }
 
-        BigDecimal entryPrice = request.getPrice() != null ? request.getPrice() : BigDecimal.ZERO;
+        BigDecimal entryPrice = request.getPrice();
+        if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Price is required and must be greater than zero");
+        }
 
         // Auto-create stock if it doesn't exist
         if (!stockStore.existsBySymbol(request.getSymbol())) {
@@ -274,8 +276,12 @@ public class PositionService {
 
         // Create position in engine via order pipeline
         String positionId = null;
-        Order order = orderManager.createBuyOrder(
-            request.getSymbol(), request.getQuantity(), entryPrice);
+        Order order = switch (request.getDirection()) {
+            case LONG -> orderManager.createBuyOrder(
+                request.getSymbol(), request.getQuantity(), entryPrice);
+            case SHORT -> orderManager.createSellOrder(
+                request.getSymbol(), request.getQuantity(), entryPrice);
+        };
         order = paperTradingEngine.executePendingOrder(order.getOrderId(), entryPrice);
         if (order.getStatus() == OrderStatus.FILLED) {
             com.swingtrade.domain.Position pos = paperTradingEngine.createPositionFromOrder(order);

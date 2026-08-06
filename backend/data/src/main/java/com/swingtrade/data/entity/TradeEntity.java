@@ -1,12 +1,17 @@
 package com.swingtrade.data.entity;
 
 import com.swingtrade.domain.Trade;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 /**
  * JPA entity for the Trade domain model.

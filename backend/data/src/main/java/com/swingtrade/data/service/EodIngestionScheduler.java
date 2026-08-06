@@ -2,7 +2,6 @@ package com.swingtrade.data.service;
 
 import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.data.repository.WatchlistRepository;
-import com.swingtrade.data.service.NseHolidayService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

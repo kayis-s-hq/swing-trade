@@ -1,6 +1,5 @@
 package com.swingtrade.llm;
 
-import com.swingtrade.domain.Signal;
 
 import java.util.List;
 

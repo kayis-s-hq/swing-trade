@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 
-import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -76,7 +75,7 @@ public class NseInstrumentService {
             for (NseInstrumentRecord r : records) {
                 if ("NSE_EQ".equals(r.segment) && "EQ".equals(r.instrumentType)
                         && r.tradingSymbol != null && r.instrumentKey != null) {
-                    newMap.put(r.tradingSymbol.toUpperCase(Locale.ROOT), r.instrumentKey);
+                    newMap.put(r.tradingSymbol.toUpperCase(), r.instrumentKey);
                 }
             }
             this.symbolToInstrumentKey = newMap;
@@ -90,7 +89,7 @@ public class NseInstrumentService {
      * Example: "RELIANCE" → Optional.of("NSE_EQ%7CINE002A01018")
      */
     public Optional<String> getEncodedInstrumentKey(String tradingSymbol) {
-        String raw = symbolToInstrumentKey.get(tradingSymbol.toUpperCase(Locale.ROOT));
+        String raw = symbolToInstrumentKey.get(tradingSymbol.toUpperCase());
         if (raw == null) return Optional.empty();
         return Optional.of(raw.replace("|", "%7C"));
     }
@@ -105,11 +104,11 @@ public class NseInstrumentService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class NseInstrumentRecord {
-        @JsonProperty("segment") String segment;
-        @JsonProperty("instrument_type") String instrumentType;
-        @JsonProperty("trading_symbol") String tradingSymbol;
-        @JsonProperty("instrument_key") String instrumentKey;
-        @JsonProperty("name") String name;
-        @JsonProperty("isin") String isin;
+        @JsonProperty("segment") private String segment;
+        @JsonProperty("instrument_type") private String instrumentType;
+        @JsonProperty("trading_symbol") private String tradingSymbol;
+        @JsonProperty("instrument_key") private String instrumentKey;
+        @JsonProperty("name") private String name;
+        @JsonProperty("isin") private String isin;
     }
 }

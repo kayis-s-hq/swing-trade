@@ -11,7 +11,7 @@
     <!-- Symbol Selector -->
     <div class="mb-6 card-panel p-5">
       <h3 class="mb-3 text-sm font-semibold text-text-primary">Select Symbol</h3>
-      <form @submit.prevent="fetchNews" class="flex flex-col sm:flex-row gap-3">
+      <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="fetchNews">
         <div class="flex-1">
           <input
             v-model="symbolInput"
@@ -33,7 +33,9 @@
           {{ loading ? 'Loading...' : 'Fetch News' }}
         </button>
       </form>
-      <p v-if="error" class="mt-3 text-xs text-danger">{{ error }}</p>
+      <p v-if="error" class="mt-3 text-xs text-danger">
+        {{ error }}
+      </p>
     </div>
 
     <!-- Loading state -->
@@ -75,11 +77,13 @@
                   {{ formatDate(article.publishedDate) }}
                 </span>
               </div>
-              <h3 class="text-sm font-medium text-text-primary">{{ article.title }}</h3>
+              <h3 class="text-sm font-medium text-text-primary">
+                {{ article.title }}
+              </h3>
             </div>
             <button
-              @click="toggleArticle(index)"
               class="shrink-0 text-text-muted transition-colors hover:text-text-primary"
+              @click="toggleArticle(index)"
             >
               <svg
                 class="h-5 w-5 transition-transform"
@@ -88,7 +92,12 @@
                 viewBox="0 0 24 24"
                 stroke="currentColor"
               >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
           </div>
@@ -98,7 +107,10 @@
             <p v-if="article.description" class="text-sm text-text-secondary leading-relaxed">
               {{ article.description }}
             </p>
-            <p v-if="article.rawContent && article.rawContent !== article.description" class="mt-2 text-sm text-text-secondary leading-relaxed">
+            <p
+              v-if="article.rawContent && article.rawContent !== article.description"
+              class="mt-2 text-sm text-text-secondary leading-relaxed"
+            >
               {{ article.rawContent }}
             </p>
             <a
@@ -117,7 +129,9 @@
 
     <!-- Empty state -->
     <div v-else class="card-panel p-5">
-      <p class="text-sm text-text-muted">No news articles found. Enter a symbol and click Fetch News.</p>
+      <p class="text-sm text-text-muted">
+        No news articles found. Enter a symbol and click Fetch News.
+      </p>
     </div>
   </div>
 </template>

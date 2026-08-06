@@ -56,8 +56,8 @@ if [ ${#java_files[@]} -gt 0 ] || [ ${#pom_files[@]} -gt 0 ]; then
     if [ ${#modules_to_check[@]} -eq 0 ]; then
         echo "No backend module changes — skipping backend checks."
     else
-        # Deduplicate
-        readarray -t modules_to_check < <(printf '%s\n' "${modules_to_check[@]}" | sort -u)
+        # Deduplicate (zsh-compatible)
+        modules_to_check=($(printf '%s\n' "${modules_to_check[@]}" | sort -u))
         echo "Modules with changes: ${modules_to_check[*]}"
 
         # Source Java 21
@@ -78,6 +78,44 @@ if [ ${#java_files[@]} -gt 0 ] || [ ${#pom_files[@]} -gt 0 ]; then
             exit 1
         fi
     fi
+fi
+
+# ---- Frontend: Prettier format check ----
+if [ ${#vue_files[@]} -gt 0 ] || [ ${#ts_files[@]} -gt 0 ]; then
+    echo "Running Prettier format check on frontend..."
+    cd dashboard
+
+    frontend_files=""
+    for f in "${vue_files[@]}" "${ts_files[@]}"; do
+        stripped="${f#dashboard/}"
+        frontend_files="$frontend_files $stripped"
+    done
+
+    npx prettier --check $frontend_files 2>&1
+    prettier_exit=$?
+
+    if [ $prettier_exit -ne 0 ]; then
+        echo "ERROR: Prettier formatting violations found. Run 'npm run format:write' to fix."
+        exit 1
+    fi
+
+    echo "Prettier check passed."
+fi
+
+# ---- Frontend: TypeScript typecheck ----
+if [ ${#vue_files[@]} -gt 0 ] || [ ${#ts_files[@]} -gt 0 ]; then
+    echo "Running TypeScript typecheck..."
+    cd dashboard
+
+    npm run typecheck 2>&1
+    typecheck_exit=$?
+
+    if [ $typecheck_exit -ne 0 ]; then
+        echo "ERROR: TypeScript typecheck failed. Fix type errors before committing."
+        exit 1
+    fi
+
+    echo "Typecheck passed."
 fi
 
 # ---- Frontend: ESLint on staged Vue/TS files ----

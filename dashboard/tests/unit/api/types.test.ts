@@ -1,5 +1,11 @@
-import {describe, expect, it} from 'vitest'
-import type {ApiResponse, MarketOverview, PortfolioSummary, Position, Signal} from '../../../src/api/types'
+import { describe, expect, it } from 'vitest'
+import type {
+  ApiResponse,
+  MarketOverview,
+  PortfolioSummary,
+  Position,
+  Signal,
+} from '../../../src/api/types'
 
 describe('Position', () => {
   it('should have valid position with all fields', () => {

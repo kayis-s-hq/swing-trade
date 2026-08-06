@@ -17,7 +17,6 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.domain.SentimentResult;
-import com.swingtrade.domain.Signal;
 import com.swingtrade.llm.service.SentimentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

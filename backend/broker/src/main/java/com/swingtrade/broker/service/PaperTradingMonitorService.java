@@ -5,7 +5,6 @@ import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.domain.Position;
 import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
-import com.swingtrade.data.service.FyersServiceClient;
 import com.swingtrade.domain.OhlcvCandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
