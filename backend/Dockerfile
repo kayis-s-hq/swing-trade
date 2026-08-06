@@ -1,16 +1,16 @@
 # ==============================================================================
 # SwingTrade API - Multi-Stage Dockerfile
 # ==============================================================================
-# Builds both GraalVM native (production) and JAR (development) images
+# Builds JAR images for stage/production (self-contained in Docker)
+# and GraalVM native images for development.
 #
-# Build Process:
-#   1. CI builds native binary: mvn package -Pnative -Dmaven.test.skip=true
-#   2. Native binary copied to Docker context (backend/)
-#   3. Docker image built with pre-built binary via --target runtime-native
+# Build Process (stage/production):
+#   1. Maven downloads dependencies and builds JAR inside Docker (jar-build stage)
+#   2. JAR packaged into Alpine JRE image (runtime-stage target)
 #
 # Usage:
-#   # Native (production, from CI binary):
-#   docker build --target runtime-native -t swing-trade-api:stage .
+#   # Stage/production (JAR, self-contained):
+#   docker build --target runtime-stage -t swing-trade-api:stage .
 #
 #   # JAR (development with hot reload):
 #   docker build --target runtime-jar -t swing-trade-api-dev .
@@ -21,7 +21,7 @@
 #   # 2. Configure IDE to connect to localhost:5005
 #   # 3. JVM will listen for debug connections without suspending startup
 #
-# CI/CD flow: native binary is built on the runner (deploy-stage.yml), not inside Docker.
+# CI/CD flow: JAR is built inside Docker during deploy (no native binary needed).
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -60,7 +60,36 @@ RUN mvn dependency:go-offline -B -N && \
     mvn clean package -Dmaven.test.skip=true -B
 
 # ------------------------------------------------------------------------------
-# Stage 2: runtime-native - GraalVM native production image
+# Stage 2: runtime-stage - JAR production image (self-contained)
+# ------------------------------------------------------------------------------
+# Builds the JAR inside Docker — no GraalVM or native binary needed.
+# Uses Alpine JRE with curl for healthchecks.
+#
+# Usage:
+#   docker build --target runtime-stage -t swing-trade-api:stage .
+FROM eclipse-temurin:21-jre-alpine AS runtime-stage
+
+WORKDIR /app
+
+# Copy JAR from build stage
+COPY --from=jar-build /app/api/target/api-1.0.0.jar /app/swing-trade-api.jar
+
+# Set timezone to Asia/Kolkata
+RUN ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
+    echo "Asia/Kolkata" > /etc/timezone
+
+# Expose API port
+EXPOSE 8080
+
+# Health check using Spring Actuator
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8080/actuator/health || exit 1
+
+# Run the JAR
+CMD ["java", "-jar", "/app/swing-trade-api.jar"]
+
+# ------------------------------------------------------------------------------
+# Stage 3: runtime-native - GraalVM native production image
 # ------------------------------------------------------------------------------
 # The native binary is built on the runner via: mvn package -Pnative
 # Then copied to the Docker context (backend/) before docker build.
@@ -79,13 +108,13 @@ EXPOSE 8080
 
 # Health check using Spring Actuator
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8080/actuator/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
 # Run the native executable
 CMD ["/app/swing-trade-api"]
 
 # ------------------------------------------------------------------------------
-# Stage 3: runtime-jar - JAR development image
+# Stage 4: runtime-jar - JAR development image
 # ------------------------------------------------------------------------------
 # For development with hot reload, mount source code as volume:
 #   docker run -v $(pwd):/app swing-trade-api-dev

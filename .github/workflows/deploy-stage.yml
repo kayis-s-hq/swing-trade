@@ -5,6 +5,7 @@ on:
     branches: [stage]
     paths:
       - backend/**
+      - dashboard/**
       - .github/workflows/**
   workflow_dispatch:
 
@@ -18,7 +19,11 @@ env:
   DOCKER_TAG: stage
 
 jobs:
-  build-and-deploy:
+  # =====================================================================
+  # Backend CI: static analysis, compile, test
+  # =====================================================================
+  backend-ci:
+    name: Backend CI
     runs-on: self-hosted
     steps:
       - name: Checkout
@@ -32,32 +37,94 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Install GraalVM 21 with native-image
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq zip >/dev/null 2>&1 || true
-          if [ ! -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
-            curl -s "https://get.sdkman.io" | bash
-          fi
-          source "$HOME/.sdkman/bin/sdkman-init.sh"
-          if ! java -version 2>&1 | grep -q "GraalVM"; then
-            sdk install java 21.0.12-graal 2>/dev/null || true
-            source "$HOME/.sdkman/bin/sdkman-init.sh"
-          fi
-          java -version
-          native-image --version
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
 
-      - name: Build native image
+      - name: Static analysis (PMD + Checkstyle) — all modules
         working-directory: backend
-        run: |
-          source "$HOME/.sdkman/bin/sdkman-init.sh"
-          export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.12-graal"
-          export PATH="$JAVA_HOME/bin:$PATH"
-          mvn package -Pnative -Dmaven.test.skip=true -DskipTests -DskipITs -Dpmd.skip=true -Dcheckstyle.skip=true -B
+        run: MAVEN_OPTS="-Xms256m -Xmx512m" mvn checkstyle:check pmd:check -B -DskipTests -Dpmd.failOnViolation=true -Dcheckstyle.failOnViolation=true
 
-      - name: Copy native binary to Docker context
+      - name: Compile + package (with tests)
+        working-directory: backend
+        run: MAVEN_OPTS="-Xms256m -Xmx512m" mvn clean verify -B -Dpmd.skip=true -Dcheckstyle.skip=true
+
+  # =====================================================================
+  # Frontend CI: lint, typecheck, build, tests
+  # =====================================================================
+  frontend-ci:
+    name: Frontend CI
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: dashboard/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: dashboard
+
+      - name: ESLint
+        run: npm run lint
+        working-directory: dashboard
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+        working-directory: dashboard
+
+      - name: Vite build
+        run: npm run build
+        working-directory: dashboard
+
+      - name: Vitest unit tests
+        run: npm run test -- --run
+        working-directory: dashboard
+
+      - name: Playwright E2E tests
         run: |
-          find backend/api/target -name "swing-trade-api" -type f -exec cp {} backend/ \;
-          ls -lh backend/swing-trade-api
+          npx playwright install --with-deps chromium
+          npx playwright test
+        working-directory: dashboard
+
+  # =====================================================================
+  # Deploy: infra, Docker build, container start, health check
+  # =====================================================================
+  deploy:
+    name: Deploy
+    runs-on: self-hosted
+    needs: [backend-ci, frontend-ci]
+    steps:
+      - name: Start stage infrastructure
+        run: |
+          cd backend
+          docker compose -f docker-compose.infra-stage.yml up -d
+          echo "Waiting for PostgreSQL..."
+          for i in $(seq 1 30); do
+            if docker inspect swing_trade_stage_postgres --format '{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; then
+              echo "PostgreSQL is healthy"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 4
+          done
+          echo "Waiting for Redis..."
+          for i in $(seq 1 15); do
+            if docker exec swing_trade_stage_redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
+              echo "Redis is healthy"
+              break
+            fi
+            echo "Waiting... ($i/15)"
+            sleep 4
+          done
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
@@ -66,16 +133,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-docker-${{ hashFiles('backend/**/pom.xml') }}
+          key: ${{ runner.os }}-docker-stage-${{ hashFiles('backend/**/pom.xml') }}
           restore-keys: |
-            ${{ runner.os }}-docker-
+            ${{ runner.os }}-docker-stage-
 
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: backend/Dockerfile
-          target: runtime-native
+          context: backend
+          dockerfile: Dockerfile
+          target: runtime-stage
           tags: ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
@@ -85,44 +152,41 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
+      - name: Write secrets to .env
+        run: |
+          cat > backend/.env.stage <<'EOF'
+DB_HOST=swing_trade_stage_postgres
+DB_PORT=5432
+DB_NAME=${{ secrets.DB_NAME }}
+DB_USER=${{ secrets.DB_USER }}
+DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+REDIS_HOST=swing_trade_stage_redis
+REDIS_PORT=6379
+LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}
+LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
+LLM_TIMEOUT=${{ secrets.LLM_TIMEOUT }}
+TRADING_ENABLED=true
+PAPER_TRADING_ENABLED=true
+REAL_TRADING_ENABLED=false
+STRATEGY_ENABLED=true
+SIGNAL_ENABLED=false
+DISCORD_WEBHOOK_ENABLED=false
+EOF
+
       - name: Stop existing stage API container
         run: |
           docker stop swing-trade-stage-api 2>/dev/null || true
           docker rm swing-trade-stage-api 2>/dev/null || true
           sleep 3
 
-      - name: Verify stage infrastructure is healthy
-        run: |
-          echo "Checking stage PostgreSQL..."
-          docker inspect swing_trade_stage_postgres --format '{{.State.Health.Status}}' || exit 1
-          echo "Checking stage Redis..."
-          docker inspect swing_trade_stage_redis --format '{{.State.Health.Status}}' || exit 1
-          echo "Checking swingtrade-network..."
-          docker network inspect swing-trade-stage_swingtrade-network --format '{{.Name}}' || exit 1
-
-      - name: Start stage API container on swingtrade-network
+      - name: Start stage API container
         run: |
           docker run -d \
             --name swing-trade-stage-api \
-            --network swing-trade-stage_swingtrade-network \
             -p 8081:8080 \
+            --network swing-trade-stage_swingtrade-network \
             -e SPRING_PROFILES_ACTIVE=stage \
-            -e DB_HOST=swing_trade_stage_postgres \
-            -e DB_PORT=5432 \
-            -e DB_NAME=swingtrade_stage \
-            -e DB_USER=swingtrade_user \
-            -e DB_PASSWORD=swingtrade_password \
-            -e REDIS_HOST=swing_trade_stage_redis \
-            -e REDIS_PORT=6379 \
-            -e LLM_BASE_URL=http://localhost:8000 \
-            -e LLM_MODEL_NAME=claude-sonnet-4-6 \
-            -e LLM_TIMEOUT=30000 \
-            -e TRADING_ENABLED=true \
-            -e PAPER_TRADING_ENABLED=true \
-            -e REAL_TRADING_ENABLED=false \
-            -e STRATEGY_ENABLED=true \
-            -e SIGNAL_ENABLED=false \
-            -e DISCORD_WEBHOOK_ENABLED=false \
+            --env-file backend/.env.stage \
             ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
 
       - name: Wait for startup
@@ -139,7 +203,7 @@ jobs:
             sleep 6
           done
           echo "Health check failed"
-          docker logs --tail 30 swing-trade-stage-api
+          docker logs --tail 50 swing-trade-stage-api
           docker ps --filter name=swing-trade-stage-api
           exit 1
 
