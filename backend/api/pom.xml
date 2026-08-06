@@ -270,14 +270,12 @@
                                 <configuration>
                                     <mainClass>com.swingtrade.api.app.SwingTradeApiApplication</mainClass>
                                     <imageName>swing-trade-api</imageName>
-                                    <classpath>${project.build.outputDirectory}</classpath>
                                     <buildArgs>
                                         <buildArg>--gc=serial</buildArg>
                                         <buildArg>-O3</buildArg>
                                         <buildArg>--allow-incomplete-classpath</buildArg>
                                         <buildArg>-H:Name=swing-trade-api</buildArg>
-                                        <buildArg>--initialize-at-build-time=org.springframework</buildArg>
-                                        <buildArg>--initialize-at-run-time=dev.langchain4j</buildArg>
+                                        <buildArg>--initialize-at-run-time=dev.langchain4j,org.apache.commons.logging</buildArg>
                                     </buildArgs>
                                 </configuration>
                             </execution>
