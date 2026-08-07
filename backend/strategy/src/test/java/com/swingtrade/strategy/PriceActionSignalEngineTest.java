@@ -16,9 +16,9 @@
 
 package com.swingtrade.strategy;
 
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
+import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Signal.SignalType;
+import com.swingtrade.domain.store.CandleStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -42,13 +42,13 @@ import static org.mockito.Mockito.when;
 class PriceActionSignalEngineTest {
 
     @Mock
-    private OhlcvCandleRepository candleRepository;
+    private CandleStore candleStore;
 
     private PriceActionSignalEngine engine;
 
     @BeforeEach
     void setUp() {
-        engine = new PriceActionSignalEngine(candleRepository);
+        engine = new PriceActionSignalEngine(candleStore);
     }
 
     @Nested
@@ -70,9 +70,8 @@ class PriceActionSignalEngineTest {
 
         @Test
         void generateSignal_withInsufficientCandles_throwsIllegalStateException() {
-            List<OhlcvCandleEntity> tooFew = buildTrendingCandles(10, 100.0, 0.0, 1_000_000L);
-            Collections.reverse(tooFew);
-            when(candleRepository.findAllBySymbolOrderByDateDesc("RELIANCE")).thenReturn(tooFew);
+            List<OhlcvCandle> tooFew = buildTrendingCandles(10, 100.0, 0.0, 1_000_000L);
+            when(candleStore.findTopBySymbolOrderByDateDesc("RELIANCE", 1000)).thenReturn(tooFew);
 
             assertThatThrownBy(() -> engine.generateSignal("RELIANCE"))
                 .isInstanceOf(IllegalStateException.class)
@@ -90,8 +89,8 @@ class PriceActionSignalEngineTest {
             // monotonic rise, which pegs RSI near 100) while still holding price > EMA20 >
             // EMA50. The final candle adds a volume surge and a fresh high to satisfy the
             // remaining two rules.
-            List<OhlcvCandleEntity> candles = buildZigzagUptrendCandles(299, 100.0, 0.5, 0.75, 1_000_000L);
-            OhlcvCandleEntity lastCandle = candles.get(candles.size() - 1);
+            List<OhlcvCandle> candles = buildZigzagUptrendCandles(299, 100.0, 0.5, 0.75, 1_000_000L);
+            OhlcvCandle lastCandle = candles.get(candles.size() - 1);
             candles.add(buildFinalCandle(lastCandle, 1.005, 2_000_000L));
 
             SignalResult result = engine.analyze("RELIANCE", candles);
@@ -106,7 +105,7 @@ class PriceActionSignalEngineTest {
         @DisplayName("RSI outside 50-65 -> HOLD")
         void analyze_withRsiOutOfRange_returnsHoldSignal() {
             // Flat/declining series pushes RSI well below 50.
-            List<OhlcvCandleEntity> candles = buildTrendingCandles(300, 100.0, -0.05, 1_000_000L);
+            List<OhlcvCandle> candles = buildTrendingCandles(300, 100.0, -0.05, 1_000_000L);
 
             SignalResult result = engine.analyze("RELIANCE", candles);
 
@@ -118,7 +117,7 @@ class PriceActionSignalEngineTest {
         @Test
         @DisplayName("volume below 1.5x average -> HOLD")
         void analyze_withoutVolumeSurge_returnsHoldSignal() {
-            List<OhlcvCandleEntity> candles = buildTrendingCandles(300, 100.0, 0.15, 1_000_000L);
+            List<OhlcvCandle> candles = buildTrendingCandles(300, 100.0, 0.15, 1_000_000L);
             // No volume bump on the final candle, so the volume-surge rule should fail.
 
             SignalResult result = engine.analyze("RELIANCE", candles);
@@ -129,10 +128,15 @@ class PriceActionSignalEngineTest {
         @Test
         @DisplayName("price far from 52-week high -> HOLD")
         void analyze_withPriceFarFromWeeklyHigh_returnsHoldSignal() {
-            List<OhlcvCandleEntity> candles = buildTrendingCandles(300, 100.0, 0.15, 1_000_000L);
+            List<OhlcvCandle> candles = buildTrendingCandles(300, 100.0, 0.15, 1_000_000L);
             // Crash the final candle well below the accumulated high.
-            OhlcvCandleEntity last = candles.get(candles.size() - 1);
-            setPrices(last, BigDecimal.valueOf(50), BigDecimal.valueOf(51), BigDecimal.valueOf(49), BigDecimal.valueOf(50));
+            OhlcvCandle last = candles.get(candles.size() - 1);
+            OhlcvCandle replaced = OhlcvCandle.of(last.symbol(), last.date(),
+                BigDecimal.valueOf(50), BigDecimal.valueOf(51),
+                BigDecimal.valueOf(49), BigDecimal.valueOf(50), last.volume());
+
+            int idx = candles.indexOf(last);
+            candles.set(idx, replaced);
 
             SignalResult result = engine.analyze("RELIANCE", candles);
 
@@ -145,8 +149,8 @@ class PriceActionSignalEngineTest {
      * Builds a chronologically-ordered (oldest first) synthetic candle series with a
      * constant daily drift percentage, used to control EMA/RSI/trend behavior deterministically.
      */
-    private List<OhlcvCandleEntity> buildTrendingCandles(int count, double startPrice, double dailyDriftPercent, long volume) {
-        List<OhlcvCandleEntity> candles = new ArrayList<>();
+    private List<OhlcvCandle> buildTrendingCandles(int count, double startPrice, double dailyDriftPercent, long volume) {
+        List<OhlcvCandle> candles = new ArrayList<>();
         double price = startPrice;
         LocalDate date = LocalDate.of(2024, 1, 1);
         for (int i = 0; i < count; i++) {
@@ -155,27 +159,15 @@ class PriceActionSignalEngineTest {
             double high = Math.max(open, close) * 1.001;
             double low = Math.min(open, close) * 0.999;
 
-            OhlcvCandleEntity entity = new OhlcvCandleEntity();
-            entity.setSymbol("RELIANCE");
-            entity.setDate(date);
-            setPrices(entity, BigDecimal.valueOf(open), BigDecimal.valueOf(high), BigDecimal.valueOf(low), BigDecimal.valueOf(close));
-            entity.setVolume(volume);
+            OhlcvCandle candle = OhlcvCandle.of("RELIANCE", date,
+                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
+                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
 
-            candles.add(entity);
+            candles.add(candle);
             price = close;
             date = date.plusDays(1);
         }
         return candles;
-    }
-
-    private void bumpFinalCandle(List<OhlcvCandleEntity> candles, double priceMultiplier, long volume) {
-        OhlcvCandleEntity last = candles.get(candles.size() - 1);
-        BigDecimal open = last.getOpenPrice();
-        BigDecimal close = last.getClosePrice().multiply(BigDecimal.valueOf(priceMultiplier));
-        BigDecimal high = close.multiply(BigDecimal.valueOf(1.001));
-        BigDecimal low = open.multiply(BigDecimal.valueOf(0.999));
-        setPrices(last, open, high, low, close);
-        last.setVolume(volume);
     }
 
     /**
@@ -184,9 +176,9 @@ class PriceActionSignalEngineTest {
      * (roughly 55-60 for the up/down magnitudes used in these tests) instead of pegging
      * near 100 like a monotonic rise would.
      */
-    private List<OhlcvCandleEntity> buildZigzagUptrendCandles(int count, double startPrice,
+    private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
                                                                double upPercent, double downPercent, long volume) {
-        List<OhlcvCandleEntity> candles = new ArrayList<>();
+        List<OhlcvCandle> candles = new ArrayList<>();
         double price = startPrice;
         LocalDate date = LocalDate.of(2024, 1, 1);
         for (int i = 0; i < count; i++) {
@@ -196,13 +188,11 @@ class PriceActionSignalEngineTest {
             double high = Math.max(open, close) * 1.001;
             double low = Math.min(open, close) * 0.999;
 
-            OhlcvCandleEntity entity = new OhlcvCandleEntity();
-            entity.setSymbol("RELIANCE");
-            entity.setDate(date);
-            setPrices(entity, BigDecimal.valueOf(open), BigDecimal.valueOf(high), BigDecimal.valueOf(low), BigDecimal.valueOf(close));
-            entity.setVolume(volume);
+            OhlcvCandle candle = OhlcvCandle.of("RELIANCE", date,
+                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
+                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
 
-            candles.add(entity);
+            candles.add(candle);
             price = close;
             date = date.plusDays(1);
         }
@@ -213,24 +203,14 @@ class PriceActionSignalEngineTest {
      * Builds a single final candle that closes {@code closeMultiplier}x above the previous
      * candle's close, on the given volume, dated the day after it.
      */
-    private OhlcvCandleEntity buildFinalCandle(OhlcvCandleEntity previous, double closeMultiplier, long volume) {
-        BigDecimal previousClose = previous.getClosePrice();
+    private OhlcvCandle buildFinalCandle(OhlcvCandle previous, double closeMultiplier, long volume) {
+        BigDecimal previousClose = previous.close();
         BigDecimal close = previousClose.multiply(BigDecimal.valueOf(closeMultiplier));
         BigDecimal high = close.multiply(BigDecimal.valueOf(1.001));
         BigDecimal low = previousClose.multiply(BigDecimal.valueOf(0.999));
 
-        OhlcvCandleEntity entity = new OhlcvCandleEntity();
-        entity.setSymbol("RELIANCE");
-        entity.setDate(previous.getDate().plusDays(1));
-        setPrices(entity, previousClose, high, low, close);
-        entity.setVolume(volume);
-        return entity;
-    }
-
-    private void setPrices(OhlcvCandleEntity entity, BigDecimal open, BigDecimal high, BigDecimal low, BigDecimal close) {
-        entity.setOpenPrice(open);
-        entity.setHighPrice(high);
-        entity.setLowPrice(low);
-        entity.setClosePrice(close);
+        OhlcvCandle candle = OhlcvCandle.of("RELIANCE", previous.date().plusDays(1),
+            previousClose, high, low, close, volume);
+        return candle;
     }
 }

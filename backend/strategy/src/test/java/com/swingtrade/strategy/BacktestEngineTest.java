@@ -1,9 +1,9 @@
 package com.swingtrade.strategy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.repository.OhlcvCandleRepository;
-import com.swingtrade.data.service.WatchlistService;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.WatchlistStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,17 +31,17 @@ class BacktestEngineTest {
     private static final String EXCHANGE = "NSE";
 
     @Mock
-    private OhlcvCandleRepository candleRepository;
+    private CandleStore candleStore;
 
     @Mock
-    private WatchlistService watchlistService;
+    private WatchlistStore watchlistStore;
 
     private BacktestEngine engine;
 
     @BeforeEach
     void setUp() {
-        PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleRepository);
-        engine = new BacktestEngine(candleRepository, watchlistService, priceActionSignalEngine,
+        PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
+        engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
             new ObjectMapper(), "target/test-reports");
     }
 
@@ -64,7 +64,7 @@ class BacktestEngineTest {
 
         @Test
         void runBacktest_withInsufficientCandles_throwsIllegalStateException() {
-            List<OhlcvCandleEntity> tooFew = buildTrendingCandles(30, 100.0, 0.0, 1_000_000L);
+            List<OhlcvCandle> tooFew = buildTrendingCandles(30, 100.0, 0.0, 1_000_000L);
             stub(tooFew);
 
             assertThatThrownBy(() -> engine.runBacktest(SYMBOL, EXCHANGE, BacktestConfig.defaults()))
@@ -79,7 +79,7 @@ class BacktestEngineTest {
         @Test
         @DisplayName("all entry rules satisfied -> a trade opens on the next day's open")
         void entrySignal_opensTradeAtNextOpen() {
-            List<OhlcvCandleEntity> candles = buildEntrySetupCandles();
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
             appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
             stub(candles);
 
@@ -95,7 +95,7 @@ class BacktestEngineTest {
         @Test
         @DisplayName("price crashes through the ATR stop -> STOP_LOSS exit at the stop price")
         void stopLossExit() {
-            List<OhlcvCandleEntity> candles = buildEntrySetupCandles();
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
             BigDecimal entry = entryPrice(candles);
             appendCandle(candles, entry, entry, entry.multiply(BigDecimal.valueOf(0.75)), entry.multiply(BigDecimal.valueOf(0.80)), 1_000_000L);
 
@@ -113,7 +113,7 @@ class BacktestEngineTest {
         @Test
         @DisplayName("price rallies through the target -> TARGET_HIT exit at the target price")
         void targetHitExit() {
-            List<OhlcvCandleEntity> candles = buildEntrySetupCandles();
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
             BigDecimal entry = entryPrice(candles);
             appendCandle(candles, entry, entry.multiply(BigDecimal.valueOf(1.60)), entry, entry.multiply(BigDecimal.valueOf(1.50)), 1_000_000L);
 
@@ -131,7 +131,7 @@ class BacktestEngineTest {
         @Test
         @DisplayName("position held flat past maxHoldingDays -> TIME_STOP exit at close")
         void timeStopExit() {
-            List<OhlcvCandleEntity> candles = buildEntrySetupCandles();
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
             appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
 
             stub(candles);
@@ -147,7 +147,7 @@ class BacktestEngineTest {
         @Test
         @DisplayName("close stays below EMA20 for 2 consecutive days -> TREND_BREAK exit")
         void trendBreakExit() {
-            List<OhlcvCandleEntity> candles = buildEntrySetupCandles();
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
             BigDecimal entry = entryPrice(candles);
             BigDecimal day1Close = entry.multiply(BigDecimal.valueOf(0.95));
             appendCandle(candles, entry, entry.multiply(BigDecimal.valueOf(1.001)), entry.multiply(BigDecimal.valueOf(0.94)), day1Close, 1_000_000L);
@@ -169,7 +169,7 @@ class BacktestEngineTest {
         @Test
         @DisplayName("no second position opens while one is already open for the symbol")
         void onlyOnePositionAtATime() {
-            List<OhlcvCandleEntity> candles = buildEntrySetupCandles();
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
             BigDecimal entry = entryPrice(candles);
             // Repeat high-volume, at-the-high conditions while flat in price: these would
             // qualify as a fresh entry signal if a position weren't already open.
@@ -186,7 +186,7 @@ class BacktestEngineTest {
         @Test
         @DisplayName("position size follows capital * riskPerTradePct / (entry - stopLoss)")
         void positionSizingMatchesRiskFormula() {
-            List<OhlcvCandleEntity> candles = buildEntrySetupCandles();
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
             appendFlatCandles(candles, 3, entryPrice(candles), 1_000_000L);
 
             stub(candles);
@@ -201,14 +201,140 @@ class BacktestEngineTest {
         }
     }
 
+    @Nested
+    @DisplayName("Config parameter tests")
+    class ConfigParameters {
+
+        @Test
+        @DisplayName("slippageAffectsEntryPrice — entryPrice = nextOpen × (1 + slippagePct)")
+        void slippageAffectsEntryPrice() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
+            stub(candles);
+
+            BacktestConfig config = new BacktestConfig(0.005, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 5);
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
+
+            assertThat(result.trades()).isNotEmpty();
+            BacktestTrade trade = result.trades().get(0);
+            BigDecimal expectedEntry = entryPrice(candles).multiply(BigDecimal.valueOf(1.005));
+            assertThat(trade.entryPrice()).isEqualByComparingTo(expectedEntry);
+        }
+
+        @Test
+        @DisplayName("brokerageReducesNetPnl — netPnl = grossPnl - brokeragePerTrade")
+        void brokerageReducesNetPnl() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            BigDecimal entry = entryPrice(candles);
+            // Add a candle that hits the target so we get a winning trade
+            appendCandle(candles, entry, entry.multiply(BigDecimal.valueOf(1.60)), entry, entry.multiply(BigDecimal.valueOf(1.50)), 1_000_000L);
+
+            stub(candles);
+            BacktestConfig config = new BacktestConfig(0.0, 20.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20);
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
+
+            assertThat(result.trades()).hasSize(1);
+            BacktestTrade trade = result.trades().get(0);
+            // Gross PnL = (exitPrice - entryPrice) × quantity
+            BigDecimal grossPnl = trade.exitPrice().subtract(trade.entryPrice()).multiply(BigDecimal.valueOf(trade.quantity()));
+            double expectedPnl = grossPnl.doubleValue() - 20.0;
+            assertThat(trade.pnl()).isCloseTo(expectedPnl, within(0.01));
+        }
+
+        @Test
+        @DisplayName("forcedCloseAtLastBar — position open at last candle exits at close price")
+        void forcedCloseAtLastBar() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            BigDecimal entry = entryPrice(candles);
+            // Add exactly 1 flat candle after entry so entry is on second-to-last bar
+            appendFlatCandles(candles, 1, entry, 1_000_000L);
+
+            stub(candles);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20);
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
+
+            assertThat(result.trades()).hasSize(1);
+            BacktestTrade trade = result.trades().get(0);
+            // The forced close uses the last candle's close price
+            OhlcvCandle lastCandle = candles.get(candles.size() - 1);
+            assertThat(trade.exitPrice()).isEqualByComparingTo(lastCandle.close());
+        }
+
+        @Test
+        @DisplayName("metrics_include_sharpe_drawdown_expectancy — all metrics non-zero when trades exist")
+        void metricsIncludeSharpeDrawdownExpectancy() {
+            // Build candles that produce 3+ trades with mixed wins/losses
+            List<OhlcvCandle> candles = new ArrayList<>();
+            double price = 100.0;
+            LocalDate date = LocalDate.of(2024, 1, 1);
+            // Create 3 entry setups spread across the candle series
+            for (int cycle = 0; cycle < 3; cycle++) {
+                // Zigzag uptrend to build indicators
+                candles.addAll(buildZigzagUptrendCandles(60, 100.0 + cycle * 10, 0.5, 0.75, 1_000_000L));
+                // Volume bump to trigger entry
+                OhlcvCandle last = candles.get(candles.size() - 1);
+                BigDecimal bumpClose = last.close().multiply(BigDecimal.valueOf(1.005));
+                candles.add(OhlcvCandle.of(SYMBOL, last.date().plusDays(1),
+                    last.close(), bumpClose.multiply(BigDecimal.valueOf(1.001)),
+                    bumpClose.multiply(BigDecimal.valueOf(0.999)), bumpClose, 2_000_000L));
+                // Entry execution day
+                OhlcvCandle entryDay = candles.get(candles.size() - 1);
+                BigDecimal entryPrice = entryDay.close();
+                candles.add(OhlcvCandle.of(SYMBOL, entryDay.date().plusDays(1),
+                    entryPrice, entryPrice.multiply(BigDecimal.valueOf(1.001)),
+                    entryPrice.multiply(BigDecimal.valueOf(0.999)), entryPrice, 1_000_000L));
+                // Add exit: alternate between target hit and stop loss
+                if (cycle % 2 == 0) {
+                    // Winning trade: target hit
+                    BigDecimal winPrice = entryPrice.multiply(BigDecimal.valueOf(1.05));
+                    candles.add(OhlcvCandle.of(SYMBOL, entryDay.date().plusDays(2),
+                        entryPrice, winPrice, entryPrice, winPrice, 1_000_000L));
+                } else {
+                    // Losing trade: crash through stop loss
+                    BigDecimal lossPrice = entryPrice.multiply(BigDecimal.valueOf(0.90));
+                    candles.add(OhlcvCandle.of(SYMBOL, entryDay.date().plusDays(2),
+                        entryPrice, entryPrice, lossPrice, lossPrice, 1_000_000L));
+                }
+                // Flat period between cycles
+                OhlcvCandle prev = candles.get(candles.size() - 1);
+                candles.add(OhlcvCandle.of(SYMBOL, prev.date().plusDays(1),
+                    prev.close(), prev.close(), prev.close(), prev.close(), 1_000_000L));
+            }
+
+            stub(candles);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20);
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
+
+            assertThat(result.totalTrades()).isGreaterThan(2);
+            assertThat(result.sharpeRatio()).isGreaterThan(0.0);
+            assertThat(result.maxDrawdownPct()).isGreaterThan(0.0);
+            assertThat(result.expectancy()).isNotEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("positionSizing_respects_maxHoldingDays — position closes at exactly maxHoldingDays bars")
+        void positionSizingRespectsMaxHoldingDays() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            appendFlatCandles(candles, 10, entryPrice(candles), 1_000_000L);
+
+            stub(candles);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 3);
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
+
+            assertThat(result.trades()).isNotEmpty();
+            BacktestTrade trade = result.trades().get(0);
+            assertThat(trade.holdingDays()).isEqualTo(3);
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Test fixtures
     // -----------------------------------------------------------------------
 
-    private void stub(List<OhlcvCandleEntity> chronologicalCandles) {
-        List<OhlcvCandleEntity> descending = new ArrayList<>(chronologicalCandles);
+    private void stub(List<OhlcvCandle> chronologicalCandles) {
+        List<OhlcvCandle> descending = new ArrayList<>(chronologicalCandles);
         Collections.reverse(descending);
-        when(candleRepository.findAllBySymbolOrderByDateDesc(SYMBOL)).thenReturn(descending);
+        when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 1000)).thenReturn(descending);
     }
 
     /**
@@ -218,42 +344,38 @@ class BacktestEngineTest {
      * day whose open equals the bump's close (used with slippagePct=0.0 in tests as the exact
      * entry price).
      */
-    private List<OhlcvCandleEntity> buildEntrySetupCandles() {
-        List<OhlcvCandleEntity> candles = buildZigzagUptrendCandles(299, 100.0, 0.5, 0.75, 1_000_000L);
-        OhlcvCandleEntity lastZigzag = candles.get(candles.size() - 1);
-        OhlcvCandleEntity bump = buildFinalCandle(lastZigzag, 1.005, 2_000_000L);
+    private List<OhlcvCandle> buildEntrySetupCandles() {
+        List<OhlcvCandle> candles = buildZigzagUptrendCandles(299, 100.0, 0.5, 0.75, 1_000_000L);
+        OhlcvCandle lastZigzag = candles.get(candles.size() - 1);
+        OhlcvCandle bump = buildFinalCandle(lastZigzag, 1.005, 2_000_000L);
         candles.add(bump);
 
-        BigDecimal bumpClose = bump.getClosePrice();
+        BigDecimal bumpClose = bump.close();
         appendCandle(candles, bumpClose, bumpClose.multiply(BigDecimal.valueOf(1.001)),
             bumpClose.multiply(BigDecimal.valueOf(0.999)), bumpClose, 1_000_000L);
         return candles;
     }
 
     /** The next-day-open entry price used with slippagePct=0.0 (equal to the entry day's open). */
-    private BigDecimal entryPrice(List<OhlcvCandleEntity> candlesFromBuildEntrySetup) {
-        return candlesFromBuildEntrySetup.get(300).getOpenPrice();
+    private BigDecimal entryPrice(List<OhlcvCandle> candlesFromBuildEntrySetup) {
+        return candlesFromBuildEntrySetup.get(300).open();
     }
 
-    private void appendFlatCandles(List<OhlcvCandleEntity> candles, int count, BigDecimal price, long volume) {
+    private void appendFlatCandles(List<OhlcvCandle> candles, int count, BigDecimal price, long volume) {
         for (int i = 0; i < count; i++) {
             appendCandle(candles, price, price, price, price, volume);
         }
     }
 
-    private void appendCandle(List<OhlcvCandleEntity> candles, BigDecimal open, BigDecimal high,
+    private void appendCandle(List<OhlcvCandle> candles, BigDecimal open, BigDecimal high,
                                BigDecimal low, BigDecimal close, long volume) {
-        OhlcvCandleEntity previous = candles.get(candles.size() - 1);
-        OhlcvCandleEntity entity = new OhlcvCandleEntity();
-        entity.setSymbol(SYMBOL);
-        entity.setDate(previous.getDate().plusDays(1));
-        setPrices(entity, open, high, low, close);
-        entity.setVolume(volume);
-        candles.add(entity);
+        OhlcvCandle previous = candles.get(candles.size() - 1);
+        OhlcvCandle candle = OhlcvCandle.of(SYMBOL, previous.date().plusDays(1), open, high, low, close, volume);
+        candles.add(candle);
     }
 
-    private List<OhlcvCandleEntity> buildTrendingCandles(int count, double startPrice, double dailyDriftPercent, long volume) {
-        List<OhlcvCandleEntity> candles = new ArrayList<>();
+    private List<OhlcvCandle> buildTrendingCandles(int count, double startPrice, double dailyDriftPercent, long volume) {
+        List<OhlcvCandle> candles = new ArrayList<>();
         double price = startPrice;
         LocalDate date = LocalDate.of(2024, 1, 1);
         for (int i = 0; i < count; i++) {
@@ -262,22 +384,20 @@ class BacktestEngineTest {
             double high = Math.max(open, close) * 1.001;
             double low = Math.min(open, close) * 0.999;
 
-            OhlcvCandleEntity entity = new OhlcvCandleEntity();
-            entity.setSymbol(SYMBOL);
-            entity.setDate(date);
-            setPrices(entity, BigDecimal.valueOf(open), BigDecimal.valueOf(high), BigDecimal.valueOf(low), BigDecimal.valueOf(close));
-            entity.setVolume(volume);
+            OhlcvCandle candle = OhlcvCandle.of(SYMBOL, date,
+                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
+                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
 
-            candles.add(entity);
+            candles.add(candle);
             price = close;
             date = date.plusDays(1);
         }
         return candles;
     }
 
-    private List<OhlcvCandleEntity> buildZigzagUptrendCandles(int count, double startPrice,
+    private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
                                                                double upPercent, double downPercent, long volume) {
-        List<OhlcvCandleEntity> candles = new ArrayList<>();
+        List<OhlcvCandle> candles = new ArrayList<>();
         double price = startPrice;
         LocalDate date = LocalDate.of(2024, 1, 1);
         for (int i = 0; i < count; i++) {
@@ -287,37 +407,25 @@ class BacktestEngineTest {
             double high = Math.max(open, close) * 1.001;
             double low = Math.min(open, close) * 0.999;
 
-            OhlcvCandleEntity entity = new OhlcvCandleEntity();
-            entity.setSymbol(SYMBOL);
-            entity.setDate(date);
-            setPrices(entity, BigDecimal.valueOf(open), BigDecimal.valueOf(high), BigDecimal.valueOf(low), BigDecimal.valueOf(close));
-            entity.setVolume(volume);
+            OhlcvCandle candle = OhlcvCandle.of(SYMBOL, date,
+                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
+                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
 
-            candles.add(entity);
+            candles.add(candle);
             price = close;
             date = date.plusDays(1);
         }
         return candles;
     }
 
-    private OhlcvCandleEntity buildFinalCandle(OhlcvCandleEntity previous, double closeMultiplier, long volume) {
-        BigDecimal previousClose = previous.getClosePrice();
+    private OhlcvCandle buildFinalCandle(OhlcvCandle previous, double closeMultiplier, long volume) {
+        BigDecimal previousClose = previous.close();
         BigDecimal close = previousClose.multiply(BigDecimal.valueOf(closeMultiplier));
         BigDecimal high = close.multiply(BigDecimal.valueOf(1.001));
         BigDecimal low = previousClose.multiply(BigDecimal.valueOf(0.999));
 
-        OhlcvCandleEntity entity = new OhlcvCandleEntity();
-        entity.setSymbol(SYMBOL);
-        entity.setDate(previous.getDate().plusDays(1));
-        setPrices(entity, previousClose, high, low, close);
-        entity.setVolume(volume);
-        return entity;
-    }
-
-    private void setPrices(OhlcvCandleEntity entity, BigDecimal open, BigDecimal high, BigDecimal low, BigDecimal close) {
-        entity.setOpenPrice(open);
-        entity.setHighPrice(high);
-        entity.setLowPrice(low);
-        entity.setClosePrice(close);
+        OhlcvCandle candle = OhlcvCandle.of(SYMBOL, previous.date().plusDays(1),
+            previousClose, high, low, close, volume);
+        return candle;
     }
 }

@@ -35,6 +35,7 @@ import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.indicators.helpers.HighPriceIndicator;
 import org.ta4j.core.indicators.helpers.HighestValueIndicator;
 import org.ta4j.core.indicators.helpers.VolumeIndicator;
+import org.ta4j.core.num.DecimalNum;
 import org.ta4j.core.num.Num;
 
 import java.math.BigDecimal;
@@ -174,7 +175,7 @@ public class PriceActionSignalEngine {
     }
 
     BarSeries buildBarSeries(String symbol, List<OhlcvCandle> chronologicalCandles) {
-        BarSeries series = new BaseBarSeries(symbol);
+        BarSeries series = new BaseBarSeries(symbol, DecimalNum.valueOf(0));
         for (OhlcvCandle candle : chronologicalCandles) {
             ZonedDateTime endTime = candle.date().atStartOfDay(MARKET_ZONE);
             Long volume = candle.volume();
@@ -193,7 +194,7 @@ public class PriceActionSignalEngine {
     }
 
     private BigDecimal numToBigDecimal(Num value) {
-        return BigDecimal.valueOf(value.doubleValue());
+        return (BigDecimal) value.getDelegate();
     }
 
     private String fmt(BigDecimal value) {
