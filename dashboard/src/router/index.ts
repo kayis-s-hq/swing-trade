@@ -60,6 +60,11 @@ const router = createRouter({
       component: () => import('../views/SettingsView.vue'),
     },
     {
+      path: '/orchestrator',
+      name: 'Orchestrator',
+      component: () => import('../views/OrchestratorView.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
       component: () => import('../views/NotFoundView.vue'),

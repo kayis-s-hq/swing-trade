@@ -31,7 +31,7 @@ class PositionTest {
         @Test
         void shouldCreatePositionWithDefaultConstructor() {
             Position position = Position.of(
-                1L,
+                1L, "PAPER",
                 "RELIANCE",
                 ENTRY_PRICE,
                 ENTRY_DATE,
@@ -61,7 +61,7 @@ class PositionTest {
         @Test
         void shouldCreatePositionWithNullId() {
             Position position = Position.of(
-                null,
+                null, "PAPER",
                 "TCS",
                 BigDecimal.valueOf(1500.00),
                 ENTRY_DATE,
@@ -391,7 +391,7 @@ class PositionTest {
         @Test
         void shouldReturnTrueForOpenPositionIsOpen() {
             openPosition = Position.of(
-                1L,
+                1L, "PAPER",
                 "RELIANCE",
                 ENTRY_PRICE,
                 ENTRY_DATE,
@@ -413,7 +413,7 @@ class PositionTest {
         @Test
         void shouldReturnFalseForClosedPositionIsOpen() {
             closedPosition = Position.of(
-                1L,
+                1L, "PAPER",
                 "RELIANCE",
                 ENTRY_PRICE,
                 ENTRY_DATE,
@@ -435,7 +435,7 @@ class PositionTest {
         @Test
         void shouldReturnFalseForStoppedPositionIsOpen() {
             stoppedPosition = Position.of(
-                1L,
+                1L, "PAPER",
                 "RELIANCE",
                 ENTRY_PRICE,
                 ENTRY_DATE,
@@ -457,7 +457,7 @@ class PositionTest {
         @Test
         void shouldReturnFalseForTargetHitPositionIsOpen() {
             targetHitPosition = Position.of(
-                1L,
+                1L, "PAPER",
                 "RELIANCE",
                 ENTRY_PRICE,
                 ENTRY_DATE,
@@ -595,12 +595,12 @@ class PositionTest {
 
         @Test
         void shouldReturnTrueWhenBothNull() {
-            position1 = Position.of(null, "RELIANCE", ENTRY_PRICE, ENTRY_DATE, QUANTITY,
+            position1 = Position.of(null, "PAPER", "RELIANCE", ENTRY_PRICE, ENTRY_DATE, QUANTITY,
                 EXPECTED_STOP_LOSS, EXPECTED_TARGET, PositionStatus.OPEN, ENTRY_REASON, ENTRY_PRICE,
                 null, null, null, TradeDirection.LONG,
                 null, null, null, null,
                 null, null, null, null);
-            position2 = Position.of(null, "RELIANCE", ENTRY_PRICE, ENTRY_DATE, QUANTITY,
+            position2 = Position.of(null, "PAPER", "RELIANCE", ENTRY_PRICE, ENTRY_DATE, QUANTITY,
                 EXPECTED_STOP_LOSS, EXPECTED_TARGET, PositionStatus.OPEN, ENTRY_REASON, ENTRY_PRICE,
                 null, null, null, TradeDirection.LONG,
                 null, null, null, null,

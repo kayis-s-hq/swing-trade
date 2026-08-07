@@ -169,6 +169,13 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
     );
 
     /**
+     * Deletes all signals for a specific symbol and date.
+     */
+    @Modifying
+    @Query("DELETE FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date")
+    int deleteBySymbolAndDate(@Param("symbol") String symbol, @Param("date") LocalDate date);
+
+    /**
      * Deletes all signals for a specific date.
      */
     @Modifying

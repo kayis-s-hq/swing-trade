@@ -225,7 +225,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   getSentimentLatest,
   getSentimentHistory,
@@ -246,6 +247,8 @@ import SentimentTimeline from '../components/SentimentTimeline.vue'
 import ArticleBrowser from '../components/ArticleBrowser.vue'
 import AnalysisAccordion from '../components/AnalysisAccordion.vue'
 
+const route = useRoute()
+
 const tabs = [
   { key: 'overview', label: 'Overview' },
   { key: 'news', label: 'News' },
@@ -254,6 +257,17 @@ const tabs = [
 const activeTab = ref('overview')
 
 const symbolInput = ref('RELIANCE')
+
+// Pre-fill symbol from query param (e.g. when navigating from SignalCard)
+onMounted(async () => {
+  const symbol = route.query.symbol as string | undefined
+  if (symbol) {
+    await nextTick()
+    symbolInput.value = symbol.toUpperCase()
+  }
+  const wr = await getWatchlist()
+  if (wr.success && wr.data) watchlistSymbols.value = wr.data
+})
 const loading = ref(false)
 const error = ref('')
 const sentiment = ref<SentimentResult | null>(null)
@@ -380,9 +394,4 @@ const loadNews = async () => {
     newsLoading.value = false
   }
 }
-
-onMounted(async () => {
-  const wr = await getWatchlist()
-  if (wr.success && wr.data) watchlistSymbols.value = wr.data
-})
 </script>

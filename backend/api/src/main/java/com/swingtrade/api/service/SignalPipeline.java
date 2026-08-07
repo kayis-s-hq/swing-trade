@@ -90,17 +90,17 @@ public class SignalPipeline {
 
         LocalDate latestDate = chronologicalCandles.get(chronologicalCandles.size() - 1).date();
 
-        if (persistenceService.existsForDate(symbol, latestDate)) {
-            logger.debug("Signal already exists for {} on {}", symbol, latestDate);
-            return java.util.Optional.empty();
-        }
+        // Clear any stale processed signals for this symbol/date so retries can regenerate
+        persistenceService.deleteBySymbolAndDate(symbol, latestDate);
 
         Signal signal = swingStrategy.analyze(chronologicalCandles);
 
         SentimentGate.SentimentVerdict verdict = SentimentGate.SentimentVerdict.allow();
         String sentimentScore = null;
+        String sentimentReasoning = null;
         if (signal.type() == Signal.SignalType.BUY) {
             verdict = sentimentGate.evaluate(symbol, latestDate);
+            sentimentReasoning = verdict.reason();
             if (verdict.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
                 return java.util.Optional.empty();
             }
@@ -117,7 +117,7 @@ public class SignalPipeline {
         String warningFlag = warningFlag(signal, latestDate);
         Signal saved = persistenceService.buildAndSaveWithWarning(
                 symbol, latestDate, signal.type(), signal.confidence(),
-                indicators, indicators, atr, warningFlag, sentimentScore);
+                indicators, indicators, atr, warningFlag, sentimentScore, sentimentReasoning);
 
         logger.info("Generated {} signal for {} on {} (confidence: {}%, warning: {})",
                 signal.type(), symbol, latestDate,
@@ -146,8 +146,10 @@ public class SignalPipeline {
 
         SentimentGate.SentimentVerdict verdict = SentimentGate.SentimentVerdict.allow();
         String sentimentScore = null;
+        String sentimentReasoning = null;
         if (result.type() == Signal.SignalType.BUY) {
             verdict = sentimentGate.evaluate(symbol, result.date());
+            sentimentReasoning = verdict.reason();
             if (verdict.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
                 return java.util.Optional.empty();
             }
@@ -166,11 +168,19 @@ public class SignalPipeline {
         BigDecimal atr = BigDecimal.valueOf(result.atr());
         String indicators = buildPriceActionIndicators(result);
 
-        Signal saved = persistenceService.buildAndSave(
-                baseSignal, null, null, null, null, indicators, sentimentScore);
+        // Calculate risk params upfront so they are saved in a single DB write
+        OhlcvCandle latestCandle = candleStore.findLatestBySymbol(result.symbol()).orElse(null);
+        BigDecimal entryPrice = null, stopLoss = null, target = null, riskReward = null;
+        if (latestCandle != null && latestCandle.close() != null) {
+            BigDecimal closePrice = latestCandle.close();
+            stopLoss = RiskCalculator.calculateStopLoss(closePrice, atr);
+            target = RiskCalculator.calculateTarget(closePrice, atr);
+            riskReward = RiskCalculator.calculateRiskReward(stopLoss, target, closePrice);
+            entryPrice = closePrice;
+        }
 
-        // Override the ATR-based risk params with the price-action engine's ATR
-        saved = overrideRiskParams(saved, result, sentimentScore);
+        Signal saved = persistenceService.buildAndSave(
+                baseSignal, entryPrice, stopLoss, target, riskReward, indicators, sentimentScore, sentimentReasoning);
 
         logger.info("Generated {} price-action signal for {} on {}", result.type(), result.symbol(), result.date());
 
@@ -209,46 +219,4 @@ public class SignalPipeline {
         }
     }
 
-    /**
-     * Overrides the risk parameters on a signal with explicit values.
-     * Used by the price-action pipeline to inject its own ATR-based values.
-     */
-    private Signal overrideRiskParams(Signal signal, SignalResult result, String sentimentScore) {
-        OhlcvCandle latestCandle = candleStore.findLatestBySymbol(signal.symbol()).orElse(null);
-        if (latestCandle == null || latestCandle.close() == null) {
-            return new Signal(
-                    signal.id(),
-                    signal.symbol(),
-                    signal.date(),
-                    signal.type(),
-                    signal.confidence(),
-                    signal.reasoning(),
-                    null, null, null, null,
-                    signal.indicators(),
-                    signal.generatedAt(),
-                    sentimentScore
-            );
-        }
-        BigDecimal closePrice = latestCandle.close();
-        BigDecimal atr = BigDecimal.valueOf(result.atr());
-        BigDecimal stopLoss = RiskCalculator.calculateStopLoss(closePrice, atr);
-        BigDecimal target = RiskCalculator.calculateTarget(closePrice, atr);
-        BigDecimal riskReward = RiskCalculator.calculateRiskReward(stopLoss, target, closePrice);
-
-        return new Signal(
-                signal.id(),
-                signal.symbol(),
-                signal.date(),
-                signal.type(),
-                signal.confidence(),
-                signal.reasoning(),
-                closePrice,
-                stopLoss,
-                target,
-                riskReward,
-                signal.indicators(),
-                signal.generatedAt(),
-                sentimentScore
-        );
     }
-}

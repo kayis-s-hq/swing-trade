@@ -35,6 +35,7 @@ import java.util.List;
  */
 public record Position(
     Long id,
+    String brokerType,
     String symbol,
     BigDecimal entryPrice,
     LocalDate entryDate,
@@ -61,6 +62,7 @@ public record Position(
 
     // Compact constructor: fills broker-enriched defaults when not provided
     public Position {
+        if (brokerType == null) brokerType = "PAPER";
         if (positionId == null && id != null) {
             positionId = "POS_" + String.format("%08d", id);
         }
@@ -99,7 +101,7 @@ public record Position(
         BigDecimal target = entryPrice.add(risk.multiply(BigDecimal.valueOf(2.5)));
 
         return new Position(
-            null,
+            null, null,
             symbol,
             entryPrice,
             entryDate,
@@ -121,6 +123,7 @@ public record Position(
      */
     public static Position of(
         Long id,
+        String brokerType,
         String symbol,
         BigDecimal entryPrice,
         LocalDate entryDate,
@@ -144,7 +147,7 @@ public record Position(
         List<Order> orders
     ) {
         return new Position(
-            id, symbol, entryPrice, entryDate, quantity,
+            id, brokerType, symbol, entryPrice, entryDate, quantity,
             stopLoss, target, status, entryReason, currentPrice,
             positionId, brokerPositionId, exchange, direction,
             averagePrice, unrealizedPnL, realizedPnL, marginUtilized,

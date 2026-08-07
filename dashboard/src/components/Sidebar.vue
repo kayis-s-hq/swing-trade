@@ -157,6 +157,7 @@ const navItems = [
   { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
   { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
   { path: '/data', label: 'Data', icon: iconPaths.data, badge: undefined },
+  { path: '/orchestrator', label: 'Orchestrator', icon: iconPaths.dashboard, badge: undefined },
   { path: '/settings', label: 'Settings', icon: iconPaths.settings, badge: undefined },
 ]
 </script>

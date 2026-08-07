@@ -22,4 +22,6 @@ public interface PositionStore {
     Position save(Position position);
 
     boolean existsOpenBySymbol(String symbol);
+
+    List<Position> findByBrokerType(String brokerType);
 }

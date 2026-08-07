@@ -107,6 +107,12 @@ public class SignalStoreImpl implements SignalStore {
 
     @Override
     @Transactional
+    public int deleteBySymbolAndDate(String symbol, LocalDate date) {
+        return repository.deleteBySymbolAndDate(symbol, date);
+    }
+
+    @Override
+    @Transactional
     public int deleteByDate(LocalDate date) {
         return repository.deleteByDate(date);
     }

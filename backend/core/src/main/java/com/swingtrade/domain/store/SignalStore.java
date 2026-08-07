@@ -44,6 +44,15 @@ public interface SignalStore {
     List<Signal> findBuySignalsSince(LocalDate sinceDate);
 
     /**
+     * Deletes all signals for a given symbol and date. Used to clear stale processed signals before regeneration.
+     *
+     * @param symbol the stock symbol
+     * @param date the signal date
+     * @return number of signals deleted
+     */
+    int deleteBySymbolAndDate(String symbol, LocalDate date);
+
+    /**
      * Deletes all signals for a given date. Used to clear stale signals before regeneration.
      *
      * @param date the signal date

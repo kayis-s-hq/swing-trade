@@ -16,7 +16,7 @@ public class PaperTradingProperties {
     private boolean enabled = true;
     private int maxConcurrentPositions = 5;
     private BigDecimal maxCapitalPerPosition = BigDecimal.valueOf(20);
-    private BigDecimal initialBalance = BigDecimal.valueOf(500000);
+    private BigDecimal initialBalance = BigDecimal.valueOf(1000000);
     private long signalExecutionDelay = 30000;
     private boolean positionSizeLimitsEnabled = true;
     private int positionSizeAlertThreshold = 80;

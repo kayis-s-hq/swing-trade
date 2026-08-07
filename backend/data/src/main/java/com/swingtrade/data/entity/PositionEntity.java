@@ -33,6 +33,9 @@ public class PositionEntity {
     @Column(nullable = false, length = 10)
     private String symbol;
 
+    @Column(name = "broker_type", length = 10, nullable = false, columnDefinition = "VARCHAR(10) DEFAULT 'PAPER'")
+    private String brokerType = "PAPER";
+
     @Column(name = "entry_price", nullable = false, precision = 15)
     private BigDecimal entryPrice;
 
@@ -101,6 +104,7 @@ public class PositionEntity {
 
     public PositionEntity(Position position) {
         this.symbol = position.symbol();
+        this.brokerType = position.brokerType() != null ? position.brokerType() : "PAPER";
         this.entryPrice = position.entryPrice();
         this.entryDate = position.entryDate();
         this.quantity = position.quantity();
@@ -126,6 +130,7 @@ public class PositionEntity {
         PositionEntity entity = new PositionEntity();
         entity.setId(position.id());
         entity.setSymbol(position.symbol());
+        entity.setBrokerType(position.brokerType() != null ? position.brokerType() : "PAPER");
         entity.setEntryPrice(position.entryPrice());
         entity.setEntryDate(position.entryDate());
         entity.setQuantity(position.quantity());
@@ -150,7 +155,7 @@ public class PositionEntity {
 
     public Position toDomain() {
         return Position.of(
-            id,
+            id, brokerType,
             symbol,
             entryPrice,
             entryDate,
@@ -180,6 +185,8 @@ public class PositionEntity {
     public void setId(Long id) { this.id = id; }
     public String getSymbol() { return symbol; }
     public void setSymbol(String symbol) { this.symbol = symbol; }
+    public String getBrokerType() { return brokerType; }
+    public void setBrokerType(String brokerType) { this.brokerType = brokerType; }
     public BigDecimal getEntryPrice() { return entryPrice; }
     public void setEntryPrice(BigDecimal entryPrice) { this.entryPrice = entryPrice; }
     public LocalDate getEntryDate() { return entryDate; }

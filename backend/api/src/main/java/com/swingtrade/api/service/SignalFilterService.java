@@ -8,7 +8,6 @@ import com.swingtrade.domain.Signal;
 import com.swingtrade.llm.service.SentimentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -71,8 +70,9 @@ public class SignalFilterService {
 
     /**
      * Daily re-analysis of open positions.
+     * @Scheduled removed — triggered by JobOrchestratorService.
      */
-    @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
+    // @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
     public void reanalysePending() {
         ZoneId ist = ZoneId.of("Asia/Kolkata");
         List<?> openPositions = paperTradingEngine.getOpenPositions();

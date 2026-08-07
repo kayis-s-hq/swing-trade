@@ -110,6 +110,21 @@
     />
 
     <template v-else>
+      <!-- Generation progress -->
+      <div v-if="generating" class="mb-4 card-panel p-4">
+        <div class="mb-2 flex items-center justify-between">
+          <span class="text-sm font-medium text-text-primary">Signal Generation</span>
+          <span class="text-xs text-text-muted">{{ progressCurrent }}/{{ progressTotal }}</span>
+        </div>
+        <div class="h-2 rounded-full bg-bg-primary/50">
+          <div
+            class="h-full rounded-full bg-brand transition-all duration-300"
+            :style="{ width: progressTotal > 0 ? (progressCurrent / progressTotal) * 100 + '%' : '0%' }"
+          />
+        </div>
+        <p class="mt-2 text-xs text-text-muted">{{ progressMessage || 'Starting...' }}</p>
+      </div>
+
       <!-- Filters -->
       <div class="mb-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -227,7 +242,7 @@
 import { ref, computed, onMounted } from 'vue'
 import {
   getSignals,
-  generateAllSignals,
+  generateAllSignalsStream,
   executeTrade,
   clearAllSignals,
   clearSignalsForSymbol,
@@ -247,6 +262,9 @@ const directionFilter = ref('ALL')
 const statusFilter = ref('ALL')
 const selectedSignalIds = ref(new Set<string>())
 const execResult = ref<{ success: number; failed: number; errors: string[] } | null>(null)
+const progressMessage = ref('')
+const progressCurrent = ref(0)
+const progressTotal = ref(0)
 
 const filteredSignals = computed(() => {
   return signals.value.filter((s) => {
@@ -346,23 +364,30 @@ const generateAll = async () => {
   generating.value = true
   error.value = false
   errorMessage.value = ''
+  progressMessage.value = ''
+  progressCurrent.value = 0
+  progressTotal.value = 0
+  const allSignals: Signal[] = []
+
   try {
-    const res = await generateAllSignals()
-    console.log('generateAllSignals result:', res)
-    if (res.success && res.data) {
-      const data = res.data as unknown as {
-        signals: Signal[]
-        skipped: Array<{ symbol: string; reason: string }>
+    for await (const progress of generateAllSignalsStream()) {
+      progressCurrent.value = progress.current ?? progressCurrent.value
+      progressTotal.value = progress.total ?? progressTotal.value
+
+      if (progress.eventType === 'GENERATING') {
+        progressMessage.value = `Analyzing ${progress.symbol} (${progressCurrent.value}/${progressTotal.value})`
+      } else if (progress.eventType === 'SENTIMENT_ANALYZING') {
+        progressMessage.value = `Analyzing sentiment for ${progress.symbol} (${progressCurrent.value}/${progressTotal.value})`
+      } else if (progress.eventType === 'SIGNAL_DONE' && progress.signal) {
+        allSignals.push(progress.signal)
+        signals.value = allSignals
+      } else if (progress.eventType === 'SKIPPED') {
+        progressMessage.value = `${progress.symbol}: ${progress.message}`
+      } else if (progress.eventType === 'COMPLETE') {
+        progressMessage.value = progress.message
       }
-      console.log(
-        'Signals loaded:',
-        data.signals.length,
-        data.signals.map((s) => s.symbol)
-      )
-      console.log('Skipped:', data.skipped)
-      signals.value = data.signals
     }
-    if (res.error) throw new Error(res.error)
+    console.log(`Signal generation complete: ${allSignals.length} signals`)
   } catch (err: unknown) {
     errorMessage.value = err instanceof Error ? err.message : 'Signal generation failed'
     error.value = true

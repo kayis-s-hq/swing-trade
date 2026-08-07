@@ -30,6 +30,9 @@ import type {
   FullAnalysisResult,
   HolidayListResponse,
   TodayHolidayStatus,
+  JobRunResponse,
+  JobRunProgressResponse,
+  JobRunSummaryResponse,
 } from './types'
 
 // ---------------------------------------------------------------------------
@@ -220,7 +223,7 @@ const mapSignal = (s: BackendSignal): Signal => ({
 // ---------------------------------------------------------------------------
 
 export async function getPortfolioSummary(): Promise<ApiResponse<PortfolioSummary>> {
-  const raw = await rawFetch('/trades/performance')
+  const raw = await rawFetch('/positions/performance')
   if (!raw.ok) return errResponse(raw.error!)
 
   const perf = raw.data as BackendPerformance
@@ -261,10 +264,12 @@ export async function getMarketOverview(): Promise<ApiResponse<MarketOverview>> 
 }
 
 export async function getPositions(): Promise<ApiResponse<Position[]>> {
-  const raw = await rawFetch('/trades')
+  const raw = await rawFetch('/positions')
   if (!raw.ok) return errResponse(raw.error!)
 
-  return { success: true, data: (raw.data as BackendPosition[]).map(mapPosition) }
+  const paginated = raw.data as BackendPaginated<BackendPosition>
+  const positions: BackendPosition[] = paginated.content ?? []
+  return { success: true, data: positions.map(mapPosition) }
 }
 
 export async function getClosedPositions(): Promise<ApiResponse<Position[]>> {
@@ -295,6 +300,71 @@ export async function generateAllSignals(): Promise<
   return {
     success: true,
     data: { signals: (resp.signals ?? []).map(mapSignal), skipped: resp.skipped ?? [] },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Signal Generation (SSE streaming)
+// ---------------------------------------------------------------------------
+
+export interface SignalGenerationProgress {
+  eventType: 'STARTED' | 'GENERATING' | 'SENTIMENT_ANALYZING' | 'SIGNAL_DONE' | 'SKIPPED' | 'COMPLETE'
+  symbol?: string
+  status: 'PROCESSING' | 'DONE' | 'SKIPPED' | 'ERROR'
+  message: string
+  current?: number
+  total?: number
+  signal?: Signal
+}
+
+export async function* generateAllSignalsStream(): AsyncIterable<SignalGenerationProgress> {
+  const url = `${API_BASE_URL}/signals/generate-all/stream`
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: DEFAULT_HEADERS,
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`Signal generation failed: ${response.statusText} ${text.slice(0, 200)}`)
+  }
+
+  const reader = response.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let currentEvent = 'progress'
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        const eventMatch = trimmed.match(/^event:\s*(\S+)/)
+        if (eventMatch) {
+          currentEvent = eventMatch[1]
+          continue
+        }
+        const dataPrefix = 'data:'
+        if (trimmed.startsWith(dataPrefix)) {
+          try {
+            const data = JSON.parse(trimmed.slice(dataPrefix.length).trim())
+            yield { ...data, _eventType: currentEvent }
+          } catch {
+            // Skip malformed JSON
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
   }
 }
 
@@ -363,7 +433,7 @@ export async function closePosition(
   symbol: string,
   exitReason?: string
 ): Promise<ApiResponse<Position>> {
-  const raw = await rawFetch(`/trades/${symbol}/close`, {
+  const raw = await rawFetch(`/positions/${symbol}/close`, {
     method: 'POST',
     body: exitReason ? JSON.stringify({ exitReason }) : undefined,
   })
@@ -397,7 +467,7 @@ export async function executeTrade(params: ExecuteTradeParams): Promise<ApiRespo
   if (params.target != null) body.target = params.target
   if (params.entryReason) body.entryReason = params.entryReason
 
-  const raw = await rawFetch('/trades', {
+  const raw = await rawFetch('/positions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -917,4 +987,39 @@ export async function getUpcomingHolidays(): Promise<ApiResponse<HolidayListResp
   if (!raw.ok) return errResponse(raw.error!)
   const resp = raw.data as { success: boolean; data: HolidayListResponse; error?: string }
   return { success: true, data: resp.data }
+}
+
+// ---------------------------------------------------------------------------
+// Job Orchestrator
+// ---------------------------------------------------------------------------
+
+export async function startJobRun(triggerType = 'MANUAL'): Promise<ApiResponse<JobRunResponse>> {
+  const params = new URLSearchParams({ triggerType })
+  const raw = await rawFetch(`/job/runs/start?${params}`, { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as JobRunResponse }
+}
+
+export async function getJobRunProgress(runId: string): Promise<ApiResponse<JobRunProgressResponse>> {
+  const raw = await rawFetch(`/job/runs/${runId}/progress`)
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as JobRunProgressResponse }
+}
+
+export async function getJobRunSummary(runId: string): Promise<ApiResponse<JobRunSummaryResponse>> {
+  const raw = await rawFetch(`/job/runs/${runId}/summary`)
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as JobRunSummaryResponse }
+}
+
+export async function listJobRuns(): Promise<ApiResponse<JobRunResponse[]>> {
+  const raw = await rawFetch('/job/runs')
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: raw.data as JobRunResponse[] }
+}
+
+export async function cancelJobRun(runId: string): Promise<ApiResponse<void>> {
+  const raw = await rawFetch(`/job/runs/${runId}/cancel`, { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: undefined }
 }

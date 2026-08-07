@@ -77,7 +77,7 @@ public class BrokerModuleIntegrationTest {
         assertEquals(new BigDecimal("20"), maxCapital);
 
         // Test 6: P&L calculation
-        Position position = Position.of(1L, "AAPL", new BigDecimal("150.00"), null, 100,
+        Position position = Position.of(1L, "PAPER", "AAPL", new BigDecimal("150.00"), null, 100,
             new BigDecimal("140.00"), new BigDecimal("170.00"),
             PositionStatus.OPEN, "Signal", new BigDecimal("155.00"),
             "pos_1", null, Exchange.NSE, TradeDirection.LONG,
@@ -97,7 +97,7 @@ public class BrokerModuleIntegrationTest {
 
     @Test
     void testPositionManagement_FunctionalTest() {
-        Position position = Position.of(1L, "AAPL", new BigDecimal("150.00"), null, 100,
+        Position position = Position.of(1L, "PAPER", "AAPL", new BigDecimal("150.00"), null, 100,
             new BigDecimal("140.00"), new BigDecimal("170.00"),
             PositionStatus.OPEN, "Signal", new BigDecimal("155.00"),
             "pos_1", null, Exchange.NSE, TradeDirection.LONG,

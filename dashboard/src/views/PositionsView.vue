@@ -435,7 +435,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getPositions, closePosition, executeTrade } from '../api/client'
+import { getPositions, getClosedPositions, closePosition, executeTrade } from '../api/client'
 import type { Position } from '../api/types'
 import ErrorMessage from '../components/ErrorMessage.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -460,9 +460,12 @@ const refreshPositions = async () => {
   error.value = false
   errorMessage.value = ''
   try {
-    const res = await getPositions()
-    if (res.success && res.data) positions.value = res.data
-    if (res.error) throw new Error(res.error)
+    const openRes = await getPositions()
+    const openPositions: Position[] = (openRes.success && openRes.data) ? openRes.data : []
+    const closedRes = await getClosedPositions()
+    const closedPositions: Position[] = (closedRes.success && closedRes.data) ? closedRes.data : []
+    positions.value = [...openPositions, ...closedPositions]
+    if (openRes.error || closedRes.error) throw new Error(openRes.error || closedRes.error)
   } catch (err: unknown) {
     errorMessage.value = err instanceof Error ? err.message : 'Failed to load positions'
     error.value = true

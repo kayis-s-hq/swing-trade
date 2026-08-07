@@ -1,5 +1,8 @@
 <template>
-  <div class="card-panel transition-all hover:border-border-default hover:shadow-lg">
+  <div
+    class="card-panel transition-all hover:border-border-default hover:shadow-lg cursor-pointer"
+    @click="navigateToSentiment"
+  >
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-border-subtle/50 px-4 py-3">
       <div class="flex items-center gap-2">
@@ -87,17 +90,38 @@
       >
     </div>
 
-    <!-- Reason -->
+    <!-- Technical Reason -->
     <div class="border-t border-border-subtle/50 px-4 py-3">
       <p class="text-xs leading-relaxed text-text-muted">
         {{ signal.reason }}
       </p>
+    </div>
+
+    <!-- Sentiment Reasoning -->
+    <div
+      v-if="signal.sentimentReasoning"
+      class="border-t border-border-subtle/50 px-4 py-3"
+    >
+      <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
+        Sentiment
+      </p>
+      <p class="text-xs leading-relaxed text-text-secondary">
+        {{ signal.sentimentReasoning }}
+      </p>
+    </div>
+
+    <!-- Click hint -->
+    <div class="border-t border-border-subtle/50 px-4 py-2">
+      <p class="text-[10px] text-text-muted/60 text-center">Click for full sentiment analysis</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const props = defineProps<{
   signal: {
@@ -113,8 +137,13 @@ const props = defineProps<{
     strategy?: string
     indicators?: string[]
     sentimentScore?: string
+    sentimentReasoning?: string
   }
 }>()
+
+const navigateToSentiment = () => {
+  router.push({ name: 'Sentiment', query: { symbol: props.signal.symbol } })
+}
 
 const statusColor = computed(() => {
   const colors: Record<string, string> = {

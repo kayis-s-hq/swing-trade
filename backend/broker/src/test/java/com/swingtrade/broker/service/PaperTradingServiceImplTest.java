@@ -193,7 +193,7 @@ class PaperTradingServiceImplTest {
 
         Position position = pair.engine.getOpenPositions().get(0);
         Position updated = Position.of(
-            position.id(), position.symbol(), position.entryPrice(), position.entryDate(),
+            position.id(), "PAPER", position.symbol(), position.entryPrice(), position.entryDate(),
             position.quantity(), position.stopLoss(), position.target(), position.status(),
             position.entryReason(), new BigDecimal("1500.00"),
             position.positionId(), position.brokerPositionId(), position.exchange(),
@@ -216,7 +216,7 @@ class PaperTradingServiceImplTest {
 
         Position position = pair.engine.getOpenPositions().get(0);
         Position updated = Position.of(
-            position.id(), position.symbol(), position.entryPrice(), position.entryDate(),
+            position.id(), "PAPER", position.symbol(), position.entryPrice(), position.entryDate(),
             position.quantity(), position.stopLoss(), position.target(), position.status(),
             position.entryReason(), new BigDecimal("1050.00"),
             position.positionId(), position.brokerPositionId(), position.exchange(),

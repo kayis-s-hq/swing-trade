@@ -188,7 +188,7 @@ class LiveTradingServiceTest {
     void testGetPositions_callsBrokerClient() {
         // Given
         List<Position> mockPositions = List.of(
-            Position.of(1L, "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
+            Position.of(1L, "PAPER", "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
                 new BigDecimal("2400"), new BigDecimal("2700"),
                 PositionStatus.OPEN, "Signal", new BigDecimal("2550"),
                 "pos-1", null, Exchange.NSE, TradeDirection.LONG,
@@ -207,7 +207,7 @@ class LiveTradingServiceTest {
     @Test
     void testGetPosition_callsBrokerClient() {
         // Given
-        Position position = Position.of(1L, "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
+        Position position = Position.of(1L, "PAPER", "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
             new BigDecimal("2400"), new BigDecimal("2700"),
             PositionStatus.OPEN, "Signal", new BigDecimal("2550"),
             "pos-1", null, Exchange.NSE, TradeDirection.LONG,
@@ -225,7 +225,7 @@ class LiveTradingServiceTest {
     @Test
     void testCalculateProfitLoss_calculatesCorrectly() {
         // Given
-        Position position = Position.of(1L, "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
+        Position position = Position.of(1L, "PAPER", "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
             new BigDecimal("2400"), new BigDecimal("2700"),
             PositionStatus.OPEN, "Signal", new BigDecimal("2550"),
             "pos-1", null, Exchange.NSE, TradeDirection.LONG,
@@ -351,7 +351,7 @@ class LiveTradingServiceTest {
     @Test
     void testCalculateProfitLoss_shortPosition() {
         // Given
-        Position position = Position.of(1L, "TCS-EQ", new BigDecimal("3500"), null, 50,
+        Position position = Position.of(1L, "PAPER", "TCS-EQ", new BigDecimal("3500"), null, 50,
             new BigDecimal("3400"), new BigDecimal("3700"),
             PositionStatus.OPEN, "Signal", new BigDecimal("3450"),
             "pos-1", null, Exchange.NSE, TradeDirection.SHORT,

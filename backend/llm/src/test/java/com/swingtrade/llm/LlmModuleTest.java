@@ -49,7 +49,7 @@ public class LlmModuleTest {
             Signal.SignalType.BUY,
             BigDecimal.valueOf(0.9),
             "Positive market sentiment",
-            null, null, null, null, null, LocalDate.now()
+            null, null, null, null, null, LocalDate.now(), null, null
         );
 
         assertEquals("AAPL", signal.symbol());

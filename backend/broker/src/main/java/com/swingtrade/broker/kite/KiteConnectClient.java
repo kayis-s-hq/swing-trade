@@ -408,7 +408,7 @@ public class KiteConnectClient implements BrokerClient {
     private Position mapHoldingToPosition(Map<String, Object> holding) {
         String exchangeValue = holding.get("exchange") != null ? (String) holding.get("exchange") : "NSE";
         return new Position(
-                null,
+                null, "Fyers",
                 (String) holding.get("tradingsymbol"),
                 holding.get("average_price") != null ? new BigDecimal(holding.get("average_price").toString()) : BigDecimal.ZERO,
                 null,

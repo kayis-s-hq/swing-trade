@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -64,7 +65,7 @@ public class PositionService {
      * @return List of open paper positions as PositionResponse DTOs
      */
     public List<PositionResponse> getOpenPositions() {
-        return positionStore.findAllOpen().stream()
+        return paperTradingEngine.getOpenPositions().stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
@@ -84,7 +85,12 @@ public class PositionService {
      * @return PositionResponse details for the symbol, or null if not found
      */
     public PositionResponse getPositionBySymbol(String symbol) {
-        return positionStore.findBySymbol(symbol).map(this::convertToResponse).orElse(null);
+        Position pos = paperTradingEngine.findOpenPositionBySymbol(symbol);
+        if (pos != null) return convertToResponse(pos);
+        // Fall back to closed positions
+        List<Position> all = positionStore.findBySymbolOrderByEntryDateDesc(symbol);
+        if (!all.isEmpty()) return convertToResponse(all.get(0));
+        return null;
     }
 
     /**
@@ -92,10 +98,11 @@ public class PositionService {
      * @return List of closed positions
      */
     public List<PositionResponse> getClosedPositions() {
-        return positionStore.findAll().stream()
-                .filter(p -> !p.isOpen())
-                .map(this::convertToResponse)
-                .collect(Collectors.toList());
+        List<Position> closed = new ArrayList<>();
+        closed.addAll(positionStore.findByStatus(PositionStatus.CLOSED));
+        closed.addAll(positionStore.findByStatus(PositionStatus.STOPPED));
+        closed.addAll(positionStore.findByStatus(PositionStatus.TARGET_HIT));
+        return closed.stream().map(this::convertToResponse).collect(Collectors.toList());
     }
 
     /**
@@ -144,48 +151,33 @@ public class PositionService {
      */
     public PositionStats getPositionStats() {
         List<Position> openPositions = positionStore.findAllOpen();
-        // Get all positions via repository (Store only tracks open)
-        List<PositionEntity> allEntities = positionRepository.findAll();
+        List<Position> closedPositions = new ArrayList<>();
+        closedPositions.addAll(positionStore.findByStatus(PositionStatus.CLOSED));
+        closedPositions.addAll(positionStore.findByStatus(PositionStatus.STOPPED));
+        closedPositions.addAll(positionStore.findByStatus(PositionStatus.TARGET_HIT));
 
         PositionStats stats = new PositionStats();
-        stats.setTotalPositions(allEntities.size());
         stats.setOpenPositions(openPositions.size());
-        stats.setClosedPositions(allEntities.size() - openPositions.size());
+        stats.setClosedPositions(closedPositions.size());
+        stats.setTotalPositions(openPositions.size() + closedPositions.size());
 
-        // Single-pass calculation of all stats
-        BigDecimal totalPnL = BigDecimal.ZERO;
-        BigDecimal unrealizedPnL = BigDecimal.ZERO;
-        long stoppedCount = 0;
-        long targetHitCount = 0;
-        long winCount = 0;
-        long closedCount = 0;
-
-        for (PositionEntity p : allEntities) {
-            String status = p.getStatus();
-            if ("OPEN".equals(status)) {
-                if (p.getCurrentPrice() != null && p.getEntryPrice() != null && p.getQuantity() != null) {
-                    unrealizedPnL = unrealizedPnL.add(
-                        p.getCurrentPrice().subtract(p.getEntryPrice())
-                            .multiply(BigDecimal.valueOf(p.getQuantity())));
-                }
-            } else {
-                closedCount++;
-                if ("STOPPED".equals(status)) stoppedCount++;
-                if ("TARGET_HIT".equals(status)) targetHitCount++;
-                if (p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) > 0) winCount++;
-                if (p.getCurrentPrice() != null && p.getEntryPrice() != null && p.getQuantity() != null) {
-                    totalPnL = totalPnL.add(
-                        p.getCurrentPrice().subtract(p.getEntryPrice())
-                            .multiply(BigDecimal.valueOf(p.getQuantity())));
-                }
-            }
-        }
+        BigDecimal unrealizedPnL = paperTradingEngine.getTotalUnrealizedPnL();
+        BigDecimal realizedPnL = paperTradingEngine.getTotalRealizedPnL();
+        BigDecimal totalPnL = realizedPnL.add(unrealizedPnL);
 
         stats.setTotalPnL(totalPnL);
         stats.setUnrealizedPnL(unrealizedPnL);
-        stats.setStoppedOut((int) stoppedCount);
-        stats.setTargetHit((int) targetHitCount);
+
+        long winCount = 0;
+        for (Position p : closedPositions) {
+            if (p.realizedPnL() != null && p.realizedPnL().compareTo(BigDecimal.ZERO) > 0) {
+                winCount++;
+            }
+        }
+        int closedCount = closedPositions.size();
         stats.setWinRate(closedCount > 0 ? (double) winCount / closedCount * 100.0 : 0.0);
+        stats.setStoppedOut(0);
+        stats.setTargetHit(0);
 
         return stats;
     }
@@ -333,7 +325,7 @@ public class PositionService {
      * @return Risk summary
      */
     public RiskSummary getRiskSummary() {
-        List<Position> openPositions = positionStore.findAllOpen();
+        List<Position> openPositions = paperTradingEngine.getOpenPositions();
         RiskSummary summary = new RiskSummary();
 
         BigDecimal totalExposure = openPositions.stream()

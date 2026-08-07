@@ -48,6 +48,7 @@ export interface Signal {
   strategy?: string
   indicators?: string[]
   sentimentScore?: string
+  sentimentReasoning?: string
 }
 
 export interface EquityPoint {
@@ -351,4 +352,61 @@ export interface TodayHolidayStatus {
   date: string
   marketClosed: boolean
   reason: Record<string, string>
+}
+
+// ---------------------------------------------------------------------------
+// Job Orchestrator
+// ---------------------------------------------------------------------------
+
+export interface JobRunResponse {
+  runId: string
+  triggerType: 'MANUAL' | 'SCHEDULED'
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+  startedAt: string
+  completedAt: string | null
+  symbolsCount: number
+  completedCount: number
+  failedCount: number
+  errorMessage: string | null
+}
+
+export interface JobRunStageResponse {
+  symbol: string
+  stageName: 'DATA_FETCH' | 'NEWS' | 'SENTIMENT' | 'SIGNAL' | 'BACKTEST' | 'PAPER_TRADE'
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'SKIPPED' | 'ERROR'
+  startedAt: string
+  completedAt: string | null
+  durationMs: number | null
+  errorMessage: string | null
+  resultSummary: string | null
+}
+
+export interface JobRunProgressResponse {
+  runId: string
+  status: string
+  totalSymbols: number
+  completedSymbols: number
+  failedSymbols: number
+  startedAt?: string
+  completedAt?: string | null
+  stages: JobRunStageResponse[]
+}
+
+export interface JobRunSummaryResponse {
+  runId: string
+  status: string
+  totalSymbols: number
+  completedSymbols: number
+  failedSymbols: number
+  totalDurationMs: number
+  stageStats: Record<string, { total: number; completed: number; errors: number; totalDurationMs: number }>
+  symbolDetails: Array<{
+    symbol: string
+    stageStatuses: Record<string, string>
+    latestSignal: string | null
+    sentimentScore: string | null
+    backtestWinRate: number
+    backtestReturn: number
+    tradesExecuted: number
+  }>
 }
