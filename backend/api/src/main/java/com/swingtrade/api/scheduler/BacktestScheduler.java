@@ -26,7 +26,8 @@ public class BacktestScheduler {
     }
 
     /**
-     * Cron: "0 0 2 * * SUN" = 02:00 IST on Sundays.
+     * Weekly backtest across active watchlist.
+     * @Scheduled removed — triggered by JobOrchestratorService.
      */
     @Scheduled(cron = "0 0 2 * * SUN", zone = "Asia/Kolkata")
     public void runWeeklyBacktest() {
