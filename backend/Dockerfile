@@ -123,3 +123,38 @@ CMD ["java", \
      "-Dspring.devtools.restart.enabled=true", \
      "-Dspring.devtools.remote.secret=dev-secret", \
      "-jar", "/app/swing-trade-api.jar"]
+
+# ------------------------------------------------------------------------------
+# Stage 4: prebuilt-jar - Just a named stage for local JAR copy
+# ------------------------------------------------------------------------------
+# This stage exists so docker build can COPY from it.
+# The JAR is pre-built locally (mvn package), then copied into the runtime.
+# ==============================================================================
+FROM scratch AS prebuilt-jar
+COPY api/target/api-1.0.0.jar /api-1.0.0.jar
+
+# ------------------------------------------------------------------------------
+# Stage 5: runtime-stage - Stage deployment image (clean, no debug)
+# ------------------------------------------------------------------------------
+# For stage deployment on pi-node. Built locally, transferred via docker save/load.
+# Uses pre-built JAR — no Maven inside Docker.
+#
+# Usage:
+#   docker build --target runtime-stage -t swing-trade-api:stage .
+# ==============================================================================
+FROM eclipse-temurin:21-jre-alpine AS runtime-stage
+
+WORKDIR /app
+
+# Copy pre-built JAR (built locally by mvn package before docker build)
+COPY --from=prebuilt-jar /api-1.0.0.jar /app/swing-trade-api.jar
+
+# Expose API port
+EXPOSE 8080
+
+# Health check using Spring Actuator
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8080/actuator/health || exit 1
+
+# Run the JAR — no debug flags, no devtools
+CMD ["java", "-jar", "/app/swing-trade-api.jar"]

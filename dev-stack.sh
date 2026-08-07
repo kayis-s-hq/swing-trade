@@ -146,97 +146,190 @@ case "${1:-help}" in
     ;;
 
   stage)
-    echo "🚀 Starting Stage Dev Stack..."
+    echo "=========================================="
+    echo "  Swing Trade - Stage Deployment"
+    echo "=========================================="
     echo ""
     echo "Stage runs entirely on pi-node: Docker containers for infra + API."
     echo "Monitoring is handled by pi-prometheus (port 9090) + pi-grafana (port 3001)."
     echo ""
 
-    # Step 1: Build Docker image from local Maven artifacts
-    echo "🔨 Building Docker image from local Maven build..."
-    cd "$BACKEND_DIR"
-    docker build -t swing-trade-api:dev -f backend/Dockerfile --target runtime-jar ..
-    echo "✓ Image built: swing-trade-api:dev"
+    # --- Step 1: Switch to Java 21 for Maven build ---
+    echo "☕ Switching to Java 21 for Maven build..."
+    if command -v sdkman-init &> /dev/null; then
+      source "$HOME/.sdkman/bin/sdkman-init.sh" 2>/dev/null
+    elif [ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
+      source "$HOME/.sdkman/bin/sdkman-init.sh"
+    fi
+    echo "  Java: $(java -version 2>&1 | head -1)"
+    echo "  Maven: $(mvn --version 2>&1 | head -1)"
     echo ""
 
-    # Step 2: Start stage infrastructure (PostgreSQL + Redis)
-    echo "📦 Starting stage infrastructure on pi-node..."
-    docker context use pi-node
+    # --- Step 2: Build JAR locally ---
+    echo "🔨 Building JAR locally (mvn package)..."
     cd "$BACKEND_DIR"
-    docker compose -f docker-compose.infra-stage.yml up -d
+    mvn clean package -Dmaven.test.skip=true -Dcheckstyle.skip=true -Dpmd.skip=true -B -q
+    JAR_STATUS=$?
+    if [ $JAR_STATUS -ne 0 ]; then
+      echo "✗ Maven build failed. Fix and retry."
+      exit 1
+    fi
+    if [ ! -f "$BACKEND_DIR/api/target/api-1.0.0.jar" ]; then
+      echo "✗ JAR not found at api/target/api-1.0.0.jar"
+      exit 1
+    fi
+    JAR_SIZE=$(du -h "$BACKEND_DIR/api/target/api-1.0.0.jar" | cut -f1)
+    echo "✓ JAR built: $JAR_SIZE"
     echo ""
 
-    # Step 3: Wait for infra to be healthy
+    # --- Step 3: Transfer JAR + Dockerfile to pi-node for build ---
+    echo "📦 Transferring JAR + Dockerfile to pi-node..."
+    STAGE_PATH="/home/dietpi/swing-trade"
+    DASH_PATH="$PROJECT_ROOT/dashboard"
+    ssh dietpi@piworm.local "mkdir -p $STAGE_PATH/api/target $STAGE_PATH/dashboard/dist"
+    scp "$BACKEND_DIR/api/target/api-1.0.0.jar" dietpi@piworm.local:"$STAGE_PATH/api/target/api-1.0.0.jar"
+    scp "$BACKEND_DIR/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/Dockerfile"
+    scp "$BACKEND_DIR/docker-compose.infra-stage.yml" dietpi@piworm.local:"$STAGE_PATH/docker-compose.infra-stage.yml"
+    echo "✓ JAR + Dockerfile + compose transferred"
+
+    echo "📦 Transferring frontend dist..."
+    scp -r "$DASH_PATH/dist" dietpi@piworm.local:"$STAGE_PATH/dashboard/dist"
+    scp "$DASH_PATH/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/dashboard/Dockerfile"
+    scp "$DASH_PATH/nginx.conf" dietpi@piworm.local:"$STAGE_PATH/dashboard/nginx.conf"
+    echo "✓ Frontend transferred"
+
+    echo "📋 Transferring .env.stage to pi-node..."
+    scp "$BACKEND_DIR/.env.stage" dietpi@piworm.local:"$STAGE_PATH/.env.stage"
+    echo "✓ Env file transferred"
+    echo ""
+
+    # --- Step 4: Stop existing stage deployment ---
+    echo "🛑 Stopping existing stage deployment on pi-node..."
+    ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml down" 2>/dev/null || true
+    echo "✓ Existing deployment stopped"
+    echo ""
+
+    # --- Step 5: Build Docker images on pi-node ---
+    echo "🐳 Building backend image (runtime-stage)..."
+    ssh dietpi@piworm.local "cd $STAGE_PATH && docker build --target runtime-stage -t swing-trade-api:stage -f Dockerfile ."
+    echo "✓ Backend image built"
+    IMAGE_SIZE=$(ssh dietpi@piworm.local "docker image inspect swing-trade-api:stage --format='{{.Size}}'" 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}')
+    echo "  Image size: ~${IMAGE_SIZE}MB"
+
+    echo "🐳 Building frontend image (nginx)..."
+    ssh dietpi@piworm.local "cd $STAGE_PATH/dashboard && docker build -t swing-trade-dashboard:stage ."
+    echo "✓ Frontend image built"
+    DASH_SIZE=$(ssh dietpi@piworm.local "docker image inspect swing-trade-dashboard:stage --format='{{.Size}}'" 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}')
+    echo "  Image size: ~${DASH_SIZE}MB"
+    echo ""
+
+    # --- Step 6: Start stage stack on pi-node ---
+    echo "🚀 Starting stage stack on pi-node..."
+    ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml up -d"
+    echo "✓ Stage stack started"
+    echo ""
+
+    # --- Step 7: Wait for infra to be healthy ---
     echo "⏳ Waiting for stage infrastructure to be ready..."
-    sleep 15
-    docker compose -f docker-compose.infra-stage.yml ps
+    for i in $(seq 1 30); do
+      PG_HEALTH=$(ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml ps --filter health=healthy postgres 2>/dev/null | wc -l")
+      if [ "$PG_HEALTH" -gt 0 ]; then
+        echo "✓ PostgreSQL is healthy"
+        break
+      fi
+      [ "$i" -eq 30 ] && echo "⚠ PostgreSQL health check timed out, continuing anyway..."
+      sleep 3
+    done
+
+    for i in $(seq 1 20); do
+      REDIS_HEALTH=$(ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml ps --filter health=healthy redis 2>/dev/null | wc -l")
+      if [ "$REDIS_HEALTH" -gt 0 ]; then
+        echo "✓ Redis is healthy"
+        break
+      fi
+      [ "$i" -eq 20 ] && echo "⚠ Redis health check timed out, continuing anyway..."
+      sleep 3
+    done
     echo ""
 
-    # Step 4: Start API container on swingtrade-network
-    echo "🐳 Starting stage API container..."
-    docker stop swing-trade-stage-api 2>/dev/null || true
-    docker rm swing-trade-stage-api 2>/dev/null || true
-    sleep 2
-    docker run -d \
-      --name swing-trade-stage-api \
-      --network swing-trade-stage_swingtrade-network \
-      -p 8081:8080 \
-      -e SPRING_PROFILES_ACTIVE=stage \
-      -e DB_HOST=swing_trade_stage_postgres \
-      -e DB_PORT=5432 \
-      -e DB_NAME=swingtrade_stage \
-      -e DB_USER=swingtrade_user \
-      -e DB_PASSWORD=swingtrade_password \
-      -e REDIS_HOST=swing_trade_stage_redis \
-      -e REDIS_PORT=6379 \
-      -e LLM_BASE_URL=http://localhost:8000 \
-      -e LLM_MODEL_NAME=claude-sonnet-4-6 \
-      -e LLM_TIMEOUT=30000 \
-      -e TRADING_ENABLED=true \
-      -e PAPER_TRADING_ENABLED=true \
-      -e REAL_TRADING_ENABLED=false \
-      -e STRATEGY_ENABLED=true \
-      -e SIGNAL_ENABLED=false \
-      -e DISCORD_WEBHOOK_ENABLED=false \
-      swing-trade-api:dev \
-      java -jar /app/swing-trade-api.jar
-    echo "✓ API container started"
+    # --- Step 8: Wait for API startup ---
+    echo "⏳ Waiting for Spring Boot startup (~30s)..."
+    for i in $(seq 1 30); do
+      HEALTH=$(curl -sf "http://piworm.local:8081/actuator/health" 2>/dev/null || true)
+      if [ -n "$HEALTH" ]; then
+        echo ""
+        echo "✓ API is responding"
+        break
+      fi
+      sleep 1
+    done
     echo ""
 
-    # Step 5: Wait for Spring Boot startup
-    echo "⏳ Waiting for Spring Boot startup (~20s)..."
-    sleep 20
-    docker context use desktop-linux
-
-    # Step 6: Health check
-    echo "🏥 Checking API health on piworm.local:8081..."
-    curl -s "http://piworm.local:8081/actuator/health" | python3 -m json.tool 2>/dev/null || echo "⚠ API not yet reachable"
+    # --- Step 9: Health check ---
+    echo "🏥 API Health Check:"
+    HEALTH=$(curl -s "http://piworm.local:8081/actuator/health" 2>/dev/null)
+    if [ -n "$HEALTH" ]; then
+      echo "$HEALTH" | python3 -m json.tool 2>/dev/null || echo "$HEALTH"
+    else
+      echo "⚠ API not yet reachable — it may still be starting"
+    fi
     echo ""
 
-    # Step 7: Verify Prometheus scrape target
+    # --- Step 10: Connect pi-prometheus to stage network ---
+    echo "📊 Connecting pi-prometheus to stage network..."
+    ssh dietpi@piworm.local "docker network connect swing-trade-stage_swingtrade-network pi-prometheus" 2>/dev/null || true
+    echo "✓ Prometheus can now scrape stage API"
+    echo ""
+
+    # --- Step 11: Verify Prometheus scrape ---
     echo "📊 Checking Prometheus scrape target..."
-    if curl -sf "http://piworm.local:9090/api/v1/targets" | grep -q '"job":"swing-trade-stage"'; then
+    sleep 5
+    PROM_TARGETS=$(curl -sf "http://piworm.local:9090/api/v1/targets" 2>/dev/null || true)
+    if echo "$PROM_TARGETS" 2>/dev/null | grep -q '"swing-trade-stage"'; then
       echo "✓ Prometheus is scraping stage API"
     else
       echo "⚠ Prometheus target may take one scrape interval (15s) to appear"
     fi
     echo ""
 
-    echo "Stage stack is running:"
-    echo "  API:       http://piworm.local:8081"
-    echo "  Prometheus: http://piworm.local:9090"
-    echo "  Grafana:    http://piworm.local:3001"
+    echo "=========================================="
+    echo "  Stage Stack Running"
+    echo "=========================================="
+    echo "  API:         http://piworm.local:8081"
+    echo "  Prometheus:  http://piworm.local:9090"
+    echo "  Grafana:     http://piworm.local:3001"
     echo ""
-    echo "To stop: $0 stage-monitoring down  (local Grafana only)"
-    echo "To see logs: docker --context pi-node logs -f swing-trade-stage-api"
+    echo "Useful commands:"
+    echo "  Logs:    docker --context pi-node logs -f swing-trade-stage-api"
+    echo "  Stop:    ./dev-stack.sh stage-down"
+    echo "  Restart: ./dev-stack.sh stage restart"
+    ;;
+
+  stage-down)
+    echo "🛑 Stopping stage stack..."
+    ssh dietpi@piworm.local "cd /home/dietpi/swing-trade && docker compose -f docker-compose.infra-stage.yml down"
+    echo "✓ Stage stack stopped"
+    ;;
+
+  stage-logs)
+    docker --context pi-node logs "${2:--f --tail=100}" swing-trade-stage-api
+    ;;
+
+  stage-restart)
+    $0 stage-down
+    sleep 3
+    $0 stage
     ;;
 
   *)
-    echo "Usage: $0 {start|stage|stop|infra|status|logs|logs-json|stage-monitoring}"
+    echo "Usage: $0 {start|stage|stage-down|stage-logs|stage-restart|stop|infra|status|logs|logs-json|stage-monitoring}"
     echo ""
     echo "Commands:"
     echo "  start            - Start dev infra on pi-node + run Spring Boot locally"
-    echo "  stage            - Build + deploy stage stack (Docker on pi-node)"
+    echo "  stage            - Build JAR + Docker image locally, deploy to pi-node"
+    echo "  stage-down       - Stop stage stack on pi-node"
+    echo "  stage-logs       - View stage API logs (pass --tail=N for limit)"
+    echo "  stage-restart    - Stop and restart stage stack (full rebuild)"
     echo "  stop             - Stop dev stack"
     echo "  infra            - Manage dev infrastructure (pass docker compose commands)"
     echo "  status           - Check status of all services"
@@ -244,14 +337,17 @@ case "${1:-help}" in
     echo "  logs-json        - View structured JSON logs (requires jq)"
     echo "  stage-monitoring - Start/stop local Grafana (scrapes pi-node Prometheus)"
     echo ""
-    echo "Stage monitoring stack:"
-    echo "  API metrics:   http://piworm.local:8081/actuator/prometheus"
-    echo "  Prometheus:    http://piworm.local:9090  (scrapes stage API)"
-    echo "  Grafana:       http://piworm.local:3001  (JVM/Spring Boot dashboard)"
+    echo "Stage stack:"
+    echo "  API:         http://piworm.local:8081"
+    echo "  Prometheus:  http://piworm.local:9090"
+    echo "  Grafana:     http://piworm.local:3001"
     echo ""
     echo "Examples:"
     echo "  $0 start"
     echo "  $0 stage"
+    echo "  $0 stage-down"
+    echo "  $0 stage-logs --tail=100"
+    echo "  $0 stage-restart"
     echo "  $0 infra up -d"
     echo "  $0 status"
     echo "  $0 logs --tail=100"

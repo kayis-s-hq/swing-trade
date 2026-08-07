@@ -52,6 +52,7 @@ reports/
 .env.dev
 .env.*.real
 .env.*.prod
+.env.stage
 
 # Database files
 *.db

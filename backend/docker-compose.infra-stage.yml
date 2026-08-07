@@ -1,34 +1,33 @@
-# Stage Infrastructure - Docker Compose (runs on pi-node)
-# Separate from dev: different ports, volumes, and database
+# Stage Stack - All-in-one (postgres + redis + api on pi-node)
 # Usage: docker compose -f docker-compose.infra-stage.yml up -d
+# Env vars loaded from .env.stage in the same directory
 name: swing-trade-stage
 
 services:
+  frontend:
+    image: swing-trade-dashboard:stage
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    container_name: swing-trade-stage-dashboard
+    ports:
+      - "8080:80"
+    networks:
+      - swingtrade-network
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
   api:
-    image: swing-trade-api:latest
+    image: swing-trade-api:stage
     build:
       context: ..
       dockerfile: backend/Dockerfile
-      target: runtime-jar
+      target: runtime-stage
     container_name: swing-trade-stage-api
-    ports:
-      - "8081:8080"
-    environment:
-      - SPRING_PROFILES_ACTIVE=stage
-      - DB_HOST=swing_trade_stage_postgres
-      - DB_USER=swingtrade_user
-      - DB_PASSWORD=swingtrade_password
-      - REDIS_HOST=swing_trade_stage_redis
-      - REDIS_PORT=6379
-      - LLM_BASE_URL=http://localhost:8000
-      - LLM_MODEL_NAME=claude-sonnet-4-6
-      - LLM_TIMEOUT=30000
-      - TRADING_ENABLED=true
-      - PAPER_TRADING_ENABLED=true
-      - REAL_TRADING_ENABLED=false
-      - STRATEGY_ENABLED=true
-      - SIGNAL_ENABLED=false
-      - DISCORD_WEBHOOK_ENABLED=false
+    env_file:
+      - .env.stage
     networks:
       - swingtrade-network
     depends_on:
@@ -36,9 +35,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    ports:
+      - "8081:8080"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
