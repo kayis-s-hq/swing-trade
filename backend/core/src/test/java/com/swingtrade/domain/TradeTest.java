@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+import com.swingtrade.domain.TradeDirection;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -64,6 +66,7 @@ class TradeTest {
                 ENTRY_PRICE,
                 BigDecimal.valueOf(110.00),
                 QUANTITY,
+                TradeDirection.LONG,
                 BigDecimal.valueOf(1000.00),
                 5,
                 Trade.TradeStatus.CLOSED,
@@ -528,6 +531,7 @@ class TradeTest {
                 ENTRY_PRICE,
                 BigDecimal.valueOf(110.00),
                 QUANTITY,
+                TradeDirection.LONG,
                 BigDecimal.valueOf(1000.00),
                 5,
                 Trade.TradeStatus.CLOSED,
@@ -550,6 +554,7 @@ class TradeTest {
                 ENTRY_PRICE,
                 BigDecimal.valueOf(95.00),
                 QUANTITY,
+                TradeDirection.LONG,
                 BigDecimal.valueOf(-500.00),
                 5,
                 Trade.TradeStatus.STOPPED,
@@ -572,6 +577,7 @@ class TradeTest {
                 ENTRY_PRICE,
                 BigDecimal.valueOf(110.00),
                 QUANTITY,
+                TradeDirection.LONG,
                 BigDecimal.valueOf(1000.00),
                 5,
                 Trade.TradeStatus.CLOSED,
@@ -594,6 +600,7 @@ class TradeTest {
                 ENTRY_PRICE,
                 BigDecimal.valueOf(95.00),
                 QUANTITY,
+                TradeDirection.LONG,
                 BigDecimal.valueOf(-500.00),
                 5,
                 Trade.TradeStatus.STOPPED,
@@ -631,6 +638,7 @@ class TradeTest {
                 ENTRY_PRICE,
                 BigDecimal.valueOf(95.00),
                 QUANTITY,
+                TradeDirection.LONG,
                 BigDecimal.valueOf(-500.00),
                 5,
                 Trade.TradeStatus.STOPPED,
@@ -653,6 +661,7 @@ class TradeTest {
                 ENTRY_PRICE,
                 BigDecimal.valueOf(110.00),
                 QUANTITY,
+                TradeDirection.LONG,
                 BigDecimal.valueOf(1000.00),
                 5,
                 Trade.TradeStatus.CLOSED,
@@ -690,6 +699,7 @@ class TradeTest {
                 ENTRY_PRICE,
                 BigDecimal.valueOf(115.00),
                 QUANTITY,
+                TradeDirection.LONG,
                 BigDecimal.valueOf(1500.00),
                 5,
                 Trade.TradeStatus.TARGET_HIT,
@@ -1037,6 +1047,7 @@ class TradeTest {
             entryPrice,
             exitPrice,
             quantity,
+            TradeDirection.LONG,
             pnl,
             durationDays,
             status,
