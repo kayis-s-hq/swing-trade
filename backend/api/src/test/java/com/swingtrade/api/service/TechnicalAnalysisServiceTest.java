@@ -28,31 +28,24 @@ class TechnicalAnalysisServiceTest {
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
         TechnicalAnalysisService service = new TechnicalAnalysisService(candleStore, technicalIndicators);
 
+        // Service: reverses list, then takes chrono[lastIndex] = candles[0].
+        // So candles[0] must be the "latest" candle. Put bullish data FIRST.
         List<OhlcvCandle> candles = new ArrayList<>();
+        // Recent (candles[0..9]): close=20.9, high=20.9, volume=1000000 (becomes chrono[lastIndex])
+        for (int i = 0; i < 10; i++) {
+            candles.add(makeCandle(
+                    BigDecimal.valueOf(20.9), BigDecimal.valueOf(20.9),
+                    BigDecimal.valueOf(19), BigDecimal.valueOf(20.9),
+                    1000000L, LocalDate.now().minusDays(49 - i)));
+        }
+        // Historical (candles[10..59]): close=10, high=12
         for (int i = 0; i < 50; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(10 + i / 10.0),
-                    BigDecimal.valueOf(10.25 + i / 10.0),
-                    BigDecimal.valueOf(8 + i / 10.0),
-                    BigDecimal.valueOf(10 + i / 10.0),
-                    500000L,
-                    LocalDate.now().minusDays(59 - i)
-            ));
+                    BigDecimal.valueOf(10), BigDecimal.valueOf(12),
+                    BigDecimal.valueOf(8), BigDecimal.valueOf(10),
+                    500000L, LocalDate.now().minusDays(59 - i)));
         }
-        for (int i = 50; i < 60; i++) {
-            candles.add(makeCandle(
-                    BigDecimal.valueOf(20 + i / 10.0),
-                    BigDecimal.valueOf(20.25 + i / 10.0),
-                    BigDecimal.valueOf(18 + i / 10.0),
-                    BigDecimal.valueOf(20 + i / 10.0),
-                    1000000L,
-                    LocalDate.now().minusDays(59 - i)
-            ));
-        }
-        when(candleStore.findBySymbol("TEST")).thenAnswer(inv -> {
-            List<OhlcvCandle> copy = new ArrayList<>(candles);
-            return copy;
-        });
+        when(candleStore.findBySymbol("TEST")).thenReturn(candles);
 
         when(technicalIndicators.calculateEMA(anyList(), eq(20))).thenReturn(18.0);
         when(technicalIndicators.calculateEMA(anyList(), eq(50))).thenReturn(16.0);
@@ -77,31 +70,23 @@ class TechnicalAnalysisServiceTest {
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
         TechnicalAnalysisService service = new TechnicalAnalysisService(candleStore, technicalIndicators);
 
+        // Service: reverses list, takes chrono[lastIndex] = candles[0]. Put bearish data FIRST.
         List<OhlcvCandle> candles = new ArrayList<>();
+        // Recent (candles[0..9]): close=64.9, high=66, volume=200000 (becomes chrono[lastIndex])
+        for (int i = 0; i < 10; i++) {
+            candles.add(makeCandle(
+                    BigDecimal.valueOf(64.9), BigDecimal.valueOf(66),
+                    BigDecimal.valueOf(63), BigDecimal.valueOf(64.9),
+                    200000L, LocalDate.now().minusDays(49 - i)));
+        }
+        // Historical (candles[10..59]): close=74, high=76.25
         for (int i = 0; i < 50; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(74 - i / 10.0),
-                    BigDecimal.valueOf(74.25 - i / 10.0),
-                    BigDecimal.valueOf(72 - i / 10.0),
-                    BigDecimal.valueOf(74 - i / 10.0),
-                    500000L,
-                    LocalDate.now().minusDays(59 - i)
-            ));
+                    BigDecimal.valueOf(74), BigDecimal.valueOf(76.25),
+                    BigDecimal.valueOf(72), BigDecimal.valueOf(74),
+                    500000L, LocalDate.now().minusDays(59 - i)));
         }
-        for (int i = 50; i < 60; i++) {
-            candles.add(makeCandle(
-                    BigDecimal.valueOf(65 - i / 10.0),
-                    BigDecimal.valueOf(65.25 - i / 10.0),
-                    BigDecimal.valueOf(63 - i / 10.0),
-                    BigDecimal.valueOf(65 - i / 10.0),
-                    200000L,
-                    LocalDate.now().minusDays(59 - i)
-            ));
-        }
-        when(candleStore.findBySymbol("TEST")).thenAnswer(inv -> {
-            List<OhlcvCandle> copy = new ArrayList<>(candles);
-            return copy;
-        });
+        when(candleStore.findBySymbol("TEST")).thenAnswer(inv -> new ArrayList<>(candles));
 
         when(technicalIndicators.calculateEMA(anyList(), eq(20))).thenReturn(70.0);
         when(technicalIndicators.calculateEMA(anyList(), eq(50))).thenReturn(65.0);

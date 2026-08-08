@@ -1,6 +1,7 @@
 package com.swingtrade.data.entity;
 
 import com.swingtrade.domain.Trade;
+import com.swingtrade.domain.TradeDirection;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;

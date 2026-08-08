@@ -32,6 +32,7 @@ class PaperTradingServiceImplTest {
     private EnginePair createPair(BigDecimal initialCapital) {
         PaperTradingProperties props = new PaperTradingProperties();
         props.setInitialBalance(initialCapital);
+        props.setMaxCapitalPerPosition(new BigDecimal("20"));
         OrderManager om = new OrderManager();
         PaperTradingEngine pe = new PaperTradingEngine(om, new PositionManager(props), props);
         return new EnginePair(pe, om);

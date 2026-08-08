@@ -1,6 +1,5 @@
 package com.swingtrade.api.config;
 
-import com.swingtrade.api.controller.FyersAuthController;
 import com.swingtrade.api.controller.UpstoxAuthController;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.data.jdbc.JdbcRepositoriesAutoConfiguration;
@@ -15,6 +14,6 @@ import org.springframework.context.annotation.Import;
     JpaRepositoriesAutoConfiguration.class,
     JdbcRepositoriesAutoConfiguration.class
 })
-@Import({UpstoxAuthController.class, FyersAuthController.class})
+@Import(UpstoxAuthController.class)
 public class TestConfiguration {
 }

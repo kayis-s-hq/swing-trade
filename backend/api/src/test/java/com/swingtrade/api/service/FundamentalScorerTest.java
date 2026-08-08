@@ -29,37 +29,29 @@ class FundamentalScorerTest {
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
         FundamentalScorer scorer = new FundamentalScorer(candleStore, technicalIndicators);
 
-        // Setup: 60 candles with increasing volume trend
-        // Historical (first 50): volume=500000, Recent (last 10): volume=1000000
-        // ratio=2.0 > 1.2 -> +25
-        // ATR mock: 0.4, price=15.9 -> ATR/Price=2.5% < 3% -> +25
-        // Momentum: candle[29]=12.9, candle[59]=15.9 -> 23.3% > 5% -> +25
-        // SMA mock: 12.0, price=15.9 > 12.0 -> +25
-        // Total: 25+25+25+25 = 100
+        // candles[0] = latest (after reversal). Flat data for predictable calculations.
+        // Historical (candles 50-59): close=10.0, volume=500000
+        // Recent (candles 0-9): close=15.0, volume=1000000
+        // Momentum: (15.0 - 10.0)/10.0 = 50% > 5% -> +25
+        // Volume trend: 1000000/500000 = 2.0 > 1.2 -> +25
+        // ATR mock: 0.3, price=15.0 -> ATR/Price=2.0% < 3% -> +25
+        // SMA mock: 12.0, price=15.0 > 12.0 -> +25
         List<OhlcvCandle> candles = new ArrayList<>();
-        for (int i = 0; i < 50; i++) {
+        for (int i = 0; i < 10; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(10 + i / 10.0),
-                    BigDecimal.valueOf(10 + i / 10.0 + 2),
-                    BigDecimal.valueOf(10 + i / 10.0 - 2),
-                    BigDecimal.valueOf(10 + i / 10.0),
-                    500000L,
-                    LocalDate.now().minusDays(59 - i)
-            ));
+                    BigDecimal.valueOf(15), BigDecimal.valueOf(17),
+                    BigDecimal.valueOf(13), BigDecimal.valueOf(15),
+                    1000000L, LocalDate.now().minusDays(9 - i)));
         }
-        for (int i = 50; i < 60; i++) {
+        for (int i = 10; i < 60; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(18 + i / 10.0),
-                    BigDecimal.valueOf(18 + i / 10.0 + 2),
-                    BigDecimal.valueOf(18 + i / 10.0 - 2),
-                    BigDecimal.valueOf(18 + i / 10.0),
-                    1000000L,
-                    LocalDate.now().minusDays(59 - i)
-            ));
+                    BigDecimal.valueOf(10), BigDecimal.valueOf(12),
+                    BigDecimal.valueOf(8), BigDecimal.valueOf(10),
+                    500000L, LocalDate.now().minusDays(59 - i)));
         }
         when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
 
-        when(technicalIndicators.calculateATR(any(), eq(14))).thenReturn(0.4);
+        when(technicalIndicators.calculateATR(any(), eq(14))).thenReturn(0.3);
         when(technicalIndicators.calculateSMA(any(), eq(50))).thenReturn(12.0);
 
         // Act
@@ -78,33 +70,25 @@ class FundamentalScorerTest {
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
         FundamentalScorer scorer = new FundamentalScorer(candleStore, technicalIndicators);
 
-        // Setup: 60 candles with declining volume trend
-        // Historical (first 50): volume=500000, Recent (last 10): volume=200000
-        // ratio=0.4 < 0.8 -> -25
-        // ATR mock: 6.0, price=10.9 -> ATR/Price=55% > 5% -> -25
-        // Momentum: candle[29]=12.9, candle[59]=10.9 -> -15.5% < -5% -> -25
-        // SMA mock: 15.0, price=10.9 < 15.0 -> -25
-        // Total: -25-25-25-25 = -100
+        // candles[0] = latest. Flat data for predictable calculations.
+        // Historical (candles 50-59): close=20.0, volume=500000
+        // Recent (candles 0-9): close=10.0, volume=200000
+        // Momentum: (10.0 - 20.0)/20.0 = -50% < -5% -> -25
+        // Volume trend: 200000/500000 = 0.4 < 0.8 -> -25
+        // ATR mock: 6.0, price=10.0 -> ATR/Price=60% > 5% -> -25
+        // SMA mock: 15.0, price=10.0 < 15.0 -> -25
         List<OhlcvCandle> candles = new ArrayList<>();
-        for (int i = 0; i < 50; i++) {
+        for (int i = 0; i < 10; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(10 + i / 10.0),
-                    BigDecimal.valueOf(10 + i / 10.0 + 2),
-                    BigDecimal.valueOf(10 + i / 10.0 - 2),
-                    BigDecimal.valueOf(10 + i / 10.0),
-                    500000L,
-                    LocalDate.now().minusDays(59 - i)
-            ));
+                    BigDecimal.valueOf(10), BigDecimal.valueOf(12),
+                    BigDecimal.valueOf(8), BigDecimal.valueOf(10),
+                    200000L, LocalDate.now().minusDays(9 - i)));
         }
-        for (int i = 50; i < 60; i++) {
+        for (int i = 10; i < 60; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(8 + i / 10.0),
-                    BigDecimal.valueOf(8 + i / 10.0 + 2),
-                    BigDecimal.valueOf(8 + i / 10.0 - 2),
-                    BigDecimal.valueOf(8 + i / 10.0),
-                    200000L,
-                    LocalDate.now().minusDays(59 - i)
-            ));
+                    BigDecimal.valueOf(20), BigDecimal.valueOf(22),
+                    BigDecimal.valueOf(18), BigDecimal.valueOf(20),
+                    500000L, LocalDate.now().minusDays(59 - i)));
         }
         when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
 

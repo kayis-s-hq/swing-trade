@@ -105,7 +105,7 @@ public class PriceActionSignalEngine {
      * @param chronologicalCandles candles ordered oldest to newest
      * @return the resulting signal with the indicator readings that produced it
      */
-    SignalResult analyze(String symbol, List<OhlcvCandle> chronologicalCandles) {
+    public SignalResult analyze(String symbol, List<OhlcvCandle> chronologicalCandles) {
         BarSeries series = buildBarSeries(symbol, chronologicalCandles);
         int lastIndex = series.getBarCount() - 1;
 
