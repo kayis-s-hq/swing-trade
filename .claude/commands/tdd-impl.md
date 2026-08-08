@@ -4,13 +4,13 @@ description: Execute a TDD plan from docs/plan/ step by step with strict RED-GRE
 
 # TDD Implementation Command
 
-Execute a TDD plan from `docs/plan/` step by step. Strict RED-GREEN-REFACTOR cycle.
+Execute a TDD plan from `docs/plans/` step by step. Strict RED-GREEN-REFACTOR cycle.
 
 ## When to Use
 
-- A TDD plan exists in `docs/plan/` for the current task
+- A TDD plan exists in `docs/plans/` for the current task
 - Plan has phases with test names, file paths, and assertions
-- Implementing backend changes in a Spring Boot Maven project
+- Implementing backend changes in a Spring Boot Gradle project
 
 ## Core Principle
 
@@ -26,7 +26,7 @@ Execute phases IN ORDER. Do NOT skip ahead.
 2. **GREEN** — Write minimal production code. Run all tests. Verify they PASS.
 3. **REFACTOR** — Clean up while keeping all tests green.
 
-After each phase completes, verify with `mvn test`. Do NOT proceed to next phase until current phase passes.
+After each phase completes, verify with `./gradlew test`. Do NOT proceed to next phase until current phase passes.
 
 ### Status Tracking
 
@@ -87,7 +87,7 @@ When fixing code:
 - [ ] Phase 3: Refactor → verify pass
 - [ ] Update plan status table after each phase
 - [ ] Repeat for each phase
-- [ ] Final: `mvn test` on entire module
+- [ ] Final: `./gradlew test` on entire module
 - [ ] Commit after each complete phase
 
 ## Arguments

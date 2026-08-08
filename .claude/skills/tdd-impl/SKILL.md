@@ -1,18 +1,18 @@
 ---
 name: tdd-impl
-description: Use when executing a TDD plan from docs/plan/ — implement backend changes test-first with Mockito unit tests and SpringBootTest integration tests
+description: Use when executing a TDD plan from docs/plans/ — implement backend changes test-first with Mockito unit tests and SpringBootTest integration tests
 ---
 
 # TDD Implementation
 
-Execute a TDD plan from `docs/plan/` step by step. Strict RED-GREEN-REFACTOR cycle.
+Execute a TDD plan from `docs/plans/` step by step. Strict RED-GREEN-REFACTOR cycle.
 
 ## When to Use
 
 Symptoms:
-- A TDD plan exists in `docs/plan/` for the current task
+- A TDD plan exists in `docs/plans/` for the current task
 - Plan has phases with test names, file paths, and assertions
-- Implementing backend changes in a Spring Boot Maven project
+- Implementing backend changes in a Spring Boot Gradle project
 
 ## When NOT to Use
 
@@ -34,11 +34,11 @@ Execute phases IN ORDER. Do NOT skip ahead.
 2. **GREEN** — Write minimal production code. Run all tests. Verify they PASS.
 3. **REFACTOR** — Clean up while keeping all tests green.
 
-After each phase completes, verify with `mvn test`. Do NOT proceed to next phase until current phase passes.
+After each phase completes, verify with `./gradlew test`. Do NOT proceed to next phase until current phase passes.
 
 ### Status Tracking
 
-After EACH phase completes (pass or fail), update the plan file in `docs/plan/`:
+After EACH phase completes (pass or fail), update the plan file in `docs/plans/`:
 
 - Mark the phase status: `[ ] Phase N: Name (pending)` → `[x] Phase N: Name (PASS)` or `[x] Phase N: Name (FAIL)`
 - Add a timestamp and result summary
@@ -123,7 +123,7 @@ When fixing code:
 | Mistake | Fix |
 |---------|-----|
 | Writing test and production code in same step | Write test first, verify fail, THEN write code |
-| Running `mvn test` instead of `mvn test -Dtest=Name` | Run only the relevant test class |
+| Running `./gradlew test` instead of `./gradlew :module:test --tests=Name` | Run only the relevant test class |
 | Skipping fixture capture | Capture real API responses before integration tests |
 | Using mocks in integration tests | Use real implementations in integration tests |
 | Asserting on behavior not in plan | Stick to plan assertions only |
@@ -137,5 +137,5 @@ When fixing code:
 - [ ] Phase 3: Refactor → verify pass
 - [ ] Update plan status table after each phase
 - [ ] Repeat for each phase
-- [ ] Final: `mvn test` on entire module
+- [ ] Final: `./gradlew test` on entire module
 - [ ] Commit after each complete phase

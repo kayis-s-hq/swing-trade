@@ -10,10 +10,10 @@ Generate a test-first development plan for backend changes. Captures real API re
 ## When to Use
 
 Symptoms that signal this skill applies:
-- Backend bug fix, precision issue, or new feature in a Spring Boot Maven module
+- Backend bug fix, precision issue, or new feature in a Spring Boot Gradle module
 - Existing tests use Mockito (mock repos/services) or SpringBootTest + H2
 - Need to capture real API request/response as JSON fixtures
-- Plan must go under `docs/plan/` with exact file paths and code
+- Plan must go under `docs/plans/` with exact file paths and code
 
 ## When NOT to Use
 
@@ -75,9 +75,9 @@ Each phase is a step in the RED-GREEN-REFACTOR cycle:
 ### 4. Verification
 Commands to run:
 ```bash
-mvn test -pl module -Dtest=TestName    # fails (RED)
+./gradlew :module:test --tests=TestName    # fails (RED)
 # → apply fix
-mvn test -pl module                    # all pass (GREEN)
+./gradlew :module:test                     # all pass (GREEN)
 ```
 
 ## Test Design Rules
