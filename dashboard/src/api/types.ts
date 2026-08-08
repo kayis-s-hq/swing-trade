@@ -20,17 +20,29 @@ export interface MarketOverview {
 
 export interface Position {
   id: string
+  brokerType?: string
   symbol: string
   entryPrice: number
   currentPrice: number
   quantity: number
-  status: 'OPEN' | 'CLOSED'
+  status: 'OPEN' | 'CLOSED' | 'STOPPED' | 'TARGET_HIT'
   pnl: number
   pnlPercent: number
   entryDate: string
   exitDate?: string
   stopLoss?: number
   target?: number
+  entryReason?: string
+  positionId?: string
+  brokerPositionId?: string
+  exchange?: string
+  direction?: 'LONG' | 'SHORT'
+  averagePrice?: number
+  realizedPnL?: number
+  marginUtilized?: number
+  entryTime?: string
+  exitTime?: string
+  exitReason?: string
 }
 
 export interface Signal {

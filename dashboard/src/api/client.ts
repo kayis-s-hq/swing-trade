@@ -45,60 +45,78 @@ interface RawFetchResult {
   error?: string
 }
 
-async function rawFetch(path: string, init?: RequestInit): Promise<RawFetchResult> {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
+async function rawFetch(
+  path: string,
+  init?: RequestInit,
+  retries = 3
+): Promise<RawFetchResult> {
+  let lastError: string = ''
+  let lastData: unknown = null
 
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers: { ...DEFAULT_HEADERS, ...init?.headers },
-      signal: controller.signal,
-    })
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
-    let data: unknown = null
-    const contentType = response.headers.get('content-type') || ''
+    try {
+      const response = await fetch(`${API_BASE_URL}${path}`, {
+        ...init,
+        headers: { ...DEFAULT_HEADERS, ...init?.headers },
+        signal: controller.signal,
+      })
 
-    if (contentType.includes('application/json')) {
-      try {
-        data = await response.json()
-      } catch {
-        data = null
+      let data: unknown = null
+      const contentType = response.headers.get('content-type') || ''
+
+      if (contentType.includes('application/json')) {
+        try {
+          data = await response.json()
+        } catch {
+          data = null
+        }
+      } else {
+        const text = await response.text().catch(() => '')
+        data = { message: text.slice(0, 200) || `Server responded with status ${response.status}` }
       }
-    } else {
-      // Non-JSON response (HTML error page, plain text, etc.)
-      const text = await response.text().catch(() => '')
-      data = { message: text.slice(0, 200) || `Server responded with status ${response.status}` }
-    }
 
-    if (!response.ok) {
-      const msg = (data as any)?.message
-      return {
-        ok: false,
-        data: null,
-        error:
+      if (!response.ok) {
+        lastData = data
+        const msg = (data as any)?.message
+        lastError =
           msg && msg !== 'Internal Server Error'
             ? msg
-            : `Server responded with status ${response.status}`,
-      }
-    }
+            : `Server responded with status ${response.status}`
 
-    return { ok: true, data }
-  } catch (err: unknown) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      return { ok: false, data: null, error: `Request timeout (${REQUEST_TIMEOUT}ms)` }
-    }
-    if (err instanceof TypeError && err.message.includes('fetch')) {
-      return {
-        ok: false,
-        data: null,
-        error: 'Unable to connect to the backend server. Is it running?',
+        // Retry on 5xx or server errors
+        if (response.status >= 500 && attempt < retries) {
+          const delay = 1000 * Math.pow(2, attempt)
+          await new Promise((r) => setTimeout(r, delay))
+          continue
+        }
+        return { ok: false, data: null, error: lastError }
       }
+
+      return { ok: true, data }
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        lastError = `Request timeout (${REQUEST_TIMEOUT}ms)`
+      } else if (err instanceof TypeError && err.message.includes('fetch')) {
+        lastError = 'Unable to connect to the backend server. Is it running?'
+      } else {
+        lastError = err instanceof Error ? err.message : 'Network error'
+      }
+
+      // Retry on network errors
+      if (attempt < retries) {
+        const delay = 1000 * Math.pow(2, attempt)
+        await new Promise((r) => setTimeout(r, delay))
+        continue
+      }
+    } finally {
+      clearTimeout(timeoutId)
     }
-    return { ok: false, data: null, error: err instanceof Error ? err.message : 'Network error' }
-  } finally {
-    clearTimeout(timeoutId)
   }
+
+  return { ok: false, data: null, error: lastError }
 }
 
 // ---------------------------------------------------------------------------
@@ -319,14 +337,18 @@ export interface SignalGenerationProgress {
 
 export async function* generateAllSignalsStream(): AsyncIterable<SignalGenerationProgress> {
   const url = `${API_BASE_URL}/signals/generate-all/stream`
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 60_000)
 
   const response = await fetch(url, {
     method: 'POST',
     headers: DEFAULT_HEADERS,
+    signal: controller.signal,
   })
 
   if (!response.ok) {
     const text = await response.text().catch(() => '')
+    clearTimeout(timeoutId)
     throw new Error(`Signal generation failed: ${response.statusText} ${text.slice(0, 200)}`)
   }
 
@@ -364,6 +386,7 @@ export async function* generateAllSignalsStream(): AsyncIterable<SignalGeneratio
       }
     }
   } finally {
+    clearTimeout(timeoutId)
     reader.releaseLock()
   }
 }
@@ -920,14 +943,18 @@ export async function* runFullAnalysis(
   })
 
   const url = `${API_BASE_URL}/analysis/run-full?${params}`
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 60_000)
 
   const response = await fetch(url, {
     method: 'POST',
     headers: DEFAULT_HEADERS,
+    signal: controller.signal,
   })
 
   if (!response.ok) {
     const text = await response.text().catch(() => '')
+    clearTimeout(timeoutId)
     throw new Error(`Analysis failed: ${response.statusText} ${text.slice(0, 200)}`)
   }
 
@@ -967,6 +994,7 @@ export async function* runFullAnalysis(
       }
     }
   } finally {
+    clearTimeout(timeoutId)
     reader.releaseLock()
   }
 }
