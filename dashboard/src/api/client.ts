@@ -205,6 +205,11 @@ const toNum = (v: number | string | null | undefined): number => {
 
 const errResponse = <T>(error: string): ApiResponse<T> => ({ success: false, error })
 
+const unwrap = <T>(raw: RawFetchResult): T => {
+  const resp = raw.data as ApiResponse<T> | null
+  return resp?.data as T
+}
+
 const mapPosition = (p: BackendPosition): Position => ({
   id: String(p.id),
   symbol: p.symbol,
@@ -603,7 +608,7 @@ export async function getEquityCurve(
 export async function getWatchlist(): Promise<ApiResponse<WatchlistEntry[]>> {
   const raw = await rawFetch('/watchlist')
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as WatchlistEntry[] }
+  return { success: true, data: unwrap<WatchlistEntry[]>(raw) }
 }
 
 export async function addToWatchlist(
@@ -616,13 +621,13 @@ export async function addToWatchlist(
   if (exchange) params.set('exchange', exchange)
   const raw = await rawFetch(`/watchlist?${params}`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as WatchlistEntry }
+  return { success: true, data: unwrap<WatchlistEntry>(raw) }
 }
 
 export async function removeFromWatchlist(symbol: string): Promise<ApiResponse<string>> {
   const raw = await rawFetch(`/watchlist/${symbol}`, { method: 'DELETE' })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as string }
+  return { success: true, data: unwrap<string>(raw) }
 }
 
 export async function toggleWatchlistActive(
@@ -633,7 +638,7 @@ export async function toggleWatchlistActive(
     method: 'PATCH',
   })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as WatchlistEntry }
+  return { success: true, data: unwrap<WatchlistEntry>(raw) }
 }
 
 // ---------------------------------------------------------------------------
@@ -643,7 +648,7 @@ export async function toggleWatchlistActive(
 export async function getIngestionStatus(): Promise<ApiResponse<IngestionStatus[]>> {
   const raw = await rawFetch('/data/status')
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as IngestionStatus[] }
+  return { success: true, data: unwrap<IngestionStatus[]>(raw) }
 }
 
 export async function triggerDataPull(
@@ -651,20 +656,20 @@ export async function triggerDataPull(
 ): Promise<ApiResponse<{ pullId: string; message: string }>> {
   const raw = await rawFetch(`/data/pull?yearsBack=${yearsBack}`, { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as { pullId: string; message: string } }
+  return { success: true, data: unwrap<{ pullId: string; message: string }>(raw) }
 }
 
 export async function getPullProgress(pullId?: string): Promise<ApiResponse<PullProgress>> {
   const params = pullId ? `?pullId=${pullId}` : ''
   const raw = await rawFetch(`/data/pull/progress${params}`)
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as PullProgress }
+  return { success: true, data: unwrap<PullProgress>(raw) }
 }
 
 export async function cancelDataPull(): Promise<ApiResponse<string>> {
   const raw = await rawFetch('/data/pull/cancel', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as string }
+  return { success: true, data: unwrap<string>(raw) }
 }
 
 // ---------------------------------------------------------------------------
@@ -674,7 +679,7 @@ export async function cancelDataPull(): Promise<ApiResponse<string>> {
 export async function getSettings(): Promise<ApiResponse<{ selectedBroker: string }>> {
   const raw = await rawFetch('/settings')
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as { selectedBroker: string } }
+  return { success: true, data: unwrap<{ selectedBroker: string }>(raw) }
 }
 
 export async function setBroker(broker: string): Promise<ApiResponse<{ selectedBroker: string }>> {
@@ -684,13 +689,13 @@ export async function setBroker(broker: string): Promise<ApiResponse<{ selectedB
     body: JSON.stringify({ broker }),
   })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as { selectedBroker: string } }
+  return { success: true, data: unwrap<{ selectedBroker: string }>(raw) }
 }
 
 export async function getLlmSettings(): Promise<ApiResponse<Record<string, string>>> {
   const raw = await rawFetch('/settings/llm')
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as Record<string, string> }
+  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
 export async function setLlmSettings(
@@ -702,13 +707,13 @@ export async function setLlmSettings(
     body: JSON.stringify(settings),
   })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as Record<string, string> }
+  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
 export async function getDiscordSettings(): Promise<ApiResponse<Record<string, string>>> {
   const raw = await rawFetch('/settings/discord')
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as Record<string, string> }
+  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
 export async function setDiscordSettings(
@@ -720,13 +725,13 @@ export async function setDiscordSettings(
     body: JSON.stringify(settings),
   })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as Record<string, string> }
+  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
 export async function testDiscordWebhook(): Promise<ApiResponse<{ success: boolean }>> {
   const raw = await rawFetch('/settings/test/discord', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as { success: boolean } }
+  return { success: true, data: unwrap<{ success: boolean }>(raw) }
 }
 
 // ---------------------------------------------------------------------------
@@ -736,7 +741,7 @@ export async function testDiscordWebhook(): Promise<ApiResponse<{ success: boole
 export async function getTradingSettings(): Promise<ApiResponse<Record<string, string>>> {
   const raw = await rawFetch('/settings/trading')
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as Record<string, string> }
+  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
 export async function setTradingSettings(
@@ -748,7 +753,7 @@ export async function setTradingSettings(
     body: JSON.stringify(settings),
   })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as Record<string, string> }
+  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
 // ---------------------------------------------------------------------------
@@ -767,7 +772,7 @@ export async function saveAllSettings(body: {
     body: JSON.stringify(body),
   })
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as Record<string, string> }
+  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
 // ---------------------------------------------------------------------------
@@ -926,7 +931,7 @@ export async function backfillSymbol(
     { method: 'POST' }
   )
   if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as any).data as string }
+  return { success: true, data: unwrap<string>(raw) }
 }
 
 // ---------------------------------------------------------------------------
