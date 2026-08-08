@@ -22,7 +22,6 @@ import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
-import com.swingtrade.strategy.SwingTradingStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,18 +48,15 @@ public class SignalPipeline {
     private static final int MIN_CANDLES = 50;
 
     private final CandleStore candleStore;
-    private final SwingTradingStrategy swingStrategy;
     private final PriceActionSignalEngine priceActionEngine;
     private final SignalPersistenceService persistenceService;
     private final SentimentGate sentimentGate;
 
     public SignalPipeline(CandleStore candleStore,
-                          SwingTradingStrategy swingStrategy,
                           PriceActionSignalEngine priceActionEngine,
                           SignalPersistenceService persistenceService,
                           SentimentGate sentimentGate) {
         this.candleStore = candleStore;
-        this.swingStrategy = swingStrategy;
         this.priceActionEngine = priceActionEngine;
         this.persistenceService = persistenceService;
         this.sentimentGate = sentimentGate;
@@ -93,12 +89,21 @@ public class SignalPipeline {
         // Clear any stale processed signals for this symbol/date so retries can regenerate
         persistenceService.deleteBySymbolAndDate(symbol, latestDate);
 
-        Signal signal = swingStrategy.analyze(chronologicalCandles);
+        SignalResult result;
+        try {
+            result = priceActionEngine.analyze(symbol, chronologicalCandles);
+        } catch (IllegalStateException e) {
+            logger.debug("Not enough candles for {}: {}", symbol, e.getMessage());
+            return java.util.Optional.empty();
+        }
+
+        Signal signal = Signal.create(result.symbol(), result.date(), result.type(),
+                BigDecimal.ONE, result.reasoning());
 
         SentimentGate.SentimentVerdict verdict = SentimentGate.SentimentVerdict.allow();
         String sentimentScore = null;
         String sentimentReasoning = null;
-        if (signal.type() == Signal.SignalType.BUY) {
+        if (result.type() == Signal.SignalType.BUY) {
             verdict = sentimentGate.evaluate(symbol, latestDate);
             sentimentReasoning = verdict.reason();
             if (verdict.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
@@ -112,17 +117,15 @@ public class SignalPipeline {
         }
 
         BigDecimal atr = RiskCalculator.calculateATR(chronologicalCandles);
-        String indicators = buildSignalReason(signal);
+        String indicators = buildPriceActionIndicators(result);
 
-        String warningFlag = warningFlag(signal, latestDate);
+        String warningFlag = warningFlag(result, latestDate);
         Signal saved = persistenceService.buildAndSaveWithWarning(
-                symbol, latestDate, signal.type(), signal.confidence(),
+                symbol, latestDate, result.type(), BigDecimal.ONE,
                 indicators, indicators, atr, warningFlag, sentimentScore, sentimentReasoning);
 
-        logger.info("Generated {} signal for {} on {} (confidence: {}%, warning: {})",
-                signal.type(), symbol, latestDate,
-                String.format("%.0f", signal.confidence().doubleValue() * 100),
-                warningFlag);
+        logger.info("Generated {} signal for {} on {} (reasoning: {})",
+                result.type(), symbol, latestDate, result.reasoning());
 
         return java.util.Optional.of(saved);
     }
@@ -189,26 +192,18 @@ public class SignalPipeline {
 
     // ---- Private helpers ----
 
-    private String buildSignalReason(Signal signal) {
-        return switch (signal.type()) {
-            case BUY -> "Technical indicators suggest bullish momentum";
-            case SELL -> "Technical indicators suggest bearish momentum";
-            case HOLD -> "No clear signal - maintain current position";
-        };
-    }
-
     private String buildPriceActionIndicators(SignalResult result) {
         return String.format(
                 "RSI=%.2f,EMA20=%.2f,EMA50=%.2f,ATR=%.2f",
                 result.rsi(), result.ema20(), result.ema50(), result.atr());
     }
 
-    private String warningFlag(Signal signal, LocalDate date) {
-        if (signal.type() != Signal.SignalType.BUY) {
+    private String warningFlag(SignalResult result, LocalDate date) {
+        if (result.type() != Signal.SignalType.BUY) {
             return "NONE";
         }
         try {
-            SentimentGate.SentimentVerdict verdict = sentimentGate.evaluate(signal.symbol(), date);
+            SentimentGate.SentimentVerdict verdict = sentimentGate.evaluate(result.symbol(), date);
             return switch (verdict.action()) {
                 case FLAG_NEUTRAL -> "NEUTRAL_SENTIMENT";
                 case ALLOW_GRACEFUL -> "SENTIMENT_ERROR";

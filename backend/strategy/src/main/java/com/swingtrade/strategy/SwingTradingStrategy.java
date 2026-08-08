@@ -13,10 +13,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Swing trading strategy based on technical analysis.
- * Combines multiple factors: moving averages, RSI, MACD, and volume.
+ * @deprecated Use {@link PriceActionSignalEngine} instead.
+ * SwingTradingStrategy uses a custom TechnicalIndicators utility with hardcoded
+ * parameters and no backtest support. PriceActionSignalEngine uses TA4j with
+ * DecimalNum precision, reads parameters from StrategyParams, and is the
+ * engine used by BacktestEngine and SignalPipeline.
+ * <p>SwingTradingStrategy is retained as a reference implementation but is no
+ * longer wired into the production signal pipeline.</p>
  */
 @Component
+@Deprecated
 public class SwingTradingStrategy {
 
     private static final Logger logger = LoggerFactory.getLogger(SwingTradingStrategy.class);
