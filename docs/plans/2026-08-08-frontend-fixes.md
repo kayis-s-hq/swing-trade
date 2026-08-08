@@ -6,14 +6,14 @@ Fix 8 frontend findings from architecture audit (docs/analysis/architecture-audi
 
 | Phase | Status | Result | Timestamp |
 |-------|--------|--------|-----------|
-| 1: ApiResult<T> types | [ ] PENDING | — | — |
-| 2: ErrorBoundary component | [ ] PENDING | — | — |
-| 3: useAsyncData composable | [ ] PENDING | — | — |
-| 4: SSE timeout (AbortController) | [ ] PENDING | — | — |
-| 5: Position type sync | [ ] PENDING | — | — |
-| 6: rawFetch retry | [ ] PENDING | — | — |
-| 7: Currency standardization | [ ] PENDING | — | — |
-| 8: Allocation from settings | [ ] PENDING | — | — |
+| 1: ApiResult<T> types | [x] COMPLETE | unwrap<T> helper replaces 19 as any casts | 2026-08-08 |
+| 2: ErrorBoundary component | [x] COMPLETE | Created src/components/ErrorBoundary.vue | 2026-08-08 |
+| 3: useAsyncData composable | [x] COMPLETE | Created src/composables/useAsyncData.ts | 2026-08-08 |
+| 4: SSE timeout (AbortController) | [x] COMPLETE | 60s timeout on both generators | 2026-08-08 |
+| 5: Position type sync | [x] COMPLETE | 24 fields added to Position interface | 2026-08-08 |
+| 6: rawFetch retry | [x] COMPLETE | Exponential backoff 1s/2s/4s, max 3 retries | 2026-08-08 |
+| 7: Currency standardization | [x] COMPLETE | All $ → Rs. (7 occurrences) | 2026-08-08 |
+| 8: Allocation from settings | [x] COMPLETE | allocationPerPosition from settings store | 2026-08-08 |
 
 ---
 

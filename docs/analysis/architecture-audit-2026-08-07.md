@@ -671,6 +671,15 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 | 6 | C2: Trade.close() SHORT PnL + fees | ✅ Done | `d464e12c` |
 | 7 | H1: DailyLossCircuitBreaker persistence | ✅ Done | `7e4a2b68` |
 | 8 | C6: Strategy consolidation | ✅ Done | `2f72eacf` |
+| 9 | H9: as any API unwraps | ✅ Done | `660e19c6` |
+| 10 | H10: SSE timeout | ✅ Done | `e8950aa9` |
+| 11 | H11: Position type sync | ✅ Done | `e8950aa9` |
+| 12 | H12: rawFetch retry | ✅ Done | `e8950aa9` |
+| 13 | C8: ErrorBoundary | ✅ Done | `e712857d` |
+| 14 | H8: useAsyncData composable | ✅ Done | `e712857d` |
+| 15 | M14: Currency standardization | ✅ Done | `e712857d` |
+| 16 | H15: Allocation from settings | ✅ Done | `e712857d` |
+| 17 | View integration (useAsyncData + ErrorBoundary) | ✅ Done | `2d9b06c5` |
 
 ### Dismissed (not bugs)
 
@@ -698,15 +707,10 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 | Finding | Priority | What's needed |
 |---------|----------|---------------|
 | C7: appState not Pinia | P1 | Convert to Pinia store |
-| C8: No ErrorBoundary | P1 | Create component, wrap top-level views |
-| H8: Loading/error boilerplate dup | P2 | Create useAsyncData<T>() composable |
-| H9: 18+ `as any` API unwraps | P2 | Proper ApiResult<T> generic types |
-| H10: SSE no timeout | P2 | AbortController with 60s timeout |
-| H11: Position type missing reason | P2 | Add reason field + STOPPED/TARGET_HIT statuses |
-| H12: rawFetch no retry | P2 | Exponential backoff (3 retries) |
-| H15: Hardcoded Rs. 100,000 | P2 | Read from settings store |
 | M3: NaN validation gap | P3 | isFinite() checks on numeric responses |
-| M14: $ vs Rs. currency | P3 | Standardize on Rs. |
+| M12: API client 921 lines | P3 | Split into separate modules |
+| M20: Flaky E2E waits | P3 | Replace fixed waits with stable selectors |
+| L1: Component unit tests | P3 | Add Vitest tests for views |
 | M12: 921-line API client | P3 | Split into domain modules |
 | M20: Flaky E2E waits | P3 | Replace waitForTimeout with waitForSelector |
 | L1: Only 4 component unit tests | P4 | Add Vitest for SignalCard, PositionCard, etc. |

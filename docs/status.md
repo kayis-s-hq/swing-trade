@@ -37,8 +37,9 @@ Last checked: 2026-08-08
 
 ## Audit Fixes (2026-08-08)
 
-8 phases completed from architecture audit (64 findings):
+17 phases completed from architecture audit (64 findings):
 
+### Backend (8 phases)
 - [x] H5: TradeRequest.isValid() operator precedence fix
 - [x] H6: Null direction guards in 3 places (PaperTradingServiceImpl, LiveTradingService, PositionService)
 - [x] H7: PositionEntity.toDomain() null status → defaults to OPEN
@@ -47,6 +48,17 @@ Last checked: 2026-08-08
 - [x] C2: Trade.close() PnL correct for SHORT + fees (TradeDirection field added)
 - [x] H1: DailyLossCircuitBreaker DB persistence (entity + repo + migration + wiring)
 - [x] C6: Strategy consolidation (SwingTradingStrategy deprecated, PriceActionSignalEngine unified)
+
+### Frontend (9 phases)
+- [x] H9: 19 `as any` casts → `unwrap<T>()` helper (1 remaining safe `as any`)
+- [x] H10: SSE 60s timeout with AbortController (both generators)
+- [x] H11: Position type synced (24 fields: brokerType, direction, entryReason, etc.)
+- [x] H12: rawFetch retry with exponential backoff (1s/2s/4s, max 3 retries)
+- [x] C8: ErrorBoundary component created and applied to all 9 views
+- [x] H8: useAsyncData<T>() composable replacing ~63 lines of boilerplate
+- [x] M14: Currency standardized to `Rs.` across all views
+- [x] H15: Allocation read from settings store (allocationPerPosition)
+- [x] View integration: all 9 views wrapped in ErrorBoundary + useAsyncData
 
 Dismissed (not bugs): C1 (param order safe), C3 (.env not in git), C5 (backtest precision safe)
 
