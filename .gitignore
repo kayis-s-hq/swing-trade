@@ -7,11 +7,13 @@
 *.ear
 *.nar
 
-# Maven target directory
+# Build target directory
 target/
 
-# Maven settings
-.settings/
+# Gradle build output
+backend/*/build/
+backend/.gradle/
+.gradle/
 
 # IDE specific files
 .idea/
@@ -78,13 +80,6 @@ yarn-error.log*
 # Scala
 *.scala_bsc
 
-# Project specific
-broker/target/
-strategy/target/
-data/target/
-core/target/
-llm/target/
-api/target/
 
 # Playwright MCP artifacts
 .playwright-mcp/
