@@ -24,30 +24,41 @@ class TechnicalAnalysisServiceTest {
 
     @Test
     void compute_bullish_data_returns_buy_score_100() {
-        // Setup: 60 candles with bullish price action
         CandleStore candleStore = mock(CandleStore.class);
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
         TechnicalAnalysisService service = new TechnicalAnalysisService(candleStore, technicalIndicators);
 
         List<OhlcvCandle> candles = new ArrayList<>();
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < 50; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(10 + i),
-                    BigDecimal.valueOf(12 + i),
-                    BigDecimal.valueOf(8 + i),
-                    BigDecimal.valueOf(15 + i),
-                    500000L + i * 1000L,
+                    BigDecimal.valueOf(10 + i / 10.0),
+                    BigDecimal.valueOf(10.25 + i / 10.0),
+                    BigDecimal.valueOf(8 + i / 10.0),
+                    BigDecimal.valueOf(10 + i / 10.0),
+                    500000L,
                     LocalDate.now().minusDays(59 - i)
             ));
         }
-        when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
+        for (int i = 50; i < 60; i++) {
+            candles.add(makeCandle(
+                    BigDecimal.valueOf(20 + i / 10.0),
+                    BigDecimal.valueOf(20.25 + i / 10.0),
+                    BigDecimal.valueOf(18 + i / 10.0),
+                    BigDecimal.valueOf(20 + i / 10.0),
+                    1000000L,
+                    LocalDate.now().minusDays(59 - i)
+            ));
+        }
+        when(candleStore.findBySymbol("TEST")).thenAnswer(inv -> {
+            List<OhlcvCandle> copy = new ArrayList<>(candles);
+            return copy;
+        });
 
-        // Mock indicator returns for bullish scenario
-        when(technicalIndicators.calculateEMA(anyList(), eq(20))).thenReturn(12.0);
-        when(technicalIndicators.calculateEMA(anyList(), eq(50))).thenReturn(10.0);
-        when(technicalIndicators.calculateRSI(anyList(), eq(14))).thenReturn(57.5);
+        when(technicalIndicators.calculateEMA(anyList(), eq(20))).thenReturn(18.0);
+        when(technicalIndicators.calculateEMA(anyList(), eq(50))).thenReturn(16.0);
+        when(technicalIndicators.calculateRSI(anyList(), eq(14))).thenReturn(60.0);
         when(technicalIndicators.calculateVolumeMA(anyList(), eq(20))).thenReturn(100.0);
-        when(technicalIndicators.calculateATR(anyList(), eq(14))).thenReturn(1.0);
+        when(technicalIndicators.calculateATR(anyList(), eq(14))).thenReturn(0.35);
 
         // Act
         CompositeAnalysis.TechnicalScore result = service.compute("test");
@@ -62,29 +73,40 @@ class TechnicalAnalysisServiceTest {
 
     @Test
     void compute_bearish_data_returns_sell_score_minus100() {
-        // Setup: 60 candles with bearish price action
         CandleStore candleStore = mock(CandleStore.class);
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
         TechnicalAnalysisService service = new TechnicalAnalysisService(candleStore, technicalIndicators);
 
         List<OhlcvCandle> candles = new ArrayList<>();
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < 50; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(10 + i),
-                    BigDecimal.valueOf(12 + i),
-                    BigDecimal.valueOf(8 + i),
-                    BigDecimal.valueOf(15 + i),
-                    200000L + i * 1000L,
+                    BigDecimal.valueOf(74 - i / 10.0),
+                    BigDecimal.valueOf(74.25 - i / 10.0),
+                    BigDecimal.valueOf(72 - i / 10.0),
+                    BigDecimal.valueOf(74 - i / 10.0),
+                    500000L,
                     LocalDate.now().minusDays(59 - i)
             ));
         }
-        when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
+        for (int i = 50; i < 60; i++) {
+            candles.add(makeCandle(
+                    BigDecimal.valueOf(65 - i / 10.0),
+                    BigDecimal.valueOf(65.25 - i / 10.0),
+                    BigDecimal.valueOf(63 - i / 10.0),
+                    BigDecimal.valueOf(65 - i / 10.0),
+                    200000L,
+                    LocalDate.now().minusDays(59 - i)
+            ));
+        }
+        when(candleStore.findBySymbol("TEST")).thenAnswer(inv -> {
+            List<OhlcvCandle> copy = new ArrayList<>(candles);
+            return copy;
+        });
 
-        // Mock indicator returns for bearish scenario
-        when(technicalIndicators.calculateEMA(anyList(), eq(20))).thenReturn(20.0);
-        when(technicalIndicators.calculateEMA(anyList(), eq(50))).thenReturn(25.0);
-        when(technicalIndicators.calculateRSI(anyList(), eq(14))).thenReturn(40.0);
-        when(technicalIndicators.calculateVolumeMA(anyList(), eq(20))).thenReturn(100.0);
+        when(technicalIndicators.calculateEMA(anyList(), eq(20))).thenReturn(70.0);
+        when(technicalIndicators.calculateEMA(anyList(), eq(50))).thenReturn(65.0);
+        when(technicalIndicators.calculateRSI(anyList(), eq(14))).thenReturn(75.0);
+        when(technicalIndicators.calculateVolumeMA(anyList(), eq(20))).thenReturn(1000000.0);
         when(technicalIndicators.calculateATR(anyList(), eq(14))).thenReturn(2.0);
 
         // Act
@@ -99,7 +121,6 @@ class TechnicalAnalysisServiceTest {
 
     @Test
     void compute_insufficient_candles_returns_hold_score_0() {
-        // Setup: only 30 candles, below StrategyParams.MIN_CANDLES (50)
         CandleStore candleStore = mock(CandleStore.class);
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
         TechnicalAnalysisService service = new TechnicalAnalysisService(candleStore, technicalIndicators);
@@ -115,7 +136,7 @@ class TechnicalAnalysisServiceTest {
                     LocalDate.now().minusDays(29 - i)
             ));
         }
-        when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
+        when(candleStore.findBySymbol("TEST")).thenReturn(candles);
 
         // Act
         CompositeAnalysis.TechnicalScore result = service.compute("test");
@@ -129,7 +150,6 @@ class TechnicalAnalysisServiceTest {
 
     @Test
     void compute_mixed_indicators_returns_sum_of_factors() {
-        // Setup: 60 candles
         CandleStore candleStore = mock(CandleStore.class);
         TechnicalIndicators technicalIndicators = mock(TechnicalIndicators.class);
         TechnicalAnalysisService service = new TechnicalAnalysisService(candleStore, technicalIndicators);
@@ -145,7 +165,10 @@ class TechnicalAnalysisServiceTest {
                     LocalDate.now().minusDays(59 - i)
             ));
         }
-        when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
+        when(candleStore.findBySymbol("TEST")).thenAnswer(inv -> {
+            List<OhlcvCandle> copy = new ArrayList<>(candles);
+            return copy;
+        });
 
         // Mixed: EMA bullish (+25), RSI bearish (-25), volume bullish (+25), 52W high bearish (-25)
         // Expected: 0 -> HOLD

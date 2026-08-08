@@ -40,7 +40,7 @@ import static org.mockito.Mockito.when;
  * Requirements:
  * - LLM_VLLM_BASE_URL environment variable set to vLLM endpoint
  *
- * Run with: mvn test -pl llm -Dtest=SentimentAnalysisLiveE2ETest
+ * Run with: ./gradlew :llm:test --tests SentimentAnalysisLiveE2ETest
  */
 @SpringBootTest(classes = {LlmConfig.class, TestLlmConfig.class})
 @ActiveProfiles("test")

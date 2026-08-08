@@ -22,6 +22,7 @@ set -e
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 DASHBOARD_DIR="$PROJECT_ROOT/dashboard"
+INFRA_DIR="$PROJECT_ROOT/infra"
 PIDFILE="$PROJECT_ROOT/.swing-trade-pids"
 PI_NODE_HOST="piworm.local"
 
@@ -48,13 +49,13 @@ trap cleanup_pids EXIT
 
 do_stage_monitoring() {
     local cmd="${2:-up}"
-    docker compose -f docker-compose.monitoring-stage.yml "$cmd"
+    docker compose -f "$INFRA_DIR/docker-compose.monitoring-stage.yml" "$cmd"
 }
 
 do_stage_infra() {
     local cmd="${2:-up}"
     docker context use pi-node
-    cd "$BACKEND_DIR"
+    cd "$INFRA_DIR"
     docker compose -f docker-compose.infra-stage.yml "$cmd"
     docker context use desktop-linux
 }
@@ -67,7 +68,7 @@ case "${1:-help}" in
     # Start infrastructure on pi-node
     echo "📦 Starting infrastructure on pi-node..."
     docker context use pi-node
-    cd "$BACKEND_DIR"
+    cd "$INFRA_DIR"
     docker compose -f docker-compose.infra-dev.yml up -d
     echo ""
 
@@ -84,11 +85,11 @@ case "${1:-help}" in
     # Start Spring Boot locally
     echo "☕ Starting Spring Boot app locally..."
     # Load .env so Spring Boot picks up env vars (Spring doesn't auto-load .env)
-    if [ -f "$BACKEND_DIR/.env" ]; then
+    if [ -f "$INFRA_DIR/env/.env" ]; then
         set -a
-        source "$BACKEND_DIR/.env"
+        source "$INFRA_DIR/env/.env"
         set +a
-        echo "✓ Loaded environment from $BACKEND_DIR/.env"
+        echo "✓ Loaded environment from $INFRA_DIR/env/.env"
     fi
     cd "$BACKEND_DIR"
     ./gradlew :api:bootRun --args='--spring.profiles.active=local' &
@@ -136,7 +137,7 @@ case "${1:-help}" in
     # Stop infrastructure on pi-node
     echo "📦 Stopping infrastructure on pi-node..."
     docker context use pi-node
-    cd "$BACKEND_DIR"
+    cd "$INFRA_DIR"
     docker compose -f docker-compose.infra-dev.yml down
     echo ""
 
@@ -149,7 +150,7 @@ case "${1:-help}" in
   infra)
     echo "📦 Managing infrastructure on pi-node..."
     docker context use pi-node
-    cd "$BACKEND_DIR"
+    cd "$INFRA_DIR"
     docker compose -f docker-compose.infra-dev.yml "${@:2}"
     ;;
 
@@ -158,7 +159,7 @@ case "${1:-help}" in
     echo ""
     echo "Infrastructure (pi-node):"
     docker context use pi-node
-    cd "$BACKEND_DIR"
+    cd "$INFRA_DIR"
     docker compose -f docker-compose.infra-dev.yml ps
     echo ""
 
@@ -180,7 +181,7 @@ case "${1:-help}" in
     echo ""
     echo "=== Infrastructure Logs ==="
     docker context use pi-node
-    cd "$BACKEND_DIR"
+    cd "$INFRA_DIR"
     docker compose -f docker-compose.infra-dev.yml logs "${@:2}"
     ;;
 
@@ -227,7 +228,7 @@ case "${1:-help}" in
     ;;
 
   logs-json)
-    LOG_FILE="${PROJECT_ROOT}/logs/swing-trade-local.log"
+    LOG_FILE="${PROJECT_ROOT}/backend/logs/swing-trade-local.log"
     if [ -f "$LOG_FILE" ]; then
       tail -n "${2:-50}" "$LOG_FILE" | jq '.' 2>/dev/null || tail -n "${2:-50}" "$LOG_FILE"
     else
@@ -244,15 +245,15 @@ case "${1:-help}" in
     echo "Monitoring is handled by pi-prometheus (port 9090) + pi-grafana (port 3001)."
     echo ""
 
-    # --- Step 1: Switch to Java 21 for Maven build ---
-    echo "☕ Switching to Java 21 for Maven build..."
+    # --- Step 1: Switch to Java 21 for Gradle build ---
+    echo "☕ Switching to Java 21 for Gradle build..."
     if command -v sdkman-init &> /dev/null; then
       source "$HOME/.sdkman/bin/sdkman-init.sh" 2>/dev/null
     elif [ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
       source "$HOME/.sdkman/bin/sdkman-init.sh"
     fi
     echo "  Java: $(java -version 2>&1 | head -1)"
-    echo "  Maven: $(mvn --version 2>&1 | head -1)"
+    echo "  Gradle: $(./gradlew --version 2>&1 | head -1)"
     echo ""
 
     # --- Step 2: Build JAR locally ---
@@ -279,18 +280,18 @@ case "${1:-help}" in
     DASH_PATH="$PROJECT_ROOT/dashboard"
     ssh dietpi@piworm.local "mkdir -p $STAGE_PATH/api/target $STAGE_PATH/dashboard/dist"
     scp "$BACKEND_DIR/api/build/libs/api-*.jar" dietpi@piworm.local:"$STAGE_PATH/api/build/libs/api-1.0.0.jar"
-    scp "$BACKEND_DIR/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/Dockerfile"
-    scp "$BACKEND_DIR/docker-compose.infra-stage.yml" dietpi@piworm.local:"$STAGE_PATH/docker-compose.infra-stage.yml"
+    scp "$INFRA_DIR/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/Dockerfile"
+    scp "$INFRA_DIR/docker-compose.infra-stage.yml" dietpi@piworm.local:"$STAGE_PATH/docker-compose.infra-stage.yml"
     echo "✓ JAR + Dockerfile + compose transferred"
 
     echo "📦 Transferring frontend dist..."
     scp -r "$DASH_PATH/dist" dietpi@piworm.local:"$STAGE_PATH/dashboard/dist"
-    scp "$DASH_PATH/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/dashboard/Dockerfile"
-    scp "$DASH_PATH/nginx.conf" dietpi@piworm.local:"$STAGE_PATH/dashboard/nginx.conf"
+    scp "$INFRA_DIR/dashboard/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/dashboard/Dockerfile"
+    scp "$INFRA_DIR/nginx/dashboard-nginx/default.conf" dietpi@piworm.local:"$STAGE_PATH/dashboard/nginx.conf"
     echo "✓ Frontend transferred"
 
     echo "📋 Transferring .env.stage to pi-node..."
-    scp "$BACKEND_DIR/.env.stage" dietpi@piworm.local:"$STAGE_PATH/.env.stage"
+    scp "$INFRA_DIR/env/.env.stage" dietpi@piworm.local:"$STAGE_PATH/.env.stage"
     echo "✓ Env file transferred"
     echo ""
 

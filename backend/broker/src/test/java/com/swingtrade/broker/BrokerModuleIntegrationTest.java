@@ -33,10 +33,10 @@ public class BrokerModuleIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        OrderManager orderManager = new OrderManager();
-        PositionManager positionManager = new PositionManager(5);
         PaperTradingProperties props = new PaperTradingProperties();
         props.setInitialBalance(INITIAL_CAPITAL);
+        OrderManager orderManager = new OrderManager();
+        PositionManager positionManager = new PositionManager(props);
         paperTradingEngine = new PaperTradingEngine(orderManager, positionManager, props);
         brokerService = new PaperTradingServiceImpl(paperTradingEngine, orderManager, null);
     }

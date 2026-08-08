@@ -35,7 +35,7 @@ The API module requires the following dependencies:
 
 Run the application with:
 ```
-mvn spring-boot:run
+cd backend && ./gradlew :api:bootRun --args='--spring.profiles.active=local,fyers'
 ```
 
 Endpoints will be available at:

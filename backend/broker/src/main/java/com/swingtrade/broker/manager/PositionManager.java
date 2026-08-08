@@ -8,6 +8,7 @@ import com.swingtrade.domain.OhlcvCandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -360,6 +361,7 @@ public class PositionManager {
     /**
      * Closes a position completely. Returns a new Position instance.
      */
+    @Transactional
     public Position closePosition(String positionId, BigDecimal exitPrice, String reason) {
         Position position = positions.get(positionId);
         if (position == null) {
@@ -372,6 +374,7 @@ public class PositionManager {
     /**
      * Closes a position by ID with a specific status (STOPPED, TARGET_HIT, etc.).
      */
+    @Transactional
     public Position closePosition(String positionId, PositionStatus status, String reason) {
         Position position = positions.get(positionId);
         if (position == null) {
@@ -383,6 +386,7 @@ public class PositionManager {
     /**
      * Internal method to close a position with specific status. Returns a new Position.
      */
+    @Transactional
     Position closePosition(Position position, PositionStatus status, String reason) {
         if (position.status() == PositionStatus.CLOSED ||
             position.status() == PositionStatus.STOPPED ||

@@ -3,7 +3,14 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar
 plugins {
     java
     id("org.springframework.boot") version "3.3.1"
-    id("io.spring.dependency-management") version "1.1.6"
+    id("io.spring.dependency-management")
+}
+
+dependencyManagement {
+    imports {
+        mavenBom("org.springframework.boot:spring-boot-dependencies:3.3.1")
+        mavenBom("dev.langchain4j:langchain4j-bom:0.34.0")
+    }
 }
 
 dependencies {

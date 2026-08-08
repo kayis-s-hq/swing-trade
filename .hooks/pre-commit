@@ -139,4 +139,137 @@ if [ ${#vue_files[@]} -gt 0 ] || [ ${#ts_files[@]} -gt 0 ]; then
     echo "ESLint passed."
 fi
 
+# ---- Structural checks: enforce project organization ----
+echo "Running structural checks..."
+
+check_structure() {
+    local error=0
+
+    # No JAR files in backend root
+    for f in backend/*.jar; do
+        if [ -e "$f" ]; then
+            echo "ERROR: $f should be in libs/ or removed (build artifact)"
+            error=1
+        fi
+    done
+
+    # No env files in backend
+    for f in backend/.env*; do
+        if [ -e "$f" ]; then
+            echo "ERROR: $f should be in infra/env/"
+            error=1
+        fi
+    done
+
+    # No docker-compose files in backend
+    for f in backend/docker-compose*.yml; do
+        if [ -e "$f" ]; then
+            echo "ERROR: $f should be in infra/"
+            error=1
+        fi
+    done
+
+    # No backend Dockerfile
+    if [ -f backend/Dockerfile ]; then
+        echo "ERROR: backend/Dockerfile should be in infra/"
+        error=1
+    fi
+
+    # No deploy.sh in backend
+    if [ -f backend/deploy.sh ]; then
+        echo "ERROR: backend/deploy.sh should be in infra/"
+        error=1
+    fi
+
+    # No nginx configs in backend
+    if [ -d backend/reports-nginx ]; then
+        echo "ERROR: backend/reports-nginx/ should be in infra/nginx/"
+        error=1
+    fi
+
+    # No monitoring in backend
+    if [ -d backend/monitoring ]; then
+        echo "ERROR: backend/monitoring/ should be in infra/monitoring/"
+        error=1
+    fi
+
+    # No logs in backend
+    if [ -d backend/logs ]; then
+        echo "ERROR: backend/logs/ should not exist (runtime artifact)"
+        error=1
+    fi
+
+    # No test-results in backend root or api/
+    if [ -d backend/test-results ]; then
+        echo "ERROR: backend/test-results/ should not exist (Gradle build output)"
+        error=1
+    fi
+    if [ -d backend/api/test-results ]; then
+        echo "ERROR: backend/api/test-results/ should not exist (Gradle build output)"
+        error=1
+    fi
+
+    # No libs in data module
+    if [ -d backend/data/libs ]; then
+        echo "ERROR: backend/data/libs/ removed; use libs/ for shared JARs"
+        error=1
+    fi
+
+    # No config symlink in api
+    if [ -d backend/api/config ]; then
+        echo "ERROR: backend/api/config/ removed; use backend/config/ for shared config"
+        error=1
+    fi
+
+    # No nested dashboard
+    if [ -d dashboard/dashboard ]; then
+        echo "ERROR: dashboard/dashboard/ is a leftover artifact"
+        error=1
+    fi
+
+    # No Dockerfile or nginx.conf in dashboard
+    for f in dashboard/Dockerfile dashboard/nginx.conf; do
+        if [ -e "$f" ]; then
+            echo "ERROR: $f should be in infra/"
+            error=1
+        fi
+    done
+
+    # No build output in dashboard
+    for d in dashboard/dist dashboard/logs dashboard/test-results; do
+        if [ -d "$d" ]; then
+            echo "ERROR: $d should not exist in source tree"
+            error=1
+        fi
+    done
+
+    # Issue files must be in docs/issues/
+    for f in .github/issues/*.md; do
+        if [ -e "$f" ]; then
+            echo "ERROR: $f should be in docs/issues/"
+            error=1
+        fi
+    done
+
+    # docs/plan/ merged into docs/plans/
+    if [ -d docs/plan ]; then
+        echo "ERROR: docs/plan/ merged into docs/plans/"
+        error=1
+    fi
+
+    if [ $error -ne 0 ]; then
+        echo "FAILED: structural checks failed. Fix the issues above."
+        return 1
+    fi
+
+    echo "Structural checks passed."
+    return 0
+}
+
+check_structure
+struct_exit=$?
+if [ $struct_exit -ne 0 ]; then
+    exit 1
+fi
+
 exit 0

@@ -2,16 +2,16 @@
 description: Generate a test-first development plan for backend changes with fixtures, Mockito tests, and H2 integration tests
 ---
 
-# TDD Plan Generator Command
+# TDD Plan Generator
 
-Generate a test-first development plan for backend changes. Captures real API request/response as fixtures, writes unit tests with Mockito, integration tests with H2, and the minimal code to make them pass.
+Generate a test-first development plan. Captures real API request/response as fixtures, writes unit tests with Mockito, integration tests with H2, and the minimal code to make them pass.
 
 ## When to Use
 
 - Backend bug fix, precision issue, or new feature in a Spring Boot Gradle module
 - Existing tests use Mockito (mock repos/services) or SpringBootTest + H2
 - Need to capture real API request/response as JSON fixtures
-- Plan must go under `docs/plans/` with exact file paths and code
+- Plan goes under `docs/plans/` with exact file paths and code
 
 ## When NOT to Use
 
@@ -19,13 +19,27 @@ Generate a test-first development plan for backend changes. Captures real API re
 - Pure infrastructure/config changes
 - One-line fixes with no test gap
 - Database migration-only work
-- Plan already exists in `docs/plans/` (use tdd-impl command instead)
+- Plan already exists in `docs/plans/` — use `/tdd-impl` to execute it
 
-## Core Principle
+## ABSOLUTE PRINCIPLES
 
-Write tests first (RED), watch them fail, write minimal code (GREEN), verify all pass. The plan documents the full cycle: what to test, how to test it, what fixtures to capture, which files change.
+These rules have NO exceptions.
 
-## Plan Structure
+### 1. Tests Before Code
+
+Production code MUST NOT exist before its test fails. This is the only rule. Everything else derives from it.
+
+### 2. Plans Are Actionable Artifacts
+
+Every plan must be executable by another agent without guessing. Exact file paths. Exact method names. Exact assertions. If a requirement is unclear, ask before writing the plan.
+
+### 3. Fixtures Are Real Data
+
+No synthetic fixtures. Run the backend locally. Hit the endpoints. Save real responses to `src/test/resources/fixtures/`.
+
+## Two Outputs
+
+### Plan Document (`docs/plans/<feature>.md`)
 
 Every plan MUST have these sections:
 
@@ -40,7 +54,7 @@ Every plan MUST have these sections:
 | 2: Missing Features | [ ] PENDING | — | — |
 ```
 
-**Note:** Stale/completed plans should be moved to `docs/plans/archive/` to keep the active folder clean.
+**Note:** Stale/completed plans MUST be moved to `docs/plans/archive/`.
 
 ### 1. Feature Map
 Table mapping every behavior/feature to test coverage:
@@ -52,10 +66,16 @@ Table mapping every behavior/feature to test coverage:
 Each phase is a step in the RED-GREEN-REFACTOR cycle:
 
 **Phase N: [Phase Name] (TDD — will fail)**
-- What to test, file path, test method names, what it asserts, why it will fail currently
+- What to test
+- File path
+- Test method names
+- What it asserts
+- Why it will fail currently
 
 **Phase N: Switch to [Fix]**
-- File paths, exact lines to change, what changes from/to
+- File paths
+- Exact lines to change
+- What changes from/to
 
 ### 3. Files Summary
 | Action | File | Type |
@@ -76,45 +96,63 @@ Commands to run:
 ## Test Design Rules
 
 ### Unit Tests (Mockito)
-- `@ExtendWith(MockitoExtension.class)` on test class
-- `@Mock` for dependencies (repos, services, stores)
-- `@BeforeEach` to wire mocked dependencies into the class under test
-- Assert on both behavior (method calls) and state (return values, fields)
-- Use `assertThat` from AssertJ, not `assertEquals`
-- Group related tests in `@Nested` classes with `@DisplayName`
+
+- `@ExtendWith(MockitoExtension.class)` on test class — REQUIRED
+- `@Mock` for all dependencies (repos, services, stores) — REQUIRED
+- `@BeforeEach` to wire mocked dependencies into the class under test — REQUIRED
+- Assert on both behavior (method calls) and state (return values, fields) — REQUIRED
+- Use `assertThat` from AssertJ, NOT `assertEquals` — REQUIRED
+- Group related tests in `@Nested` classes with `@DisplayName` — REQUIRED
 
 ### Integration Tests (SpringBootTest + H2)
-- `@SpringBootTest` with `@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)` if using real schema
-- Or `@SpringBootTest` with H2 auto-config if schema is compatible
-- Load real OHLCV/data from CSV fixtures into H2
-- Wire real implementations (not mocks)
-- Assert on full pipeline output (JSON reports, CSV files)
+
+- `@SpringBootTest` with `@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)` if using real schema — REQUIRED
+- Or `@SpringBootTest` with H2 auto-config if schema is compatible — REQUIRED
+- Load real OHLCV/data from CSV fixtures into H2 — REQUIRED
+- Wire real implementations (NOT mocks) — REQUIRED
+- Assert on full pipeline output (JSON reports, CSV files) — REQUIRED
 
 ### Fixtures
-- Run backend locally, hit endpoints with real data
-- Save responses to `src/test/resources/fixtures/`
+
+- Run backend locally, hit endpoints with real data — REQUIRED
+- Save responses to `src/test/resources/fixtures/` — REQUIRED
 - Name: `fixture-name.json` (single symbol) / `fixture-multi.json` (multi-symbol)
+- Integration tests load fixtures and assert exact values match — REQUIRED
 
-## TDD Discipline
+## Ambiguity Resolution
 
-**NO CODE BEFORE TESTS PASS.** The sequence is always:
-1. Comment out the code that needs fixing (do NOT delete)
-2. Write test that fails (RED)
-3. Uncomment code
-4. Apply minimal fix (GREEN)
-5. Verify all existing tests still pass (no regression)
-6. Remove the comment wrapper once tests pass
+Before writing the plan, if ANY of these are unclear, use `AskUserQuestion`:
 
-## Red Flags - STOP and Start Over
+| Ambiguity | Question |
+|-----------|----------|
+| Test method names not specified | "Which test method names should I use?" |
+| Assertions unclear | "What exact values should I assert?" |
+| Fixture data missing | "What real data should I capture?" |
+| Config parameters unclear | "Which BacktestConfig values should I use?" |
+| File paths ambiguous | "Which exact file and line should I modify?" |
+| Dependencies unclear | "Which mocks should I use for this dependency?" |
+| Test scope unclear | "Should I test edge cases or just the main behavior?" |
 
-- Code before test
-- "I already manually tested it"
-- "Tests after achieve the same purpose"
-- "This is different because..."
-- Skipping fixture capture because "it's complicated"
-- Deleting code instead of commenting it out
+**Do NOT guess.** If uncertain about ANY requirement, ask before writing the plan.
 
-**All of these mean: Comment out the code. Start over with TDD.**
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Only testing happy path | Test all exit reasons, edge cases, null inputs |
+| Asserting only on trades list | Assert on aggregate metrics (Sharpe, drawdown, expectancy) |
+| Missing config parameter tests | Test slippage, brokerage, maxHoldingDays explicitly |
+| No precision comparison | Compare DecimalNum vs DoubleNum behavior |
+| Fixture file too large | Split into single/multi fixtures, remove noise |
+| Integration test uses mocks | Use real implementations, not mocks |
+
+## Real-World Impact
+
+A thorough TDD plan for a backtest precision fix caught:
+- 5 untested features (slippage, brokerage, forced close, metrics, multi-symbol)
+- Precision loss from DoubleNum → DecimalNum conversion
+- 23 call sites using `doubleValue()` instead of `toBigDecimal()`
+- Total: 64 findings across architecture audit, 15 high priority
 
 ## Arguments
 

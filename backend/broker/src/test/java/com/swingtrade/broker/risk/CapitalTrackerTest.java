@@ -220,7 +220,7 @@ class CapitalTrackerTest {
             // When
             boolean canAdd = tracker.canAddPosition(null, new BigDecimal("5000"));
 
-            // Then
+            // Then: canAddPosition guards null
             assertThat(canAdd).isFalse();
         }
     }
@@ -269,13 +269,14 @@ class CapitalTrackerTest {
         @Test
         void getDeployedCapital_nullPositionInList() {
             // Given: List with null position
-            List<Position> positions = List.of(null, makePosition("RELIANCE-EQ", 10, new BigDecimal("1000")));
+            List<Position> positions = new java.util.ArrayList<>(java.util.Arrays.asList(null, makePosition("RELIANCE-EQ", 10, new BigDecimal("1000"))));
 
             // When
             BigDecimal deployed = tracker.getDeployedCapital(positions);
 
-            // Then
-            assertThat(deployed).isEqualTo(new BigDecimal("10000"));
+            // Then: null positions in list are skipped, only valid positions count
+            assertThat(deployed).isNotNull();
+            assertThat(deployed).isEqualByComparingTo(new BigDecimal("10000"));
         }
 
         @Test
@@ -323,8 +324,8 @@ class CapitalTrackerTest {
             // When
             BigDecimal utilization = tracker.getUtilizationPercentage(List.of());
 
-            // Then
-            assertThat(utilization).isEqualTo(BigDecimal.ZERO);
+            // Then: divide with scale 4 produces 0.0000, not 0
+            assertThat(utilization).isEqualByComparingTo(BigDecimal.ZERO);
         }
 
         @Test
@@ -377,7 +378,7 @@ class CapitalTrackerTest {
             assertThat(summary.getDeployedCapital()).isEqualTo(BigDecimal.ZERO);
             assertThat(summary.getAvailableCapital()).isEqualTo(INITIAL_CAPITAL);
             assertThat(summary.getCurrentPositions()).isZero();
-            assertThat(summary.getUtilizationPercentage()).isEqualTo(BigDecimal.ZERO);
+            assertThat(summary.getUtilizationPercentage()).isEqualByComparingTo(BigDecimal.ZERO);
         }
 
         @Test

@@ -1,0 +1,16 @@
+# Markdown lint config for swing-trade project
+# See https://github.com/DavidAnson/markdownlint/blob/main/doc/rules.md
+
+default: true
+
+# Line length
+MD013: false
+
+# No duplicate headings
+MD024: false
+
+# No multiple headings at same level with blank line
+MD025: false
+
+# First line heading
+MD041: false

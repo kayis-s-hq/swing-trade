@@ -18,7 +18,10 @@ import com.swingtrade.domain.PositionStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
+
+import java.util.ArrayList;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -100,7 +103,7 @@ public class PaperTradingStateService {
     }
 
     private void loadClosedPositions() {
-        List<PositionEntity> closedEntities = List.of();
+        List<PositionEntity> closedEntities = new ArrayList<>();
         try {
             closedEntities.addAll(unifiedPositionRepo.findByStatus("CLOSED").stream()
                 .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType()))
@@ -161,6 +164,7 @@ public class PaperTradingStateService {
         }
     }
 
+    @Transactional
     public void closePosition(String positionId, Position closedPos) {
         try {
             PositionEntity entity = unifiedPositionRepo.findByPositionId(positionId).orElse(null);

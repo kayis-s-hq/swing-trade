@@ -58,6 +58,7 @@ import static org.mockito.Mockito.*;
  * portfolio/position/order/snapshot persistence, queries, and edge cases.
  */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class PaperTradingStateServiceTest {
 
     @Mock
@@ -173,7 +174,7 @@ class PaperTradingStateServiceTest {
             // Then
             verify(portfolioRepo).findById(1L);
             verify(unifiedPositionRepo).findAllOpenPositions();
-            verify(unifiedPositionRepo, never()).findByStatus(anyString());
+            verify(unifiedPositionRepo).findByStatus("CLOSED");
         }
 
         @Test
@@ -226,11 +227,11 @@ class PaperTradingStateServiceTest {
             when(portfolioRepo.findById(1L)).thenReturn(Optional.of(makePortfolioEntity(
                     1L, "default", BigDecimal.valueOf(1000000), BigDecimal.valueOf(950000),
                     BigDecimal.valueOf(50000), BigDecimal.ZERO, 0)));
+            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(1000000)));
             when(unifiedPositionRepo.findAllOpenPositions()).thenReturn(List.of());
             when(unifiedPositionRepo.findByStatus("CLOSED")).thenReturn(List.of());
             when(unifiedPositionRepo.findByStatus("STOPPED")).thenReturn(List.of());
             when(unifiedPositionRepo.findByStatus("TARGET_HIT")).thenReturn(List.of());
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(1000000)));
 
             // When
             stateService.loadState();

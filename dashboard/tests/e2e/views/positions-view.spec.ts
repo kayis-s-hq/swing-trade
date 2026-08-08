@@ -220,10 +220,10 @@ test.describe('Positions View', () => {
     }
 
     // Check each row — Close button should only appear on OPEN rows
-    const closeBtns = page.locator('tbody tr td:text("Close")')
+    const closeBtns = page.locator('tbody tr td button:has-text("Close")')
     const closeCount = await closeBtns.count()
 
-    // Count OPEN status cells
+    // Count OPEN status cells (7th column)
     const statusCells = page.locator('tbody tr td:nth-child(7)')
     const openCount = await statusCells.filter({ hasText: /^OPEN$/ }).count()
 
@@ -356,9 +356,9 @@ test.describe('Positions View', () => {
     await page.getByRole('button', { name: 'New Position' }).click()
     await expect(page.locator('h2', { hasText: 'New Position' })).toBeVisible()
 
-    // The modal uses @click.self on the outer div — dispatch a click event on the backdrop element
-    // Use dispatch to properly trigger the Vue .self modifier
-    await page.locator('div[class*="bg-black/50"]').dispatchEvent('click')
+    // The modal uses @click.self on the outer fixed div — dispatch click on the outer
+    // container (not a child element) so Vue's .self modifier fires the handler
+    await page.locator('.fixed.inset-0.z-50').dispatchEvent('click')
 
     // Wait for the Teleport v-if to remove the modal
     await expect(page.locator('h2', { hasText: 'New Position' })).not.toBeVisible()

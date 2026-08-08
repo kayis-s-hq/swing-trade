@@ -1,5 +1,13 @@
 plugins {
     java
+    id("io.spring.dependency-management")
+}
+
+dependencyManagement {
+    imports {
+        mavenBom("org.springframework.boot:spring-boot-dependencies:3.3.1")
+        mavenBom("dev.langchain4j:langchain4j-bom:0.34.0")
+    }
 }
 
 dependencies {
@@ -23,8 +31,8 @@ dependencies {
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
-    testImplementation("org.mockito:mockito-core:5.12.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-core")
     testImplementation("org.assertj:assertj-core:3.26.3")
     testImplementation("org.wiremock:wiremock:3.8.0")
 }

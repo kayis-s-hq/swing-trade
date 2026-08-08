@@ -32,6 +32,7 @@ public record Trade(
     BigDecimal entryPrice,
     BigDecimal exitPrice,
     Integer quantity,
+    TradeDirection direction,
     BigDecimal totalPnL,
     Integer durationDays,
     TradeStatus tradeStatus,
@@ -81,6 +82,19 @@ public record Trade(
         String entryReason,
         BigDecimal fees
     ) {
+        return open(positionId, symbol, entryDate, entryPrice, quantity, entryReason, fees, TradeDirection.LONG);
+    }
+
+    public static Trade open(
+        Long positionId,
+        String symbol,
+        LocalDate entryDate,
+        BigDecimal entryPrice,
+        Integer quantity,
+        String entryReason,
+        BigDecimal fees,
+        TradeDirection direction
+    ) {
         return new Trade(
             null,
             positionId,
@@ -90,6 +104,7 @@ public record Trade(
             entryPrice,
             null,
             quantity,
+            direction,
             null,
             null,
             TradeStatus.OPEN,
@@ -114,8 +129,15 @@ public record Trade(
         BigDecimal exitPrice,
         String exitReason
     ) {
-        BigDecimal totalPnL = exitPrice.subtract(trade.entryPrice())
-            .multiply(BigDecimal.valueOf(trade.quantity()));
+        BigDecimal grossPnL;
+        if (trade.direction() == TradeDirection.SHORT) {
+            grossPnL = trade.entryPrice().subtract(exitPrice)
+                .multiply(BigDecimal.valueOf(trade.quantity()));
+        } else {
+            grossPnL = exitPrice.subtract(trade.entryPrice())
+                .multiply(BigDecimal.valueOf(trade.quantity()));
+        }
+        BigDecimal totalPnL = grossPnL.subtract(trade.fees());
 
         int durationDays = (int) java.time.temporal.ChronoUnit.DAYS.between(trade.entryDate(), exitDate);
 
@@ -128,6 +150,7 @@ public record Trade(
             trade.entryPrice(),
             exitPrice,
             trade.quantity(),
+            trade.direction(),
             totalPnL,
             durationDays,
             isProfit(totalPnL) ? TradeStatus.CLOSED : TradeStatus.STOPPED,

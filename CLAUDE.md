@@ -4,12 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Dual Backend Architecture
 
-This repo has **two** backend implementations — know which one you're working in:
+This repo has **one** active backend:
 
-1. **`src/` (root)** — Standalone Spring Boot 3.4.2 monolith. Simple app with basic stock/signal controllers. Use this for quick prototypes or simple changes. Built with `mvn` at repo root.
-2. **`backend/`** — Multi-module Gradle project (6 modules: core, data, strategy, llm, broker, api) with Spring Boot 3.3.1. Full-featured architecture with separate data ingestion, TA, LLM sentiment, paper trading, and REST API. Use this for real feature work.
-
-When in doubt, `backend/` is the active development target.
+1. **`backend/`** — Multi-module Gradle project (6 modules: core, data, strategy, llm, broker, api) with Spring Boot 3.3.1. Full-featured architecture with separate data ingestion, TA, LLM sentiment, paper trading, and REST API. Built with Gradle 9.6.1.
 
 ## Java Version
 
@@ -34,24 +31,33 @@ java -version  # must be Java 21, NOT 25/26
 
 ```
 swing-trade/
-├── src/                    # Root monolith (Spring Boot 3.4.2, standalone)
-│   └── main/java/com/swingtrade/
-│       ├── controller/     # StockController, TradeSignalController
-│       ├── model/          # Stock, TradeSignal, TradeSignalRequest
-│       ├── repository/     # JPA repositories
-│       ├── service/        # Business logic
-│       └── config/         # RedisConfig
-│
 ├── backend/                # Multi-module Gradle project (Spring Boot 3.3.1)
 │   ├── build.gradle.kts    # Root build + dependency management
 │   ├── settings.gradle.kts # Project settings + repository config
 │   ├── gradle.properties   # Gradle config (cache, JVM args)
+│   ├── config/             # Shared checkstyle + PMD config
 │   ├── core/               # Domain models (Stock, OhlcvCandle, Signal, Position, Trade, SentimentResult)
 │   ├── data/               # Data ingestion & storage (Upstox client, JPA entities, repositories, Flyway migrations)
 │   ├── strategy/           # TA with TA4j, signal generation, backtesting engine
 │   ├── llm/                # LLM client (vLLM/OpenAI-compatible), sentiment analysis, news ingestion
 │   ├── broker/             # Paper trading engine, order/position management, risk controls
 │   └── api/                # REST endpoints (Health, Signal, Trade, Position, Scan, Performance), scheduled jobs
+│
+├── infra/                  # Infrastructure (Docker, env, monitoring, nginx)
+│   ├── env/                # Environment files (.env, .env.dev, .env.stage, .env.example)
+│   ├── docker-compose.yml  # Default compose (dashboard + backend)
+│   ├── docker-compose.infra-dev.yml   # Dev PostgreSQL + Redis on pi-node
+│   ├── docker-compose.infra-stage.yml # Stage PostgreSQL + Redis on pi-node
+│   ├── docker-compose.monitoring-stage.yml # Stage monitoring
+│   ├── docker-compose.reports.yml     # Backtest reports service
+│   ├── Dockerfile          # Backend Dockerfile
+│   ├── deploy.sh           # Stage deployment script
+│   ├── monitoring/         # Prometheus + Grafana config
+│   ├── nginx/              # Nginx configs (dashboard, reports)
+│   └── dashboard/          # Dashboard Dockerfile
+│
+├── libs/                   # Shared local JAR dependencies
+│   └── fyersjavasdk-1.9.0.jar
 │
 ├── dashboard/              # Vue 3 + TypeScript frontend
 │   ├── src/
@@ -64,15 +70,25 @@ swing-trade/
 │
 ├── docs/                   # Project documentation
 │   ├── plans/              # Implementation plans (handoff artifacts)
-│   └── specs/              # Design specs
-└── dev-stack.sh            # Dev stack orchestration script
+│   ├── specs/              # Design specs
+│   ├── analysis/           # Architecture audits, analysis reports
+│   ├── api-references/     # External API docs (Fyers, Yahoo Finance)
+│   └── infra/              # CI/CD and deployment docs
+│
+├── .github/                # GitHub CI/CD workflows
+│   └── workflows/
+│
+├── .github/issues/         # Feature issue descriptions
+├── bin/                    # Shell scripts
+├── dev-stack.sh            # Dev stack orchestration script
+└── README.md
 ```
 
 ## Key Technologies
 
 ### Backend
 - Java 21 (MUST use Java 21 via sdkman — `source "$HOME/.sdkman/bin/sdkman-init.sh"` before Gradle; NOT Java 25/26)
-- Spring Boot 3.3.1 (backend/) / 3.4.2 (root src/)
+- Spring Boot 3.3.1
 - Gradle 9.6.1 (Kotlin DSL, multi-module build)
 - PostgreSQL + TimescaleDB (time-series)
 - Redis (caching)
@@ -119,22 +135,27 @@ cd backend
 ./gradlew :api:bootRun --args='--spring.profiles.active=local,fyers'
 ```
 
+## Build Configuration
+
+Gradle 9.6.1 with Kotlin DSL. All build phases configured in `backend/build.gradle.kts`:
+- JaCoCo: 80% line coverage threshold, XML reports
+- Checkstyle: `backend/config/checkstyle/checkstyle.xml`
+- PMD: `backend/config/pmd/pmd-ruleset.xml`
+- Integration tests: `src/integrationTest/` source set
+- Javadoc + source JAR generation
+
 ## Test Phase Rules
 
-**All tests run via `./gradlew test`.** Gradle's JVM Test Suite plugin runs ALL tests in the `test` phase.
+**All tests run via `./gradlew test`.** Gradle's JVM Test Suite plugin runs ALL unit tests in the `test` phase.
 
 **Naming convention:**
 - Unit tests: `*Test.java` (e.g., `BacktestEngineTest.java`)
-- Integration tests: `*IntegrationTest.java` (e.g., `BacktestEngineIntegrationTest.java`)
+- Integration tests: `*IntegrationTest.java` (e.g., `BacktestEngineIntegrationTest.java`) — placed in `src/integrationTest/`
 
-**Verification:** `./gradlew test` runs everything. `./gradlew check` runs tests + PMD + checkstyle.
-
-### Backend (root monolith)
-```bash
-./gradlew build                # Build
-./gradlew test                 # Run tests
-./gradlew :api:bootRun         # Run locally
-```
+**Verification:**
+- `./gradlew test` — runs unit tests + JaCoCo report
+- `./gradlew check` — runs tests + PMD + checkstyle + integration tests
+- `./gradlew jacocoTestCoverageVerification` — checks 80% line coverage threshold
 
 ### Frontend
 ```bash
@@ -187,7 +208,7 @@ Network: `swingtrade-network` (bridge). Volumes: `postgres_data`, `redis_data`.
 | Vue Dashboard | `3003` | — |
 
 ### Docker Compose Infra
-Located at `backend/docker-compose.infra.yml`. Manage directly:
+Located at `infra/`. Manage directly:
 ```bash
 ./dev-stack.sh infra up -d      # Start
 ./dev-stack.sh infra down       # Stop
@@ -202,7 +223,7 @@ Located at `backend/docker-compose.infra.yml`. Manage directly:
 - `test` — test configuration (H2 in-memory DB in some modules)
 
 ### Environment
-- `backend/.env` — loaded by `dev-stack.sh start`; contains DB, Redis, Upstox, LLM, and broker credentials
+- `infra/env/.env` — loaded by `dev-stack.sh start`; contains DB, Redis, Upstox, LLM, and broker credentials
 - Spring Boot does NOT auto-load `.env`; the script sources it explicitly
 
 ### DB Migrations
@@ -216,6 +237,8 @@ Located in `backend/data/src/main/resources/db/migration/`:
 - Remove explicit `hibernate.dialect` — auto-detected in Hibernate 6.6+
 - Set `spring.jpa.open-in-view: false` to avoid lazy-loading warnings
 - Set `spring.data.redis.host=piworm.local` for remote Redis
+- Broker module tests have pre-existing compilation errors (Position record constructor mismatch, missing RiskControlsService class)
+- Native image build (GraalVM) not implemented — would need `org.graalvm.buildtools.native` Gradle plugin
 
 ## API Endpoints
 
@@ -236,14 +259,20 @@ Located in `backend/data/src/main/resources/db/migration/`:
 ## Testing
 
 ```bash
-# Backend — all modules
+# Backend — all modules (unit tests)
 cd backend && ./gradlew test
 
 # Backend — specific module
 cd backend && ./gradlew :data:test
 
-# Backend — with coverage
-./gradlew test jacocoTestReport
+# Backend — all verification (tests + PMD + checkstyle + integration tests)
+cd backend && ./gradlew check
+
+# Backend — coverage report
+cd backend && ./gradlew jacocoTestReport
+
+# Backend — coverage threshold check (80% line coverage)
+cd backend && ./gradlew jacocoTestCoverageVerification
 
 # Frontend unit tests
 cd dashboard && yarn test
@@ -260,7 +289,13 @@ All project documentation goes in `docs/` as Markdown files.
 
 ### External API References
 
+- [docs/api-references/fyers-api-v3.md](docs/api-references/fyers-api-v3.md) — Fyers v3 API documentation
 - [docs/yahoo-finance-api.md](docs/yahoo-finance-api.md) — Yahoo Finance unofficial API endpoints (v8/chart, v7/quote, v1/search), response formats, parameters, and reliability notes. Based on [yahoo-finance2](https://github.com/gadicc/yahoo-finance2) reverse-engineered docs.
+
+### Analysis & Audits
+
+- [docs/analysis/architecture-audit-2026-07-22.md](docs/analysis/architecture-audit-2026-07-22.md) — Architecture audit findings
+- [docs/analysis/llm-accuracy-monitoring.md](docs/analysis/llm-accuracy-monitoring.md) — LLM accuracy monitoring analysis
 
 ### Backtesting
 
@@ -305,6 +340,9 @@ When a multi-step implementation plan is decided (after research and clarificati
 - `docs/` — knowledge docs (API refs, architecture, backtesting, etc.)
 - `docs/plans/` — implementation plans (handoff artifacts)
 - `docs/specs/` — design specs
+- `docs/analysis/` — architecture audits, analysis reports
+- `docs/api-references/` — external API documentation
+- `docs/infra/` — CI/CD and deployment documentation
 
 **Forbidden locations:** `claude/plans/`, `.claude/plans/`, `docs/superpowers/`, `.claude/worktrees/`, or any other ad-hoc directory.
 

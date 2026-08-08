@@ -85,7 +85,7 @@ yarn-error.log*
 .playwright-mcp/
 
 # Backend runtime artifacts
-backend/api/logs/
+backend/logs/
 backend/api/data/fyers-tokens.json
 
 # Dashboard build output

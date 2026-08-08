@@ -1,5 +1,13 @@
 plugins {
     java
+    id("io.spring.dependency-management")
+}
+
+dependencyManagement {
+    imports {
+        mavenBom("org.springframework.boot:spring-boot-dependencies:3.3.1")
+        mavenBom("dev.langchain4j:langchain4j-bom:0.34.0")
+    }
 }
 
 dependencies {
@@ -15,7 +23,7 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql:10.13.0")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
 
-    implementation(files("libs/fyersjavasdk-1.9.0.jar"))
+    implementation(files("../../libs/fyersjavasdk-1.9.0.jar"))
     implementation("org.json:json:20231013")
     implementation("org.apache.commons:commons-csv:1.11.0")
     implementation("org.jsoup:jsoup:1.18.3")
@@ -53,4 +61,3 @@ tasks {
     }
 }
 
-// Resource filtering removed — Maven <filtering> not needed for Gradle

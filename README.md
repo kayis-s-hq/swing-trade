@@ -6,7 +6,7 @@ Automated swing trading system for NSE/BSE Indian equities. Implements 1-4 week 
 
 ```
 swing-trade/
-├── backend/                # Multi-module Maven project (Spring Boot 3.3.1)
+├── backend/                # Multi-module Gradle project (Spring Boot 3.3.1)
 │   ├── core/               # Domain models (Stock, OhlcvCandle, Signal, Position, Trade)
 │   ├── data/               # Data ingestion & storage (Upstox client, JPA, Flyway)
 │   ├── strategy/           # TA with TA4j, signal generation, backtesting
@@ -37,7 +37,7 @@ core → (none)
 |-----------|------------|
 | Language | Java 21 |
 | Framework | Spring Boot 3.3.1 |
-| Build | Maven multi-module |
+| Build | Gradle 9.6.1 (Kotlin DSL, multi-module) |
 | Database | PostgreSQL 16 + TimescaleDB |
 | Cache | Redis 7 |
 | TA | TA4j 0.16 |
@@ -59,14 +59,14 @@ This runs PostgreSQL and Redis on pi-node via SSH, with the app locally on your 
 
 ```bash
 cd backend
-mvn clean install
+./gradlew build
 ```
 
 ### 3. Run Backend
 
 ```bash
-cd api
-mvn spring-boot:run -Dspring-boot.run.profiles=local,fyers
+cd backend
+./gradlew :api:bootRun --args='--spring.profiles.active=local,fyers'
 ```
 
 ### 4. Run Frontend
@@ -77,7 +77,7 @@ yarn
 yarn dev
 ```
 
-Dashboard: http://localhost:5173
+Dashboard: http://localhost:3003
 API: http://localhost:8080
 
 ## API Endpoints
@@ -104,14 +104,23 @@ API: http://localhost:8080
 ## Testing
 
 ```bash
-# Backend — all modules
-cd backend && mvn test
+# Backend — all modules (unit tests)
+cd backend && ./gradlew test
+
+# Backend — specific module
+cd backend && ./gradlew :data:test
+
+# Backend — full verification (tests + PMD + checkstyle + integration tests)
+cd backend && ./gradlew check
+
+# Backend — coverage report
+cd backend && ./gradlew jacocoTestReport
 
 # Frontend unit tests
 cd dashboard && yarn test
 
 # Frontend E2E tests
-cd dashboard && npx playwright test
+cd dashboard && yarn playwright test
 ```
 
 ## Configuration

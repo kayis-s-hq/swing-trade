@@ -66,6 +66,9 @@ public class TradeEntity {
     @Column(precision = 15)
     private BigDecimal fees;
 
+    @Column(name = "direction", length = 10)
+    private String direction;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -92,6 +95,7 @@ public class TradeEntity {
         this.entryReason = trade.entryReason();
         this.exitReason = trade.exitReason();
         this.fees = trade.fees();
+        this.direction = trade.direction() != null ? trade.direction().name() : TradeDirection.LONG.name();
     }
 
     public static TradeEntity fromDomain(Trade trade) {
@@ -108,6 +112,7 @@ public class TradeEntity {
             entryPrice,
             exitPrice,
             quantity,
+            direction != null ? TradeDirection.valueOf(direction) : TradeDirection.LONG,
             totalPnL,
             durationDays,
             Trade.TradeStatus.valueOf(tradeStatus),

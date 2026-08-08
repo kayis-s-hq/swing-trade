@@ -162,7 +162,7 @@ public class PositionEntity {
             quantity,
             stopLoss,
             target,
-            PositionStatus.valueOf(status),
+            status != null ? PositionStatus.valueOf(status) : PositionStatus.OPEN,
             entryReason,
             currentPrice,
             positionId,

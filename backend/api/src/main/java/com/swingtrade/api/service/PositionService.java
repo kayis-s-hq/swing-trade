@@ -7,6 +7,7 @@ import com.swingtrade.api.dto.SectorAllocation;
 import com.swingtrade.api.dto.TradeRequest;
 import com.swingtrade.api.dto.TradeResponse;
 import com.swingtrade.broker.engine.PaperTradingEngine;
+import org.springframework.transaction.annotation.Transactional;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.domain.Order;
@@ -200,6 +201,7 @@ public class PositionService {
      * @param exitReason the reason for closing
      * @return Closed position response or null if not found
      */
+    @Transactional
     public PositionResponse closePosition(String symbol, String exitReason) {
         Optional<Position> posOpt = positionStore.findBySymbol(symbol);
         if (posOpt.isEmpty()) {

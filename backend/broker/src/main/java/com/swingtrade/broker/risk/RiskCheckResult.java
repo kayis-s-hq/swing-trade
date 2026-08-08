@@ -83,7 +83,8 @@ public class RiskCheckResult {
 
     public RiskCheckResult addWarning(String format, Object... args) {
         this.passed = false;
-        this.messages.add("WARNING: " + String.format(format.replace("{}", "%s"), args));
+        String escaped = format.replace("%", "%%").replace("{}", "%s");
+        this.messages.add("WARNING: " + String.format(escaped, args));
         return this;
     }
 
@@ -95,7 +96,8 @@ public class RiskCheckResult {
 
     public RiskCheckResult addError(String format, Object... args) {
         this.passed = false;
-        this.messages.add("ERROR: " + String.format(format.replace("{}", "%s"), args));
+        String escaped = format.replace("%", "%%").replace("{}", "%s");
+        this.messages.add("ERROR: " + String.format(escaped, args));
         return this;
     }
 
@@ -105,7 +107,8 @@ public class RiskCheckResult {
     }
 
     public RiskCheckResult addInfo(String format, Object... args) {
-        this.messages.add("INFO: " + String.format(format.replace("{}", "%s"), args));
+        String escaped = format.replace("%", "%%").replace("{}", "%s");
+        this.messages.add("INFO: " + String.format(escaped, args));
         return this;
     }
 

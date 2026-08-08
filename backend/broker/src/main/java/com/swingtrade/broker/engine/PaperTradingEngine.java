@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -182,6 +183,9 @@ public class PaperTradingEngine {
         // In production, this would use ATR and risk-per-trade parameters
 
         BigDecimal riskPerTrade = BigDecimal.valueOf(1).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP); // 1% max risk per trade
+        if (stopLoss == null) {
+            return BigDecimal.valueOf(100);
+        }
         BigDecimal riskPerShare = entryPrice.subtract(stopLoss);
         BigDecimal maxRiskAmount = portfolio.getCurrentCapital().multiply(riskPerTrade);
 
@@ -429,6 +433,7 @@ public class PaperTradingEngine {
      * @return the closed position
      * @throws IllegalArgumentException if position not found
      */
+    @Transactional
     public Position closePosition(Long positionId) {
         // Load position from DB to get its positionId (counter may have reset)
         PositionEntity entity = stateService.getPositionById(positionId);
@@ -455,6 +460,7 @@ public class PaperTradingEngine {
      * @param exitPrice the exit price
      * @param reason the reason for closing
      */
+    @Transactional
     public void closePosition(String positionId, BigDecimal exitPrice, String reason) {
         Position position = positionManager.closePosition(positionId, exitPrice, reason);
 

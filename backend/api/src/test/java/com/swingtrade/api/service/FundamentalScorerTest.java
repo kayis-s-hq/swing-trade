@@ -49,18 +49,18 @@ class FundamentalScorerTest {
         }
         for (int i = 50; i < 60; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(15 + i / 10.0),
-                    BigDecimal.valueOf(15 + i / 10.0 + 2),
-                    BigDecimal.valueOf(15 + i / 10.0 - 2),
-                    BigDecimal.valueOf(15 + i / 10.0),
+                    BigDecimal.valueOf(18 + i / 10.0),
+                    BigDecimal.valueOf(18 + i / 10.0 + 2),
+                    BigDecimal.valueOf(18 + i / 10.0 - 2),
+                    BigDecimal.valueOf(18 + i / 10.0),
                     1000000L,
                     LocalDate.now().minusDays(59 - i)
             ));
         }
         when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
 
-        when(technicalIndicators.calculateATR(anyList(), eq(14))).thenReturn(0.4);
-        when(technicalIndicators.calculateSMA(anyList(), eq(50))).thenReturn(12.0);
+        when(technicalIndicators.calculateATR(any(), eq(14))).thenReturn(0.4);
+        when(technicalIndicators.calculateSMA(any(), eq(50))).thenReturn(12.0);
 
         // Act
         CompositeAnalysis.FundamentalScore result = scorer.compute("test");
@@ -98,18 +98,18 @@ class FundamentalScorerTest {
         }
         for (int i = 50; i < 60; i++) {
             candles.add(makeCandle(
-                    BigDecimal.valueOf(10 + i / 10.0),
-                    BigDecimal.valueOf(10 + i / 10.0 + 2),
-                    BigDecimal.valueOf(10 + i / 10.0 - 2),
-                    BigDecimal.valueOf(10 + i / 10.0),
+                    BigDecimal.valueOf(8 + i / 10.0),
+                    BigDecimal.valueOf(8 + i / 10.0 + 2),
+                    BigDecimal.valueOf(8 + i / 10.0 - 2),
+                    BigDecimal.valueOf(8 + i / 10.0),
                     200000L,
                     LocalDate.now().minusDays(59 - i)
             ));
         }
         when(candleStore.findAllBySymbolOrderByDateDesc("TEST")).thenReturn(candles);
 
-        when(technicalIndicators.calculateATR(anyList(), eq(14))).thenReturn(6.0);
-        when(technicalIndicators.calculateSMA(anyList(), eq(50))).thenReturn(15.0);
+        when(technicalIndicators.calculateATR(any(), eq(14))).thenReturn(6.0);
+        when(technicalIndicators.calculateSMA(any(), eq(50))).thenReturn(15.0);
 
         // Act
         CompositeAnalysis.FundamentalScore result = scorer.compute("test");

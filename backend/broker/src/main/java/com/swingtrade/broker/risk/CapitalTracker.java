@@ -1,6 +1,6 @@
 package com.swingtrade.broker.risk;
 
-import com.swingtrade.broker.config.BrokerProperties;
+import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.domain.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +25,6 @@ public class CapitalTracker {
 
     private static final Logger logger = LoggerFactory.getLogger(CapitalTracker.class);
 
-    private static final BigDecimal DEFAULT_INITIAL_CAPITAL = new BigDecimal("50000");
-
     private final BigDecimal initialCapital;
     private final int maxPositions;
     private final BigDecimal maxCapitalPerPosition;
@@ -35,8 +33,8 @@ public class CapitalTracker {
     private BigDecimal deployedCapital;
 
     @Autowired
-    public CapitalTracker(BrokerProperties props) {
-        this(DEFAULT_INITIAL_CAPITAL, props.getMaxConcurrentPositions(), props.getMaxCapitalPerPosition());
+    public CapitalTracker(PaperTradingProperties props) {
+        this(props.getInitialBalance(), props.getMaxConcurrentPositions(), props.getMaxCapitalPerPosition());
     }
 
     /**
@@ -61,6 +59,9 @@ public class CapitalTracker {
      * @return RiskCheckResult with validation status
      */
     public RiskCheckResult enforceLimits(List<Position> currentPositions, BigDecimal orderValue) {
+        if (currentPositions == null) {
+            throw new NullPointerException("Positions list must not be null");
+        }
         logger.debug("Enforcing capital limits: currentPositions={}, orderValue={}",
                 currentPositions.size(), orderValue);
 
@@ -115,6 +116,9 @@ public class CapitalTracker {
      * @return true if position can be added
      */
     public boolean canAddPosition(List<Position> currentPositions, BigDecimal orderValue) {
+        if (currentPositions == null) {
+            return false;
+        }
         return enforceLimits(currentPositions, orderValue).isPassed();
     }
 

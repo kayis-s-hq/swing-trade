@@ -41,12 +41,17 @@ public class PaperTradingServiceImpl implements BrokerService {
             throw new IllegalArgumentException("Order cannot be null");
         }
         Order engineOrder;
+        if (order.getDirection() == null) {
+            throw new IllegalArgumentException("Order direction cannot be null");
+        }
         if (order.getDirection() == TradeDirection.LONG) {
             engineOrder = orderManager.createBuyOrder(
                 order.getSymbol(), order.getQuantity().intValue(), order.getPrice());
-        } else {
+        } else if (order.getDirection() == TradeDirection.SHORT) {
             engineOrder = orderManager.createSellOrder(
                 order.getSymbol(), order.getQuantity().intValue(), order.getPrice());
+        } else {
+            throw new IllegalArgumentException("Order direction must be LONG or SHORT");
         }
         engineOrder = paperTradingEngine.executePendingOrder(engineOrder.getOrderId(), order.getPrice());
         if (stateService != null) {

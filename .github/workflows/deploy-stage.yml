@@ -24,34 +24,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache Maven repo
-        uses: actions/cache@v4
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
         with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
 
-      - name: Install GraalVM 21 with native-image
-        run: |
-          curl -s "https://get.sdkman.io" | bash
-          source "$HOME/.sdkman/bin/sdkman-init.sh"
-          sdk install graalvm 21.0.2.gr21 2>/dev/null || true
-          source "$HOME/.sdkman/bin/sdkman-init.sh"
-          gu install native-image
-          java -version
-          native-image --version
-
-      - name: Build native image
+      - name: Grant execute permission to gradlew
         working-directory: backend
-        run: |
-          source "$HOME/.sdkman/bin/sdkman-init.sh"
-          export JAVA_HOME="$HOME/.sdkman/candidates/java/current"
-          export PATH="$HOME/.sdkman/candidates/graalvm/21.0.2.gr21/bin:$PATH"
-          mvn package -Pnative -Dmaven.test.skip=true -B
+        run: chmod +x gradlew
 
-      - name: Copy native binary to Docker context
-        run: cp backend/api/target/native/image/swing-trade-api backend/
+      - name: Build backend JAR
+        working-directory: backend
+        run: ./gradlew :api:bootJar -B -x test
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
@@ -60,7 +46,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-docker-${{ hashFiles('backend/**/pom.xml') }}
+          key: ${{ runner.os }}-docker-${{ hashFiles('backend/**/build.gradle.kts') }}
           restore-keys: |
             ${{ runner.os }}-docker-
 
@@ -69,7 +55,7 @@ jobs:
         with:
           context: .
           file: backend/Dockerfile
-          target: runtime-native
+          target: runtime-stage
           tags: ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max

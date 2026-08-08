@@ -172,15 +172,15 @@ check_java() {
   fi
 }
 
-check_mvn() {
-  if command -v mvn &>/dev/null; then
-    local mvn_version
-    mvn_version=$(mvn --version 2>&1 | head -1)
-    check_ok "${mvn_version}"
+check_gradle() {
+  if command -v gradle &>/dev/null; then
+    local gradle_version
+    gradle_version=$(gradle --version 2>&1 | head -1)
+    check_ok "${gradle_version}"
     return 0
   else
-    check_fail "mvn not found in PATH"
-    warn "Install Maven: brew install maven"
+    check_fail "gradle not found in PATH"
+    warn "Install Gradle: brew install gradle (or use ./gradlew wrapper)"
     return 1
   fi
 }
@@ -246,7 +246,7 @@ cmd_env_check() {
     check_env_file
     check_env_vars
     check_java
-    check_mvn
+    check_gradle
     check_npm
     check_docker
     check_pi_node_ssh
@@ -429,18 +429,14 @@ ENVEOF
   log "API port: ${API_PORT}"
 
   if [[ "${QUIET}" == "false" ]]; then
-    cd "${SCRIPT_DIR}/backend/api"
-    mvn spring-boot:run \
-      -Dspring-boot.run.profiles="${PROFILE}" \
-      -Dspring-boot.run.jvmArguments="-Dserver.port=${API_PORT}" &
+    cd "${SCRIPT_DIR}/backend"
+    ./gradlew :api:bootRun --args="--spring.profiles.active=${PROFILE} --server.port=${API_PORT}" &
     API_PID=$!
     log "API backend started (PID: ${API_PID})"
     cd "${SCRIPT_DIR}"
   else
-    cd "${SCRIPT_DIR}/backend/api"
-    mvn spring-boot:run \
-      -Dspring-boot.run.profiles="${PROFILE}" \
-      -Dspring-boot.run.jvmArguments="-Dserver.port=${API_PORT}" > /dev/null 2>&1 &
+    cd "${SCRIPT_DIR}/backend"
+    ./gradlew :api:bootRun --args="--spring.profiles.active=${PROFILE} --server.port=${API_PORT}" > /dev/null 2>&1 &
     API_PID=$!
     cd "${SCRIPT_DIR}"
   fi
@@ -626,10 +622,8 @@ cmd_api() {
     die "API module directory not found at ${API_DIR}"
   fi
 
-  cd "${API_DIR}"
-  mvn spring-boot:run \
-    -Dspring-boot.run.profiles="${PROFILE}" \
-    -Dspring-boot.run.jvmArguments="-Dserver.port=${API_PORT}"
+  cd "${SCRIPT_DIR}/backend"
+  ./gradlew :api:bootRun --args="--spring.profiles.active=${PROFILE} --server.port=${API_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -651,10 +645,8 @@ cmd_full_start() {
 
   # Start API in background
   step "3/4 Starting API backend..."
-  cd "${SCRIPT_DIR}/backend/api"
-  mvn spring-boot:run \
-    -Dspring-boot.run.profiles="${PROFILE}" \
-    -Dspring-boot.run.jvmArguments="-Dserver.port=${API_PORT}" > /dev/null 2>&1 &
+  cd "${SCRIPT_DIR}/backend"
+  ./gradlew :api:bootRun --args="--spring.profiles.active=${PROFILE} --server.port=${API_PORT}" > /dev/null 2>&1 &
   API_PID=$!
   cd "${SCRIPT_DIR}"
   log "API backend started (PID: ${API_PID})"
