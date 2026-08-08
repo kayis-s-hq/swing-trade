@@ -51,7 +51,6 @@ async function rawFetch(
   retries = 3
 ): Promise<RawFetchResult> {
   let lastError: string = ''
-  let lastData: unknown = null
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController()
@@ -79,7 +78,6 @@ async function rawFetch(
       }
 
       if (!response.ok) {
-        lastData = data
         const msg = (data as any)?.message
         lastError =
           msg && msg !== 'Internal Server Error'
@@ -212,16 +210,22 @@ const unwrap = <T>(raw: RawFetchResult): T => {
 
 const mapPosition = (p: BackendPosition): Position => ({
   id: String(p.id),
+  brokerType: p.symbol,
   symbol: p.symbol,
   entryPrice: toNum(p.entryPrice),
   currentPrice: toNum(p.currentPrice),
   quantity: p.quantity,
-  status: p.status === 'STOPPED' || p.status === 'TARGET_HIT' ? 'CLOSED' : p.status,
+  status: p.status,
   pnl: toNum(p.unrealizedPnL),
   pnlPercent: toNum(p.unrealizedPnLPercent),
   entryDate: p.entryDate,
+  exitDate: p.entryDate,
   stopLoss: p.stopLoss != null ? toNum(p.stopLoss) : undefined,
   target: p.target != null ? toNum(p.target) : undefined,
+  entryReason: p.entryReason,
+  direction: 'LONG',
+  averagePrice: toNum(p.entryPrice),
+  totalValue: toNum(p.totalValue),
 })
 
 const mapSignal = (s: BackendSignal): Signal => ({

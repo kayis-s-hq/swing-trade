@@ -43,19 +43,23 @@
       </div>
     </div>
 
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <LoadingSpinner message="Loading positions..." />
-    </div>
+    <ErrorBoundary>
+      <template #error>
+        <div class="flex flex-col items-center justify-center py-20">
+          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <button
+            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
+            @click="refreshPositions"
+          >
+            Retry
+          </button>
+        </div>
+      </template>
+      <div v-if="loading" class="flex items-center justify-center py-20">
+        <LoadingSpinner message="Loading positions..." />
+      </div>
 
-    <ErrorMessage
-      v-else-if="error"
-      :message="errorMessage"
-      :show-retry="true"
-      retry-text="Retry"
-      @retry="refreshPositions"
-    />
-
-    <template v-else>
+      <template v-else>
       <!-- Filters -->
       <div class="mb-4 flex items-center gap-3">
         <input
@@ -196,6 +200,8 @@
         </div>
       </div>
     </template>
+      </ErrorBoundary>
+    </div>
 
     <!-- New Position Modal -->
     <Teleport to="body">
@@ -437,12 +443,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { getPositions, getClosedPositions, closePosition, executeTrade } from '../api/client'
 import type { Position } from '../api/types'
-import ErrorMessage from '../components/ErrorMessage.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import ErrorBoundary from '../components/ErrorBoundary.vue'
+import { useAsyncData } from '../composables/useAsyncData'
 
-const loading = ref(true)
-const error = ref(false)
-const errorMessage = ref('')
+const { loading, error, errorMessage, execute } = useAsyncData()
 const positions = ref<Position[]>([])
 const searchQuery = ref('')
 const statusFilter = ref('ALL')
@@ -455,23 +460,15 @@ const filteredPositions = computed(() => {
   })
 })
 
-const refreshPositions = async () => {
-  loading.value = true
-  error.value = false
-  errorMessage.value = ''
-  try {
+const refreshPositions = () => {
+  execute(async () => {
     const openRes = await getPositions()
     const openPositions: Position[] = (openRes.success && openRes.data) ? openRes.data : []
     const closedRes = await getClosedPositions()
     const closedPositions: Position[] = (closedRes.success && closedRes.data) ? closedRes.data : []
     positions.value = [...openPositions, ...closedPositions]
     if (openRes.error || closedRes.error) throw new Error(openRes.error || closedRes.error)
-  } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to load positions'
-    error.value = true
-  } finally {
-    loading.value = false
-  }
+  })
 }
 
 // New Position Modal

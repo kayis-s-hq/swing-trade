@@ -36,14 +36,14 @@ describe('PositionCard', () => {
     const wrapper = mount(PositionCard, {
       props: { position: samplePosition },
     })
-    expect(wrapper.text()).toContain('$2500')
+    expect(wrapper.text()).toContain('₹2500')
   })
 
   it('renders current price', () => {
     const wrapper = mount(PositionCard, {
       props: { position: samplePosition },
     })
-    expect(wrapper.text()).toContain('$2600')
+    expect(wrapper.text()).toContain('₹2600')
   })
 
   it('calculates and displays P&L percentage', () => {

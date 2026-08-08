@@ -97,19 +97,23 @@
       </div>
     </div>
 
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <LoadingSpinner message="Scanning for signals..." />
-    </div>
+    <ErrorBoundary>
+      <template #error>
+        <div class="flex flex-col items-center justify-center py-20">
+          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <button
+            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
+            @click="refreshSignals"
+          >
+            Retry
+          </button>
+        </div>
+      </template>
+      <div v-if="loading" class="flex items-center justify-center py-20">
+        <LoadingSpinner message="Scanning for signals..." />
+      </div>
 
-    <ErrorMessage
-      v-else-if="error"
-      :message="errorMessage"
-      :show-retry="true"
-      retry-text="Retry"
-      @retry="refreshSignals"
-    />
-
-    <template v-else>
+      <template v-else>
       <!-- Generation progress -->
       <div v-if="generating" class="mb-4 card-panel p-4">
         <div class="mb-2 flex items-center justify-between">
@@ -206,6 +210,8 @@
         <p class="text-sm text-text-muted">No signals matching filter</p>
       </div>
     </template>
+      </ErrorBoundary>
+    </div>
 
     <!-- Execution results toast -->
     <div v-if="execResult" class="fixed bottom-4 right-4 z-50 max-w-md">
@@ -249,14 +255,14 @@ import {
 } from '../api/client'
 import type { Signal } from '../api/types'
 import SignalCard from '../components/SignalCard.vue'
-import ErrorMessage from '../components/ErrorMessage.vue'
+import { getSettings } from '../stores/settings'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import ErrorBoundary from '../components/ErrorBoundary.vue'
+import { useAsyncData } from '../composables/useAsyncData'
 
-const loading = ref(true)
+const { loading, error, errorMessage, execute } = useAsyncData()
 const generating = ref(false)
 const executing = ref(false)
-const error = ref(false)
-const errorMessage = ref('')
 const signals = ref<Signal[]>([])
 const directionFilter = ref('ALL')
 const statusFilter = ref('ALL')
@@ -313,8 +319,8 @@ const executeSelected = async () => {
   const errors: string[] = []
 
   for (const signal of selected) {
-    // Calculate quantity: allocate ~Rs.1,00,000 per position
-    const allocation = 100000
+    // Calculate quantity: allocate from settings
+    const allocation = getSettings().tradingConfig.allocationPerPosition
     const quantity = Math.max(1, Math.floor(allocation / signal.entryPrice))
 
     try {
@@ -344,20 +350,12 @@ const executeSelected = async () => {
   executing.value = false
 }
 
-const doRefresh = async () => {
-  loading.value = true
-  error.value = false
-  errorMessage.value = ''
-  try {
+const doRefresh = () => {
+  execute(async () => {
     const res = await getSignals()
     if (res.success && res.data) signals.value = res.data
     if (res.error) throw new Error(res.error)
-  } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to load signals'
-    error.value = true
-  } finally {
-    loading.value = false
-  }
+  })
 }
 
 const generateAll = async () => {

@@ -66,22 +66,23 @@
       </form>
     </div>
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <LoadingSpinner message="Loading watchlist..." />
-    </div>
+    <ErrorBoundary>
+      <template #error>
+        <div class="flex flex-col items-center justify-center py-20">
+          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <button
+            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
+            @click="loadWatchlist"
+          >
+            Retry
+          </button>
+        </div>
+      </template>
+      <div v-if="loading" class="flex items-center justify-center py-20">
+        <LoadingSpinner message="Loading watchlist..." />
+      </div>
 
-    <!-- Error -->
-    <ErrorMessage
-      v-else-if="error"
-      :message="errorMessage"
-      :show-retry="true"
-      retry-text="Retry"
-      @retry="loadWatchlist"
-    />
-
-    <!-- Watchlist Table -->
-    <template v-else>
+      <template v-else>
       <div class="card-panel overflow-x-auto">
         <table class="min-w-full">
           <thead>
@@ -174,6 +175,8 @@
         No stocks in watchlist. Click "Add Stock" to get started.
       </div>
     </template>
+      </ErrorBoundary>
+    </div>
   </div>
 </template>
 
@@ -187,21 +190,18 @@ import {
 } from '../api/client'
 import type { WatchlistEntry } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
-import ErrorMessage from '../components/ErrorMessage.vue'
+import ErrorBoundary from '../components/ErrorBoundary.vue'
+import { useAsyncData } from '../composables/useAsyncData'
 
-const loading = ref(true)
-const error = ref(false)
-const errorMessage = ref('')
+const { loading, errorMessage, execute } = useAsyncData()
 const watchlist = ref<WatchlistEntry[]>([])
 const showAddForm = ref(false)
 const newSymbol = ref('')
 const newName = ref('')
 const adding = ref(false)
 
-const loadWatchlist = async () => {
-  loading.value = true
-  error.value = false
-  try {
+const loadWatchlist = () => {
+  execute(async () => {
     console.log('[Watchlist] Loading watchlist...')
     const result = await getWatchlist()
     if (result.success && result.data) {
@@ -211,12 +211,7 @@ const loadWatchlist = async () => {
       console.error('[Watchlist] Load failed:', result.error, result)
       throw new Error(result.error || 'Failed to load watchlist')
     }
-  } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to load watchlist'
-    error.value = true
-  } finally {
-    loading.value = false
-  }
+  })
 }
 
 const handleSubmit = async () => {

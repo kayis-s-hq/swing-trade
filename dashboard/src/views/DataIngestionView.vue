@@ -127,21 +127,25 @@
       </p>
     </div>
 
-    <!-- Loading -->
-    <div v-if="loading && !status.length" class="flex items-center justify-center py-20">
-      <LoadingSpinner message="Loading ingestion status..." />
-    </div>
+    <ErrorBoundary>
+      <template #error>
+        <div class="flex flex-col items-center justify-center py-20">
+          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <button
+            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
+            @click="loadStatus"
+          >
+            Retry
+          </button>
+        </div>
+      </template>
 
-    <!-- Error -->
-    <ErrorMessage
-      v-else-if="error"
-      :message="errorMessage"
-      :show-retry="true"
-      retry-text="Retry"
-      @retry="loadStatus"
-    />
+      <!-- Loading -->
+      <div v-if="loading && !status.length" class="flex items-center justify-center py-20">
+        <LoadingSpinner message="Loading ingestion status..." />
+      </div>
 
-    <!-- Summary Cards -->
+      <!-- Summary Cards -->
     <template v-else>
       <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div class="card-panel p-4">
@@ -247,6 +251,8 @@
         </table>
       </div>
     </template>
+      </ErrorBoundary>
+    </div>
   </div>
 </template>
 
@@ -263,14 +269,13 @@ import {
 } from '../api/client'
 import type { IngestionStatus, PullProgress } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
-import ErrorMessage from '../components/ErrorMessage.vue'
+import ErrorBoundary from '../components/ErrorBoundary.vue'
+import { useAsyncData } from '../composables/useAsyncData'
 import { getSettings } from '../stores/settings'
 
 const settings = getSettings()
 const backendBroker = ref(settings.selectedBroker)
-const loading = ref(true)
-const error = ref(false)
-const errorMessage = ref('')
+const { loading, errorMessage, execute } = useAsyncData()
 const status = ref<IngestionStatus[]>([])
 const fyersConnected = ref(false)
 
@@ -322,10 +327,8 @@ const syncBroker = async () => {
   }
 }
 
-const loadStatus = async () => {
-  loading.value = true
-  error.value = false
-  try {
+const loadStatus = () => {
+  execute(async () => {
     await syncBroker()
     const [statusResult, fyersResult, progressResult] = await Promise.all([
       getIngestionStatus(),
@@ -347,12 +350,7 @@ const loadStatus = async () => {
       pullProgress.value = progressResult.data
       startPolling(progressResult.data.pullId)
     }
-  } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to load status'
-    error.value = true
-  } finally {
-    loading.value = false
-  }
+  })
 }
 
 const refreshStatus = () => {

@@ -35,21 +35,23 @@
       </div>
     </div>
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <LoadingSpinner message="Loading orchestrator data..." />
-    </div>
+    <ErrorBoundary>
+      <template #error>
+        <div class="flex flex-col items-center justify-center py-20">
+          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <button
+            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
+            @click="refresh"
+          >
+            Retry
+          </button>
+        </div>
+      </template>
+      <div v-if="loading" class="flex items-center justify-center py-20">
+        <LoadingSpinner message="Loading orchestrator data..." />
+      </div>
 
-    <!-- Error -->
-    <ErrorMessage
-      v-else-if="error"
-      :message="errorMessage"
-      :show-retry="true"
-      retry-text="Retry"
-      @retry="refresh"
-    />
-
-    <template v-else>
+      <template v-else>
       <!-- Current Run -->
       <div v-if="currentRun" class="mb-6 card-panel p-5">
         <div class="mb-3 flex items-center justify-between">
@@ -222,6 +224,8 @@
         </table>
       </div>
     </template>
+      </ErrorBoundary>
+    </div>
   </div>
 </template>
 
@@ -234,16 +238,15 @@ import {
   cancelJobRun,
 } from '../api/client'
 import type { JobRunResponse, JobRunStageResponse } from '../api/types'
-import ErrorMessage from '../components/ErrorMessage.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import StageIcon from '../components/StageIcon.vue'
+import ErrorBoundary from '../components/ErrorBoundary.vue'
+import { useAsyncData } from '../composables/useAsyncData'
 
 const STAGES = ['DATA_FETCH', 'NEWS', 'SENTIMENT', 'SIGNAL', 'BACKTEST', 'PAPER_TRADE'] as const
 
-const loading = ref(true)
-const error = ref(false)
-const errorMessage = ref('')
+const { loading, error, errorMessage, execute } = useAsyncData<void>()
 const currentRunId = ref<string | null>(null)
 const currentRun = ref<JobRunResponse | null>(null)
 const pastRuns = ref<JobRunResponse[]>([])
@@ -355,11 +358,8 @@ async function cancelRun() {
   }
 }
 
-async function refresh() {
-  loading.value = true
-  error.value = false
-  errorMessage.value = ''
-  try {
+function refresh() {
+  execute(async () => {
     // If we have a currentRunId, load its progress
     if (currentRunId.value) {
       const progressRes = await getJobRunProgress(currentRunId.value)
@@ -416,12 +416,7 @@ async function refresh() {
 
     // Load history
     await loadHistory()
-  } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to load data'
-    error.value = true
-  } finally {
-    loading.value = false
-  }
+  })
 }
 
 async function loadHistory() {

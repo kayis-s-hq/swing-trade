@@ -27,22 +27,23 @@
       </button>
     </div>
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <LoadingSpinner message="Loading market data..." />
-    </div>
+    <ErrorBoundary>
+      <template #error>
+        <div class="flex flex-col items-center justify-center py-20">
+          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <button
+            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
+            @click="refreshDashboard"
+          >
+            Retry
+          </button>
+        </div>
+      </template>
+      <div v-if="loading" class="flex items-center justify-center py-20">
+        <LoadingSpinner message="Loading market data..." />
+      </div>
 
-    <!-- Error -->
-    <ErrorMessage
-      v-else-if="error"
-      :message="errorMessage"
-      :show-retry="true"
-      retry-text="Retry"
-      @retry="refreshDashboard"
-    />
-
-    <!-- Content -->
-    <template v-else>
+      <template v-else>
       <!-- P&L Card -->
       <div class="mb-6 card-panel p-5">
         <div class="flex items-center justify-between">
@@ -192,6 +193,8 @@
         </div>
       </div>
     </template>
+      </ErrorBoundary>
+    </div>
   </div>
 </template>
 
@@ -209,13 +212,12 @@ import type {
   PortfolioSummary,
   HealthStatus as HealthStatusType,
 } from '../api/types'
-import ErrorMessage from '../components/ErrorMessage.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import HealthStatus from '../components/HealthStatus.vue'
+import ErrorBoundary from '../components/ErrorBoundary.vue'
+import { useAsyncData } from '../composables/useAsyncData'
 
-const loading = ref(true)
-const error = ref(false)
-const errorMessage = ref('')
+const { loading, errorMessage, execute } = useAsyncData<void>()
 const marketOverview = ref<MarketOverview | null>(null)
 const positions = ref<Position[]>([])
 const portfolioSummary = ref<PortfolioSummary | null>(null)
@@ -242,11 +244,8 @@ const metrics = computed(() => [
   },
 ])
 
-const refreshDashboard = async () => {
-  loading.value = true
-  error.value = false
-  errorMessage.value = ''
-  try {
+const refreshDashboard = () => {
+  execute(async () => {
     const [overviewRes, posRes, summaryRes, healthRes] = await Promise.all([
       getMarketOverview(),
       getPositions(),
@@ -259,12 +258,7 @@ const refreshDashboard = async () => {
     if (healthRes.success && healthRes.data) healthData.value = healthRes.data
     if (overviewRes.error || posRes.error || summaryRes.error)
       throw new Error(overviewRes.error ?? posRes.error ?? summaryRes.error)
-  } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to load dashboard data'
-    error.value = true
-  } finally {
-    loading.value = false
-  }
+  })
 }
 
 onMounted(() => {

@@ -29,11 +29,21 @@
       </button>
     </div>
 
-    <!-- Error State -->
-    <ErrorMessage v-if="loadError" :message="loadError" :show-retry="true" @retry="loadAll" />
+    <ErrorBoundary>
+      <template #error>
+        <div class="flex flex-col items-center justify-center py-20">
+          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <button
+            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
+            @click="loadAll"
+          >
+            Retry
+          </button>
+        </div>
+      </template>
 
-    <!-- Overview Tab -->
-    <div v-if="activeTab === 'overview' && !loadError">
+      <!-- Overview Tab -->
+      <div v-if="activeTab === 'overview'">
       <!-- Metric Cards -->
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <AccuracyMetricCard
@@ -153,7 +163,7 @@
     </div>
 
     <!-- Breakdown Tab -->
-    <div v-if="activeTab === 'breakdown' && !loadError">
+    <div v-if="activeTab === 'breakdown'">
       <!-- Accuracy by Window -->
       <div class="mb-6 card-panel p-5">
         <h3 class="mb-4 text-sm font-semibold text-text-primary">Accuracy by Evaluation Window</h3>
@@ -295,7 +305,7 @@
     </div>
 
     <!-- Calibration Tab -->
-    <div v-if="activeTab === 'calibration' && !loadError">
+    <div v-if="activeTab === 'calibration'">
       <!-- ECE Display -->
       <div class="mb-6 card-panel p-5">
         <h3 class="mb-4 text-sm font-semibold text-text-primary">Expected Calibration Error</h3>
@@ -437,7 +447,7 @@
     </div>
 
     <!-- A/B Tab -->
-    <div v-if="activeTab === 'ab-testing' && !loadError">
+    <div v-if="activeTab === 'ab-testing'">
       <div class="card-panel p-5">
         <h3 class="mb-4 text-sm font-semibold text-text-primary">A/B Testing & Model Comparison</h3>
         <p class="text-sm text-text-muted">
@@ -488,6 +498,8 @@
         otherwise. Evaluation runs nightly via scheduled job.
       </p>
     </div>
+      </ErrorBoundary>
+    </div>
   </div>
 </template>
 
@@ -514,8 +526,11 @@ import type {
   ECEStats,
 } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
-import ErrorMessage from '../components/ErrorMessage.vue'
 import AccuracyMetricCard from '../components/AccuracyMetricCard.vue'
+import ErrorBoundary from '../components/ErrorBoundary.vue'
+import { useAsyncData } from '../composables/useAsyncData'
+
+const { errorMessage, execute } = useAsyncData<void>()
 
 const tabs = [
   { key: 'overview', label: 'Overview' },
@@ -524,8 +539,6 @@ const tabs = [
   { key: 'ab-testing', label: 'A/B Testing' },
 ]
 const activeTab = ref('overview')
-
-const loadError = ref('')
 const stats = ref<SentimentAccuracyStats | null>(null)
 const summary = ref<AccuracySummary | null>(null)
 const byWindow = ref<AccuracyByWindow[] | null>(null)
@@ -537,35 +550,35 @@ const ece = ref<ECEStats | null>(null)
 
 const total = ref(0)
 
-const loadAll = async () => {
-  loadError.value = ''
-  const [statsRes, summaryRes, windowRes, regimeRes, symbolRes, calRes, volRes, eceRes] =
-    await Promise.all([
-      getAccuracyStats(),
-      getAccuracySummary(),
-      getAccuracyByWindow(),
-      getAccuracyByRegime(),
-      getAccuracyBySymbol(),
-      getCalibration(),
-      getSignalVolume(),
-      getECE(),
-    ])
+const loadAll = () => {
+  execute(async () => {
+    const [statsRes, summaryRes, windowRes, regimeRes, symbolRes, calRes, volRes, eceRes] =
+      await Promise.all([
+        getAccuracyStats(),
+        getAccuracySummary(),
+        getAccuracyByWindow(),
+        getAccuracyByRegime(),
+        getAccuracyBySymbol(),
+        getCalibration(),
+        getSignalVolume(),
+        getECE(),
+      ])
 
-  if (statsRes.success && statsRes.data) {
-    stats.value = statsRes.data
-    total.value = statsRes.data.total
-  } else {
-    loadError.value = statsRes.error || 'Failed to load accuracy data'
-    return
-  }
+    if (statsRes.success && statsRes.data) {
+      stats.value = statsRes.data
+      total.value = statsRes.data.total
+    } else {
+      throw new Error(statsRes.error || 'Failed to load accuracy data')
+    }
 
-  if (summaryRes.success && summaryRes.data) summary.value = summaryRes.data
-  if (windowRes.success && windowRes.data) byWindow.value = windowRes.data
-  if (regimeRes.success && regimeRes.data) byRegime.value = regimeRes.data
-  if (symbolRes.success && symbolRes.data) bySymbol.value = symbolRes.data
-  if (calRes.success && calRes.data) calibration.value = calRes.data
-  if (volRes.success && volRes.data) signalVolume.value = volRes.data
-  if (eceRes.success && eceRes.data) ece.value = eceRes.data
+    if (summaryRes.success && summaryRes.data) summary.value = summaryRes.data
+    if (windowRes.success && windowRes.data) byWindow.value = windowRes.data
+    if (regimeRes.success && regimeRes.data) byRegime.value = regimeRes.data
+    if (symbolRes.success && symbolRes.data) bySymbol.value = symbolRes.data
+    if (calRes.success && calRes.data) calibration.value = calRes.data
+    if (volRes.success && volRes.data) signalVolume.value = volRes.data
+    if (eceRes.success && eceRes.data) ece.value = eceRes.data
+  })
 }
 
 const formatPercent = (v: number | undefined | null): string => {

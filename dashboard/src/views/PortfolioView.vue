@@ -27,19 +27,23 @@
       </button>
     </div>
 
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <LoadingSpinner message="Loading portfolio data..." />
-    </div>
+    <ErrorBoundary>
+      <template #error>
+        <div class="flex flex-col items-center justify-center py-20">
+          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <button
+            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
+            @click="refreshPortfolio"
+          >
+            Retry
+          </button>
+        </div>
+      </template>
+      <div v-if="loading" class="flex items-center justify-center py-20">
+        <LoadingSpinner message="Loading portfolio data..." />
+      </div>
 
-    <ErrorMessage
-      v-else-if="error"
-      :message="errorMessage"
-      :show-retry="true"
-      retry-text="Retry"
-      @retry="refreshPortfolio"
-    />
-
-    <template v-else>
+      <template v-else>
       <PerformanceMetrics
         :portfolio-summary="portfolioSummary ?? undefined"
         :equity-points="equityPoints"
@@ -153,6 +157,8 @@
         </div>
       </div>
     </template>
+      </ErrorBoundary>
+    </div>
   </div>
 </template>
 
@@ -161,12 +167,11 @@ import { ref, onMounted } from 'vue'
 import { getPortfolioSummary, getTradeHistory, getEquityCurve } from '../api/client'
 import type { PortfolioSummary, Position, EquityPoint } from '../api/types'
 import PerformanceMetrics from '../components/PerformanceMetrics.vue'
-import ErrorMessage from '../components/ErrorMessage.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import ErrorBoundary from '../components/ErrorBoundary.vue'
+import { useAsyncData } from '../composables/useAsyncData'
 
-const loading = ref(true)
-const error = ref(false)
-const errorMessage = ref('')
+const { loading, errorMessage, execute } = useAsyncData<void>()
 const portfolioSummary = ref<PortfolioSummary | null>(null)
 const recentTrades = ref<Position[]>([])
 const equityPoints = ref<EquityPoint[]>([])
@@ -183,11 +188,8 @@ const handleRangeChange = async (range: string) => {
   if (res.success && res.data) equityPoints.value = res.data.data
 }
 
-const refreshPortfolio = async () => {
-  loading.value = true
-  error.value = false
-  errorMessage.value = ''
-  try {
+const refreshPortfolio = () => {
+  execute(async () => {
     const [summaryRes, tradesRes, equityRes] = await Promise.all([
       getPortfolioSummary(),
       getTradeHistory(10),
@@ -198,12 +200,7 @@ const refreshPortfolio = async () => {
     if (equityRes.success && equityRes.data) equityPoints.value = equityRes.data.data
     if (summaryRes.error || tradesRes.error || equityRes.error)
       throw new Error(summaryRes.error ?? tradesRes.error ?? equityRes.error)
-  } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to load portfolio data'
-    error.value = true
-  } finally {
-    loading.value = false
-  }
+  })
 }
 
 onMounted(() => {

@@ -40,6 +40,7 @@ export interface Position {
   averagePrice?: number
   realizedPnL?: number
   marginUtilized?: number
+  totalValue?: number
   entryTime?: string
   exitTime?: string
   exitReason?: string
