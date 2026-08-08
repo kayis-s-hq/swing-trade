@@ -1,6 +1,7 @@
 package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.manager.PositionManager;
+import com.swingtrade.data.repository.DailyLossCircuitBreakerStateRepository;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
@@ -33,7 +34,7 @@ class DailyLossCircuitBreakerTest {
 
     @BeforeEach
     void setUp() {
-        dailyLossCircuitBreaker = new DailyLossCircuitBreaker(positionManager, LOSS_THRESHOLD, INITIAL_CAPITAL);
+        dailyLossCircuitBreaker = new DailyLossCircuitBreaker(positionManager, LOSS_THRESHOLD, INITIAL_CAPITAL, null);
     }
 
     @Test
