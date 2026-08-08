@@ -8,13 +8,14 @@ Fix 7 confirmed bugs from the architecture audit (docs/analysis/architecture-aud
 
 | Phase | Status | Result | Timestamp |
 |-------|--------|--------|-----------|
-| 1: TradeRequest.isValid() | [ ] PENDING | — | — |
-| 2: Null direction guards | [ ] PENDING | — | — |
-| 3: PositionEntity NPE | [ ] PENDING | — | — |
-| 4: @Transactional on closePosition | [ ] PENDING | — | — |
-| 5: Capital config mismatch | [ ] PENDING | — | — |
-| 6: Trade.close() PnL + fees | [ ] PENDING | — | — |
-| 7: DailyLossCircuitBreaker persistence | [ ] PENDING | — | — |
+| 1: TradeRequest.isValid() | [x] COMPLETE | Operator precedence fixed | 2026-08-08 |
+| 2: Null direction guards | [x] COMPLETE | Guards in 3 files | 2026-08-08 |
+| 3: PositionEntity NPE | [x] COMPLETE | Null check defaults to OPEN | 2026-08-08 |
+| 4: @Transactional on closePosition | [x] COMPLETE | 7 methods annotated | 2026-08-08 |
+| 5: Capital config mismatch | [x] COMPLETE | CapitalTracker → PaperTradingProperties | 2026-08-08 |
+| 6: Trade.close() PnL + fees | [x] COMPLETE | TradeDirection field + SHORT PnL | 2026-08-08 |
+| 7: DailyLossCircuitBreaker persistence | [x] COMPLETE | Entity + repo + migration + wiring | 2026-08-08 |
+| 8: Strategy consolidation | [x] COMPLETE | Deprecate SwingTradingStrategy | 2026-08-08 |
 
 ---
 

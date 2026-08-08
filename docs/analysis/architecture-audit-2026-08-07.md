@@ -654,3 +654,66 @@ This audit was produced by three parallel analysis agents:
 3. **Frontend Code Review Agent** — Vue 3/TypeScript type safety and UX review
 
 Each agent scanned the codebase independently. Findings were deduplicated and merged by severity. File paths and line numbers reference the codebase state at time of analysis.
+
+---
+
+## Audit Fix Progress (2026-08-08)
+
+### Completed (8 phases)
+
+| Phase | Finding(s) | Status | Commit |
+|-------|-----------|--------|--------|
+| 1 | H5: TradeRequest.isValid() | ✅ Done | `d464e12c` |
+| 2 | H6: Null direction guards | ✅ Done | `d464e12c` |
+| 3 | H7: PositionEntity NPE | ✅ Done | `d464e12c` |
+| 4 | C4: @Transactional on closePosition | ✅ Done | `d464e12c` |
+| 5 | H4: Capital config mismatch | ✅ Done | `d464e12c` |
+| 6 | C2: Trade.close() SHORT PnL + fees | ✅ Done | `d464e12c` |
+| 7 | H1: DailyLossCircuitBreaker persistence | ✅ Done | `7e4a2b68` |
+| 8 | C6: Strategy consolidation | ✅ Done | `2f72eacf` |
+
+### Dismissed (not bugs)
+
+| Finding | Reason |
+|---------|--------|
+| C1: Position.createWithRisk() param order | Compact constructor fallback makes it safe |
+| C3: Credentials in git | infra/env/.env is NOT tracked (.gitignore matches it) |
+| C5: Backtest precision | Uses safe numToBigDecimal() helper; one doubleValue() is on BigDecimal not Num |
+
+### Remaining — Backend
+
+| Finding | Priority | What's needed |
+|---------|----------|---------------|
+| H2: PerformanceService hardcoded capital | P1 | Inject PaperTradingProperties, use getInitialCapital() |
+| H3: Inline PnL ignores SHORT | P1 | Remove inline calc, use Position.calculateUnrealizedPnL() |
+| H14: Portfolio summary totalValue: 0 | P2 | Sum position values + cash balance |
+| M1: DailyLossCircuitBreaker timezone | P3 | Use Asia/Kolkata explicitly |
+| M9: Position god object (23 fields) | P3 | Split into PositionSummary/PositionDetails |
+| M10: VARCHAR(10) symbols | P3 | Standardize VARCHAR(20) |
+| M13: No rate limiting | P3 | Add @RateLimiter on analysis/scan endpoints |
+| M28: No pagination on performance | P3 | Add pagination to /api/performance |
+
+### Remaining — Frontend
+
+| Finding | Priority | What's needed |
+|---------|----------|---------------|
+| C7: appState not Pinia | P1 | Convert to Pinia store |
+| C8: No ErrorBoundary | P1 | Create component, wrap top-level views |
+| H8: Loading/error boilerplate dup | P2 | Create useAsyncData<T>() composable |
+| H9: 18+ `as any` API unwraps | P2 | Proper ApiResult<T> generic types |
+| H10: SSE no timeout | P2 | AbortController with 60s timeout |
+| H11: Position type missing reason | P2 | Add reason field + STOPPED/TARGET_HIT statuses |
+| H12: rawFetch no retry | P2 | Exponential backoff (3 retries) |
+| H15: Hardcoded Rs. 100,000 | P2 | Read from settings store |
+| M3: NaN validation gap | P3 | isFinite() checks on numeric responses |
+| M14: $ vs Rs. currency | P3 | Standardize on Rs. |
+| M12: 921-line API client | P3 | Split into domain modules |
+| M20: Flaky E2E waits | P3 | Replace waitForTimeout with waitForSelector |
+| L1: Only 4 component unit tests | P4 | Add Vitest for SignalCard, PositionCard, etc. |
+
+### Next Recommended Sprint
+
+1. **H2: PerformanceService hardcoded capital** — quick injection fix, same pattern as Phase 5
+2. **C7: appState → Pinia** — frontend migration, low risk
+3. **C8: ErrorBoundary** — frontend resilience
+4. **H14: Portfolio summary totalValue** — visible dashboard bug
