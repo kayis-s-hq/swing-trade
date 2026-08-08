@@ -14,6 +14,7 @@ interface TradingConfig {
   maxPositionSize: number
   stopLoss: number
   takeProfit: number
+  allocationPerPosition: number
 }
 
 interface LlmSettings {
@@ -42,6 +43,7 @@ const defaults: SettingsState = {
     maxPositionSize: 10,
     stopLoss: 5,
     takeProfit: 15,
+    allocationPerPosition: 100000,
   },
   llmSettings: {
     vllmBaseUrl: 'https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1',
@@ -61,6 +63,7 @@ function parseTradingConfig(raw: Record<string, string>): TradingConfig {
     maxPositionSize: parseInt(raw['trading.max_position_size'] || '10', 10),
     stopLoss: parseInt(raw['trading.stop_loss'] || '5', 10),
     takeProfit: parseInt(raw['trading.take_profit'] || '15', 10),
+    allocationPerPosition: parseInt(raw['trading.allocation_per_position'] || '100000', 10),
   }
 }
 
@@ -135,6 +138,7 @@ export async function saveSettings(): Promise<boolean> {
       'trading.max_position_size': String(state.tradingConfig.maxPositionSize),
       'trading.stop_loss': String(state.tradingConfig.stopLoss),
       'trading.take_profit': String(state.tradingConfig.takeProfit),
+      'trading.allocation_per_position': String(state.tradingConfig.allocationPerPosition),
     },
   }
 

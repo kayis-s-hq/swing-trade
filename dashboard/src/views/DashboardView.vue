@@ -53,7 +53,7 @@
                 class="text-3xl font-bold tracking-tight"
                 :class="(marketOverview?.todayPnl ?? 0) >= 0 ? 'text-success' : 'text-danger'"
               >
-                {{ (marketOverview?.todayPnl ?? 0) >= 0 ? '+' : '' }}${{
+                {{ (marketOverview?.todayPnl ?? 0) >= 0 ? '+' : '' }}Rs.{{
                   (marketOverview?.todayPnl ?? 0).toLocaleString()
                 }}
               </span>
@@ -159,12 +159,12 @@
                 <td class="px-5 py-4 text-sm font-semibold text-text-primary">
                   {{ pos.symbol }}
                 </td>
-                <td class="px-5 py-4 text-sm text-text-secondary">${{ pos.entryPrice }}</td>
+                <td class="px-5 py-4 text-sm text-text-secondary">Rs.{{ pos.entryPrice }}</td>
                 <td class="px-5 py-4 text-right text-sm text-text-secondary">
                   {{ pos.quantity }}
                 </td>
                 <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                  ${{ pos.currentPrice }}
+                  Rs.{{ pos.currentPrice }}
                 </td>
                 <td class="px-5 py-4">
                   <span
@@ -181,7 +181,7 @@
                   class="px-5 py-4 text-right text-sm font-semibold"
                   :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
                 >
-                  {{ pos.pnl >= 0 ? '+' : '' }}${{ pos.pnl }}
+                  {{ pos.pnl >= 0 ? '+' : '' }}Rs.{{ pos.pnl }}
                   <span class="ml-1 text-xs font-normal opacity-70"
                     >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
                   >
