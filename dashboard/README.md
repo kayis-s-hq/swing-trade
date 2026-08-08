@@ -26,19 +26,19 @@ Vue 3 monitoring application for the SwingTrade automated trading system. Real-t
 ### Prerequisites
 
 - Node.js 18+
-- npm 9+
+- Yarn 1.x+
 
 ### Installation
 
 ```bash
 cd swing-trade-dashboard
-npm install
+yarn
 ```
 
 ### Development Server
 
 ```bash
-npm run dev
+yarn dev
 ```
 
 The application will start at `http://localhost:5173`
@@ -46,7 +46,7 @@ The application will start at `http://localhost:5173`
 ### Build
 
 ```bash
-npm run build
+yarn build
 ```
 
 The build output will be in the `dist/` directory.
@@ -54,7 +54,7 @@ The build output will be in the `dist/` directory.
 ### Preview Production Build
 
 ```bash
-npm run preview
+yarn preview
 ```
 
 The production preview will be available at `http://localhost:4173`
@@ -62,13 +62,13 @@ The production preview will be available at `http://localhost:4173`
 ### Run Tests
 
 ```bash
-npx vitest run
+yarn test:run
 ```
 
 ### Lint
 
 ```bash
-npm run lint
+yarn lint
 ```
 
 ## Environment Variables
@@ -90,7 +90,7 @@ cp .env.example .env
 
 ## Production Deployment
 
-1. Build the application: `npm run build`
+1. Build the application: `yarn build`
 2. The `dist/` directory contains the minified assets
 3. Serve the `dist/` directory with any static file server (nginx, Apache, etc.)
 4. Router uses hash history, no server reconfiguration needed

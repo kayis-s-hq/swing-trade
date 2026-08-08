@@ -8,7 +8,7 @@ export default defineConfig({
     trace: 'off',
   },
   webServer: {
-    command: 'npm run dev',
+    command: 'yarn dev',
     port: 3003,
     reuseExistingServer: true,
   },

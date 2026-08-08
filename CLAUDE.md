@@ -109,13 +109,29 @@ Network: `swingtrade-network` (bridge). Volumes: `postgres_data`, `redis_data`.
 ```bash
 cd backend
 mvn clean install              # Build all modules
-mvn test                       # Run all tests
+mvn test                       # Run all tests (unit + integration)
 mvn test -Dtest=SomeTest       # Run specific test class
 
 # Run API module locally (after starting infra)
 cd api
 mvn spring-boot:run -Dspring-boot.run.profiles=local,fyers
 ```
+
+## Test Phase Rules
+
+**All tests run in the `test` phase via `mvn test`. There is no separate `verify` phase for integration tests.**
+
+The parent POM (`backend/pom.xml`) configures:
+- **maven-surefire-plugin** — runs ALL tests in the `test` phase:
+  - Unit tests: `*Test.java`
+  - Integration tests: `*IntegrationTest.java`, `*IT.java`, `*E2ETest.java`
+- **No maven-failsafe-plugin** — integration tests are NOT deferred to `verify`
+
+**Naming convention:**
+- Unit tests: `*Test.java` (e.g., `BacktestEngineTest.java`)
+- Integration tests: `*IntegrationTest.java` (e.g., `BacktestEngineIntegrationTest.java`)
+
+**Verification:** `mvn test` runs everything. No need for `mvn verify` or `mvn failsafe:integration-test`.
 
 ### Backend (root monolith)
 ```bash
@@ -127,12 +143,32 @@ mvn spring-boot:run            # Run locally
 ### Frontend
 ```bash
 cd dashboard
-npm install
-npm run dev                    # Start dev server (localhost:3003)
-npm run build                  # Production build
-npm run typecheck              # TypeScript type check
-npm test                       # Vitest unit tests
-npx playwright test            # E2E tests
+yarn                           # Install dependencies
+yarn dev                       # Start dev server (localhost:3003)
+yarn build                     # Production build
+yarn typecheck                 # TypeScript type check
+yarn test                      # Vitest unit tests
+yarn playwright test           # E2E tests
+```
+
+### Dev Stack Script (`dev-stack.sh`)
+
+Manages the full dev environment — infrastructure on pi-node + local services.
+
+```bash
+./dev-stack.sh start           # Start infra on pi-node + Spring Boot + Vue locally
+./dev-stack.sh stop            # Stop all local services + infra on pi-node
+./dev-stack.sh status          # Check status of infra, backend, frontend
+./dev-stack.sh logs            # View infrastructure logs
+
+# Frontend management
+./dev-stack.sh frontend start  # Start Vue dev server only
+./dev-stack.sh frontend stop   # Stop Vue dev server only
+./dev-stack.sh frontend-logs   # Tail Vue dev server logs
+
+# Infrastructure
+./dev-stack.sh infra up -d     # Start infra only
+./dev-stack.sh infra down      # Stop infra only
 ```
 
 ## Infrastructure & Configuration
@@ -214,10 +250,10 @@ cd backend/data && mvn test
 mvn clean test jacoco:report
 
 # Frontend unit tests
-cd dashboard && npm test
+cd dashboard && yarn test
 
 # Frontend E2E tests
-cd dashboard && npx playwright test
+cd dashboard && yarn playwright test
 ```
 
 Test resources include `application-test.properties`, `application-e2e.yml`, and test-specific Flyway schemas.

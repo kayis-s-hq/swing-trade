@@ -415,7 +415,7 @@ curl -X POST 'http://localhost:8080/api/analysis/analyze?symbol=RELIANCE'
 
 ### Frontend
 ```bash
-cd dashboard && npm run dev
+cd dashboard && yarn dev
 # Visit http://localhost:3003/sentiment
 # Verify:
 # - Overview tab shows composite score + all panels

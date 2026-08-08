@@ -8,7 +8,7 @@
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",
     "lint": "eslint . --fix",
-    "build": "npm run format:check && npm run typecheck && npm run lint && vite build",
+    "build": "yarn run format:check && yarn run typecheck && yarn run lint && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest",

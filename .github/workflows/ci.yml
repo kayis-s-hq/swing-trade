@@ -168,16 +168,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dashboard/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('dashboard/package.json', 'dashboard/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-yarn-
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
         working-directory: dashboard
 
       - name: ESLint
-        run: npm run lint
+        run: yarn lint
         working-directory: dashboard
         continue-on-error: true
 
@@ -195,16 +195,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dashboard/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('dashboard/package.json', 'dashboard/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-yarn-
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
         working-directory: dashboard
 
       - name: TypeScript typecheck
-        run: npm run typecheck
+        run: yarn typecheck
         working-directory: dashboard
 
   # =====================================================================
@@ -222,16 +222,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dashboard/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('dashboard/package.json', 'dashboard/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-yarn-
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
         working-directory: dashboard
 
       - name: Vite build
-        run: npm run build
+        run: yarn build
         working-directory: dashboard
 
       - name: Upload build artifact
@@ -256,16 +256,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dashboard/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('dashboard/package.json', 'dashboard/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-yarn-
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
         working-directory: dashboard
 
       - name: Vitest unit tests
-        run: npm run test -- --run
+        run: yarn test -- --run
         working-directory: dashboard
 
   # =====================================================================
@@ -283,18 +283,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dashboard/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package.json', 'dashboard/package-lock.json') }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('dashboard/package.json', 'dashboard/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-yarn-
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
         working-directory: dashboard
 
       - name: Playwright E2E tests
         run: |
-          npx playwright install --with-deps chromium
-          npx playwright test
+          yarn playwright install --with-deps chromium
+          yarn playwright test
         working-directory: dashboard
 
   # =====================================================================

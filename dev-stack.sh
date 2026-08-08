@@ -21,12 +21,30 @@ set -e
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/backend"
+DASHBOARD_DIR="$PROJECT_ROOT/dashboard"
+PIDFILE="$PROJECT_ROOT/.swing-trade-pids"
 PI_NODE_HOST="piworm.local"
 
 echo "=========================================="
 echo "  Swing Trade - Dev Stack Manager"
 echo "=========================================="
 echo ""
+
+# PID tracking for local processes
+save_pid() {
+    mkdir -p "$PROJECT_ROOT"
+    echo "$2" >> "$PIDFILE"
+}
+
+cleanup_pids() {
+    if [ -f "$PIDFILE" ]; then
+        while read -r pid; do
+            kill "$pid" 2>/dev/null || true
+        done < "$PIDFILE"
+        rm -f "$PIDFILE"
+    fi
+}
+trap cleanup_pids EXIT
 
 do_stage_monitoring() {
     local cmd="${2:-up}"
@@ -73,16 +91,46 @@ case "${1:-help}" in
         echo "✓ Loaded environment from $BACKEND_DIR/.env"
     fi
     cd "$BACKEND_DIR/api"
-    mvn spring-boot:run -Dspring-boot.run.profiles=local -Dcheckstyle.skip=true -Dpmd.skip=true
+    mvn spring-boot:run -Dspring-boot.run.profiles=local -Dcheckstyle.skip=true -Dpmd.skip=true &
+    BACKEND_PID=$!
+    save_pid "$BACKEND_PID"
+    echo "✓ Backend PID: $BACKEND_PID"
+    echo ""
+
+    # Start Vue dev server locally
+    echo "🖥️  Starting Vue dev server locally..."
+    cd "$DASHBOARD_DIR"
+    yarn dev &
+    FRONTEND_PID=$!
+    save_pid "$FRONTEND_PID"
+    echo "✓ Frontend PID: $FRONTEND_PID"
+    echo ""
+
+    echo "=========================================="
+    echo "  Dev Stack Running"
+    echo "=========================================="
+    echo "  API:      http://localhost:8080"
+    echo "  Dashboard: http://localhost:3003"
+    echo ""
+    echo "Useful commands:"
+    echo "  Logs:    $0 logs"
+    echo "  Stop:    $0 stop"
+    echo "  Frontend only: $0 frontend"
     ;;
 
   stop)
     echo "🛑 Stopping Dev Stack..."
     echo ""
 
-    # Stop local Spring Boot
+    # Stop local processes via PID file
+    cleanup_pids
+    echo "✓ Stopped local processes"
+    echo ""
+
+    # Fallback: kill by pattern
     pkill -f "spring-boot:run" 2>/dev/null || true
-    echo "✓ Stopped local Spring Boot app"
+    pkill -f "vite" 2>/dev/null || true
+    echo "✓ Stopped local Spring Boot app and Vue dev server"
     echo ""
 
     # Stop infrastructure on pi-node
@@ -118,6 +166,11 @@ case "${1:-help}" in
     docker context use desktop-linux
     pgrep -f "spring-boot:run" && echo "✓ Running" || echo "✗ Not running"
     echo ""
+
+    echo "Local Vue Dev Server:"
+    pgrep -f "vite" && echo "✓ Running" || echo "✗ Not running"
+    echo ""
+
     echo "API Health:"
     curl -s "http://localhost:8080/actuator/health" | python3 -m json.tool 2>/dev/null || echo "✗ API not reachable"
     ;;
@@ -134,6 +187,43 @@ case "${1:-help}" in
   stage-monitoring)
     echo "📊 Managing stage monitoring (local Grafana → pi-node Prometheus)..."
     do_stage_monitoring "${@:2}"
+    ;;
+
+  frontend)
+    case "${2:-start}" in
+      start)
+        echo "🖥️  Starting Vue dev server..."
+        cd "$DASHBOARD_DIR"
+        if pgrep -f "vite" > /dev/null 2>&1; then
+          echo "✓ Vue dev server already running"
+        else
+          yarn dev &
+          FRONTEND_PID=$!
+          save_pid "$FRONTEND_PID"
+          echo "✓ Frontend started (PID: $FRONTEND_PID)"
+          echo "  Dashboard: http://localhost:3003"
+        fi
+        ;;
+      stop)
+        echo "🛑 Stopping Vue dev server..."
+        pkill -f "vite" 2>/dev/null || true
+        echo "✓ Stopped Vue dev server"
+        ;;
+      logs)
+        echo "📋 Vue dev server logs:"
+        cd "$DASHBOARD_DIR"
+        yarn dev
+        ;;
+      *)
+        echo "Usage: $0 frontend {start|stop|logs}"
+        ;;
+    esac
+    ;;
+
+  frontend-logs)
+    echo "📋 Vue dev server logs:"
+    cd "$DASHBOARD_DIR"
+    yarn dev
     ;;
 
   logs-json)
@@ -322,10 +412,10 @@ case "${1:-help}" in
     ;;
 
   *)
-    echo "Usage: $0 {start|stage|stage-down|stage-logs|stage-restart|stop|infra|status|logs|logs-json|stage-monitoring}"
+    echo "Usage: $0 {start|stage|stage-down|stage-logs|stage-restart|stop|infra|status|logs|logs-json|stage-monitoring|frontend|frontend-logs}"
     echo ""
     echo "Commands:"
-    echo "  start            - Start dev infra on pi-node + run Spring Boot locally"
+    echo "  start            - Start dev infra on pi-node + Spring Boot + Vue locally"
     echo "  stage            - Build JAR + Docker image locally, deploy to pi-node"
     echo "  stage-down       - Stop stage stack on pi-node"
     echo "  stage-logs       - View stage API logs (pass --tail=N for limit)"
@@ -336,6 +426,8 @@ case "${1:-help}" in
     echo "  logs             - View infrastructure logs"
     echo "  logs-json        - View structured JSON logs (requires jq)"
     echo "  stage-monitoring - Start/stop local Grafana (scrapes pi-node Prometheus)"
+    echo "  frontend         - Manage Vue dev server (start|stop|logs)"
+    echo "  frontend-logs    - View Vue dev server logs"
     echo ""
     echo "Stage stack:"
     echo "  API:         http://piworm.local:8081"
@@ -353,5 +445,8 @@ case "${1:-help}" in
     echo "  $0 logs --tail=100"
     echo "  $0 logs-json 50"
     echo "  $0 stage-monitoring up -d"
+    echo "  $0 frontend start"
+    echo "  $0 frontend stop"
+    echo "  $0 frontend-logs"
     ;;
 esac

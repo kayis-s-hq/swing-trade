@@ -73,8 +73,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local,fyers
 
 ```bash
 cd dashboard
-npm install
-npm run dev
+yarn
+yarn dev
 ```
 
 Dashboard: http://localhost:5173
@@ -108,7 +108,7 @@ API: http://localhost:8080
 cd backend && mvn test
 
 # Frontend unit tests
-cd dashboard && npm test
+cd dashboard && yarn test
 
 # Frontend E2E tests
 cd dashboard && npx playwright test
