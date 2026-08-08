@@ -1,6 +1,6 @@
 # Pre-Pilot Status
 
-Last checked: 2026-07-25
+Last checked: 2026-08-08
 
 ## Data
 
@@ -16,17 +16,39 @@ Last checked: 2026-07-25
 - [ ] Max drawdown < 20% on portfolio
 - [ ] Signal scanner ran today - check /api/signals/latest
 - [ ] Manually verify 1 signal against TradingView chart
+- [x] Strategy consolidated: SwingTradingStrategy deprecated, PriceActionSignalEngine is the single engine (uses TA4j + DecimalNum precision)
+- [x] SignalPipeline uses PriceActionSignalEngine for both primary and price-action signals
+- [x] BacktestEngine and live engine share same constants from StrategyParams
 
 ## Paper Trading
 
 - [x] Initial capital set: Rs.5,00,000 (PaperTradingProperties.initialBalance=500000, injected into PaperTradingEngine)
 - [x] Max positions: 5 (PaperTradingProperties.maxConcurrentPositions=5, wired through PositionManager)
-- [x] Max capital per position: 20% (PaperTradingProperties.maxCapitalPerPosition=20, used in validatePositionCapacity)
+- [x] Max capital per position: Rs.2,00,000 (PaperTradingProperties.maxCapitalPerPosition=200000, aligned with BrokerProperties)
 - [x] Risk per trade: 1% (changed from 2% hardcoded to 1% in calculatePositionSize)
+- [x] CapitalTracker uses PaperTradingProperties (not BrokerProperties) for initial balance, max positions, max capital
+- [x] @Transactional added to all closePosition methods (PositionService, PositionManager, PaperTradingEngine, PaperTradingStateService)
+- [x] Null direction guards in PaperTradingServiceImpl, LiveTradingService, PositionService
+- [x] DailyLossCircuitBreaker persists to DB (V4 migration, DailyLossCircuitBreakerStateEntity) — survives restarts
 - [ ] 9:15am scheduler tested - fills pending orders (SignalExecutionJob uses fixedDelay=30s poller, no cron-based 9:15am job)
 - [x] 3:30pm monitor cron set (PaperTradingMonitorService: 15:30 IST) — needs runtime test
 - [x] 3:45pm snapshot cron set (PortfolioSnapshotScheduler: 15:45 IST) — needs runtime test
 - [x] Manual close position endpoint exists (POST /api/positions/{symbol}/close via PositionController)
+
+## Audit Fixes (2026-08-08)
+
+8 phases completed from architecture audit (64 findings):
+
+- [x] H5: TradeRequest.isValid() operator precedence fix
+- [x] H6: Null direction guards in 3 places (PaperTradingServiceImpl, LiveTradingService, PositionService)
+- [x] H7: PositionEntity.toDomain() null status → defaults to OPEN
+- [x] C4: @Transactional on 7 closePosition methods
+- [x] H4: Capital config mismatch resolved (CapitalTracker → PaperTradingProperties)
+- [x] C2: Trade.close() PnL correct for SHORT + fees (TradeDirection field added)
+- [x] H1: DailyLossCircuitBreaker DB persistence (entity + repo + migration + wiring)
+- [x] C6: Strategy consolidation (SwingTradingStrategy deprecated, PriceActionSignalEngine unified)
+
+Dismissed (not bugs): C1 (param order safe), C3 (.env not in git), C5 (backtest precision safe)
 
 ## LLM Layer
 
