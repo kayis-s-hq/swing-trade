@@ -13,6 +13,14 @@ Generate a test-first development plan for backend changes. Captures real API re
 - Need to capture real API request/response as JSON fixtures
 - Plan must go under `docs/plans/` with exact file paths and code
 
+## When NOT to Use
+
+- Frontend-only changes
+- Pure infrastructure/config changes
+- One-line fixes with no test gap
+- Database migration-only work
+- Plan already exists in `docs/plans/` (use tdd-impl command instead)
+
 ## Core Principle
 
 Write tests first (RED), watch them fail, write minimal code (GREEN), verify all pass. The plan documents the full cycle: what to test, how to test it, what fixtures to capture, which files change.
@@ -31,6 +39,8 @@ Every plan MUST have these sections:
 | 1: NumPrecisionTest | [ ] PENDING | — | — |
 | 2: Missing Features | [ ] PENDING | — | — |
 ```
+
+**Note:** Stale/completed plans should be moved to `docs/plans/archive/` to keep the active folder clean.
 
 ### 1. Feature Map
 Table mapping every behavior/feature to test coverage:

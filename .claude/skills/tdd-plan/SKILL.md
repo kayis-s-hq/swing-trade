@@ -21,6 +21,7 @@ Symptoms that signal this skill applies:
 - Pure infrastructure/config changes
 - One-line fixes with no test gap
 - Database migration-only work
+- Plan already exists in `docs/plans/` (use tdd-impl skill instead)
 
 ## Core Principle
 
@@ -42,6 +43,8 @@ Every plan MUST have these sections:
 ```
 
 Mark `[x] PASS` or `[x] FAIL` after each phase verification. Do NOT proceed until current phase is marked.
+
+**Note:** Stale/completed plans should be moved to `docs/plans/archive/` to keep the active folder clean.
 
 ### 1. Feature Map
 Table mapping every behavior/feature to test coverage:
