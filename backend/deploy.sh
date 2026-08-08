@@ -41,8 +41,9 @@ err() { echo -e "${RED}[deploy]${NC} $*" >&2; }
 do_build() {
     log "Building JAR..."
     cd "$BACKEND_DIR"
-    mvn clean package -Dmaven.test.skip=true -B
-    log "Build complete: $(ls -1 api/target/*.jar | head -1)"
+    source "$HOME/.sdkman/bin/sdkman-init.sh" 2>/dev/null
+    ./gradlew :api:bootJar -B -x test -q
+    log "Build complete: $(ls -1 api/build/libs/*.jar | head -1)"
 }
 
 # ---------------------------------------------------------------------------
@@ -68,7 +69,7 @@ do_deploy() {
         IS_LOCAL=true
     fi
 
-    local jar_path="api/target/api-1.0.0.jar"
+    local jar_path="api/build/libs/api-1.0.0.jar"
     local APP_DIR="$REMOTE_APP_DIR/$env_label"
 
     if [ "$IS_LOCAL" = true ]; then

@@ -90,8 +90,8 @@ case "${1:-help}" in
         set +a
         echo "✓ Loaded environment from $BACKEND_DIR/.env"
     fi
-    cd "$BACKEND_DIR/api"
-    mvn spring-boot:run -Dspring-boot.run.profiles=local -Dcheckstyle.skip=true -Dpmd.skip=true &
+    cd "$BACKEND_DIR"
+    ./gradlew :api:bootRun --args='--spring.profiles.active=local' &
     BACKEND_PID=$!
     save_pid "$BACKEND_PID"
     echo "✓ Backend PID: $BACKEND_PID"
@@ -256,19 +256,20 @@ case "${1:-help}" in
     echo ""
 
     # --- Step 2: Build JAR locally ---
-    echo "🔨 Building JAR locally (mvn package)..."
+    echo "🔨 Building JAR locally (gradle build)..."
     cd "$BACKEND_DIR"
-    mvn clean package -Dmaven.test.skip=true -Dcheckstyle.skip=true -Dpmd.skip=true -B -q
+    ./gradlew :api:bootJar -B -x test -q
     JAR_STATUS=$?
     if [ $JAR_STATUS -ne 0 ]; then
-      echo "✗ Maven build failed. Fix and retry."
+      echo "✗ Gradle build failed. Fix and retry."
       exit 1
     fi
-    if [ ! -f "$BACKEND_DIR/api/target/api-1.0.0.jar" ]; then
-      echo "✗ JAR not found at api/target/api-1.0.0.jar"
+    JAR_FILE=$(ls "$BACKEND_DIR/api/build/libs/api-*.jar" 2>/dev/null | head -1)
+    if [ -z "$JAR_FILE" ]; then
+      echo "✗ JAR not found in api/build/libs/"
       exit 1
     fi
-    JAR_SIZE=$(du -h "$BACKEND_DIR/api/target/api-1.0.0.jar" | cut -f1)
+    JAR_SIZE=$(du -h "$JAR_FILE" | cut -f1)
     echo "✓ JAR built: $JAR_SIZE"
     echo ""
 
@@ -277,7 +278,7 @@ case "${1:-help}" in
     STAGE_PATH="/home/dietpi/swing-trade"
     DASH_PATH="$PROJECT_ROOT/dashboard"
     ssh dietpi@piworm.local "mkdir -p $STAGE_PATH/api/target $STAGE_PATH/dashboard/dist"
-    scp "$BACKEND_DIR/api/target/api-1.0.0.jar" dietpi@piworm.local:"$STAGE_PATH/api/target/api-1.0.0.jar"
+    scp "$BACKEND_DIR/api/build/libs/api-*.jar" dietpi@piworm.local:"$STAGE_PATH/api/build/libs/api-1.0.0.jar"
     scp "$BACKEND_DIR/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/Dockerfile"
     scp "$BACKEND_DIR/docker-compose.infra-stage.yml" dietpi@piworm.local:"$STAGE_PATH/docker-compose.infra-stage.yml"
     echo "✓ JAR + Dockerfile + compose transferred"

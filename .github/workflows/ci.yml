@@ -13,6 +13,7 @@ concurrency:
 
 env:
   JAVA_OPTS: -Xms256m -Xmx512m
+  GRADLE_OPTS: -Xms256m -Xmx512m
 
 jobs:
   # =====================================================================
@@ -29,24 +30,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache Maven repo
+      - name: Cache Gradle
         uses: actions/cache@v4
         with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('backend/gradle/**/*.kts', backend/**/build.gradle.kts') }}
           restore-keys: |
-            ${{ runner.os }}-maven-
+            ${{ runner.os }}-gradle-
 
       - name: Checkstyle + PMD
         working-directory: backend/${{ matrix.module }}
-        run: MAVEN_OPTS="$JAVA_OPTS" mvn checkstyle:check pmd:check -B
+        run: ../gradlew :${{ matrix.module }}:checkstyleMain :${{ matrix.module }}:pmdMain -B
 
       - name: Upload PMD report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pmd-${{ matrix.module }}
-          path: backend/${{ matrix.module }}/target/site/pmd.html
+          path: backend/${{ matrix.module }}/build/reports/pmd/pmd.html
           retention-days: 7
 
       - name: Upload Checkstyle report
@@ -54,7 +55,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: checkstyle-${{ matrix.module }}
-          path: backend/${{ matrix.module }}/target/checkstyle-result.xml
+          path: backend/${{ matrix.module }}/build/reports/checkstyle/checkstyleMain.xml
           retention-days: 7
 
   # =====================================================================
@@ -72,31 +73,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache Maven repo
+      - name: Cache Gradle
         uses: actions/cache@v4
         with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('backend/gradle/**/*.kts', backend/**/build.gradle.kts') }}
           restore-keys: |
-            ${{ runner.os }}-maven-
+            ${{ runner.os }}-gradle-
 
-      - name: Compile + package (skip tests)
+      - name: Compile + jar (skip tests)
         working-directory: backend/${{ matrix.module }}
-        run: MAVEN_OPTS="$JAVA_OPTS" mvn compile package -B -Dmaven.test.skip=true
+        run: ../gradlew :${{ matrix.module }}:jar -B -x test
 
       - name: Upload JAR
         if: matrix.module == 'api'
         uses: actions/upload-artifact@v4
         with:
           name: api-jar
-          path: backend/api/target/api-1.0.0.jar
+          path: backend/api/build/libs/api-*.jar
           retention-days: 1
 
   # =====================================================================
-  # Phase 3: Unit Tests — per module, parallel (skip IT, PMD, Checkstyle)
+  # Phase 3: Tests — all modules (unit + integration)
   # =====================================================================
-  unit-tests:
-    name: Unit Tests (${{ matrix.module }})
+  test:
+    name: Tests (${{ matrix.module }})
     runs-on: self-hosted
     needs: [compile]
     strategy:
@@ -107,52 +108,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache Maven repo
+      - name: Cache Gradle
         uses: actions/cache@v4
         with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('backend/gradle/**/*.kts', backend/**/build.gradle.kts') }}
           restore-keys: |
-            ${{ runner.os }}-maven-
+            ${{ runner.os }}-gradle-
 
-      - name: Unit tests only
+      - name: Tests
         working-directory: backend/${{ matrix.module }}
-        run: MAVEN_OPTS="$JAVA_OPTS" mvn test -B -Dspring.profiles.active=test -DskipITs=true -Dpmd.skip=true -Dcheckstyle.skip=true
+        run: ../gradlew :${{ matrix.module }}:test -B -Dspring.profiles.active=test
 
       - name: Upload JaCoCo report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-${{ matrix.module }}
-          path: backend/${{ matrix.module }}/target/site/jacoco-index.html
+          path: backend/${{ matrix.module }}/build/reports/jacoco/test/index.html
           retention-days: 7
-
-  # =====================================================================
-  # Phase 4: Integration Tests — per module, parallel (skip unit tests)
-  # =====================================================================
-  integration-tests:
-    name: Integration Tests (${{ matrix.module }})
-    runs-on: self-hosted
-    needs: [compile]
-    strategy:
-      fail-fast: false
-      matrix:
-        module: [api]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cache Maven repo
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-
-      - name: Integration tests only
-        working-directory: backend/${{ matrix.module }}
-        run: MAVEN_OPTS="$JAVA_OPTS" mvn failsafe:integration-test failsafe:verify -B -Dspring.profiles.active=test -DskipTests=true -Dpmd.skip=true -Dcheckstyle.skip=true
 
   # =====================================================================
   # Frontend Phase 1: Static Analysis (ESLint + TypeScript typecheck)
@@ -322,30 +296,3 @@ jobs:
           else
             echo "TruffleHog not installed, skipping"
           fi
-
-  # =====================================================================
-  # Maven Site — generate aggregated reports and deploy to nginx
-  # =====================================================================
-  maven-site:
-    name: Maven Site
-    runs-on: self-hosted
-    needs: [unit-tests]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cache Maven repo
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('backend/**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-
-      - name: Generate Maven Site
-        working-directory: backend
-        run: MAVEN_OPTS="$JAVA_OPTS" mvn site -B -DskipTests -Dpmd.skip=false -Dcheckstyle.skip=true
-
-      - name: Deploy to reports server
-        run: |
-          docker cp ${GITHUB_WORKSPACE}/backend/target/site/ swing-trade-reports:/usr/share/nginx/html/

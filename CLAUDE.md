@@ -7,21 +7,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This repo has **two** backend implementations — know which one you're working in:
 
 1. **`src/` (root)** — Standalone Spring Boot 3.4.2 monolith. Simple app with basic stock/signal controllers. Use this for quick prototypes or simple changes. Built with `mvn` at repo root.
-2. **`backend/`** — Multi-module Maven project (6 modules: core, data, strategy, llm, broker, api) with Spring Boot 3.3.1. Full-featured architecture with separate data ingestion, TA, LLM sentiment, paper trading, and REST API. Use this for real feature work.
+2. **`backend/`** — Multi-module Gradle project (6 modules: core, data, strategy, llm, broker, api) with Spring Boot 3.3.1. Full-featured architecture with separate data ingestion, TA, LLM sentiment, paper trading, and REST API. Use this for real feature work.
 
 When in doubt, `backend/` is the active development target.
 
 ## Java Version
 
-**MUST use Java 21 for Maven builds.** The system JDK may be Java 25/26, which causes PMD 7.14.0 to crash (ASM parser cannot parse JDK class files of version 70+). Use sdkman to switch:
+**MUST use Java 21 for Gradle builds.** The system JDK may be Java 25/26, which causes PMD 7.14.0 to crash. Use sdkman to switch:
 
 ```bash
 source "$HOME/.sdkman/bin/sdkman-init.sh"
 java -version  # should show openjdk 21.0.2
-mvn validate   # now works
+./gradlew help  # now works
 ```
 
-Verify before running Maven:
+Verify before running Gradle:
 ```bash
 java -version  # must be Java 21, NOT 25/26
 ```
@@ -42,8 +42,10 @@ swing-trade/
 │       ├── service/        # Business logic
 │       └── config/         # RedisConfig
 │
-├── backend/                # Multi-module Maven project (Spring Boot 3.3.1)
-│   ├── pom.xml             # Parent POM (6 modules)
+├── backend/                # Multi-module Gradle project (Spring Boot 3.3.1)
+│   ├── build.gradle.kts    # Root build + dependency management
+│   ├── settings.gradle.kts # Project settings + repository config
+│   ├── gradle.properties   # Gradle config (cache, JVM args)
 │   ├── core/               # Domain models (Stock, OhlcvCandle, Signal, Position, Trade, SentimentResult)
 │   ├── data/               # Data ingestion & storage (Upstox client, JPA entities, repositories, Flyway migrations)
 │   ├── strategy/           # TA with TA4j, signal generation, backtesting engine
@@ -69,9 +71,9 @@ swing-trade/
 ## Key Technologies
 
 ### Backend
-- Java 21 (MUST use Java 21 via sdkman — `source "$HOME/.sdkman/bin/sdkman-init.sh"` before Maven; NOT Java 25/26)
+- Java 21 (MUST use Java 21 via sdkman — `source "$HOME/.sdkman/bin/sdkman-init.sh"` before Gradle; NOT Java 25/26)
 - Spring Boot 3.3.1 (backend/) / 3.4.2 (root src/)
-- Maven multi-module build
+- Gradle 9.6.1 (Kotlin DSL, multi-module build)
 - PostgreSQL + TimescaleDB (time-series)
 - Redis (caching)
 - TA4j 0.16 (technical analysis)
@@ -108,36 +110,30 @@ Network: `swingtrade-network` (bridge). Volumes: `postgres_data`, `redis_data`.
 ### Backend (multi-module)
 ```bash
 cd backend
-mvn clean install              # Build all modules
-mvn test                       # Run all tests (unit + integration)
-mvn test -Dtest=SomeTest       # Run specific test class
+./gradlew build                # Build all modules + run tests
+./gradlew test                 # Run all tests (unit + integration)
+./gradlew :api:test            # Run specific module tests
 
 # Run API module locally (after starting infra)
-cd api
-mvn spring-boot:run -Dspring-boot.run.profiles=local,fyers
+cd backend
+./gradlew :api:bootRun --args='--spring.profiles.active=local,fyers'
 ```
 
 ## Test Phase Rules
 
-**All tests run in the `test` phase via `mvn test`. There is no separate `verify` phase for integration tests.**
-
-The parent POM (`backend/pom.xml`) configures:
-- **maven-surefire-plugin** — runs ALL tests in the `test` phase:
-  - Unit tests: `*Test.java`
-  - Integration tests: `*IntegrationTest.java`, `*IT.java`, `*E2ETest.java`
-- **No maven-failsafe-plugin** — integration tests are NOT deferred to `verify`
+**All tests run via `./gradlew test`.** Gradle's JVM Test Suite plugin runs ALL tests in the `test` phase.
 
 **Naming convention:**
 - Unit tests: `*Test.java` (e.g., `BacktestEngineTest.java`)
 - Integration tests: `*IntegrationTest.java` (e.g., `BacktestEngineIntegrationTest.java`)
 
-**Verification:** `mvn test` runs everything. No need for `mvn verify` or `mvn failsafe:integration-test`.
+**Verification:** `./gradlew test` runs everything. `./gradlew check` runs tests + PMD + checkstyle.
 
 ### Backend (root monolith)
 ```bash
-mvn clean install              # Build
-mvn test                       # Run tests
-mvn spring-boot:run            # Run locally
+./gradlew build                # Build
+./gradlew test                 # Run tests
+./gradlew :api:bootRun         # Run locally
 ```
 
 ### Frontend
@@ -241,13 +237,13 @@ Located in `backend/data/src/main/resources/db/migration/`:
 
 ```bash
 # Backend — all modules
-cd backend && mvn test
+cd backend && ./gradlew test
 
 # Backend — specific module
-cd backend/data && mvn test
+cd backend && ./gradlew :data:test
 
 # Backend — with coverage
-mvn clean test jacoco:report
+./gradlew test jacocoTestReport
 
 # Frontend unit tests
 cd dashboard && yarn test
