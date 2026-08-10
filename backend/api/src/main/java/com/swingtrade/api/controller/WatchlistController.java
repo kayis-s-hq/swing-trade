@@ -128,12 +128,12 @@ public class WatchlistController {
         }
 
         return ResponseEntity.ok(ApiResponse.ok(Map.of(
-                "pullId", progress.pullId,
-                "status", progress.status,
-                "total", progress.total,
-                "completed", progress.completed.get(),
-                "failed", progress.failed.get(),
-                "currentSymbol", progress.currentSymbol,
+                "pullId", progress.getPullId(),
+                "status", progress.getStatus(),
+                "total", progress.getTotal(),
+                "completed", progress.getCompleted(),
+                "failed", progress.getFailed(),
+                "currentSymbol", progress.getCurrentSymbol(),
                 "percentComplete", Math.round(progress.getPercentComplete())
         )));
     }

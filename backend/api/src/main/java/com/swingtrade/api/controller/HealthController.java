@@ -24,18 +24,18 @@ public class HealthController {
     private static final Logger logger = LoggerFactory.getLogger(HealthController.class);
 
     private final com.swingtrade.data.service.DataIngestionService dataIngestionService;
-    private final com.swingtrade.strategy.SwingTradingStrategy strategyService;
+    private final com.swingtrade.strategy.PriceActionSignalEngine signalEngine;
     private final com.swingtrade.llm.LlmService llmService;
 
     public HealthController(
             @Autowired(required = false)
             com.swingtrade.data.service.DataIngestionService dataIngestionService,
             @Autowired(required = false)
-            com.swingtrade.strategy.SwingTradingStrategy strategyService,
+            com.swingtrade.strategy.PriceActionSignalEngine signalEngine,
             @Autowired(required = false)
             com.swingtrade.llm.LlmService llmService) {
         this.dataIngestionService = dataIngestionService;
-        this.strategyService = strategyService;
+        this.signalEngine = signalEngine;
         this.llmService = llmService;
     }
 
@@ -65,9 +65,9 @@ public class HealthController {
                     "data", "UP", "Data Service (not configured)"));
         }
 
-        if (strategyService != null) {
+        if (signalEngine != null) {
             status.addComponent("strategy", new HealthStatus.ComponentStatus(
-                    "strategy", "UP", "Trading Strategy Engine", getComponentDetails(strategyService)));
+                    "strategy", "UP", "Price Action Signal Engine", getComponentDetails(signalEngine)));
         } else {
             status.addComponent("strategy", new HealthStatus.ComponentStatus(
                     "strategy", "UP", "Strategy Service (not configured)"));

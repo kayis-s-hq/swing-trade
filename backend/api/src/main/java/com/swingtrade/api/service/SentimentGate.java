@@ -64,7 +64,7 @@ public class SentimentGate {
                 return SentimentVerdict.flagNeutral(sentiment.summary());
             }
 
-            return SentimentVerdict.allow();
+            return SentimentVerdict.allowWithSummary(sentiment.summary());
 
         } catch (Exception e) {
             logger.warn("Failed to check sentiment for {} on {}: {}, saving signal anyway",
@@ -77,7 +77,7 @@ public class SentimentGate {
      * Immutable verdict for a sentiment gate evaluation.
      *
      * @param action {@code ALLOW}, {@code SUPPRESS}, or {@code FLAG_NEUTRAL}
-     * @param reason the sentiment reasoning (if available)
+     * @param reason the sentiment reasoning/summary (if available)
      * @param errorMessage the error message if sentiment check failed (if applicable)
      */
     public record SentimentVerdict(
@@ -94,6 +94,10 @@ public class SentimentGate {
 
         public static SentimentVerdict allow() {
             return new SentimentVerdict(Action.ALLOW, null, null);
+        }
+
+        public static SentimentVerdict allowWithSummary(String summary) {
+            return new SentimentVerdict(Action.ALLOW, summary, null);
         }
 
         public static SentimentVerdict suppress(String reason) {

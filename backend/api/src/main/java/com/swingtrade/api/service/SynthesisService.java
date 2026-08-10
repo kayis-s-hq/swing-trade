@@ -2,7 +2,7 @@ package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.CompositeAnalysis;
 import com.swingtrade.domain.SynthesisResult;
-import com.swingtrade.llm.client.VLLMClient;
+import com.swingtrade.llm.client.GpuHubClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,14 +18,14 @@ public class SynthesisService {
     private static final Logger logger = LoggerFactory.getLogger(SynthesisService.class);
     private static final int MAX_TOKENS = 1024;
     private static final double TEMPERATURE = 0.2;
-    private static final long TIMEOUT_SECONDS = 60;
+    private static final long TIMEOUT_SECONDS = 120;
 
-    private final VLLMClient vllmClient;
+    private final GpuHubClient gpuHubClient;
     private final String modelName;
 
-    public SynthesisService(VLLMClient vllmClient,
-                            @Value("${llm.vllm.model-name:gemma-3-27b-it}") String modelName) {
-        this.vllmClient = vllmClient;
+    public SynthesisService(GpuHubClient gpuHubClient,
+                            @Value("${llm.gpuhub.model-name:gemma-3-27b-it}") String modelName) {
+        this.gpuHubClient = gpuHubClient;
         this.modelName = modelName;
     }
 
@@ -56,7 +56,7 @@ public class SynthesisService {
         );
 
         try {
-            String llmResponse = vllmClient.generateChatCompletion(messages, MAX_TOKENS, TEMPERATURE)
+            String llmResponse = gpuHubClient.generateChatCompletion(messages, MAX_TOKENS, TEMPERATURE)
                 .block(Duration.ofSeconds(TIMEOUT_SECONDS));
 
             if (llmResponse == null || llmResponse.isBlank()) {

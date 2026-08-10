@@ -4,6 +4,7 @@ import com.swingtrade.api.dto.ApiResponse;
 import com.swingtrade.broker.service.DiscordNotificationService;
 import com.swingtrade.data.service.AppSettingsService;
 import com.swingtrade.data.service.MarketDataClientProvider;
+import com.swingtrade.llm.service.LlamaCppServerManager;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,6 +13,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -19,16 +23,21 @@ import java.util.Map;
 @RequestMapping("/api")
 public class SettingsController {
 
+    private static final Logger logger = LoggerFactory.getLogger(SettingsController.class);
+
     private final MarketDataClientProvider marketDataClientProvider;
     private final AppSettingsService appSettingsService;
     private final DiscordNotificationService discordNotificationService;
+    private final LlamaCppServerManager serverManager;
 
     public SettingsController(MarketDataClientProvider marketDataClientProvider,
                               AppSettingsService appSettingsService,
-                              DiscordNotificationService discordNotificationService) {
+                              DiscordNotificationService discordNotificationService,
+                              LlamaCppServerManager serverManager) {
         this.marketDataClientProvider = marketDataClientProvider;
         this.appSettingsService = appSettingsService;
         this.discordNotificationService = discordNotificationService;
+        this.serverManager = serverManager;
     }
 
     @GetMapping("/settings")
@@ -55,8 +64,9 @@ public class SettingsController {
     @GetMapping("/settings/llm")
     public ResponseEntity<ApiResponse<Map<String, String>>> getLlmSettings() {
         Map<String, String> settings = Map.of(
-            "llm.vllm.base_url", appSettingsService.get("llm.vllm.base_url", ""),
-            "llm.vllm.model", appSettingsService.get("llm.vllm.model", ""),
+            "llm.base_url", appSettingsService.get("llm.base_url", ""),
+            "llm.gpuhub.base_url", appSettingsService.get("llm.gpuhub.base_url", ""),
+            "llamacpp.model", appSettingsService.get("llamacpp.model", "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"),
             "llm.pdf.base_url", appSettingsService.get("llm.pdf.base_url", ""),
             "llm.pdf.model", appSettingsService.get("llm.pdf.model", "")
         );
@@ -66,7 +76,16 @@ public class SettingsController {
     @PutMapping("/settings/llm")
     public ResponseEntity<ApiResponse<Map<String, String>>> setLlmSettings(
             @RequestBody Map<String, String> body) {
+        boolean modelChanged = body.containsKey("llamacpp.model")
+                && !body.get("llamacpp.model").equals(appSettingsService.get("llamacpp.model").orElse(""));
         body.forEach((key, value) -> appSettingsService.set(key, value));
+        if (modelChanged) {
+            try {
+                serverManager.restart();
+            } catch (Exception e) {
+                logger.warn("llama-server restart failed: {}", e.getMessage());
+            }
+        }
         return getLlmSettings();
     }
 

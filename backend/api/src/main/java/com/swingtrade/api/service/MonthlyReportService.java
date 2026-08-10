@@ -1,7 +1,5 @@
 package com.swingtrade.api.service;
 
-import com.swingtrade.broker.telegram.TelegramConfig;
-import com.swingtrade.broker.telegram.TelegramMessageFormatter;
 import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.repository.PositionRepository;
@@ -27,18 +25,14 @@ public class MonthlyReportService {
 
     private final PositionRepository positionRepository;
     private final SignalRepository signalRepository;
-    private final TelegramConfig telegramConfig;
 
     private final ZoneId istZone = ZoneId.of("Asia/Kolkata");
 
     public MonthlyReportService(
             PositionRepository positionRepository,
-            SignalRepository signalRepository,
-            TelegramConfig telegramConfig,
-            TelegramMessageFormatter telegramMessageFormatter) {
+            SignalRepository signalRepository) {
         this.positionRepository = positionRepository;
         this.signalRepository = signalRepository;
-        this.telegramConfig = telegramConfig;
     }
 
     @PostConstruct
@@ -63,15 +57,10 @@ public class MonthlyReportService {
 
             Map<String, Object> report = buildReport(now, monthlyPositions, monthlySignals);
 
-            String telegramMessage = formatMonthlyReport(report);
+            String reportMessage = formatMonthlyReport(report);
+            log.info("Monthly report: {}", reportMessage);
 
-            if (telegramConfig.isEnabled() && !telegramConfig.getChatIds().isEmpty()) {
-                log.info("Sending monthly report to Telegram");
-                // Telegram notifications would be sent here
-                log.info("Monthly report message: {}", telegramMessage);
-            }
-
-            log.info("Monthly report generated and sent for period: {} to {}", firstDay, lastDay);
+            log.info("Monthly report generated for period: {} to {}", firstDay, lastDay);
 
         } catch (Exception e) {
             log.error("Failed to generate monthly report", e);

@@ -22,7 +22,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -55,10 +54,10 @@ public class SignalEngine {
     }
 
     /**
-     * Scheduled job to generate signals for all stocks with data.
-     * Runs at 17:00 IST (30 min after market close) on weekdays.
+     * Generate signals for all stocks with data.
+     * Called by JobOrchestratorService — @Scheduled removed in favor of unified pipeline.
      */
-    @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Kolkata")
+    // @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Kolkata")
     public void generateDailySignals() {
         orchestrator.runDailyGeneration();
     }

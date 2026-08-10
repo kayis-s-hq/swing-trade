@@ -56,7 +56,7 @@ public class Portfolio {
     }
 
     public BigDecimal getTotalValue() {
-        BigDecimal totalValue = initialCapital;
+        BigDecimal totalValue = currentCapital;
         for (Position position : positions.values()) {
             if (position.status() == PositionStatus.OPEN) {
                 totalValue = totalValue.add(position.unrealizedPnL() != null ? position.unrealizedPnL() : BigDecimal.ZERO);

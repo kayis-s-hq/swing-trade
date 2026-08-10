@@ -141,7 +141,7 @@ class DryRunServiceTest {
     @Test
     void testCalculateProfitLoss_returnsZero() {
         // Given
-        Position position = Position.of(1L, "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
+        Position position = Position.of(1L, "PAPER", "RELIANCE-EQ", new BigDecimal("2500"), null, 100,
             new BigDecimal("2400"), new BigDecimal("2700"),
             PositionStatus.OPEN, "Signal", new BigDecimal("2550"),
             "pos-1", null, Exchange.NSE, TradeDirection.LONG,

@@ -7,8 +7,6 @@ import com.swingtrade.data.repository.SentimentResultRepository;
 import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Stock;
-import com.swingtrade.llm.client.VLLMClient;
-import com.swingtrade.llm.config.LlmConfig;
 import com.swingtrade.llm.config.TestLlmConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,26 +28,23 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
- * Live E2E tests for SentimentService that make real API calls to vLLM.
+ * Live E2E tests for SentimentService that make real API calls to local llama.cpp.
  *
  * These tests verify the complete pipeline:
  * 1. News ingestion from RSS feeds (mocked for reliability)
- * 2. Sentiment analysis via real vLLM API call
+ * 2. Sentiment analysis via real llama.cpp API call
  * 3. Result caching and persistence
  *
  * Requirements:
- * - LLM_VLLM_BASE_URL environment variable set to vLLM endpoint
+ * - LLM_BASE_URL environment variable set to llama.cpp endpoint
  *
- * Run with: mvn test -pl llm -Dtest=SentimentAnalysisLiveE2ETest
+ * Run with: ./gradlew :llm:test --tests SentimentAnalysisLiveE2ETest
  */
-@SpringBootTest(classes = {LlmConfig.class, TestLlmConfig.class})
+@SpringBootTest(classes = TestLlmConfig.class)
 @ActiveProfiles("test")
 @DisplayName("Sentiment Analysis Live E2E Tests")
-@EnabledIfEnvironmentVariable(named = "LLM_VLLM_BASE_URL", matches = ".*")
+@EnabledIfEnvironmentVariable(named = "LLM_BASE_URL", matches = ".*")
 class SentimentAnalysisLiveE2ETest {
-
-    @Value("${llm.vllm.base-url}")
-    private String vllmBaseUrl;
 
     @MockBean
     private NewsIngestionService newsIngestionService;
@@ -77,6 +72,7 @@ class SentimentAnalysisLiveE2ETest {
         // Create sample news articles for each stock - must contain the stock symbol
         // for the containsStockSymbol() filter to pass
         NewsArticle relianceArticle1 = new NewsArticle(
+                "RELIANCE",
                 "Reliance Industries reports strong quarterly earnings",
                 "https://example.com/news1",
                 "Reliance Industries announces better than expected quarterly results.",
@@ -86,6 +82,7 @@ class SentimentAnalysisLiveE2ETest {
         );
 
         NewsArticle tcsArticle1 = new NewsArticle(
+                "TCS",
                 "TCS reports strong digital services growth",
                 "https://example.com/news2",
                 "Tata Consultancy Services shows strong performance in digital services.",
@@ -95,6 +92,7 @@ class SentimentAnalysisLiveE2ETest {
         );
 
         NewsArticle infyArticle1 = new NewsArticle(
+                "INFY",
                 "Infosys reports solid quarterly performance",
                 "https://example.com/news3",
                 "Infosys announces strong quarterly earnings beat.",
@@ -116,12 +114,12 @@ class SentimentAnalysisLiveE2ETest {
     }
 
     @Test
-    @DisplayName("testAnalyzeStockSentiment_MakesRealVLLMCall")
-    void testAnalyzeStockSentiment_MakesRealVLLMCall() {
+    @DisplayName("testAnalyzeStockSentiment_MakesRealLlamaCppCall")
+    void testAnalyzeStockSentiment_MakesRealLlamaCppCall() {
         // Given: Stock and news available
         StockEntity stock = createAndSaveStock("RELIANCE", "Reliance Industries", Stock.Sector.OTHERS);
 
-        // When: Analyze sentiment (makes real vLLM API call)
+        // When: Analyze sentiment (makes real llama.cpp API call)
         SentimentResult result = sentimentAnalysisService.analyzeStockSentiment("RELIANCE", LocalDate.now());
 
         // Then: Verify sentiment analysis completed
@@ -170,7 +168,7 @@ class SentimentAnalysisLiveE2ETest {
         createAndSaveStock("RELIANCE", "Reliance Industries", Stock.Sector.OTHERS);
         createAndSaveStock("TCS", "Tata Consultancy Services", Stock.Sector.IT);
 
-        // When: Batch analyze (makes real vLLM API calls)
+        // When: Batch analyze (makes real llama.cpp API calls)
         List<String> stocks = List.of("RELIANCE", "TCS");
         var results = sentimentAnalysisService.analyzeMultipleStocks(stocks, LocalDate.now());
 

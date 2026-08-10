@@ -4,6 +4,7 @@ import com.swingtrade.api.dto.CombinedSignalResponse;
 import com.swingtrade.api.dto.GenerateAllResponse;
 import com.swingtrade.api.dto.ScanRequest;
 import com.swingtrade.api.dto.ScanResponse;
+import com.swingtrade.api.dto.SignalGenerationProgress;
 import com.swingtrade.api.dto.SignalResponse;
 import com.swingtrade.api.dto.SymbolRequest;
 import com.swingtrade.api.dto.TechnicalAnalysisResponse;
@@ -27,12 +28,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -209,12 +213,14 @@ public class SignalController {
         if (cleared > 0) {
             logger.info("Cleared {} stale signals", cleared);
         }
+        java.util.Set<String> generatedSymbols = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
         List<SignalResponse> signals = new ArrayList<>();
         List<GenerateAllResponse.SymbolResult> skipped = new ArrayList<>();
         for (String symbol : symbols) {
             try {
                 java.util.Optional<Signal> result = signalService.generatePriceActionSignal(symbol);
                 if (result.isPresent()) {
+                    generatedSymbols.add(symbol);
                     signals.add(new SignalResponse(result.get()));
                 } else {
                     List<com.swingtrade.domain.OhlcvCandle> candles =
@@ -224,7 +230,7 @@ public class SignalController {
                             "Insufficient candle data (" + candles.size() + " available)"));
                     } else {
                         skipped.add(new GenerateAllResponse.SymbolResult(symbol,
-                            "Signal already exists for latest date"));
+                            "No signal conditions met"));
                     }
                 }
             } catch (IllegalStateException e) {
@@ -237,6 +243,106 @@ public class SignalController {
         logger.info("Generated {} signals, skipped {} of {} symbols",
             signals.size(), skipped.size(), symbols.size());
         return ResponseEntity.ok(GenerateAllResponse.of(signals, skipped));
+    }
+
+    /**
+     * Generate price-action signals for all active watchlist symbols with SSE streaming.
+     * Emits progress events for each symbol: generating -> signal/skipped -> complete.
+     */
+    @PostMapping("/generate-all/stream")
+    public SseEmitter generateAllSignalsStream() {
+        SseEmitter emitter = new SseEmitter(300_000L); // 5 min timeout
+
+        try {
+            List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
+            int total = symbols.size();
+
+            // Clear stale signals
+            for (String symbol : symbols) {
+                List<Signal> existing = signalStore.findBySymbol(symbol);
+                if (!existing.isEmpty()) {
+                    Signal latest = existing.stream()
+                        .max(java.util.Comparator.comparing(s -> s.date()))
+                        .orElse(null);
+                    if (latest != null) {
+                        signalStore.deleteByDate(latest.date());
+                    }
+                }
+            }
+
+            emitter.send(SseEmitter.event()
+                .name("progress")
+                .data(SignalGenerationProgress.started(total)));
+        } catch (IOException e) {
+            logger.warn("Failed to send start event: {}", e.getMessage());
+            return emitter;
+        }
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
+                int total = symbols.size();
+                final int[] signalCount = {0};
+                final int[] skipCount = {0};
+
+                for (int i = 0; i < symbols.size(); i++) {
+                    String symbol = symbols.get(i);
+                    int current = i + 1;
+                    try {
+                        emitter.send(SseEmitter.event()
+                            .name("progress")
+                            .data(SignalGenerationProgress.generating(symbol, current, total)));
+
+                        java.util.Optional<Signal> result = signalService.generatePriceActionSignal(symbol);
+                        if (result.isPresent()) {
+                            signalCount[0]++;
+                            SignalResponse response = new SignalResponse(result.get());
+                            emitter.send(SseEmitter.event()
+                                .name("signal")
+                                .data(SignalGenerationProgress.signalDone(symbol, response, current, total)));
+                        } else {
+                            skipCount[0]++;
+                            List<com.swingtrade.domain.OhlcvCandle> candles = signalService.getCandleCount(symbol);
+                            String reason = (candles.isEmpty() || candles.size() < 50)
+                                ? "Insufficient candle data (" + candles.size() + " available)"
+                                : "No signal conditions met";
+                            emitter.send(SseEmitter.event()
+                                .name("progress")
+                                .data(SignalGenerationProgress.skipped(symbol, reason, current, total)));
+                        }
+                    } catch (Exception e) {
+                        try {
+                            skipCount[0]++;
+                            emitter.send(SseEmitter.event()
+                                .name("progress")
+                                .data(SignalGenerationProgress.skipped(symbol, "Error: " + e.getMessage(), current, total)));
+                        } catch (IOException ioEx) {
+                            logger.warn("Failed to send error event for {}: {}", symbol, ioEx.getMessage());
+                        }
+                    }
+                }
+
+                emitter.send(SseEmitter.event()
+                    .name("progress")
+                    .data(SignalGenerationProgress.complete(signalCount[0], skipCount[0], total)));
+                emitter.complete();
+            } catch (Exception e) {
+                try {
+                    emitter.send(SseEmitter.event()
+                        .name("error")
+                        .data(Map.of("message", e.getMessage())));
+                } catch (IOException ioEx) {
+                    logger.error("Failed to send error: {}", ioEx.getMessage());
+                }
+                emitter.completeWithError(e);
+            }
+        });
+
+        emitter.onCompletion(() -> logger.info("Client disconnected from generate-all stream"));
+        emitter.onTimeout(() -> logger.warn("Generate-all stream timed out"));
+        emitter.onError(e -> logger.error("Generate-all stream error: {}", e.getMessage()));
+
+        return emitter;
     }
 
     /**

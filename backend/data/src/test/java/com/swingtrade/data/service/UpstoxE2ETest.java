@@ -22,14 +22,14 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * End-to-End tests for Upstox Integration.
  * Tests the complete OAuth2 flow and data pull pipeline using UpstoxServiceClient.
  *
- * Run with: mvn test -Dtest=UpstoxE2ETest -P upstox
+ * Run with: ./gradlew :data:test --tests UpstoxE2ETest
  * Requires: Valid Upstox API credentials in application-upstox.yml or environment variables
  *
- * Note: Disabled from standard test runs. Enable with: mvn test -Dtest=UpstoxE2ETest
+ * Note: Disabled from standard test runs. Enable with: ./gradlew :data:test --tests UpstoxE2ETest
  */
 @SpringBootTest
 @ActiveProfiles({"test", "upstox"})
-@org.junit.jupiter.api.Disabled("Requires Upstox API credentials - run with: mvn test -Dtest=UpstoxE2ETest")
+@org.junit.jupiter.api.Disabled("Requires Upstox API credentials - run with: ./gradlew :data:test --tests UpstoxE2ETest")
 class UpstoxE2ETest {
 
     @Autowired

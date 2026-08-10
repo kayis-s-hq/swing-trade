@@ -69,6 +69,11 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
+    public Signal save(Signal signal, String warningFlag) {
+        return repository.save(SignalEntity.fromDomain(signal, warningFlag)).toDomain();
+    }
+
+    @Override
     public void markProcessed(Long signalId) {
         Optional<SignalEntity> entity = repository.findById(signalId);
         entity.ifPresent(e -> {
@@ -98,6 +103,12 @@ public class SignalStoreImpl implements SignalStore {
                 org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).stream()
             .map(SignalEntity::toDomain)
             .toList();
+    }
+
+    @Override
+    @Transactional
+    public int deleteBySymbolAndDate(String symbol, LocalDate date) {
+        return repository.deleteBySymbolAndDate(symbol, date);
     }
 
     @Override

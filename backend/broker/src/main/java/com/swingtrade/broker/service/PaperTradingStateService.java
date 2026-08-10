@@ -5,22 +5,23 @@ import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
-import com.swingtrade.broker.entity.PaperTradingClosedPositionEntity;
 import com.swingtrade.broker.entity.PaperTradingOrderEntity;
-import com.swingtrade.broker.entity.PaperTradingPositionEntity;
 import com.swingtrade.broker.entity.PaperTradingPortfolioEntity;
 import com.swingtrade.broker.entity.PaperTradingSnapshotEntity;
-import com.swingtrade.broker.repository.PaperTradingClosedPositionRepository;
 import com.swingtrade.broker.repository.PaperTradingOrderRepository;
-import com.swingtrade.broker.repository.PaperTradingPositionRepository;
 import com.swingtrade.broker.repository.PaperTradingPortfolioRepository;
 import com.swingtrade.broker.repository.PaperTradingSnapshotRepository;
+import com.swingtrade.data.entity.PositionEntity;
+import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
+
+import java.util.ArrayList;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -29,18 +30,20 @@ import java.util.List;
 /**
  * Bridges in-memory PaperTradingEngine with DB persistence.
  * Loads state from DB on startup; persists after every engine mutation.
+ * Uses unified positions table with broker_type="PAPER".
  */
 @Service
 public class PaperTradingStateService {
 
     private static final Logger logger = LoggerFactory.getLogger(PaperTradingStateService.class);
 
+    private static final String BROKER_TYPE_PAPER = "PAPER";
+
     private final PaperTradingEngine engine;
     private final PositionManager positionManager;
     private final OrderManager orderManager;
     private final PaperTradingPortfolioRepository portfolioRepo;
-    private final PaperTradingPositionRepository positionRepo;
-    private final PaperTradingClosedPositionRepository closedPositionRepo;
+    private final PositionRepository unifiedPositionRepo;
     private final PaperTradingOrderRepository orderRepo;
     private final PaperTradingSnapshotRepository snapshotRepo;
 
@@ -48,16 +51,14 @@ public class PaperTradingStateService {
                                     PositionManager positionManager,
                                     OrderManager orderManager,
                                     PaperTradingPortfolioRepository portfolioRepo,
-                                    PaperTradingPositionRepository positionRepo,
-                                    PaperTradingClosedPositionRepository closedPositionRepo,
+                                    PositionRepository unifiedPositionRepo,
                                     PaperTradingOrderRepository orderRepo,
                                     PaperTradingSnapshotRepository snapshotRepo) {
         this.engine = engine;
         this.positionManager = positionManager;
         this.orderManager = orderManager;
         this.portfolioRepo = portfolioRepo;
-        this.positionRepo = positionRepo;
-        this.closedPositionRepo = closedPositionRepo;
+        this.unifiedPositionRepo = unifiedPositionRepo;
         this.orderRepo = orderRepo;
         this.snapshotRepo = snapshotRepo;
     }
@@ -86,8 +87,10 @@ public class PaperTradingStateService {
     }
 
     private void loadOpenPositions() {
-        List<PaperTradingPositionEntity> openEntities = positionRepo.findAllByStatusOpen();
-        for (PaperTradingPositionEntity e : openEntities) {
+        List<PositionEntity> openEntities = unifiedPositionRepo.findAllOpenPositions().stream()
+            .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType()))
+            .toList();
+        for (PositionEntity e : openEntities) {
             try {
                 Position pos = e.toDomain();
                 engine.getPortfolio().addPosition(pos);
@@ -100,9 +103,23 @@ public class PaperTradingStateService {
     }
 
     private void loadClosedPositions() {
-        List<PaperTradingClosedPositionEntity> closedEntities = closedPositionRepo.findAllByOrderByExitTimeDesc();
+        List<PositionEntity> closedEntities = new ArrayList<>();
+        try {
+            closedEntities.addAll(unifiedPositionRepo.findByStatus("CLOSED").stream()
+                .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType()))
+                .toList());
+            closedEntities.addAll(unifiedPositionRepo.findByStatus("STOPPED").stream()
+                .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType()))
+                .toList());
+            closedEntities.addAll(unifiedPositionRepo.findByStatus("TARGET_HIT").stream()
+                .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType()))
+                .toList());
+        } catch (Exception e) {
+            logger.error("Failed to load closed positions", e);
+            throw new IllegalStateException("Failed to load closed positions from database", e);
+        }
         BigDecimal totalRealized = BigDecimal.ZERO;
-        for (PaperTradingClosedPositionEntity e : closedEntities) {
+        for (PositionEntity e : closedEntities) {
             totalRealized = totalRealized.add(e.getRealizedPnL() != null ? e.getRealizedPnL() : BigDecimal.ZERO);
         }
         // currentCapital from DB already includes realized P&L — do NOT add again
@@ -127,39 +144,39 @@ public class PaperTradingStateService {
 
     public void savePosition(Position position) {
         try {
-            PaperTradingPositionEntity entity = positionRepo.findByPositionId(position.positionId()).orElse(null);
+            PositionEntity entity = unifiedPositionRepo.findByPositionId(position.positionId()).orElse(null);
             if (entity == null) {
-                entity = new PaperTradingPositionEntity(position);
+                entity = new PositionEntity(position);
+                entity.setBrokerType(BROKER_TYPE_PAPER);
             } else {
                 entity.setCurrentPrice(position.currentPrice());
-                entity.setPnl(position.unrealizedPnL());
                 entity.setUnrealizedPnL(position.unrealizedPnL());
                 entity.setRealizedPnL(position.realizedPnL());
-                entity.setDirection(position.direction() != null ? position.direction().name() : "LONG");
                 entity.setStatus(position.status() != null ? position.status().name() : "OPEN");
                 if (position.status() != PositionStatus.OPEN) {
                     entity.setExitTime(LocalDateTime.now());
                     entity.setExitReason("auto");
                 }
             }
-            positionRepo.save(entity);
+            unifiedPositionRepo.save(entity);
         } catch (Exception e) {
             throw new RuntimeException("Failed to save position " + position.positionId(), e);
         }
     }
 
+    @Transactional
     public void closePosition(String positionId, Position closedPos) {
         try {
-            PaperTradingPositionEntity openEntity = positionRepo.findByPositionId(positionId).orElse(null);
-            if (openEntity != null) {
-                PaperTradingClosedPositionEntity closed = new PaperTradingClosedPositionEntity(openEntity);
-                closed.setExitPrice(closedPos.currentPrice());
-                closed.setPnl(closedPos.unrealizedPnL());
-                closed.setRealizedPnL(closedPos.unrealizedPnL());
-                closed.setExitReason(closedPos.exitTime() != null ? "auto" : "manual");
-                closedPositionRepo.save(closed);
-                positionRepo.deleteByPositionId(positionId);
-                logger.info("Closed position {} moved to history", positionId);
+            PositionEntity entity = unifiedPositionRepo.findByPositionId(positionId).orElse(null);
+            if (entity != null) {
+                entity.setStatus("CLOSED");
+                entity.setCurrentPrice(closedPos.currentPrice());
+                entity.setUnrealizedPnL(closedPos.unrealizedPnL());
+                entity.setRealizedPnL(closedPos.realizedPnL());
+                entity.setExitTime(LocalDateTime.now());
+                entity.setExitReason("manual");
+                unifiedPositionRepo.save(entity);
+                logger.info("Closed position {} updated in unified table", positionId);
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to close position " + positionId + " in DB", e);
@@ -201,12 +218,25 @@ public class PaperTradingStateService {
         }
     }
 
-    public List<PaperTradingPositionEntity> getOpenPositions() {
-        return positionRepo.findAllByStatusOpen();
+    public List<PositionEntity> getOpenPositions() {
+        return unifiedPositionRepo.findAllOpenPositions().stream()
+            .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType()))
+            .toList();
     }
 
-    public List<PaperTradingClosedPositionEntity> getClosedPositions() {
-        return closedPositionRepo.findAllByOrderByExitTimeDesc();
+    public List<PositionEntity> getClosedPositions() {
+        try {
+            var all = new java.util.ArrayList<PositionEntity>();
+            all.addAll(unifiedPositionRepo.findByStatus("CLOSED").stream()
+                .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType())).toList());
+            all.addAll(unifiedPositionRepo.findByStatus("STOPPED").stream()
+                .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType())).toList());
+            all.addAll(unifiedPositionRepo.findByStatus("TARGET_HIT").stream()
+                .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType())).toList());
+            return all;
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     public List<PaperTradingOrderEntity> getOrders() {
@@ -219,5 +249,17 @@ public class PaperTradingStateService {
 
     public PaperTradingPortfolioEntity getPortfolio() {
         return portfolioRepo.findById(1L).orElse(null);
+    }
+
+    /**
+     * Looks up a persisted position entity by its database ID.
+     * Used by PaperTradingEngine.closePosition(Long) to resolve the
+     * positionId string when the in-memory counter may have reset.
+     *
+     * @param id the database position ID
+     * @return the position entity, or null if not found
+     */
+    public PositionEntity getPositionById(Long id) {
+        return unifiedPositionRepo.findById(id).orElse(null);
     }
 }

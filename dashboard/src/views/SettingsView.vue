@@ -158,13 +158,14 @@
       <div class="card-panel p-5">
         <h2 class="mb-4 text-base font-semibold text-text-primary">LLM & Intelligence</h2>
 
-        <!-- vLLM Configuration -->
+        <!-- Local LLM (llama.cpp) -->
         <div class="space-y-4 mb-6">
-          <h3 class="text-sm font-medium text-text-secondary">vLLM Endpoint</h3>
+          <h3 class="text-sm font-medium text-text-secondary">Local LLM (llama.cpp)</h3>
+
           <div class="flex gap-2">
             <input
-              v-model="llmSettings.vllmBaseUrl"
-              placeholder="https://gpuhub:8443/v1"
+              v-model="llmSettings.llmBaseUrl"
+              placeholder="http://localhost:8080/v1"
               class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
             />
             <button
@@ -177,13 +178,39 @@
           </div>
 
           <div class="flex gap-2">
+            <select
+              v-model="llmSettings.llamacppModel"
+              class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
+            >
+              <option value="/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf">
+                Qwen3-4B (fast, default)
+              </option>
+              <option value="/home/dietpi/.synapse/models/google_gemma-4-E2B-it-Q4_0.gguf">
+                Gemma-4 (larger, super analysis)
+              </option>
+            </select>
+            <span class="self-center text-xs text-text-muted">Model</span>
+          </div>
+
+          <p class="text-xs text-text-muted">
+            Used for sentiment analysis on every signal. Switching models requires restarting the
+            llama.cpp service.
+          </p>
+        </div>
+
+        <!-- GPUHub (Super Analysis) -->
+        <div class="space-y-4 mb-6">
+          <h3 class="text-sm font-medium text-text-secondary">GPUHub (Super Analysis)</h3>
+          <div class="flex gap-2">
             <input
-              v-model="llmSettings.model"
-              placeholder="Qwen3-30B-AWQ"
+              v-model="llmSettings.gpuhubBaseUrl"
+              placeholder="https://gpuhub:8443/v1"
               class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
             />
-            <span class="self-center text-xs text-text-muted">Model name</span>
           </div>
+          <p class="text-xs text-text-muted">
+            External GPU endpoint used for adhoc "super analysis" via SynthesisService.
+          </p>
         </div>
 
         <!-- PDF Extraction -->

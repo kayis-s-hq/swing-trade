@@ -32,8 +32,9 @@ class PaperTradingServiceImplTest {
     private EnginePair createPair(BigDecimal initialCapital) {
         PaperTradingProperties props = new PaperTradingProperties();
         props.setInitialBalance(initialCapital);
+        props.setMaxCapitalPerPosition(new BigDecimal("20"));
         OrderManager om = new OrderManager();
-        PaperTradingEngine pe = new PaperTradingEngine(om, new PositionManager(5), props);
+        PaperTradingEngine pe = new PaperTradingEngine(om, new PositionManager(props), props);
         return new EnginePair(pe, om);
     }
 
@@ -193,7 +194,7 @@ class PaperTradingServiceImplTest {
 
         Position position = pair.engine.getOpenPositions().get(0);
         Position updated = Position.of(
-            position.id(), position.symbol(), position.entryPrice(), position.entryDate(),
+            position.id(), "PAPER", position.symbol(), position.entryPrice(), position.entryDate(),
             position.quantity(), position.stopLoss(), position.target(), position.status(),
             position.entryReason(), new BigDecimal("1500.00"),
             position.positionId(), position.brokerPositionId(), position.exchange(),
@@ -216,7 +217,7 @@ class PaperTradingServiceImplTest {
 
         Position position = pair.engine.getOpenPositions().get(0);
         Position updated = Position.of(
-            position.id(), position.symbol(), position.entryPrice(), position.entryDate(),
+            position.id(), "PAPER", position.symbol(), position.entryPrice(), position.entryDate(),
             position.quantity(), position.stopLoss(), position.target(), position.status(),
             position.entryReason(), new BigDecimal("1050.00"),
             position.positionId(), position.brokerPositionId(), position.exchange(),

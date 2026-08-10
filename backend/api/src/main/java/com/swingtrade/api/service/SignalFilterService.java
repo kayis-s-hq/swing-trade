@@ -3,14 +3,11 @@ package com.swingtrade.api.service;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.domain.Order;
 import com.swingtrade.broker.service.DiscordNotificationService;
-import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
-import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -28,16 +25,13 @@ public class SignalFilterService {
     private static final Logger log = LoggerFactory.getLogger(SignalFilterService.class);
 
     private final SentimentService sentimentService;
-    private final NewsIngestionService newsService;
     private final PaperTradingEngine paperTradingEngine;
     private final DiscordNotificationService discordService;
 
     public SignalFilterService(SentimentService sentimentService,
-                               NewsIngestionService newsService,
                                PaperTradingEngine paperTradingEngine,
                                DiscordNotificationService discordService) {
         this.sentimentService = sentimentService;
-        this.newsService = newsService;
         this.paperTradingEngine = paperTradingEngine;
         this.discordService = discordService;
     }
@@ -46,13 +40,8 @@ public class SignalFilterService {
      * Filters a signal through sentiment analysis. Returns null if suppressed.
      */
     public Order filterAndProcess(Signal signal, BigDecimal currentPrice) {
-        List<NewsArticle> news = newsService.fetchAllNews(signal.symbol());
-        List<String> headlines = news.stream()
-                .map(newsService::cleanNewsText)
-                .toList();
-
-        SentimentResult sentiment = sentimentService.analyseSentiment(
-                signal.symbol(), headlines, null);
+        SentimentResult sentiment = sentimentService.analyzeStockSentiment(
+                signal.symbol(), LocalDate.now());
 
         return switch (sentiment.score()) {
             case POSITIVE -> {
@@ -81,8 +70,9 @@ public class SignalFilterService {
 
     /**
      * Daily re-analysis of open positions.
+     * @Scheduled removed — triggered by JobOrchestratorService.
      */
-    @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
+    // @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
     public void reanalysePending() {
         ZoneId ist = ZoneId.of("Asia/Kolkata");
         List<?> openPositions = paperTradingEngine.getOpenPositions();

@@ -1,7 +1,11 @@
 package com.swingtrade.api.controller;
 
+import com.swingtrade.api.dto.ClosePositionRequest;
 import com.swingtrade.api.dto.PaginatedResponse;
+import com.swingtrade.api.dto.PerformanceResponse;
 import com.swingtrade.api.dto.PositionResponse;
+import com.swingtrade.api.dto.RiskSummary;
+import com.swingtrade.api.dto.TradeRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +33,9 @@ public class PositionController {
 
     @Autowired
     private com.swingtrade.api.service.PositionService positionService;
+
+    @Autowired
+    private com.swingtrade.api.service.PerformanceService performanceService;
 
     /**
      * Get all open positions.
@@ -170,7 +177,7 @@ public class PositionController {
     @PostMapping("/{symbol}/close")
     public ResponseEntity<PositionResponse> closePosition(
             @PathVariable String symbol,
-            @Valid @RequestBody(required = false) com.swingtrade.api.dto.ClosePositionRequest request
+            @Valid @RequestBody(required = false) ClosePositionRequest request
     ) {
         logger.info("Closing position for symbol: {}", symbol);
         PositionResponse position = positionService.closePosition(symbol,
@@ -181,5 +188,43 @@ public class PositionController {
         }
 
         return ResponseEntity.ok(position);
+    }
+
+    /**
+     * Create a new trading position.
+     *
+     * @param request Trade request with position details
+     * @return Created position response
+     */
+    @PostMapping
+    public ResponseEntity<PositionResponse> createPosition(
+            @Valid @RequestBody TradeRequest request
+    ) {
+        logger.info("Creating new position for symbol: {}", request.getSymbol());
+        if (!request.isValid()) {
+            return ResponseEntity.badRequest().build();
+        }
+        PositionResponse position = positionService.createPosition(request);
+        return ResponseEntity.ok(position);
+    }
+
+    /**
+     * Get overall portfolio performance.
+     */
+    @GetMapping("/performance")
+    public ResponseEntity<PerformanceResponse> getPortfolioPerformance() {
+        logger.debug("Fetching portfolio performance");
+        PerformanceResponse performance = performanceService.getPortfolioPerformance();
+        return ResponseEntity.ok(performance);
+    }
+
+    /**
+     * Get risk summary for current positions.
+     */
+    @GetMapping("/risk-summary")
+    public ResponseEntity<RiskSummary> getRiskSummary() {
+        logger.debug("Fetching risk summary");
+        RiskSummary riskSummary = positionService.getRiskSummary();
+        return ResponseEntity.ok(riskSummary);
     }
 }

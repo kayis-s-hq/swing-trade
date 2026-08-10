@@ -10,11 +10,13 @@ import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.broker.model.Portfolio;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -130,6 +132,9 @@ public class PaperTradingEngine {
         logger.info("Executing BUY order for {} at {}: signal confidence={}, SL={}, Target={}",
             signal.symbol(), currentPrice, signal.confidence(), signal.stopLoss(), signal.target());
 
+        // Execute the order immediately (fills it and creates a position)
+        order = executePendingOrder(order.getOrderId(), currentPrice);
+
         return order;
     }
 
@@ -141,13 +146,18 @@ public class PaperTradingEngine {
      * @return true if position can be opened
      */
     public boolean validatePositionCapacity(BigDecimal entryPrice, int quantity) {
-        if (positionManager.hasReachedPositionLimit(properties.getMaxConcurrentPositions())) {
-            logger.warn("Cannot open position: maximum positions ({}) reached", properties.getMaxConcurrentPositions());
+        if (positionManager.hasReachedPositionLimit()) {
+            logger.warn("Cannot open position: maximum positions ({}) reached", positionManager.getMaxPositions());
             return false;
         }
 
         BigDecimal positionValue = entryPrice.multiply(BigDecimal.valueOf(quantity));
-        BigDecimal capitalRatio = positionValue.divide(portfolio.getCurrentCapital(), 4, RoundingMode.HALF_UP);
+        BigDecimal currentCapital = portfolio.getCurrentCapital();
+        if (currentCapital.compareTo(BigDecimal.ZERO) <= 0) {
+            logger.warn("Cannot open position: portfolio capital is depleted ({})", currentCapital);
+            return false;
+        }
+        BigDecimal capitalRatio = positionValue.divide(currentCapital, 4, RoundingMode.HALF_UP);
 
         BigDecimal maxCapitalRatio = maxCapitalPerPositionDiv100();
         if (capitalRatio.compareTo(maxCapitalRatio) > 0) {
@@ -173,6 +183,9 @@ public class PaperTradingEngine {
         // In production, this would use ATR and risk-per-trade parameters
 
         BigDecimal riskPerTrade = BigDecimal.valueOf(1).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP); // 1% max risk per trade
+        if (stopLoss == null) {
+            return BigDecimal.valueOf(100);
+        }
         BigDecimal riskPerShare = entryPrice.subtract(stopLoss);
         BigDecimal maxRiskAmount = portfolio.getCurrentCapital().multiply(riskPerTrade);
 
@@ -413,24 +426,31 @@ public class PaperTradingEngine {
 
     /**
      * Closes a position by its database ID.
-     * Looks up the position using "POS_{id}" format and closes it at current market price.
+     * Looks up the persisted position from DB to get its positionId string
+     * (the in-memory counter may have reset on restart).
      *
      * @param positionId the database position ID
      * @return the closed position
      * @throws IllegalArgumentException if position not found
      */
+    @Transactional
     public Position closePosition(Long positionId) {
-        String posId = "POS_" + String.format("%08d", positionId);
-        Optional<Position> position = getPosition(posId);
-        if (position.isEmpty()) {
+        // Load position from DB to get its positionId (counter may have reset)
+        PositionEntity entity = stateService.getPositionById(positionId);
+        if (entity == null) {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
+        String posId = entity.getPositionId();
+        Position position = positionManager.getPosition(posId);
+        if (position == null) {
+            throw new IllegalArgumentException("Position not found in memory: " + posId);
+        }
 
-        BigDecimal exitPrice = position.get().currentPrice();
+        BigDecimal exitPrice = position.currentPrice();
         String reason = "manual_close";
 
         closePosition(posId, exitPrice, reason);
-        return position.get();
+        return position;
     }
 
     /**
@@ -440,6 +460,7 @@ public class PaperTradingEngine {
      * @param exitPrice the exit price
      * @param reason the reason for closing
      */
+    @Transactional
     public void closePosition(String positionId, BigDecimal exitPrice, String reason) {
         Position position = positionManager.closePosition(positionId, exitPrice, reason);
 

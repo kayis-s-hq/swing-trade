@@ -2,6 +2,8 @@ package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.PositionManager;
+import com.swingtrade.data.entity.DailyLossCircuitBreakerStateEntity;
+import com.swingtrade.data.repository.DailyLossCircuitBreakerStateRepository;
 import com.swingtrade.domain.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +27,7 @@ public class DailyLossCircuitBreaker {
 
     private final PositionManager positionManager;
     private final BrokerProperties props;
+    private final DailyLossCircuitBreakerStateRepository stateRepository;
     private BigDecimal dailyLossThresholdPercent;
     private BigDecimal initialCapital;
 
@@ -37,22 +40,27 @@ public class DailyLossCircuitBreaker {
     private BigDecimal lossAtCircuitOpen;
 
     @Autowired
-    public DailyLossCircuitBreaker(PositionManager positionManager, BrokerProperties props) {
+    public DailyLossCircuitBreaker(PositionManager positionManager, BrokerProperties props,
+                                   DailyLossCircuitBreakerStateRepository stateRepository) {
         this.positionManager = positionManager;
         this.props = props;
+        this.stateRepository = stateRepository;
         this.dailyLossThresholdPercent = props.getDailyLossCircuitBreaker();
         this.initialCapital = props.getInitialCapital();
         logger.info("DailyLossCircuitBreaker initialized with {}% daily loss threshold",
                 dailyLossThresholdPercent);
+        restoreStateFromDb();
         resetDailyTracker();
     }
 
     /**
      * Constructor for testing purposes.
      */
-    public DailyLossCircuitBreaker(PositionManager positionManager, BigDecimal dailyLossThresholdPercent, BigDecimal initialCapital) {
+    public DailyLossCircuitBreaker(PositionManager positionManager, BigDecimal dailyLossThresholdPercent,
+                                   BigDecimal initialCapital, DailyLossCircuitBreakerStateRepository stateRepository) {
         this.positionManager = positionManager;
         this.props = null;
+        this.stateRepository = stateRepository;
         this.dailyLossThresholdPercent = dailyLossThresholdPercent;
         this.initialCapital = initialCapital;
         resetDailyTracker();
@@ -143,6 +151,16 @@ public class DailyLossCircuitBreaker {
         openCircuit(getCurrentDailyPnL());
     }
 
+    private void openCircuit(BigDecimal lossAmount) {
+        isCircuitOpen = true;
+        circuitOpenTime = LocalDateTime.now();
+        lossAtCircuitOpen = lossAmount;
+        persistState();
+
+        logger.warn("DAILY LOSS CIRCUIT BREAKER OPENED! Loss: ₹{} ({}%)",
+                lossAmount, calculateLossPercent());
+    }
+
     /**
      * Manually close the circuit breaker (resume trading).
      */
@@ -150,6 +168,7 @@ public class DailyLossCircuitBreaker {
         isCircuitOpen = false;
         circuitOpenTime = null;
         lossAtCircuitOpen = null;
+        persistState();
         logger.info("Daily loss circuit breaker CLOSED. Trading resumed.");
     }
 
@@ -191,6 +210,40 @@ public class DailyLossCircuitBreaker {
 
     // Private Helper Methods
 
+    private void restoreStateFromDb() {
+        if (stateRepository == null) return;
+        stateRepository.findFirstByOrderByUpdatedAtDesc().ifPresent(entity -> {
+            this.isCircuitOpen = entity.isCircuitOpen();
+            this.circuitOpenTime = entity.getCircuitOpenedAt();
+            this.lossAtCircuitOpen = entity.getLossAtOpen();
+            if (entity.getLastResetDate() != null) {
+                dailyPnLTracker.clear();
+                dailyPnLTracker.put(entity.getLastResetDate(), BigDecimal.ZERO);
+            }
+            logger.info("Restored circuit breaker state from DB: circuitOpen={}, resetDate={}",
+                    isCircuitOpen, entity.getLastResetDate());
+        });
+    }
+
+    private void persistState() {
+        if (stateRepository == null) return;
+        stateRepository.findFirstByOrderByUpdatedAtDesc().ifPresentOrElse(entity -> {
+            entity.setCircuitOpen(isCircuitOpen);
+            entity.setCircuitOpenedAt(circuitOpenTime);
+            entity.setLossAtOpen(lossAtCircuitOpen);
+            entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now() : dailyPnLTracker.keySet().iterator().next());
+            entity.setUpdatedAt(LocalDateTime.now());
+            stateRepository.save(entity);
+        }, () -> {
+            DailyLossCircuitBreakerStateEntity entity = new DailyLossCircuitBreakerStateEntity();
+            entity.setCircuitOpen(isCircuitOpen);
+            entity.setCircuitOpenedAt(circuitOpenTime);
+            entity.setLossAtOpen(lossAtCircuitOpen);
+            entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now() : dailyPnLTracker.keySet().iterator().next());
+            stateRepository.save(entity);
+        });
+    }
+
     private void resetDailyTracker() {
         dailyPnLTracker.clear();
         dailyPnLTracker.put(LocalDate.now(), BigDecimal.ZERO);
@@ -222,14 +275,5 @@ public class DailyLossCircuitBreaker {
             return BigDecimal.ZERO;
         }
         return pnL.multiply(BigDecimal.valueOf(100)).divide(initialCapital, 4, BigDecimal.ROUND_HALF_UP);
-    }
-
-    private void openCircuit(BigDecimal lossAmount) {
-        isCircuitOpen = true;
-        circuitOpenTime = LocalDateTime.now();
-        lossAtCircuitOpen = lossAmount;
-
-        logger.warn("DAILY LOSS CIRCUIT BREAKER OPENED! Loss: ₹{} ({}%)",
-                lossAmount, calculateLossPercent());
     }
 }

@@ -52,7 +52,7 @@ public class SignalService {
                         (a, b) -> b.date() != null && a.date() != null && b.date().isAfter(a.date()) ? b : a));
         return latestBySymbol.values().stream()
                 .map(SignalResponse::new)
-                .toList();
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
     }
 
     /**

@@ -1,242 +1,198 @@
 package com.swingtrade.broker.risk;
 
-import com.swingtrade.broker.kite.KiteConnectClient;
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.OrderResponse;
 import com.swingtrade.domain.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Main risk controls orchestrator.
- * Coordinates all risk checks before trade execution.
- * Integrates KillSwitchService and CapitalTracker for live trading.
+ * Concrete implementation of RiskControls that orchestrates all risk checks.
+ * Delegates to PositionLimitChecker, PositionSizeValidator, DailyLossCircuitBreaker,
+ * CapitalTracker, and KillSwitchService.
  */
-@Component
+@Service
 public class RiskControlsService implements RiskControls {
 
     private static final Logger logger = LoggerFactory.getLogger(RiskControlsService.class);
 
     private final PositionLimitChecker positionLimitChecker;
-    private final DailyLossCircuitBreaker dailyLossCircuitBreaker;
     private final PositionSizeValidator positionSizeValidator;
-    private final PositionManager positionManager;
-    private final KiteConnectClient kiteConnectClient;
-    private final KillSwitchService killSwitchService;
+    private final DailyLossCircuitBreaker dailyLossCircuitBreaker;
     private final CapitalTracker capitalTracker;
+    private final KillSwitchService killSwitchService;
+    private final PositionManager positionManager;
+    private final BrokerProperties props;
 
     @Autowired
     public RiskControlsService(PositionLimitChecker positionLimitChecker,
-                               DailyLossCircuitBreaker dailyLossCircuitBreaker,
                                PositionSizeValidator positionSizeValidator,
-                               PositionManager positionManager,
-                               @Autowired(required = false) KiteConnectClient kiteConnectClient,
-                               KillSwitchService killSwitchService,
-                               CapitalTracker capitalTracker) {
-        this.positionLimitChecker = positionLimitChecker;
-        this.dailyLossCircuitBreaker = dailyLossCircuitBreaker;
-        this.positionSizeValidator = positionSizeValidator;
-        this.positionManager = positionManager;
-        this.kiteConnectClient = kiteConnectClient;
-        this.killSwitchService = killSwitchService;
-        this.capitalTracker = capitalTracker;
-
-        logger.info("RiskControlsService initialized with KillSwitchService and CapitalTracker");
-    }
-
-    /**
-     * Constructor for testing purposes.
-     */
-    public RiskControlsService(PositionLimitChecker positionLimitChecker,
                                DailyLossCircuitBreaker dailyLossCircuitBreaker,
-                               PositionSizeValidator positionSizeValidator,
-                               PositionManager positionManager,
-                               KiteConnectClient kiteConnectClient,
-                               KillSwitchService killSwitchService,
                                CapitalTracker capitalTracker,
-                               boolean killSwitchActive) {
+                               KillSwitchService killSwitchService,
+                               PositionManager positionManager,
+                               BrokerProperties props) {
         this.positionLimitChecker = positionLimitChecker;
-        this.dailyLossCircuitBreaker = dailyLossCircuitBreaker;
         this.positionSizeValidator = positionSizeValidator;
-        this.positionManager = positionManager;
-        this.kiteConnectClient = kiteConnectClient;
-        this.killSwitchService = killSwitchService;
+        this.dailyLossCircuitBreaker = dailyLossCircuitBreaker;
         this.capitalTracker = capitalTracker;
+        this.killSwitchService = killSwitchService;
+        this.positionManager = positionManager;
+        this.props = props;
     }
 
-    /**
-     * Full pre-trade risk check before placing an order.
-     *
-     * @param orderResponse the order to validate
-     * @param marketPrice current market price for the symbol
-     * @return RiskCheckResult with all check results
-     */
+    @Override
     public RiskCheckResult preTradeCheck(OrderResponse orderResponse, BigDecimal marketPrice) {
-        logger.info("Starting pre-trade risk check for order: {}", orderResponse.getSymbol());
+        if (orderResponse == null) {
+            return new RiskCheckResult(false);
+        }
+
+        if (killSwitchService.isActive()) {
+            logger.warn("Pre-trade check blocked: kill switch is active");
+            return new RiskCheckResult(false, "Trading halted — kill switch is active");
+        }
+
+        if (!dailyLossCircuitBreaker.isTradingAllowed()) {
+            logger.warn("Pre-trade check blocked: daily loss circuit breaker is open");
+            return new RiskCheckResult(false, "Daily loss limit exceeded — trading halted");
+        }
+
+        BigDecimal orderValue = calculateOrderValue(orderResponse, marketPrice);
+        if (orderValue == null || orderValue.compareTo(BigDecimal.ZERO) <= 0) {
+            return new RiskCheckResult(false, "Invalid order value: " + orderValue);
+        }
+
+        List<Position> openPositions = positionManager.getOpenPositions();
 
         RiskCheckResult result = new RiskCheckResult();
-        result.setCheckType("PRE_TRADE_CHECK");
+        result.setCheckType("PRE_TRADE");
 
-        // 1. Check kill switch
-        if (killSwitchService.isActive()) {
-            result.addError("KILL SWITCH ACTIVE. All trading is halted.");
-            result.addInfo("Kill switch reason: {}", killSwitchService.getReason());
+        // Position limit check
+        RiskCheckResult positionCheck = positionLimitChecker.canAddPosition(orderValue);
+        if (!positionCheck.isPassed()) {
+            result.addError("Position limit: " + firstMessage(positionCheck, "ERROR"));
             return result;
         }
 
-        // 2. Check daily loss circuit breaker
-        RiskCheckResult circuitBreakerResult = dailyLossCircuitBreaker.canPlaceTrade(
-                calculateTradeValue(orderResponse, marketPrice),
-                calculateEstimatedRisk(orderResponse, marketPrice)
-        );
-        result.getMessages().addAll(circuitBreakerResult.getMessages());
-        result.setPassed(circuitBreakerResult.isPassed());
-        if (!circuitBreakerResult.isPassed()) {
+        // Position size validation
+        RiskCheckResult sizeCheck = positionSizeValidator.validatePositionSize(orderValue);
+        if (!sizeCheck.isPassed()) {
+            result.addError("Position size: " + firstMessage(sizeCheck, "ERROR"));
             return result;
         }
 
-        // 3. Get current positions and check capital limits
-        List<Position> currentPositions = positionManager.getOpenPositions();
-        BigDecimal orderValue = calculateTradeValue(orderResponse, marketPrice);
-
-        // 4. Check capital limits
-        RiskCheckResult capitalResult = capitalTracker.enforceLimits(currentPositions, orderValue);
-        result.getMessages().addAll(capitalResult.getMessages());
-        result.setPassed(capitalResult.isPassed());
-        if (!capitalResult.isPassed()) {
+        // Capital limits
+        RiskCheckResult capitalCheck = capitalTracker.enforceLimits(openPositions, orderValue);
+        if (!capitalCheck.isPassed()) {
+            result.addError("Capital limit: " + firstMessage(capitalCheck, "ERROR"));
             return result;
         }
 
-        // 5. Check position limits
-        BigDecimal estimatedValue = calculateTradeValue(orderResponse, marketPrice);
-        RiskCheckResult positionLimitResult = positionLimitChecker.canAddPosition(estimatedValue);
-        result.getMessages().addAll(positionLimitResult.getMessages());
-        result.setPassed(positionLimitResult.isPassed());
-        if (!positionLimitResult.isPassed()) {
+        // Daily loss circuit breaker check
+        BigDecimal estimatedRisk = orderValue.multiply(props.getMaxPositionSizePercentage().divide(BigDecimal.valueOf(100)));
+        RiskCheckResult circuitCheck = dailyLossCircuitBreaker.canPlaceTrade(orderValue, estimatedRisk);
+        if (!circuitCheck.isPassed()) {
+            result.addError("Daily loss circuit: " + firstMessage(circuitCheck, "ERROR"));
             return result;
         }
 
-        // 6. Check position size
-        RiskCheckResult sizeResult = positionSizeValidator.validatePositionSize(estimatedValue);
-        result.getMessages().addAll(sizeResult.getMessages());
-        if (!sizeResult.isPassed() && sizeResult.hasErrors()) {
-            result.setPassed(false);
-            return result;
-        }
-
-        // All checks passed
-        result.addInfo("All pre-trade risk checks passed for: {}", orderResponse.getSymbol());
+        result.addInfo("All pre-trade checks passed for " + orderResponse.getSymbol());
         return result;
     }
 
-    /**
-     * Quick risk check without market price (uses order price if available).
-     */
+    @Override
     public RiskCheckResult quickPreTradeCheck(OrderResponse orderResponse) {
-        BigDecimal marketPrice = orderResponse.getPrice() != null ? orderResponse.getPrice() : BigDecimal.ZERO;
-        return preTradeCheck(orderResponse, marketPrice);
+        if (orderResponse == null) {
+            return new RiskCheckResult(false, "Order response must not be null");
+        }
+
+        if (killSwitchService.isActive()) {
+            return new RiskCheckResult(false, "Trading halted — kill switch is active");
+        }
+
+        if (!dailyLossCircuitBreaker.isTradingAllowed()) {
+            return new RiskCheckResult(false, "Daily loss limit exceeded");
+        }
+
+        BigDecimal orderValue = calculateOrderValue(orderResponse, null);
+        if (orderValue == null || orderValue.compareTo(BigDecimal.ZERO) <= 0) {
+            return new RiskCheckResult(false, "Invalid order value");
+        }
+
+        int remainingCapacity = positionLimitChecker.getRemainingPositionCapacity();
+        if (remainingCapacity <= 0) {
+            return new RiskCheckResult(false, "Maximum concurrent positions reached");
+        }
+
+        return new RiskCheckResult(true, "Quick pre-trade check passed");
     }
 
-    /**
-     * Update risk controls with current portfolio state.
-     */
+    @Override
     public void updateRiskState() {
-        logger.info("Updating risk control state");
-
-        // Update daily P&L tracker
         dailyLossCircuitBreaker.updateWithCurrentPositions();
-
-        // Log current state
-        logger.info("Current positions: {}, Daily P&L: ₹{} ({}%)",
-                positionManager.getOpenPositionCount(),
-                dailyLossCircuitBreaker.getCurrentDailyPnL(),
-                dailyLossCircuitBreaker.getLossPercent());
+        logger.debug("Risk state updated");
     }
 
-    /**
-     * Calculate the total trade value.
-     */
-    private BigDecimal calculateTradeValue(OrderResponse order, BigDecimal marketPrice) {
-        if (order.getQuantity() == null) {
-            return BigDecimal.ZERO;
-        }
-
-        BigDecimal price = order.getLimitPrice() != null ? order.getLimitPrice() : marketPrice;
-        return order.getQuantity().multiply(price != null ? price : BigDecimal.ZERO);
-    }
-
-    /**
-     * Calculate estimated risk for a trade (potential loss).
-     * For long positions: difference between entry and stop loss.
-     */
-    private BigDecimal calculateEstimatedRisk(OrderResponse order, BigDecimal marketPrice) {
-        if (order.getQuantity() == null || order.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
-        }
-
-        // Simple risk calculation: assume 2% risk from entry price
-        BigDecimal entryPrice = order.getLimitPrice() != null ? order.getLimitPrice() : marketPrice;
-        if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) == 0) {
-            return BigDecimal.ZERO;
-        }
-
-        BigDecimal riskPercent = new BigDecimal("0.02"); // 2% risk
-        BigDecimal riskPerShare = entryPrice.multiply(riskPercent);
-        return order.getQuantity().multiply(riskPerShare);
-    }
-
-    /**
-     * Get kill switch status.
-     */
+    @Override
     public boolean isKillSwitchActive() {
         return killSwitchService.isActive();
     }
 
-    /**
-     * Set kill switch status via KillSwitchService.
-     */
+    @Override
     public void setKillSwitchActive(boolean active) {
         if (active) {
-            killSwitchService.enableKillSwitch("Set via API");
-            dailyLossCircuitBreaker.openCircuit();
-            logger.warn("Daily loss circuit breaker opened due to kill switch");
+            killSwitchService.enableKillSwitch("Set via RiskControls");
         } else {
             killSwitchService.disableKillSwitch();
-            dailyLossCircuitBreaker.closeCircuit();
-            logger.info("Daily loss circuit breaker closed, trading resumed");
         }
     }
 
-    /**
-     * Get current position count.
-     */
+    @Override
     public int getCurrentPositionCount() {
-        return positionManager.getOpenPositionCount();
+        return positionLimitChecker.getCurrentPositionCount();
     }
 
-    /**
-     * Get remaining position capacity.
-     */
+    @Override
     public int getRemainingPositionCapacity() {
         return positionLimitChecker.getRemainingPositionCapacity();
     }
 
-    /**
-     * Get current daily P&L.
-     */
+    @Override
     public BigDecimal getCurrentDailyPnL() {
         return dailyLossCircuitBreaker.getCurrentDailyPnL();
     }
 
-    /**
-     * Get current daily loss percentage.
-     */
+    @Override
     public BigDecimal getDailyLossPercent() {
         return dailyLossCircuitBreaker.getLossPercent();
+    }
+
+    private BigDecimal calculateOrderValue(OrderResponse order, BigDecimal marketPrice) {
+        BigDecimal quantity = order.getQuantity();
+        BigDecimal price = order.getPrice();
+
+        if (quantity != null && quantity.compareTo(BigDecimal.ZERO) > 0) {
+            if (price != null && price.compareTo(BigDecimal.ZERO) > 0) {
+                return quantity.multiply(price);
+            }
+            if (marketPrice != null && marketPrice.compareTo(BigDecimal.ZERO) > 0) {
+                return quantity.multiply(marketPrice);
+            }
+        }
+        return null;
+    }
+
+    private String firstMessage(RiskCheckResult result, String prefix) {
+        return result.getMessages().stream()
+                .filter(m -> m.startsWith(prefix + ":"))
+                .map(m -> m.substring(prefix.length() + 2))
+                .findFirst()
+                .orElse(null);
     }
 }

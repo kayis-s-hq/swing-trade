@@ -65,4 +65,11 @@ public class PositionStoreImpl implements PositionStore {
             .map(PositionEntity::toDomain)
             .toList();
     }
+
+    @Override
+    public List<Position> findByBrokerType(String brokerType) {
+        return repository.findByBrokerType(brokerType).stream()
+            .map(PositionEntity::toDomain)
+            .toList();
+    }
 }

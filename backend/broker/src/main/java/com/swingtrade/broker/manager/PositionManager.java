@@ -1,5 +1,6 @@
 package com.swingtrade.broker.manager;
 
+import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
@@ -7,8 +8,10 @@ import com.swingtrade.domain.OhlcvCandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,17 +36,11 @@ public class PositionManager {
 
     /**
      * Creates a new PositionManager with empty position storage.
+     * Max positions is read from PaperTradingProperties.
      */
-    public PositionManager() {
-        this(5);
-    }
-
-    /**
-     * Creates a new PositionManager with specified max positions.
-     */
-    public PositionManager(int maxPositions) {
+    public PositionManager(PaperTradingProperties properties) {
         this.positions = new ConcurrentHashMap<>();
-        this.maxPositions = maxPositions;
+        this.maxPositions = properties.getMaxConcurrentPositions();
     }
 
     /**
@@ -63,9 +60,10 @@ public class PositionManager {
 
         Position position = new Position(
             null,
+            "PAPER",
             symbol,
             entryPrice,
-            null,
+            LocalDate.now(),
             quantity,
             stopLoss,
             target,
@@ -131,8 +129,17 @@ public class PositionManager {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
 
+        // Recalculate unrealized P&L based on new current price
+        BigDecimal unrealizedPnL;
+        if (position.direction() == TradeDirection.LONG) {
+            unrealizedPnL = currentPrice.subtract(position.entryPrice()).multiply(BigDecimal.valueOf(position.quantity()));
+        } else {
+            unrealizedPnL = position.entryPrice().subtract(currentPrice).multiply(BigDecimal.valueOf(position.quantity()));
+        }
+
         Position updated = new Position(
             position.id(),
+            position.brokerType(),
             position.symbol(),
             position.entryPrice(),
             position.entryDate(),
@@ -147,7 +154,7 @@ public class PositionManager {
             position.exchange(),
             position.direction(),
             position.averagePrice(),
-            position.unrealizedPnL(),
+            unrealizedPnL,
             position.realizedPnL(),
             position.marginUtilized(),
             position.entryTime(),
@@ -274,6 +281,7 @@ public class PositionManager {
         // Update quantity and track realized P&L
         Position updated = new Position(
             position.id(),
+            position.brokerType(),
             position.symbol(),
             position.entryPrice(),
             position.entryDate(),
@@ -301,6 +309,7 @@ public class PositionManager {
             // Full exit
             updated = new Position(
                 updated.id(),
+                updated.brokerType(),
                 updated.symbol(),
                 updated.entryPrice(),
                 updated.entryDate(),
@@ -352,6 +361,7 @@ public class PositionManager {
     /**
      * Closes a position completely. Returns a new Position instance.
      */
+    @Transactional
     public Position closePosition(String positionId, BigDecimal exitPrice, String reason) {
         Position position = positions.get(positionId);
         if (position == null) {
@@ -364,6 +374,7 @@ public class PositionManager {
     /**
      * Closes a position by ID with a specific status (STOPPED, TARGET_HIT, etc.).
      */
+    @Transactional
     public Position closePosition(String positionId, PositionStatus status, String reason) {
         Position position = positions.get(positionId);
         if (position == null) {
@@ -375,6 +386,7 @@ public class PositionManager {
     /**
      * Internal method to close a position with specific status. Returns a new Position.
      */
+    @Transactional
     Position closePosition(Position position, PositionStatus status, String reason) {
         if (position.status() == PositionStatus.CLOSED ||
             position.status() == PositionStatus.STOPPED ||
@@ -388,6 +400,7 @@ public class PositionManager {
 
         Position updated = new Position(
             position.id(),
+            position.brokerType(),
             position.symbol(),
             position.entryPrice(),
             position.entryDate(),
@@ -487,13 +500,6 @@ public class PositionManager {
      * Checks if position limit has been reached.
      */
     public boolean hasReachedPositionLimit() {
-        return getOpenPositionCount() >= maxPositions;
-    }
-
-    /**
-     * Checks if position limit has been reached for a specific max.
-     */
-    public boolean hasReachedPositionLimit(int maxPositions) {
         return getOpenPositionCount() >= maxPositions;
     }
 

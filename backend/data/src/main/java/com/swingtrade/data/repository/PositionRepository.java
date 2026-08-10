@@ -98,4 +98,9 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
      * @return list of positions
      */
     List<PositionEntity> findBySymbol(String symbol);
+
+    @Query("SELECT p FROM PositionEntity p WHERE p.brokerType = :brokerType ORDER BY p.entryDate DESC")
+    List<PositionEntity> findByBrokerType(@Param("brokerType") String brokerType);
+
+    Optional<PositionEntity> findByPositionId(String positionId);
 }

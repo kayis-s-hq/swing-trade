@@ -37,7 +37,9 @@ class SignalTest {
             TARGET,
             RISK_REWARD,
             INDICATORS,
-            LocalDate.now()
+            LocalDate.now(),
+            null,
+            null
         );
     }
 
@@ -54,7 +56,9 @@ class SignalTest {
             TARGET,
             RISK_REWARD,
             INDICATORS,
-            LocalDate.now()
+            LocalDate.now(),
+            null,
+            null
         );
     }
 
@@ -71,7 +75,9 @@ class SignalTest {
             TARGET,
             RISK_REWARD,
             INDICATORS,
-            LocalDate.now()
+            LocalDate.now(),
+            null,
+            null
         );
     }
 
@@ -119,6 +125,8 @@ class SignalTest {
                 "TCS",
                 null,
                 Signal.SignalType.HOLD,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -208,7 +216,9 @@ class SignalTest {
                 null,
                 null,
                 null,
-                LocalDate.now()
+                LocalDate.now(),
+            null,
+            null
             );
 
             assertThat(signal.symbol()).isNull();
@@ -223,21 +233,21 @@ class SignalTest {
 
         @Test
         void shouldCreateSignalWithBUYType() {
-            Signal signal = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now());
+            Signal signal = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now(), null, null);
 
             assertThat(signal.type()).isEqualTo(Signal.SignalType.BUY);
         }
 
         @Test
         void shouldCreateSignalWithSELLType() {
-            Signal signal = new Signal(1L, SYMBOL, DATE, Signal.SignalType.SELL, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now());
+            Signal signal = new Signal(1L, SYMBOL, DATE, Signal.SignalType.SELL, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now(), null, null);
 
             assertThat(signal.type()).isEqualTo(Signal.SignalType.SELL);
         }
 
         @Test
         void shouldCreateSignalWithHOLDType() {
-            Signal signal = new Signal(1L, SYMBOL, DATE, Signal.SignalType.HOLD, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now());
+            Signal signal = new Signal(1L, SYMBOL, DATE, Signal.SignalType.HOLD, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now(), null, null);
 
             assertThat(signal.type()).isEqualTo(Signal.SignalType.HOLD);
         }
@@ -368,7 +378,9 @@ class SignalTest {
                 TARGET,
                 RISK_REWARD,
                 INDICATORS,
-                LocalDate.now()
+                LocalDate.now(),
+            null,
+            null
             );
 
             assertThat(signal.entryPrice()).isEqualTo(BigDecimal.valueOf(2440.00));
@@ -388,7 +400,9 @@ class SignalTest {
                 TARGET,
                 RISK_REWARD,
                 INDICATORS,
-                LocalDate.now()
+                LocalDate.now(),
+            null,
+            null
             );
 
             assertThat(signal.stopLoss()).isEqualTo(BigDecimal.valueOf(2400.00));
@@ -408,7 +422,9 @@ class SignalTest {
                 BigDecimal.valueOf(2500.00),
                 RISK_REWARD,
                 INDICATORS,
-                LocalDate.now()
+                LocalDate.now(),
+            null,
+            null
             );
 
             assertThat(signal.target()).isEqualTo(BigDecimal.valueOf(2500.00));
@@ -428,7 +444,9 @@ class SignalTest {
                 null,
                 RISK_REWARD,
                 INDICATORS,
-                LocalDate.now()
+                LocalDate.now(),
+            null,
+            null
             );
 
             assertThat(signal.entryPrice()).isNull();
@@ -450,7 +468,9 @@ class SignalTest {
                 BigDecimal.ZERO,
                 RISK_REWARD,
                 INDICATORS,
-                LocalDate.now()
+                LocalDate.now(),
+            null,
+            null
             );
 
             assertThat(signal.entryPrice()).isEqualTo(BigDecimal.ZERO);
@@ -664,8 +684,8 @@ class SignalTest {
 
         @Test
         void shouldNotEqualWhenIdsDiffer() {
-            Signal signal1 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now());
-            Signal signal2 = new Signal(2L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now());
+            Signal signal1 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now(), null, null);
+            Signal signal2 = new Signal(2L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -673,7 +693,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenSymbolsDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, "TCS", DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now());
+            Signal signal2 = new Signal(1L, "TCS", DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -681,7 +701,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenDatesDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, LocalDate.of(2024, 1, 16), Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now());
+            Signal signal2 = new Signal(1L, SYMBOL, LocalDate.of(2024, 1, 16), Signal.SignalType.BUY, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -689,7 +709,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenTypesDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.SELL, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now());
+            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.SELL, CONFIDENCE, REASONING, null, null, null, null, null, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -697,7 +717,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenConfidencesDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, BigDecimal.valueOf(0.5), REASONING, null, null, null, null, null, LocalDate.now());
+            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, BigDecimal.valueOf(0.5), REASONING, null, null, null, null, null, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -705,7 +725,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenReasoningsDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, "Different reasoning", null, null, null, null, null, LocalDate.now());
+            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, "Different reasoning", null, null, null, null, null, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -713,7 +733,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenEntryPricesDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, BigDecimal.valueOf(2500.00), STOP_LOSS, TARGET, RISK_REWARD, INDICATORS, LocalDate.now());
+            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, BigDecimal.valueOf(2500.00), STOP_LOSS, TARGET, RISK_REWARD, INDICATORS, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -721,7 +741,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenStopLossesDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, BigDecimal.valueOf(2450.00), TARGET, RISK_REWARD, INDICATORS, LocalDate.now());
+            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, BigDecimal.valueOf(2450.00), TARGET, RISK_REWARD, INDICATORS, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -729,7 +749,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenTargetsDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, STOP_LOSS, BigDecimal.valueOf(2550.00), RISK_REWARD, INDICATORS, LocalDate.now());
+            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, STOP_LOSS, BigDecimal.valueOf(2550.00), RISK_REWARD, INDICATORS, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -737,7 +757,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenRiskRewardsDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, STOP_LOSS, TARGET, new BigDecimal("2.0"), INDICATORS, LocalDate.now());
+            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, STOP_LOSS, TARGET, new BigDecimal("2.0"), INDICATORS, LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -745,7 +765,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenIndicatorsDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, STOP_LOSS, TARGET, RISK_REWARD, "Different indicators", LocalDate.now());
+            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, STOP_LOSS, TARGET, RISK_REWARD, "Different indicators", LocalDate.now(), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -753,7 +773,7 @@ class SignalTest {
         @Test
         void shouldNotEqualWhenGeneratedAtDatesDiffer() {
             Signal signal1 = createValidBuySignal();
-            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, STOP_LOSS, TARGET, RISK_REWARD, INDICATORS, LocalDate.of(2025, 1, 1));
+            Signal signal2 = new Signal(1L, SYMBOL, DATE, Signal.SignalType.BUY, CONFIDENCE, REASONING, ENTRY_PRICE, STOP_LOSS, TARGET, RISK_REWARD, INDICATORS, LocalDate.of(2025, 1, 1), null, null);
 
             assertThat(signal1).isNotEqualTo(signal2);
         }
@@ -834,6 +854,8 @@ class SignalTest {
                 "TCS",
                 null,
                 Signal.SignalType.HOLD,
+                null,
+                null,
                 null,
                 null,
                 null,

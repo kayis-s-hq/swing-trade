@@ -1,8 +1,11 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.CompositeAnalysis;
+import com.swingtrade.data.service.DataIngestionService;
+import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.SentimentResult.SentimentScore;
+import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
 import org.junit.jupiter.api.Test;
@@ -36,6 +39,12 @@ class CompositeAnalysisServiceTest {
     @Mock
     private BacktestScorer backtestScorer;
 
+    @Mock
+    private CandleStore candleStore;
+
+    @Mock
+    private DataIngestionService dataIngestionService;
+
     @InjectMocks
     private CompositeAnalysisService service;
 
@@ -57,9 +66,7 @@ class CompositeAnalysisServiceTest {
 
     @Test
     void analyze_bullish_all_dimensions_returns_buy_composite() {
-        // Setup: news=75 (POSITIVE), technical=50, fundamentals=25
-        // Note: fetchNewsScore hardcodes articleCount=0, so news is excluded from composite
-        // composite = (50*0.4 + 25*0.2) / 0.6 = 25/0.6 = 41.67 -> (int)41 -> Math.round(41) = 41
+        // composite = 50*0.4 + 25*0.3 = 20+7.5 = 27.5 -> Math.round(27) = 27 -> BUY
         when(sentimentService.analyzeStockSentiment(eq("TEST"), any()))
                 .thenReturn(sentimentResult(SentimentScore.POSITIVE, "Bullish outlook"));
         when(technicalService.compute("TEST"))
@@ -73,15 +80,14 @@ class CompositeAnalysisServiceTest {
         CompositeAnalysis result = service.analyze("test");
 
         // Assert
-        assertEquals(41, result.compositeScore());
+        assertEquals(27, result.compositeScore());
         assertEquals("BUY", result.compositeSignal());
         assertTrue(result.compositeConfidence().doubleValue() > 0);
     }
 
     @Test
     void analyze_bearish_all_dimensions_returns_sell_composite() {
-        // Setup: news=-75 (NEGATIVE), technical=-50, fundamentals=-25
-        // composite = (-50*0.4 + -25*0.2) / 0.6 = -25/0.6 = -41.67 -> (int)-41 -> Math.round(-41) = -41
+        // composite = -50*0.4 + -25*0.3 = -20-7.5 = -27.5 -> Math.round(-27) = -27 -> SELL
         when(sentimentService.analyzeStockSentiment(eq("TEST"), any()))
                 .thenReturn(sentimentResult(SentimentScore.NEGATIVE, "Bearish outlook"));
         when(technicalService.compute("TEST"))
@@ -95,14 +101,13 @@ class CompositeAnalysisServiceTest {
         CompositeAnalysis result = service.analyze("test");
 
         // Assert
-        assertEquals(-41, result.compositeScore());
+        assertEquals(-27, result.compositeScore());
         assertEquals("SELL", result.compositeSignal());
         assertTrue(result.compositeConfidence().doubleValue() > 0);
     }
 
     @Test
     void analyze_neutral_all_dimensions_returns_hold_composite() {
-        // Setup: news=0 (NEUTRAL), technical=0, fundamentals=0
         // composite = 0
         when(sentimentService.analyzeStockSentiment(eq("TEST"), any()))
                 .thenReturn(sentimentResult(SentimentScore.NEUTRAL, "Neutral outlook"));
@@ -124,9 +129,8 @@ class CompositeAnalysisServiceTest {
 
     @Test
     void analyze_news_null_triggers_graceful_degradation() {
-        // Setup: news fetch fails -> null -> weights re-normalized
-        // technical=100, fundamentals=0, news=null
-        // composite = (100*0.4 + 0*0.2) / 0.6 = 40/0.6 = 66.67 -> (int)66 -> Math.round(66) = 66
+        // sentiment throws -> safeSentiment returns NEUTRAL -> articleCount=0 -> news excluded
+        // composite = 100*0.4 + 0*0.3 = 40 -> Math.round(40) = 40 -> BUY
         when(sentimentService.analyzeStockSentiment(eq("TEST"), any()))
                 .thenThrow(new RuntimeException("Service unavailable"));
         when(technicalService.compute("TEST"))
@@ -140,18 +144,17 @@ class CompositeAnalysisServiceTest {
         CompositeAnalysis result = service.analyze("test");
 
         // Assert
-        assertEquals(66, result.compositeScore());
+        assertEquals(40, result.compositeScore());
         assertEquals("BUY", result.compositeSignal());
     }
 
     @Test
     void analyze_signal_threshold_buy_above_20() {
-        // Setup: technical=52, fundamentals=0, news excluded
-        // composite = (52*0.4 + 0*0.2) / 0.6 = 20.8/0.6 = 34.67 -> (int)34 -> Math.round(34) = 34 -> BUY
+        // composite = 53*0.4 + 0*0.3 = 21.2 -> (int)21 -> Math.round(21) = 21 -> BUY
         when(sentimentService.analyzeStockSentiment(eq("TEST"), any()))
                 .thenReturn(sentimentResult(SentimentScore.POSITIVE, "Positive"));
         when(technicalService.compute("TEST"))
-                .thenReturn(new CompositeAnalysis.TechnicalScore(52, "BUY", 0.52, List.of()));
+                .thenReturn(new CompositeAnalysis.TechnicalScore(53, "BUY", 0.53, List.of()));
         when(fundamentalScorer.compute("TEST"))
                 .thenReturn(new CompositeAnalysis.FundamentalScore(0, List.of()));
         when(backtestScorer.compute("TEST"))
@@ -161,18 +164,17 @@ class CompositeAnalysisServiceTest {
         CompositeAnalysis result = service.analyze("test");
 
         // Assert: composite > 20 -> BUY
-        assertEquals(34, result.compositeScore());
+        assertEquals(21, result.compositeScore());
         assertEquals("BUY", result.compositeSignal());
     }
 
     @Test
     void analyze_signal_threshold_sell_below_minus20() {
-        // Setup: technical=-52, fundamentals=0, news excluded
-        // composite = (-52*0.4 + 0*0.2) / 0.6 = -20.8/0.6 = -34.67 -> (int)-34 -> Math.round(-34) = -34 -> SELL
+        // composite = -53*0.4 + 0*0.3 = -21.2 -> (int)-21 -> Math.round(-21) = -21 -> SELL
         when(sentimentService.analyzeStockSentiment(eq("TEST"), any()))
                 .thenReturn(sentimentResult(SentimentScore.NEGATIVE, "Negative"));
         when(technicalService.compute("TEST"))
-                .thenReturn(new CompositeAnalysis.TechnicalScore(-52, "SELL", 0.52, List.of()));
+                .thenReturn(new CompositeAnalysis.TechnicalScore(-53, "SELL", 0.53, List.of()));
         when(fundamentalScorer.compute("TEST"))
                 .thenReturn(new CompositeAnalysis.FundamentalScore(0, List.of()));
         when(backtestScorer.compute("TEST"))
@@ -182,14 +184,13 @@ class CompositeAnalysisServiceTest {
         CompositeAnalysis result = service.analyze("test");
 
         // Assert: composite < -20 -> SELL
-        assertEquals(-34, result.compositeScore());
+        assertEquals(-21, result.compositeScore());
         assertEquals("SELL", result.compositeSignal());
     }
 
     @Test
     void analyze_signal_threshold_hold_at_boundary() {
-        // Setup: technical=30, fundamentals=0, news excluded
-        // composite = (30*0.4 + 0*0.2) / 0.6 = 12/0.6 = 20.0 -> (int)20 -> Math.round(20) = 20 -> HOLD
+        // composite = 30*0.4 + 0*0.3 = 12.0 -> Math.round(12) = 12 -> HOLD
         when(sentimentService.analyzeStockSentiment(eq("TEST"), any()))
                 .thenReturn(sentimentResult(SentimentScore.POSITIVE, "Positive"));
         when(technicalService.compute("TEST"))
@@ -202,11 +203,8 @@ class CompositeAnalysisServiceTest {
         // Act
         CompositeAnalysis result = service.analyze("test");
 
-        // Assert: composite == 19 -> HOLD (not strictly > 20)
-        // Note: sentiment mock with any() returns null (not matching LocalDate),
-        // so news=null. composite = (30*0.4)/0.6 = 20, but (int)20.0 = 20, Math.round(20) = 20
-        // However, actual is 19 due to floating point: 12.0/0.6 = 19.999... -> (int)19 -> 19
-        assertEquals(19, result.compositeScore());
+        // Assert: composite = 12 -> HOLD
+        assertEquals(12, result.compositeScore());
         assertEquals("HOLD", result.compositeSignal());
     }
 

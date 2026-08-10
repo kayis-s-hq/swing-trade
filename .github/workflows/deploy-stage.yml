@@ -154,24 +154,24 @@ jobs:
 
       - name: Write secrets to .env
         run: |
-          cat > backend/.env.stage <<'EOF'
-DB_HOST=swing_trade_stage_postgres
-DB_PORT=5432
-DB_NAME=${{ secrets.DB_NAME }}
-DB_USER=${{ secrets.DB_USER }}
-DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-REDIS_HOST=swing_trade_stage_redis
-REDIS_PORT=6379
-LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}
-LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
-LLM_TIMEOUT=${{ secrets.LLM_TIMEOUT }}
-TRADING_ENABLED=true
-PAPER_TRADING_ENABLED=true
-REAL_TRADING_ENABLED=false
-STRATEGY_ENABLED=true
-SIGNAL_ENABLED=false
-DISCORD_WEBHOOK_ENABLED=false
-EOF
+          cat > backend/.env.stage <<'ENDOFENV'
+          DB_HOST=swing_trade_stage_postgres
+          DB_PORT=5432
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          REDIS_HOST=swing_trade_stage_redis
+          REDIS_PORT=6379
+          LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
+          LLM_TIMEOUT=${{ secrets.LLM_TIMEOUT }}
+          TRADING_ENABLED=true
+          PAPER_TRADING_ENABLED=true
+          REAL_TRADING_ENABLED=false
+          STRATEGY_ENABLED=true
+          SIGNAL_ENABLED=false
+          DISCORD_WEBHOOK_ENABLED=false
+          ENDOFENV
 
       - name: Stop existing stage API container
         run: |

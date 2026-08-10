@@ -1,5 +1,7 @@
 package com.swingtrade.llm.service;
 
+import java.time.LocalDate;
+
 
 /**
  * Represents a structured corporate filing from NSE/BSE announcements.

@@ -15,7 +15,7 @@ public class BrokerProperties {
 
     // Position limits
     private int maxConcurrentPositions = 3;
-    private BigDecimal maxCapitalPerPosition = BigDecimal.valueOf(10000);
+    private BigDecimal maxCapitalPerPosition = BigDecimal.valueOf(200000);
 
     // Trade sizing
     private BigDecimal maxCapitalPerTrade = BigDecimal.valueOf(50000);

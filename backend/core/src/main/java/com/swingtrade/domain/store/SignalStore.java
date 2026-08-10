@@ -22,6 +22,11 @@ public interface SignalStore {
 
     Signal save(Signal signal);
 
+    /**
+     * Saves a signal with an optional warning flag (e.g., NEUTRAL_SENTIMENT).
+     */
+    Signal save(Signal signal, String warningFlag);
+
     void markProcessed(Long signalId);
 
     Optional<Signal> findLatestBySymbol(String symbol);
@@ -37,6 +42,15 @@ public interface SignalStore {
      * @return list of BUY signals
      */
     List<Signal> findBuySignalsSince(LocalDate sinceDate);
+
+    /**
+     * Deletes all signals for a given symbol and date. Used to clear stale processed signals before regeneration.
+     *
+     * @param symbol the stock symbol
+     * @param date the signal date
+     * @return number of signals deleted
+     */
+    int deleteBySymbolAndDate(String symbol, LocalDate date);
 
     /**
      * Deletes all signals for a given date. Used to clear stale signals before regeneration.

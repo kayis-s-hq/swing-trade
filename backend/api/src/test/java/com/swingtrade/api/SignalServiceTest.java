@@ -1,19 +1,19 @@
 package com.swingtrade.api;
 
 import com.swingtrade.api.dto.SignalResponse;
-import com.swingtrade.api.service.SignalService;
-import com.swingtrade.data.entity.SignalEntity;
-import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.api.service.SignalEngine;
+import com.swingtrade.api.service.SignalService;
+import com.swingtrade.api.service.TechnicalAnalysisService;
+import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.SentimentStore;
+import com.swingtrade.domain.store.SignalStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -22,8 +22,7 @@ import java.util.List;
 import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 /**
  * Comprehensive unit tests for SignalService
@@ -33,42 +32,39 @@ import static org.mockito.Mockito.when;
 class SignalServiceTest {
 
     @Mock
-    private SignalRepository signalRepository;
+    private SignalStore signalStore;
+
+    @Mock
+    private SentimentStore sentimentStore;
+
+    @Mock
+    private TechnicalAnalysisService technicalAnalysisService;
 
     @Mock
     private SignalEngine signalEngine;
 
+    @Mock
+    private CandleStore candleStore;
+
     @InjectMocks
     private SignalService signalService;
 
-    @BeforeEach
-    void setUp() {
-        // Set up test data using SignalEntity
-        List<SignalEntity> testEntities = new ArrayList<>();
-        testEntities.add(createSignalEntity("AAPL", "BUY", 0.85, LocalDate.now(), "Breakout above resistance"));
-        testEntities.add(createSignalEntity("TSLA", "SELL", 0.72, LocalDate.now(), "Support level broken"));
-        testEntities.add(createSignalEntity("MSFT", "BUY", 0.78, LocalDate.now(), "Moving average crossover"));
-        testEntities.add(createSignalEntity("GOOGL", "BUY", 0.65, LocalDate.now(), "RSI oversold"));
-        testEntities.add(createSignalEntity("AMZN", "SELL", 0.68, LocalDate.now(), "Resistance rejection"));
+    private final List<Signal> testSignals = List.of(
+            createSignal("AAPL", "BUY", 0.85, LocalDate.now(), "Breakout above resistance"),
+            createSignal("TSLA", "SELL", 0.72, LocalDate.now(), "Support level broken"),
+            createSignal("MSFT", "BUY", 0.78, LocalDate.now(), "Moving average crossover"),
+            createSignal("GOOGL", "BUY", 0.65, LocalDate.now(), "RSI oversold"),
+            createSignal("AMZN", "SELL", 0.68, LocalDate.now(), "Resistance rejection")
+    );
 
-        // Mock repository to return test data as Page for findAll with pageable
-        Page<SignalEntity> testPage = new PageImpl<>(testEntities);
-        when(signalRepository.findAll(any(Pageable.class))).thenReturn(testPage);
+    private Signal createSignal(String symbol, String type, double confidence, LocalDate date, String reasoning) {
+        return Signal.create(symbol, date, Signal.SignalType.valueOf(type),
+                BigDecimal.valueOf(confidence), reasoning);
     }
 
-    private SignalEntity createSignalEntity(String symbol, String type, double confidence, LocalDate date, String reasoning) {
-        var entity = new SignalEntity();
-        entity.setSymbol(symbol);
-        entity.setSignalType(type);
-        entity.setConfidenceScore(BigDecimal.valueOf(confidence));
-        entity.setDate(date);
-        entity.setReasoning(reasoning);
-        entity.setEntryPrice(BigDecimal.valueOf(100));
-        entity.setStopLoss(BigDecimal.valueOf(95));
-        entity.setTarget(BigDecimal.valueOf(110));
-        entity.setRiskReward(BigDecimal.valueOf(2.0));
-        entity.setIndicators("RSI=35");
-        return entity;
+    @BeforeEach
+    void setUp() {
+        lenient().when(signalStore.findAll()).thenReturn(new ArrayList<>(testSignals));
     }
 
     @Test

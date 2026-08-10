@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -200,11 +201,7 @@ public class SentimentApiController {
     @PostMapping("/sentiment/{symbol}/analyse")
     public ResponseEntity<ApiResponse<SentimentResult>> triggerAnalysis(
             @PathVariable String symbol) {
-        List<NewsArticle> news = newsService.fetchAllNews(symbol);
-        List<String> headlines = news.stream()
-            .map(newsService::cleanNewsText)
-            .toList();
-        SentimentResult result = sentimentService.analyseSentiment(symbol, headlines, null);
+        SentimentResult result = sentimentService.analyzeStockSentiment(symbol, LocalDate.now());
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 

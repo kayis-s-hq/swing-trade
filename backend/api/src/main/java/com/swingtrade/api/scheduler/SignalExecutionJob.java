@@ -15,7 +15,8 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Scheduled job that polls for unprocessed BUY signals and auto-executes them as paper trades.
+ * Polls for unprocessed BUY signals and auto-executes them as paper trades.
+ * @Scheduled removed — replaced by JobOrchestratorService.
  */
 @Service
 public class SignalExecutionJob {

@@ -98,7 +98,7 @@ public class TradeRequest {
     }
 
     public void setPrice(BigDecimal price) {
-        this.price = price;
+        this.price = price != null ? price.setScale(2, java.math.RoundingMode.HALF_UP) : null;
     }
 
     public BigDecimal getLimitPrice() {
@@ -106,7 +106,7 @@ public class TradeRequest {
     }
 
     public void setLimitPrice(BigDecimal limitPrice) {
-        this.limitPrice = limitPrice;
+        this.limitPrice = limitPrice != null ? limitPrice.setScale(2, java.math.RoundingMode.HALF_UP) : null;
     }
 
     public BigDecimal getStopPrice() {
@@ -114,7 +114,7 @@ public class TradeRequest {
     }
 
     public void setStopPrice(BigDecimal stopPrice) {
-        this.stopPrice = stopPrice;
+        this.stopPrice = stopPrice != null ? stopPrice.setScale(2, java.math.RoundingMode.HALF_UP) : null;
     }
 
     public BigDecimal getTarget() {
@@ -122,7 +122,7 @@ public class TradeRequest {
     }
 
     public void setTarget(BigDecimal target) {
-        this.target = target;
+        this.target = target != null ? target.setScale(2, java.math.RoundingMode.HALF_UP) : null;
     }
 
     public String getEntryReason() {
@@ -157,7 +157,10 @@ public class TradeRequest {
         }
 
         // For STOP and STOP_LIMIT orders, stopPrice is required
-        return orderType != OrderType.STOP && orderType != OrderType.STOP_LIMIT || stopPrice != null;
+        if ((orderType == OrderType.STOP || orderType == OrderType.STOP_LIMIT) && stopPrice == null) {
+            return false;
+        }
+        return true;
     }
 
     private boolean isValidSymbol() {

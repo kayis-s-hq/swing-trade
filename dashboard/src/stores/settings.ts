@@ -17,8 +17,9 @@ interface TradingConfig {
 }
 
 interface LlmSettings {
-  vllmBaseUrl: string
-  model: string
+  llmBaseUrl: string
+  gpuhubBaseUrl: string
+  llamacppModel: string
   pdfBaseUrl: string
   pdfModel: string
 }
@@ -44,8 +45,9 @@ const defaults: SettingsState = {
     takeProfit: 15,
   },
   llmSettings: {
-    vllmBaseUrl: 'https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1',
-    model: 'Qwen3-30B-AWQ',
+    llmBaseUrl: 'http://localhost:8080/v1',
+    gpuhubBaseUrl: 'https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1',
+    llamacppModel: '/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf',
     pdfBaseUrl: '',
     pdfModel: 'gemma-4-E2B',
   },
@@ -72,8 +74,9 @@ async function loadAll(): Promise<SettingsState> {
     const llmRes = await getLlmSettings()
     if (llmRes.success && llmRes.data) {
       Object.assign(state.llmSettings, {
-        vllmBaseUrl: llmRes.data['llm.vllm.base_url'] || state.llmSettings.vllmBaseUrl,
-        model: llmRes.data['llm.vllm.model'] || state.llmSettings.model,
+        llmBaseUrl: llmRes.data['llm.base_url'] || state.llmSettings.llmBaseUrl,
+        gpuhubBaseUrl: llmRes.data['llm.gpuhub.base_url'] || state.llmSettings.gpuhubBaseUrl,
+        llamacppModel: llmRes.data['llamacpp.model'] || state.llmSettings.llamacppModel,
         pdfBaseUrl: llmRes.data['llm.pdf.base_url'] || state.llmSettings.pdfBaseUrl,
         pdfModel: llmRes.data['llm.pdf.model'] || state.llmSettings.pdfModel,
       })
@@ -121,8 +124,9 @@ export async function saveSettings(): Promise<boolean> {
   const body = {
     broker: state.selectedBroker,
     llm: {
-      'llm.vllm.base_url': state.llmSettings.vllmBaseUrl,
-      'llm.vllm.model': state.llmSettings.model,
+      'llm.base_url': state.llmSettings.llmBaseUrl,
+      'llm.gpuhub.base_url': state.llmSettings.gpuhubBaseUrl,
+      'llamacpp.model': state.llmSettings.llamacppModel,
       'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
       'llm.pdf.model': state.llmSettings.pdfModel,
     },
@@ -149,8 +153,9 @@ export async function saveSettings(): Promise<boolean> {
 // Keep individual save methods for toggle-on-change behavior
 export async function saveLlmSettings(): Promise<boolean> {
   const settings: Record<string, string> = {
-    'llm.vllm.base_url': state.llmSettings.vllmBaseUrl,
-    'llm.vllm.model': state.llmSettings.model,
+    'llm.base_url': state.llmSettings.llmBaseUrl,
+    'llm.gpuhub.base_url': state.llmSettings.gpuhubBaseUrl,
+    'llamacpp.model': state.llmSettings.llamacppModel,
     'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
     'llm.pdf.model': state.llmSettings.pdfModel,
   }

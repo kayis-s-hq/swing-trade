@@ -8,12 +8,16 @@ import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
-import com.swingtrade.llm.client.VLLMClient;
+import com.swingtrade.llm.client.LlamaCppClient;
+import com.swingtrade.llm.service.LlamaCppServerManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
@@ -30,6 +34,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Main service for sentiment analysis of stocks using LLM.
@@ -43,12 +48,13 @@ public class SentimentService {
     // Cache configuration
     private static final int DEFAULT_CACHE_MAX_SIZE = 100;
     private static final long DEFAULT_CACHE_EXPIRY_MINUTES = 60;
-    private static final long ANALYSIS_TIMEOUT_SECONDS = 120;
+    private static final long ANALYSIS_TIMEOUT_SECONDS = 180;
 
     // Thread pool for async operations
     private final ExecutorService analysisExecutor;
 
-    private final VLLMClient vllmClient;
+    private final LlamaCppClient llamaCppClient;
+    private final LlamaCppServerManager serverManager;
     private final SentimentAnalyzer sentimentAnalyzer;
     private final NewsIngestionService newsIngestionService;
     private final SentimentCacheService sentimentCacheService;
@@ -66,7 +72,8 @@ public class SentimentService {
      */
     @Autowired
     public SentimentService(
-            VLLMClient vllmClient,
+            LlamaCppClient llamaCppClient,
+            LlamaCppServerManager serverManager,
             SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService,
             SentimentCacheService sentimentCacheService,
@@ -78,7 +85,8 @@ public class SentimentService {
             @Value("${llm.sentiment.cache.enabled:false}") boolean enableCaching,
             @Value("${llm.sentiment.default-confidence:0.75}") double defaultConfidence) {
 
-        this.vllmClient = vllmClient;
+        this.llamaCppClient = llamaCppClient;
+        this.serverManager = serverManager;
         this.sentimentAnalyzer = sentimentAnalyzer;
         this.newsIngestionService = newsIngestionService;
         this.sentimentCacheService = sentimentCacheService;
@@ -223,7 +231,8 @@ public class SentimentService {
         // Call LLM for sentiment analysis
         String llmResponse;
         try {
-            llmResponse = vllmClient.generateChatCompletion(messages, 512, 0.3)
+            serverManager.ensureRunning();
+            llmResponse = llamaCppClient.generateChatCompletion(messages, 512, 0.3)
                     .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
         } catch (Exception e) {
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
@@ -263,8 +272,8 @@ public class SentimentService {
             SentimentOutput analysisResult,
             int articleCount) {
 
-        String modelVersion = appSettingsStore.get("llm.vllm.model-name")
-                .orElse("unknown");
+        String modelVersion = appSettingsStore.get("llamacpp.model")
+                .orElse("Qwen3-4B-Instruct");
         String promptHash = computePromptHash();
 
         SentimentResult.SentimentScore score;
@@ -564,72 +573,6 @@ public class SentimentService {
         } catch (InterruptedException e) {
             analysisExecutor.shutdownNow();
             Thread.currentThread().interrupt();
-        }
-    }
-
-    /**
-     * Public method to analyse sentiment for a symbol with provided headlines.
-     */
-    public SentimentResult analyseSentiment(String symbol, List<String> headlines, Object earningsData) {
-        if (headlines == null || headlines.isEmpty()) {
-            logger.warn("No headlines provided for {}", symbol);
-            return SentimentResult.create(symbol, LocalDate.now(),
-                    SentimentResult.SentimentScore.NEUTRAL, "No headlines", "", 0.0, List.of(), List.of());
-        }
-
-        String cacheKey = generateCacheKey(symbol, LocalDate.now());
-        if (enableCaching && sentimentCacheService.isCached(cacheKey)) {
-            var cached = sentimentCacheService.getValue(cacheKey);
-            if (cached.isPresent()) {
-                CachedSentiment cs = (CachedSentiment) cached.get();
-                return new SentimentResult(
-                        cs.resultId(), symbol, LocalDate.now(),
-                        cs.sentimentType() == SentimentType.POSITIVE ? SentimentResult.SentimentScore.POSITIVE :
-                        cs.sentimentType() == SentimentType.NEGATIVE ? SentimentResult.SentimentScore.NEGATIVE :
-                        SentimentResult.SentimentScore.NEUTRAL,
-                        cs.reasoning(), "", cs.confidence(),
-                        LocalDate.now(), cs.redFlags(), cs.catalysts(),
-                        null, null, cs.articleCount());
-            }
-        }
-
-        try {
-            List<Map<String, String>> messages = sentimentAnalyzer.createSentimentAnalysisPrompt(
-                    symbol, headlines, earningsData != null ? earningsData.toString() : null);
-
-            String llmResponse;
-            try {
-                llmResponse = vllmClient.generateChatCompletion(messages, 512, 0.3)
-                        .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
-            } catch (Exception llmEx) {
-                logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", symbol, llmEx.getMessage());
-                return keywordBasedSentiment(symbol, headlines);
-            }
-
-            if (llmResponse == null || llmResponse.isBlank()) {
-                return keywordBasedSentiment(symbol, headlines);
-            }
-
-            SentimentOutput result = sentimentAnalyzer.parseResponse(llmResponse);
-            SentimentResult sr = buildSentimentResult(symbol, LocalDate.now(), result, headlines.size());
-
-            // Persist
-            try {
-                sentimentStore.save(sr);
-            } catch (Exception e) {
-                logger.warn("Failed to persist sentiment for {}: {}", symbol, e.getMessage());
-            }
-
-            // Cache
-            if (enableCaching) {
-                cacheSentimentResult(cacheKey, sr, result);
-            }
-
-            return sr;
-        } catch (Exception e) {
-            logger.error("Error analysing sentiment for {}: {}", symbol, e.getMessage());
-            return SentimentResult.create(symbol, LocalDate.now(),
-                    SentimentResult.SentimentScore.NEUTRAL, "Analysis error", "", 0.2, List.of(), List.of());
         }
     }
 
