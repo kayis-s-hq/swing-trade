@@ -18,12 +18,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 
-    implementation("dev.langchain4j:langchain4j")
-    implementation("dev.langchain4j:langchain4j-open-ai")
-    implementation("dev.langchain4j:langchain4j-spring-boot-starter")
-    implementation("dev.langchain4j:langchain4j-web-search-engine-google-custom")
-    implementation("dev.langchain4j:langchain4j-ollama")
-
     implementation("commons-codec:commons-codec:1.16.0")
     implementation("org.apache.commons:commons-lang3:3.14.0")
     implementation("org.jsoup:jsoup:1.18.3")

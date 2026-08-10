@@ -19,7 +19,9 @@ spring:
     enabled: false
 
 llm:
-  vllm:
+  base-url: http://localhost:8080/v1
+  model-name: Qwen3-4B-Instruct
+  gpuhub:
     base-url: https://u425-af79-4d7d6139.singapore-a.gpuhub.com:8443/v1
     model-name: claude-sonnet-4-6
   sentiment:

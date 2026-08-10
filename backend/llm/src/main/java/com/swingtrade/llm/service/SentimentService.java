@@ -8,7 +8,8 @@ import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
-import com.swingtrade.llm.client.VLLMClient;
+import com.swingtrade.llm.client.LlamaCppClient;
+import com.swingtrade.llm.service.LlamaCppServerManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,12 +48,13 @@ public class SentimentService {
     // Cache configuration
     private static final int DEFAULT_CACHE_MAX_SIZE = 100;
     private static final long DEFAULT_CACHE_EXPIRY_MINUTES = 60;
-    private static final long ANALYSIS_TIMEOUT_SECONDS = 120;
+    private static final long ANALYSIS_TIMEOUT_SECONDS = 180;
 
     // Thread pool for async operations
     private final ExecutorService analysisExecutor;
 
-    private final VLLMClient vllmClient;
+    private final LlamaCppClient llamaCppClient;
+    private final LlamaCppServerManager serverManager;
     private final SentimentAnalyzer sentimentAnalyzer;
     private final NewsIngestionService newsIngestionService;
     private final SentimentCacheService sentimentCacheService;
@@ -70,7 +72,8 @@ public class SentimentService {
      */
     @Autowired
     public SentimentService(
-            VLLMClient vllmClient,
+            LlamaCppClient llamaCppClient,
+            LlamaCppServerManager serverManager,
             SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService,
             SentimentCacheService sentimentCacheService,
@@ -82,7 +85,8 @@ public class SentimentService {
             @Value("${llm.sentiment.cache.enabled:false}") boolean enableCaching,
             @Value("${llm.sentiment.default-confidence:0.75}") double defaultConfidence) {
 
-        this.vllmClient = vllmClient;
+        this.llamaCppClient = llamaCppClient;
+        this.serverManager = serverManager;
         this.sentimentAnalyzer = sentimentAnalyzer;
         this.newsIngestionService = newsIngestionService;
         this.sentimentCacheService = sentimentCacheService;
@@ -227,7 +231,8 @@ public class SentimentService {
         // Call LLM for sentiment analysis
         String llmResponse;
         try {
-            llmResponse = vllmClient.generateChatCompletion(messages, 512, 0.3)
+            serverManager.ensureRunning();
+            llmResponse = llamaCppClient.generateChatCompletion(messages, 512, 0.3)
                     .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
         } catch (Exception e) {
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
@@ -267,8 +272,8 @@ public class SentimentService {
             SentimentOutput analysisResult,
             int articleCount) {
 
-        String modelVersion = appSettingsStore.get("llm.vllm.model-name")
-                .orElse("unknown");
+        String modelVersion = appSettingsStore.get("llamacpp.model")
+                .orElse("Qwen3-4B-Instruct");
         String promptHash = computePromptHash();
 
         SentimentResult.SentimentScore score;
