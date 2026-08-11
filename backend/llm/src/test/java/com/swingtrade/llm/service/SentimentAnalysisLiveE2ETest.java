@@ -77,6 +77,7 @@ class SentimentAnalysisLiveE2ETest {
         // Create sample news articles for each stock - must contain the stock symbol
         // for the containsStockSymbol() filter to pass
         NewsArticle relianceArticle1 = new NewsArticle(
+                "RELIANCE",
                 "Reliance Industries reports strong quarterly earnings",
                 "https://example.com/news1",
                 "Reliance Industries announces better than expected quarterly results.",
@@ -86,6 +87,7 @@ class SentimentAnalysisLiveE2ETest {
         );
 
         NewsArticle tcsArticle1 = new NewsArticle(
+                "TCS",
                 "TCS reports strong digital services growth",
                 "https://example.com/news2",
                 "Tata Consultancy Services shows strong performance in digital services.",
@@ -95,6 +97,7 @@ class SentimentAnalysisLiveE2ETest {
         );
 
         NewsArticle infyArticle1 = new NewsArticle(
+                "INFY",
                 "Infosys reports solid quarterly performance",
                 "https://example.com/news3",
                 "Infosys announces strong quarterly earnings beat.",

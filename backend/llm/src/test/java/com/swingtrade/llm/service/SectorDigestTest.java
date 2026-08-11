@@ -1,8 +1,6 @@
 package com.swingtrade.llm.service;
 
 import com.swingtrade.data.entity.SentimentResultEntity;
-import com.swingtrade.data.repository.SentimentResultRepository;
-import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Stock;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,21 +35,25 @@ class SectorDigestTest {
     private SentimentService sentimentAnalysisService;
 
     @Mock
-    private SentimentResultRepository sentimentResultRepository;
+    private com.swingtrade.domain.store.SentimentStore sentimentStore;
 
     @Mock
-    private StockRepository stockRepository;
+    private com.swingtrade.domain.store.StockStore stockStore;
+
+    @Mock
+    private com.swingtrade.domain.store.AppSettingsStore appSettingsStore;
 
     @BeforeEach
     void setUp() {
-        // Create real SentimentService with mocked repositories
+        // Create real SentimentService with mocked dependencies
         sentimentAnalysisService = new SentimentService(
                 null,  // vllmClient not needed for sector digest tests
                 null,  // sentimentAnalyzer not needed
                 null,  // newsIngestionService not needed
                 null,  // sentimentCacheService not needed
-                sentimentResultRepository,
-                stockRepository,
+                sentimentStore,
+                stockStore,
+                appSettingsStore,
                 100,   // maxCacheSize
                 60L,   // cacheExpiryMinutes
                 true,  // enableCaching
@@ -221,9 +223,9 @@ class SectorDigestTest {
 
         results.add(createSentimentResultEntity("SUNPHARMA", Stock.Sector.PHARMA, SentimentResult.SentimentScore.NEGATIVE, startDate));
 
-        // Mock repository to return our test data
-        when(sentimentResultRepository.findAllByDateBetween(startDate, endDate))
-                .thenReturn(results);
+        // Mock store to return our test data
+        when(sentimentStore.findAllByDateBetween(startDate, endDate))
+                .thenReturn(results.stream().map(this::toSentimentResult).toList());
 
         mockStockRepositoryForEntities(results);
 
@@ -246,8 +248,8 @@ class SectorDigestTest {
         LocalDate startDate = LocalDate.of(2026, 3, 16);
         LocalDate endDate = LocalDate.of(2026, 3, 22);
 
-        // Mock repository to return empty list
-        when(sentimentResultRepository.findAllByDateBetween(startDate, endDate))
+        // Mock store to return empty list
+        when(sentimentStore.findAllByDateBetween(startDate, endDate))
                 .thenReturn(new ArrayList<>());
 
         // When: generating digest with no data
@@ -301,35 +303,40 @@ class SectorDigestTest {
     }
 
     /**
-     * Mocks the stock repository to return correct sectors for test symbols.
+     * Converts a SentimentResultEntity to a SentimentResult domain object.
+     */
+    private SentimentResult toSentimentResult(SentimentResultEntity entity) {
+        return SentimentResult.create(
+                entity.getSymbol(),
+                entity.getDate(),
+                SentimentResult.SentimentScore.valueOf(entity.getSentimentScore()),
+                entity.getSummary(),
+                entity.getRawContent(),
+                entity.getConfidence()
+        );
+    }
+
+    /**
+     * Mocks the stock store to return correct sectors for test symbols.
      */
     private void mockStockRepository(List<SentimentResult> results) {
-        // Build a set of unique symbols and their sectors
         for (SentimentResult result : results) {
             String symbol = result.symbol();
-
-            // Determine sector based on symbol
             Stock.Sector sector = determineSectorForSymbol(symbol);
-
-            // Mock the repository
-            when(stockRepository.findBySymbol(symbol))
-                    .thenReturn(java.util.Optional.of(createMockStockEntity(symbol, sector)));
+            when(stockStore.findBySymbol(symbol))
+                    .thenReturn(java.util.Optional.of(createMockStock(symbol, sector)));
         }
     }
 
     /**
-     * Mocks the stock repository for entity-based tests.
+     * Mocks the stock store for entity-based tests.
      */
     private void mockStockRepositoryForEntities(List<SentimentResultEntity> results) {
         for (SentimentResultEntity entity : results) {
             String symbol = entity.getSymbol();
-
-            // Determine sector based on symbol
             Stock.Sector sector = determineSectorForSymbol(symbol);
-
-            // Mock the repository
-            when(stockRepository.findBySymbol(symbol))
-                    .thenReturn(java.util.Optional.of(createMockStockEntity(symbol, sector)));
+            when(stockStore.findBySymbol(symbol))
+                    .thenReturn(java.util.Optional.of(createMockStock(symbol, sector)));
         }
     }
 
@@ -352,14 +359,9 @@ class SectorDigestTest {
     }
 
     /**
-     * Creates a mock stock entity for testing.
+     * Creates a mock Stock domain object for testing.
      */
-    private com.swingtrade.data.entity.StockEntity createMockStockEntity(String symbol, Stock.Sector sector) {
-        com.swingtrade.data.entity.StockEntity entity = new com.swingtrade.data.entity.StockEntity();
-        entity.setSymbol(symbol);
-        entity.setName("Test Company " + symbol);
-        entity.setSector(sector.name());
-        entity.setExchange("NSE");
-        return entity;
+    private Stock createMockStock(String symbol, Stock.Sector sector) {
+        return new Stock(symbol, "Test Company " + symbol, sector.name(), "NSE");
     }
 }

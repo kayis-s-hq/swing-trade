@@ -5,7 +5,7 @@ import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.llm.LlmClient;
 import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 
 import java.math.BigDecimal;
@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  */
 public class LangChain4jLlmClient implements LlmClient {
     
-    private final ChatLanguageModel chatLanguageModel;
+    private final ChatModel chatModel;
     private static final String DEFAULT_BASE_URL = "http://localhost:8000";
     
     /**
@@ -39,7 +39,7 @@ public class LangChain4jLlmClient implements LlmClient {
     public LangChain4jLlmClient(String baseUrl) {
         // Initialize the Ollama model with the provided base URL
         // Ollama supports multiple model types and is compatible with vLLM endpoints
-        this.chatLanguageModel = OllamaChatModel.builder()
+        this.chatModel = OllamaChatModel.builder()
                 .baseUrl(baseUrl)
                 .modelName("meta-llama/Llama-3.2-3B-Instruct") // Default model, can be configured
                 .temperature(0.0) // Deterministic output for consistent results
@@ -58,7 +58,7 @@ public class LangChain4jLlmClient implements LlmClient {
             """.formatted(inputText);
             
         // Get response from LLM
-        String response = chatLanguageModel.generate(prompt);
+        String response = chatModel.chat(prompt);
         
         // Parse structured output (simplified approach for demonstration)
         try {

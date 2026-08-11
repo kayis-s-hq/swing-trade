@@ -5,8 +5,8 @@ plugins {
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.3.1")
-        mavenBom("dev.langchain4j:langchain4j-bom:0.34.0")
+        mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")
+        mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
     }
 }
 
@@ -19,7 +19,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 
     implementation("dev.langchain4j:langchain4j")
-    implementation("dev.langchain4j:langchain4j-open-ai")
     implementation("dev.langchain4j:langchain4j-spring-boot-starter")
     implementation("dev.langchain4j:langchain4j-web-search-engine-google-custom")
     implementation("dev.langchain4j:langchain4j-ollama")

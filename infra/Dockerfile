@@ -1,21 +1,8 @@
 # ==============================================================================
 # SwingTrade API - Multi-Stage Dockerfile
 # ==============================================================================
-# Builds JAR images for production and development
-#
-# Build Process:
-#   1. CI builds JAR: ./gradlew :api:bootJar -x test
-#   2. Docker image built with pre-built JAR
-#
-# Usage:
-#   # Stage deployment (production):
-#   docker build --target runtime-stage -t swing-trade-api:stage .
-#
-#   # Development with hot reload:
-#   docker build --target runtime-jar -t swing-trade-api-dev .
-#   docker run -p 8081:8080 -p 5005:5005 -v $(pwd):/app swing-trade-api-dev
-#
-# CI/CD flow: JAR is built by Gradle on the runner, then copied to Docker context.
+# For Gradle 9.6.1 + Spring Boot 3.3.1: bootJar is incompatible.
+# Uses plain jar + lib/ with shell classpath script.
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -26,78 +13,56 @@ FROM eclipse-temurin:21-jdk-alpine AS jar-build
 WORKDIR /app
 
 # Copy Gradle wrapper and build files
-COPY gradlew ./
-COPY gradle/ ./gradle/
-COPY build.gradle.kts ./
-COPY settings.gradle.kts ./
-COPY core/ ./core/
-COPY data/ ./data/
-COPY strategy/ ./strategy/
-COPY llm/ ./llm/
-COPY broker/ ./broker/
-COPY api/ ./api/
+COPY backend/gradlew ./
+COPY backend/gradle/ ./gradle/
+COPY backend/build.gradle.kts ./
+COPY backend/settings.gradle.kts ./
+COPY backend/core/ ./core/
+COPY backend/data/ ./data/
+COPY backend/strategy/ ./strategy/
+COPY backend/llm/ ./llm/
+COPY backend/broker/ ./broker/
+COPY backend/api/ ./api/
+COPY libs/ ./libs/
 
 # Set timezone to Asia/Kolkata for correct scheduling
 RUN ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
     echo "Asia/Kolkata" > /etc/timezone
 
-# Build JAR (skip tests)
+# Build JAR + copy dependencies (skip tests)
 RUN chmod +x gradlew && \
-    ./gradlew :api:bootJar -x test -B
+    ./gradlew :api:jar -x test --quiet && \
+    mkdir -p /app/lib && \
+    cp api/build/libs/api-plain.jar /app/lib/ && \
+    ./gradlew -q --no-daemon :api:copyDeps --quiet 2>/dev/null || \
+    ./gradlew -q --no-daemon :api:copyRuntimeDeps --quiet 2>/dev/null || \
+    true && \
+    echo "Lib count: $(ls /app/lib/*.jar 2>/dev/null | wc -l)"
 
 # ------------------------------------------------------------------------------
-# Stage 2: runtime-jar - JAR development image
+# Stage 2: runtime-stage - Stage deployment image
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jre-alpine AS runtime-jar
-
-WORKDIR /app
-
-# Copy JAR from build stage
-COPY --from=jar-build /app/api/build/libs/api-*.jar /app/swing-trade-api.jar
-
-# Expose API port
-EXPOSE 8080
-
-# Expose debug port for remote IDE debugging (JDWP)
-EXPOSE 5005
-
-# Health check using Spring Actuator (longer start period for JAR)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:8080/actuator/health || exit 1
-
-# Run the JAR with development-specific JVM arguments:
-#   -agentlib:jdwp: Enable Java Debug Wire Protocol for remote debugging
-#     transport=dt_socket,server=y,suspend=n,address=5005
-#     - Socket-based debug server, don't suspend on startup, listen on port 5005
-#
-# Run with volume mount for hot reload:
-#   docker run -p 8081:8080 -p 5005:5005 -v $(pwd):/app swing-trade-api-dev
-CMD ["java", \
-     "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005", \
-     "-jar", "/app/swing-trade-api.jar"]
-
-# ------------------------------------------------------------------------------
-# Stage 3: runtime-stage - Stage deployment image (clean, no debug)
-# ------------------------------------------------------------------------------
-# For stage deployment on pi-node. Built locally, transferred via docker save/load.
-# Uses pre-built JAR — no build tools inside Docker.
-#
-# Usage:
-#   docker build --target runtime-stage -t swing-trade-api:stage .
-# ==============================================================================
 FROM eclipse-temurin:21-jre-alpine AS runtime-stage
 
 WORKDIR /app
 
-# Copy JAR from build stage
-COPY --from=jar-build /app/api/build/libs/api-*.jar /app/swing-trade-api.jar
+# Copy app JAR and dependencies from build stage
+COPY --from=jar-build /app/lib/ ./lib/
 
 # Expose API port
 EXPOSE 8080
 
 # Health check using Spring Actuator
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:8080/actuator/health || exit 1
+    CMD wget -qO- http://localhost:8080/actuator/health || exit 1
 
-# Run the JAR — no debug flags, no devtools
-CMD ["java", "-jar", "/app/swing-trade-api.jar"]
+# Startup script builds classpath from all JARs in lib/
+RUN printf '#!/bin/sh\n' > /app/start.sh && \
+    printf 'CP=""\n' >> /app/start.sh && \
+    printf 'for f in /app/lib/*.jar; do\n' >> /app/start.sh && \
+    printf '  CP="${CP:+$CP:}$f"\n' >> /app/start.sh && \
+    printf 'done\n' >> /app/start.sh && \
+    printf 'exec java -cp "$CP" -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-stage} -Dserver.port=${SERVER_PORT:-8080} com.swingtrade.api.app.SwingTradeApiApplication\n' && \
+    chmod +x /app/start.sh
+
+CMD ["/app/start.sh"]

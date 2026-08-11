@@ -2,14 +2,15 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 plugins {
     java
-    id("org.springframework.boot") version "3.3.1"
-    id("io.spring.dependency-management")
+    id("org.springframework.boot") version "3.5.9"
+    id("io.spring.dependency-management") version "1.1.6"
+    id("org.graalvm.buildtools.native") version "0.10.6"
 }
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.3.1")
-        mavenBom("dev.langchain4j:langchain4j-bom:0.34.0")
+        mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")
+        mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
     }
 }
 
@@ -51,6 +52,19 @@ dependencies {
 springBoot {
     mainClass = "com.swingtrade.api.app.SwingTradeApiApplication"
     buildInfo()
+}
+
+graalvmNative {
+    binaries {
+        named("main") {
+            imageName = "swing-trade-api"
+            mainClass = "com.swingtrade.api.app.SwingTradeApiApplication"
+            buildArgs.add("--report-unsupported-elements-at-runtime")
+            buildArgs.add("-H:+ReportExceptionStackTraces")
+            buildArgs.add("-J-Xmx4g")
+            buildArgs.add("--parallelism=4")
+        }
+    }
 }
 
 tasks {

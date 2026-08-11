@@ -81,20 +81,6 @@ public class TestLlmConfig {
         return new ObjectMapper();
     }
 
-    @Primary
-    @Bean
-    public NewsIngestionService newsIngestionService(
-            WebClient.Builder webClientBuilder,
-            ObjectMapper objectMapper,
-            NewsFilterService newsFilterService) {
-        return new NewsIngestionService(
-                webClientBuilder,
-                objectMapper,
-                newsFilterService,
-                null,
-                10
-        );
-    }
 
     @Primary
     @Bean

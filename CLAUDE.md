@@ -283,6 +283,48 @@ cd dashboard && yarn playwright test
 
 Test resources include `application-test.properties`, `application-e2e.yml`, and test-specific Flyway schemas.
 
+## Context MCP (Library Docs)
+
+The `context` MCP server provides version-specific documentation for libraries, frameworks, SDKs, APIs, and CLI tools. It solves the problem of outdated training data by querying freshly indexed docs locally.
+
+**How it works:**
+- `search_packages` — discovers packages from the online registry (for finding new packages to install)
+- `download_package` — downloads a package for local caching
+- `get_docs` — queries your cached docs. The `library` parameter uses the format `name@version` (e.g., `vue@latest`, `java/spring-boot@3.5.7`)
+
+**Installed packages (15 total):**
+| Category | Packages |
+|----------|----------|
+| Java/Spring | `java/spring-boot@3.5.7`, `java/spring-data@4.1.0`, `java/gradle@8.9.0` |
+| DB | `flyway/flyway@12.9.0` |
+| AI/LLM | `js/langchain4j@1.18.1`, `js/langchain@0.1.16`, `js/openai@1.99.9` |
+| Vue Frontend | `vue@latest`, `tailwindcss@latest`, `js/vue-router@4.6.0`, `pinia@2.2.8` |
+| Testing | `vitest@3.2.7`, `playwright@1.8.1` |
+| Infra | `js/docker@18.09-release`, `js/docker-compose@5.4.0` |
+
+**Usage examples:**
+```
+# Query Vue Composition API docs
+get_docs(library: "vue@latest", topic: "composition API")
+
+# Query Spring Boot REST docs
+get_docs(library: "java/spring-boot@3.5.7", topic: "REST controller")
+
+# Query Gradle build docs
+get_docs(library: "java/gradle@8.9.0", topic: "dependency management")
+
+# Query Playwright E2E test docs
+get_docs(library: "playwright@1.8.1", topic: "browser navigation")
+
+# Discover new packages to install
+search_packages(registry: "npm", name: "axios")
+
+# Install a new package
+download_package(registry: "npm", name: "axios", version: "latest")
+```
+
+**Important:** `search_packages` searches the online neuledge registry for discovery. Locally installed packages are queried via `get_docs` with the exact library name.
+
 ## Documentation
 
 All project documentation goes in `docs/` as Markdown files.
