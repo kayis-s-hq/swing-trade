@@ -7,13 +7,15 @@ CREATE TABLE app_settings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP INDEX IF EXISTS idx_app_settings_key;
 CREATE INDEX idx_app_settings_key ON app_settings(key);
 
--- Seed default values
+-- Seed default values (upsert to handle re-runs)
 INSERT INTO app_settings (key, value) VALUES
     ('llm.vllm.base_url', 'https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1'),
     ('llm.vllm.model', 'Qwen3-30B-AWQ'),
     ('llm.pdf.base_url', ''),
     ('llm.pdf.model', 'gemma-4-E2B'),
     ('discord.webhook.url', ''),
-    ('discord.webhook.enabled', 'false');
+    ('discord.webhook.enabled', 'false')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;

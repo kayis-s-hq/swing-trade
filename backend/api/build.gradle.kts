@@ -19,6 +19,7 @@ dependencies {
     implementation(project(":data"))
     implementation(project(":strategy"))
     implementation(project(":llm"))
+    implementation(project(":gpuhub"))
     implementation(project(":broker"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")

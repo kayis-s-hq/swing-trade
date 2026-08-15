@@ -1,7 +1,7 @@
 -- V8__create_intelligence_tables.sql
 
 -- news_items: fetched headlines
-CREATE TABLE news_items (
+CREATE TABLE IF NOT EXISTS news_items (
     id BIGSERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,
     headline TEXT NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE news_items (
 );
 
 -- pdf_extractions: extracted earnings data
-CREATE TABLE pdf_extractions (
+CREATE TABLE IF NOT EXISTS pdf_extractions (
     id BIGSERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,
     document_type VARCHAR(20) NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE pdf_extractions (
 );
 
 -- sentiment_accuracy: LLM prediction accuracy tracking
-CREATE TABLE sentiment_accuracy (
+CREATE TABLE IF NOT EXISTS sentiment_accuracy (
     id BIGSERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,
     signal_date DATE NOT NULL,
@@ -37,7 +37,10 @@ CREATE TABLE sentiment_accuracy (
 );
 
 -- Indexes
+DROP INDEX IF EXISTS idx_news_symbol_date;
+DROP INDEX IF EXISTS idx_news_headline;
+DROP INDEX IF EXISTS idx_pdf_symbol_date;
+-- Note: idx_sentiment_accuracy is created by V11 with analysis_date column
 CREATE INDEX idx_news_symbol_date ON news_items(symbol, published_at);
 CREATE INDEX idx_news_headline ON news_items(LOWER(headline));
 CREATE INDEX idx_pdf_symbol_date ON pdf_extractions(symbol, extraction_date);
-CREATE INDEX idx_sentiment_accuracy_symbol_date ON sentiment_accuracy(symbol, signal_date);

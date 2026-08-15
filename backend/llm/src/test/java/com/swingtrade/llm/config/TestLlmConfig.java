@@ -3,7 +3,8 @@ package com.swingtrade.llm.config;
 import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
-import com.swingtrade.llm.client.VLLMClient;
+import com.swingtrade.llm.client.LlamaCppClient;
+import com.swingtrade.llm.service.LlamaCppServerManager;
 import com.swingtrade.llm.service.NewsFilterService;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
@@ -25,13 +26,12 @@ import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import javax.sql.DataSource;
+import java.util.Optional;
 import java.util.Properties;
 
 /**
  * Test configuration for LLM module E2E tests.
- * Provides real beans for integration testing with vLLM.
- * Uses real WebClient for actual HTTP calls to vLLM.
- * Configures H2 in-memory database for repository testing.
+ * Provides real beans for integration testing with local llama.cpp.
  */
 @TestConfiguration
 @EnableAutoConfiguration(
@@ -51,6 +51,9 @@ public class TestLlmConfig {
     @MockBean
     private SentimentStore sentimentStore;
 
+    @MockBean
+    private LlamaCppServerManager serverManager;
+
     @Primary
     @Bean
     public WebClient.Builder webClientBuilder() {
@@ -59,8 +62,8 @@ public class TestLlmConfig {
 
     @Primary
     @Bean
-    public VLLMClient vllmClient(WebClient.Builder webClientBuilder, AppSettingsStore appSettingsStore) {
-        return new VLLMClient(webClientBuilder, appSettingsStore);
+    public LlamaCppClient llamaCppClient(WebClient.Builder webClientBuilder, AppSettingsStore appSettingsStore) {
+        return new LlamaCppClient(webClientBuilder, appSettingsStore);
     }
 
     @Primary
@@ -81,11 +84,13 @@ public class TestLlmConfig {
         return new ObjectMapper();
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
     @Primary
     @Bean
     public SentimentCacheService sentimentCacheService() {
-        // Use reasonable cache settings
         return new SentimentCacheService(100, 60);
     }
 
@@ -126,7 +131,8 @@ public class TestLlmConfig {
     @Primary
     @Bean
     public SentimentService sentimentAnalysisService(
-            VLLMClient vllmClient,
+            LlamaCppClient llamaCppClient,
+            LlamaCppServerManager serverManager,
             SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService,
             SentimentCacheService sentimentCacheService,
@@ -134,7 +140,8 @@ public class TestLlmConfig {
             StockStore stockStore,
             AppSettingsStore appSettingsStore) {
         return new SentimentService(
-                vllmClient,
+                llamaCppClient,
+                serverManager,
                 sentimentAnalyzer,
                 newsIngestionService,
                 sentimentCacheService,

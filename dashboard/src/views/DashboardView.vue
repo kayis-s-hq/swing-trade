@@ -194,7 +194,6 @@
       </div>
     </template>
       </ErrorBoundary>
-    </div>
   </div>
 </template>
 

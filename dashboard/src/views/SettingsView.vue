@@ -137,7 +137,7 @@
             </div>
           </div>
 
-          <!-- Connect Button -->
+<!-- Connect Button -->
           <div v-if="settings.selectedBroker === 'fyers' && !fyersConnected" class="mt-4 space-y-3">
             <button
               :disabled="authing"

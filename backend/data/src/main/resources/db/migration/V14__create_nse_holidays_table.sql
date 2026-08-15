@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS nse_holidays (
     CONSTRAINT uq_nse_holiday_date UNIQUE (holiday_date)
 );
 
+DROP INDEX IF EXISTS idx_nse_holidays_date;
 CREATE INDEX idx_nse_holidays_date ON nse_holidays(holiday_date);
 
 -- FY2026-27 holidays (April 2026 - March 2027)

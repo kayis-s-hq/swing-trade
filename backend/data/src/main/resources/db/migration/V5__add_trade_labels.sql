@@ -15,5 +15,6 @@ CREATE TABLE IF NOT EXISTS trade_labels (
 CREATE INDEX IF NOT EXISTS idx_trade_labels_trade_id ON trade_labels(trade_id);
 CREATE INDEX IF NOT EXISTS idx_trade_labels_position_id ON trade_labels(position_id);
 
+DROP TRIGGER IF EXISTS update_trade_labels_updated_at ON trade_labels;
 CREATE TRIGGER update_trade_labels_updated_at BEFORE UPDATE ON trade_labels
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

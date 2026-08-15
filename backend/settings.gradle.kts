@@ -4,6 +4,7 @@ include("core")
 include("data")
 include("strategy")
 include("llm")
+include("gpuhub")
 include("broker")
 include("api")
 

@@ -39,21 +39,29 @@ class SectorDigestTest {
 
     @Mock
     private com.swingtrade.domain.store.StockStore stockStore;
+<<<<<<< HEAD
 
     @Mock
     private com.swingtrade.domain.store.AppSettingsStore appSettingsStore;
+=======
+>>>>>>> origin/main
 
     @BeforeEach
     void setUp() {
         // Create real SentimentService with mocked dependencies
         sentimentAnalysisService = new SentimentService(
-                null,  // vllmClient not needed for sector digest tests
+                null,  // llamaCppClient not needed for sector digest tests
+                null,  // serverManager not needed for sector digest tests
                 null,  // sentimentAnalyzer not needed
                 null,  // newsIngestionService not needed
                 null,  // sentimentCacheService not needed
                 sentimentStore,
                 stockStore,
+<<<<<<< HEAD
                 appSettingsStore,
+=======
+                null,  // appSettingsStore not needed
+>>>>>>> origin/main
                 100,   // maxCacheSize
                 60L,   // cacheExpiryMinutes
                 true,  // enableCaching
