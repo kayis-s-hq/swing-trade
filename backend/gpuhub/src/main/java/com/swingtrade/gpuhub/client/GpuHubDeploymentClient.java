@@ -44,6 +44,7 @@ public class GpuHubDeploymentClient {
         this.webClient = webClientBuilder
                 .baseUrl(baseUrl)
                 .defaultHeader("Content-Type", "application/json")
+                .defaultHeader("Authorization", apiKey)
                 .build();
         this.mapper = mapper;
         this.apiKey = apiKey;
