@@ -1,11 +1,7 @@
 package com.swingtrade.llm;
 
 import com.swingtrade.domain.Signal;
-<<<<<<< HEAD
-import com.swingtrade.llm.client.VLLMClient;
-=======
 import com.swingtrade.llm.client.LlamaCppClient;
->>>>>>> origin/main
 import com.swingtrade.llm.service.SentimentOutput;
 import com.swingtrade.llm.service.SentimentType;
 import org.junit.jupiter.api.Test;
@@ -25,47 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class LlmModuleTest {
 
     @Mock
-<<<<<<< HEAD
-    private VLLMClient vllmClient;
-
-    @Mock
-    private com.swingtrade.llm.service.NewsIngestionService newsIngestionService;
-=======
     private LlamaCppClient llamaCppClient;
->>>>>>> origin/main
-
-    @Test
-    void testSentimentOutputCreation() {
-        SentimentOutput result = new SentimentOutput(
-            SentimentType.POSITIVE,
-            "Test reasoning",
-            0.85
-        );
-
-        assertEquals(SentimentType.POSITIVE, result.getSentiment());
-        assertEquals("Test reasoning", result.getReasoning());
-        assertEquals(0.85, result.getConfidence());
-    }
-
-    @Test
-    void testDomainSignalCreation() {
-        Signal signal = new Signal(
-            null,
-            "AAPL",
-            LocalDate.now(),
-            Signal.SignalType.BUY,
-            BigDecimal.valueOf(0.9),
-            "Positive market sentiment",
-            null, null, null, null, null, LocalDate.now(), null, null
-        );
-
-        assertEquals("AAPL", signal.symbol());
-        assertEquals(Signal.SignalType.BUY, signal.type());
-        assertEquals("Positive market sentiment", signal.reasoning());
-        assertEquals(BigDecimal.valueOf(0.9), signal.confidence());
-        assertTrue(signal.isBuySignal());
-    }
-<<<<<<< HEAD
 
     @Test
     void testSentimentOutputCreation() {
@@ -99,6 +55,3 @@ public class LlmModuleTest {
         assertTrue(signal.isBuySignal());
     }
 }
-=======
-}
->>>>>>> origin/main

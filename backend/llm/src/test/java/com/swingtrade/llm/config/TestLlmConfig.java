@@ -84,10 +84,6 @@ public class TestLlmConfig {
         return new ObjectMapper();
     }
 
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/main
     @Primary
     @Bean
     public SentimentCacheService sentimentCacheService() {
