@@ -25,7 +25,7 @@ public class HealthController {
 
     private final com.swingtrade.data.service.DataIngestionService dataIngestionService;
     private final com.swingtrade.strategy.PriceActionSignalEngine signalEngine;
-    private final com.swingtrade.llm.LlmService llmService;
+    private final com.swingtrade.llm.service.SentimentService sentimentService;
 
     public HealthController(
             @Autowired(required = false)
@@ -33,10 +33,10 @@ public class HealthController {
             @Autowired(required = false)
             com.swingtrade.strategy.PriceActionSignalEngine signalEngine,
             @Autowired(required = false)
-            com.swingtrade.llm.LlmService llmService) {
+            com.swingtrade.llm.service.SentimentService sentimentService) {
         this.dataIngestionService = dataIngestionService;
         this.signalEngine = signalEngine;
-        this.llmService = llmService;
+        this.sentimentService = sentimentService;
     }
 
     @GetMapping
@@ -73,9 +73,9 @@ public class HealthController {
                     "strategy", "UP", "Strategy Service (not configured)"));
         }
 
-        if (llmService != null) {
+        if (sentimentService != null) {
             status.addComponent("llm", new HealthStatus.ComponentStatus(
-                    "llm", "UP", "LLM Sentiment Service", getComponentDetails(llmService)));
+                    "llm", "UP", "LLM Sentiment Service", getComponentDetails(sentimentService)));
         } else {
             status.addComponent("llm", new HealthStatus.ComponentStatus(
                     "llm", "UP", "LLM Service (not configured)"));
@@ -134,10 +134,10 @@ public class HealthController {
         HealthStatus status = new HealthStatus();
         status.setSystemInfo(HealthStatus.SystemInfo.fromSystem());
 
-        if (llmService != null) {
+        if (sentimentService != null) {
             status.addComponent("llm", new HealthStatus.ComponentStatus(
                     "llm", "UP", "LLM Sentiment Service",
-                    Map.of("provider", "vLLM", "status", "Active")));
+                    Map.of("provider", "GPUHUB", "status", "Active")));
         } else {
             status.addComponent("llm", new HealthStatus.ComponentStatus(
                     "llm", "UP", "LLM Service (not configured)"));

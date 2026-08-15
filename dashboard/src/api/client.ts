@@ -738,6 +738,24 @@ export async function testDiscordWebhook(): Promise<ApiResponse<{ success: boole
   return { success: true, data: unwrap<{ success: boolean }>(raw) }
 }
 
+export async function getGpuHubSettings(): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/gpuhub')
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: unwrap<Record<string, string>>(raw) }
+}
+
+export async function setGpuHubSettings(
+  settings: Record<string, string>
+): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/gpuhub', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: unwrap<Record<string, string>>(raw) }
+}
+
 // ---------------------------------------------------------------------------
 // Trading Configuration
 // ---------------------------------------------------------------------------

@@ -6,6 +6,8 @@ import {
   setDiscordSettings,
   getTradingSettings,
   setTradingSettings,
+  getGpuHubSettings,
+  setGpuHubSettings,
   saveAllSettings,
 } from '../api/client'
 
@@ -20,6 +22,7 @@ interface TradingConfig {
 interface LlmSettings {
   llmBaseUrl: string
   gpuhubBaseUrl: string
+  gpuhubApiKey: string
   llamacppModel: string
   pdfBaseUrl: string
   pdfModel: string
@@ -49,6 +52,7 @@ const defaults: SettingsState = {
   llmSettings: {
     llmBaseUrl: 'http://localhost:8080/v1',
     gpuhubBaseUrl: 'https://u425-84cf-d540ae09.singapore-b.gpuhub.com:8443/v1',
+    gpuhubApiKey: '',
     llamacppModel: '/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf',
     pdfBaseUrl: '',
     pdfModel: 'gemma-4-E2B',
@@ -83,6 +87,16 @@ async function loadAll(): Promise<SettingsState> {
         pdfBaseUrl: llmRes.data['llm.pdf.base_url'] || state.llmSettings.pdfBaseUrl,
         pdfModel: llmRes.data['llm.pdf.model'] || state.llmSettings.pdfModel,
       })
+      // Load GPUHUB deployment settings
+      try {
+        const gpuhubRes = await getGpuHubSettings()
+        if (gpuhubRes.success && gpuhubRes.data) {
+          state.llmSettings.gpuhubApiKey =
+            gpuhubRes.data['gpuhub.api_key'] || state.llmSettings.gpuhubApiKey
+        }
+      } catch {
+        /* ignore */
+      }
     }
   } catch {
     /* ignore */
@@ -133,6 +147,9 @@ export async function saveSettings(): Promise<boolean> {
       'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
       'llm.pdf.model': state.llmSettings.pdfModel,
     },
+    gpuhub: {
+      'gpuhub.api_key': state.llmSettings.gpuhubApiKey,
+    },
     discord: {
       'discord.webhook.url': state.discordSettings.webhookUrl,
       'discord.webhook.enabled': String(state.discordSettings.enabled),
@@ -168,7 +185,11 @@ export async function saveLlmSettings(): Promise<boolean> {
     console.error('Failed to save LLM settings:', res.error)
     return false
   }
-  return true
+  // Save GPUHUB settings separately
+  const gpuRes = await setGpuHubSettings({
+    'gpuhub.api_key': state.llmSettings.gpuhubApiKey,
+  })
+  return gpuRes.success
 }
 
 export async function saveDiscordSettings(): Promise<boolean> {

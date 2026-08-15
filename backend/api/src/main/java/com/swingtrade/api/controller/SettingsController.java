@@ -63,13 +63,13 @@ public class SettingsController {
 
     @GetMapping("/settings/llm")
     public ResponseEntity<ApiResponse<Map<String, String>>> getLlmSettings() {
-        Map<String, String> settings = Map.of(
-            "llm.base_url", appSettingsService.get("llm.base_url", ""),
-            "llm.gpuhub.base_url", appSettingsService.get("llm.gpuhub.base_url", ""),
-            "llamacpp.model", appSettingsService.get("llamacpp.model", "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"),
-            "llm.pdf.base_url", appSettingsService.get("llm.pdf.base_url", ""),
-            "llm.pdf.model", appSettingsService.get("llm.pdf.model", "")
-        );
+        Map<String, String> settings = new java.util.LinkedHashMap<>();
+        settings.put("llm.base_url", appSettingsService.get("llm.base_url", ""));
+        settings.put("llm.gpuhub.base_url", appSettingsService.get("llm.gpuhub.base_url", ""));
+        settings.put("llamacpp.model", appSettingsService.get("llamacpp.model", "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"));
+        settings.put("llm.pdf.base_url", appSettingsService.get("llm.pdf.base_url", ""));
+        settings.put("llm.pdf.model", appSettingsService.get("llm.pdf.model", ""));
+        settings.put("gpuhub.api_key", appSettingsService.get("gpuhub.api_key", ""));
         return ResponseEntity.ok(ApiResponse.ok(settings));
     }
 
@@ -77,7 +77,7 @@ public class SettingsController {
     public ResponseEntity<ApiResponse<Map<String, String>>> setLlmSettings(
             @RequestBody Map<String, String> body) {
         boolean modelChanged = body.containsKey("llamacpp.model")
-                && !body.get("llamacpp.model").equals(appSettingsService.get("llamacpp.model").orElse(""));
+                && !body.get("llamacpp.model").equals(appSettingsService.get("llamacpp.model", ""));
         body.forEach((key, value) -> appSettingsService.set(key, value));
         if (modelChanged) {
             try {
@@ -87,6 +87,21 @@ public class SettingsController {
             }
         }
         return getLlmSettings();
+    }
+
+    @GetMapping("/settings/gpuhub")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getGpuHubSettings() {
+        Map<String, String> settings = Map.of(
+            "gpuhub.api_key", appSettingsService.get("gpuhub.api_key", "")
+        );
+        return ResponseEntity.ok(ApiResponse.ok(settings));
+    }
+
+    @PutMapping("/settings/gpuhub")
+    public ResponseEntity<ApiResponse<Map<String, String>>> setGpuHubSettings(
+            @RequestBody Map<String, String> body) {
+        body.forEach((key, value) -> appSettingsService.set(key, value));
+        return getGpuHubSettings();
     }
 
     @GetMapping("/settings/discord")
@@ -139,7 +154,7 @@ public class SettingsController {
     @PostMapping("/settings/save")
     public ResponseEntity<ApiResponse<Map<String, String>>> saveAllSettings(
             @RequestBody Map<String, Object> body) {
-        // Accept nested objects: { broker, llm, discord, trading }
+        // Accept nested objects: { broker, llm, discord, trading, gpuhub }
         if (body.containsKey("broker")) {
             String broker = String.valueOf(body.get("broker"));
             if (broker != null && !broker.isBlank() && !"null".equals(broker)) {
@@ -149,6 +164,9 @@ public class SettingsController {
         }
         if (body.containsKey("llm") && body.get("llm") instanceof Map<?, ?>) {
             ((Map<?, ?>) body.get("llm")).forEach((key, value) -> appSettingsService.set(String.valueOf(key), String.valueOf(value)));
+        }
+        if (body.containsKey("gpuhub") && body.get("gpuhub") instanceof Map<?, ?>) {
+            ((Map<?, ?>) body.get("gpuhub")).forEach((key, value) -> appSettingsService.set(String.valueOf(key), String.valueOf(value)));
         }
         if (body.containsKey("discord") && body.get("discord") instanceof Map<?, ?>) {
             ((Map<?, ?>) body.get("discord")).forEach((key, value) -> appSettingsService.set(String.valueOf(key), String.valueOf(value)));
@@ -161,6 +179,7 @@ public class SettingsController {
         Map<String, String> result = new LinkedHashMap<>();
         result.put("selectedBroker", marketDataClientProvider.getActiveBroker());
         result.putAll(getLlmSettings().getBody().data());
+        result.putAll(getGpuHubSettings().getBody().data());
         result.putAll(getDiscordSettings().getBody().data());
         result.putAll(getTradingSettings().getBody().data());
         return ResponseEntity.ok(ApiResponse.ok(result));
