@@ -2,6 +2,8 @@
 *.class
 
 # Package files
+*.jar
+!libs/fyersjavasdk-1.9.0.jar
 *.war
 *.ear
 *.nar
