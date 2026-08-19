@@ -659,7 +659,7 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 
 ## Audit Fix Progress (2026-08-08)
 
-### Completed (8 phases)
+### Completed (20 phases)
 
 | Phase | Finding(s) | Status | Commit |
 |-------|-----------|--------|--------|
@@ -680,6 +680,9 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 | 15 | M14: Currency standardization | ✅ Done | `e712857d` |
 | 16 | H15: Allocation from settings | ✅ Done | `e712857d` |
 | 17 | View integration (useAsyncData + ErrorBoundary) | ✅ Done | `2d9b06c5` |
+| 18 | H2: PerformanceService hardcoded capital | ✅ Done | `c445da7d` |
+| 19 | H3: Inline PnL removed | ✅ Done | `cc8ed0ff` |
+| 20 | H14: Portfolio totalValue/totalPnL populated | ✅ Done | `c445da7d` |
 
 ### Dismissed (not bugs)
 
@@ -693,9 +696,6 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 
 | Finding | Priority | What's needed |
 |---------|----------|---------------|
-| H2: PerformanceService hardcoded capital | P1 | Inject PaperTradingProperties, use getInitialCapital() |
-| H3: Inline PnL ignores SHORT | P1 | Remove inline calc, use Position.calculateUnrealizedPnL() |
-| H14: Portfolio summary totalValue: 0 | P2 | Sum position values + cash balance |
 | M1: DailyLossCircuitBreaker timezone | P3 | Use Asia/Kolkata explicitly |
 | M9: Position god object (23 fields) | P3 | Split into PositionSummary/PositionDetails |
 | M10: VARCHAR(10) symbols | P3 | Standardize VARCHAR(20) |
@@ -706,18 +706,14 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 
 | Finding | Priority | What's needed |
 |---------|----------|---------------|
-| C7: appState not Pinia | P1 | Convert to Pinia store |
+| C7: appState not Pinia | P1 | Convert `reactive()` to Pinia store |
 | M3: NaN validation gap | P3 | isFinite() checks on numeric responses |
-| M12: API client 921 lines | P3 | Split into separate modules |
-| M20: Flaky E2E waits | P3 | Replace fixed waits with stable selectors |
-| L1: Component unit tests | P3 | Add Vitest tests for views |
-| M12: 921-line API client | P3 | Split into domain modules |
-| M20: Flaky E2E waits | P3 | Replace waitForTimeout with waitForSelector |
-| L1: Only 4 component unit tests | P4 | Add Vitest for SignalCard, PositionCard, etc. |
+| M12: API client 1096 lines | P3 | Split into domain modules (grew from 921) |
+| M20: Flaky E2E waits | P3 | Replace 10+ `waitForTimeout` with waitForSelector |
+| L1: Only 2 component unit tests | P4 | Down from 4 — need Vitest for key components |
 
 ### Next Recommended Sprint
 
-1. **H2: PerformanceService hardcoded capital** — quick injection fix, same pattern as Phase 5
-2. **C7: appState → Pinia** — frontend migration, low risk
-3. **C8: ErrorBoundary** — frontend resilience
-4. **H14: Portfolio summary totalValue** — visible dashboard bug
+1. **C7: appState → Pinia** — frontend migration, low risk, 54-line file
+2. **M3: NaN validation** — isFinite() checks on numeric API responses
+3. **M20: Flaky E2E waits** — replace fixed timeouts with stable selectors

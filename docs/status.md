@@ -1,11 +1,11 @@
 # Pre-Pilot Status
 
-Last checked: 2026-08-08
+Last checked: 2026-08-19
 
 ## Data
 
 - [x] 3yr candles backfilled for all 15 stocks
-- [ ] Daily EOD scheduler tested - ran at least once successfully
+- [x] Daily EOD scheduler tested - ran at least once successfully
 - [ ] No data gaps - check /api/ingestion/status
 - [x] NSE holidays set for FY27 in scheduler
 
@@ -37,7 +37,7 @@ Last checked: 2026-08-08
 
 ## Audit Fixes (2026-08-08)
 
-17 phases completed from architecture audit (64 findings):
+20 phases completed from architecture audit (64 findings):
 
 ### Backend (8 phases)
 - [x] H5: TradeRequest.isValid() operator precedence fix
@@ -48,6 +48,9 @@ Last checked: 2026-08-08
 - [x] C2: Trade.close() PnL correct for SHORT + fees (TradeDirection field added)
 - [x] H1: DailyLossCircuitBreaker DB persistence (entity + repo + migration + wiring)
 - [x] C6: Strategy consolidation (SwingTradingStrategy deprecated, PriceActionSignalEngine unified)
+- [x] H2: PerformanceService hardcoded capital → uses paperTradingEngine.getInitialCapital()
+- [x] H3: Inline PnL removed → PositionService delegates to engine methods
+- [x] H14: Portfolio totalValue/totalPnL populated in PerformanceResponse
 
 ### Frontend (9 phases)
 - [x] H9: 19 `as any` casts → `unwrap<T>()` helper (1 remaining safe `as any`)
@@ -61,6 +64,26 @@ Last checked: 2026-08-08
 - [x] View integration: all 9 views wrapped in ErrorBoundary + useAsyncData
 
 Dismissed (not bugs): C1 (param order safe), C3 (.env not in git), C5 (backtest precision safe)
+
+### Remaining — Backend
+
+| Finding | Priority | Status | Notes |
+|---------|----------|--------|-------|
+| M1: DailyLossCircuitBreaker timezone | P3 | OPEN | Use Asia/Kolkata explicitly |
+| M9: Position god object (23 fields) | P3 | OPEN | Split into PositionSummary/PositionDetails |
+| M10: VARCHAR(10) symbols | P3 | OPEN | Standardize VARCHAR(20) |
+| M13: No rate limiting | P3 | OPEN | Add @RateLimiter on analysis/scan endpoints |
+| M28: No pagination on performance | P3 | OPEN | Add pagination to /api/performance |
+
+### Remaining — Frontend
+
+| Finding | Priority | Status | Notes |
+|---------|----------|--------|-------|
+| C7: appState not Pinia | P1 | OPEN | Still uses `reactive()` — 54 lines, 1 store |
+| M3: NaN validation gap | P3 | OPEN | No `isFinite()` checks on numeric responses |
+| M12: API client 1096 lines | P3 | ✅ Done | Split into 14 domain modules (commit `22232700`) |
+| M20: Flaky E2E waits | P3 | OPEN | 10+ `waitForTimeout` calls in 5 test files |
+| L1: Only 2 component unit tests | P4 | OPEN | Down from 4 — need Vitest for key components |
 
 ## LLM Layer
 
