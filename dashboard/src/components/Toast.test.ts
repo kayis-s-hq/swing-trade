@@ -3,7 +3,9 @@ import { mount, VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import Toast from './Toast.vue'
 
-function mountToast(props = { message: 'Saved', type: 'success' as const, duration: 4000 }): VueWrapper {
+function mountToast(
+  props = { message: 'Saved', type: 'success' as const, duration: 4000 }
+): VueWrapper {
   return mount(Toast, { props })
 }
 

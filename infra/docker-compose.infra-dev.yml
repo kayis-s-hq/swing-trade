@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16
+    container_name: swing_trade_postgres
+    environment:
+      POSTGRES_DB: swingtrade_db
+      POSTGRES_USER: swingtrade_user
+      POSTGRES_PASSWORD: swingtrade_password
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - swingtrade-network
+
+volumes:
+  postgres_data:
+
+networks:
+  swingtrade-network:
+    driver: bridge

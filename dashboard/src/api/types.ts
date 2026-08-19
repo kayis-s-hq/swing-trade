@@ -337,6 +337,7 @@ export interface SynthesisResult {
   keyDrivers: string[]
   bullishFactors: string[]
   bearishFactors: string[]
+  success: boolean
 }
 
 export interface FullAnalysisResult {
@@ -412,7 +413,10 @@ export interface JobRunSummaryResponse {
   completedSymbols: number
   failedSymbols: number
   totalDurationMs: number
-  stageStats: Record<string, { total: number; completed: number; errors: number; totalDurationMs: number }>
+  stageStats: Record<
+    string,
+    { total: number; completed: number; errors: number; totalDurationMs: number }
+  >
   symbolDetails: Array<{
     symbol: string
     stageStatuses: Record<string, string>

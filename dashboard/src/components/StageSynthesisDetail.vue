@@ -1,6 +1,17 @@
 <template>
   <div class="flex flex-col gap-3">
-    <div class="rounded-md bg-bg-elevated px-3 py-3">
+    <!-- Fallback warning -->
+    <div
+      v-if="!synthesisSuccess"
+      class="rounded-md border border-warning/30 bg-warning/10 px-3 py-2"
+    >
+      <p class="text-xs font-medium text-warning">
+        ⚠ LLM synthesis unavailable — result is a template-based composite summary, not an actual
+        LLM analysis.
+      </p>
+    </div>
+
+    <div v-if="synthesisSuccess" class="rounded-md bg-bg-elevated px-3 py-3">
       <div class="mb-1 flex items-center justify-between">
         <span class="text-sm font-semibold uppercase tracking-wider" :class="recommendationColor">{{
           recommendation
@@ -9,6 +20,11 @@
       </div>
       <p class="text-sm leading-relaxed text-text-secondary">
         {{ narrative }}
+      </p>
+    </div>
+    <div v-else class="rounded-md border border-border-subtle bg-bg-elevated px-3 py-3">
+      <p class="text-sm text-text-muted">
+        LLM was unable to produce this analysis. The data below may not be reliable.
       </p>
     </div>
 
@@ -56,6 +72,7 @@ const confidence = computed(() => (props.details.payload.confidence as number) ?
 const keyDrivers = computed(() => (props.details.payload.keyDrivers as string[]) ?? [])
 const bullishFactors = computed(() => (props.details.payload.bullishFactors as string[]) ?? [])
 const bearishFactors = computed(() => (props.details.payload.bearishFactors as string[]) ?? [])
+const synthesisSuccess = computed(() => (props.details.payload.success as boolean) ?? false)
 
 const recommendationColor = computed(() => {
   if (recommendation.value === 'BUY') return 'text-success'

@@ -2,14 +2,14 @@ import { test, expect } from '@playwright/test'
 
 test('orchestrator page — full feature check', async ({ page }) => {
   const consoleMessages: string[] = []
-  page.on('console', msg => consoleMessages.push(msg.text()))
+  page.on('console', (msg) => consoleMessages.push(msg.text()))
 
   await page.goto('http://localhost:3003/orchestrator')
   await page.waitForTimeout(4000)
 
   // Print all console messages
   console.log('\n=== CONSOLE MESSAGES ===')
-  consoleMessages.forEach(m => console.log('  ', m))
+  consoleMessages.forEach((m) => console.log('  ', m))
 
   // 1. Check page loaded without error
   const errorBanner = page.locator('text=AN UNEXPECTED ERROR OCCURRED')
@@ -34,21 +34,31 @@ test('orchestrator page — full feature check', async ({ page }) => {
   for (let i = 0; i < tableRows.length; i++) {
     const cells = await tableRows[i].locator('td').all()
     let svgCount = 0
-    for (let j = 1; j <= 6; j++) { // cols 1-6 are stage columns
+    for (let j = 1; j <= 6; j++) {
+      // cols 1-6 are stage columns
       if (j < cells.length) {
         svgCount += await cells[j].locator('svg').count()
       }
     }
     const innerHTML = await cells[1].innerHTML()
-    console.log(`Row ${i} (${await tableRows[i].locator('td').first().innerText()}): ${svgCount} SVGs, innerHTML="${innerHTML}"`)
-    if (i < 3) { // only assert first few rows
+    console.log(
+      `Row ${i} (${await tableRows[i].locator('td').first().innerText()}): ${svgCount} SVGs, innerHTML="${innerHTML}"`
+    )
+    if (i < 3) {
+      // only assert first few rows
       expect(svgCount).toBeGreaterThan(0)
     }
   }
 
   // 6. Check past runs table
   const pastRunsRows = await page.locator('table tbody tr').all()
-  const hasPastRun = pastRunsRows.some(r => r.locator('td').first().innerText().then(t => t.includes(':')))
+  const hasPastRun = pastRunsRows.some((r) =>
+    r
+      .locator('td')
+      .first()
+      .innerText()
+      .then((t) => t.includes(':'))
+  )
   console.log(`Past runs visible: ${hasPastRun}`)
 
   // 7. Click a row to expand (accordion)

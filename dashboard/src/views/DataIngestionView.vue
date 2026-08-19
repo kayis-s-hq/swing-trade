@@ -146,113 +146,112 @@
       </div>
 
       <!-- Summary Cards -->
-    <template v-else>
-      <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div class="card-panel p-4">
-          <p class="text-xs font-medium text-text-muted">Total Stocks</p>
-          <p class="mt-1 text-xl font-bold text-text-primary">
-            {{ status.length }}
-          </p>
+      <template v-else>
+        <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div class="card-panel p-4">
+            <p class="text-xs font-medium text-text-muted">Total Stocks</p>
+            <p class="mt-1 text-xl font-bold text-text-primary">
+              {{ status.length }}
+            </p>
+          </div>
+          <div class="card-panel p-4">
+            <p class="text-xs font-medium text-text-muted">With Data</p>
+            <p class="mt-1 text-xl font-bold text-success">
+              {{ status.filter((s) => s.hasData).length }}
+            </p>
+          </div>
+          <div class="card-panel p-4">
+            <p class="text-xs font-medium text-text-muted">Missing Data</p>
+            <p class="mt-1 text-xl font-bold text-danger">
+              {{ status.filter((s) => !s.hasData).length }}
+            </p>
+          </div>
+          <div class="card-panel p-4">
+            <p class="text-xs font-medium text-text-muted">Total Candles</p>
+            <p class="mt-1 text-xl font-bold text-text-primary">
+              {{ formatNumber(status.reduce((sum, s) => sum + s.candleCount, 0)) }}
+            </p>
+          </div>
         </div>
-        <div class="card-panel p-4">
-          <p class="text-xs font-medium text-text-muted">With Data</p>
-          <p class="mt-1 text-xl font-bold text-success">
-            {{ status.filter((s) => s.hasData).length }}
-          </p>
-        </div>
-        <div class="card-panel p-4">
-          <p class="text-xs font-medium text-text-muted">Missing Data</p>
-          <p class="mt-1 text-xl font-bold text-danger">
-            {{ status.filter((s) => !s.hasData).length }}
-          </p>
-        </div>
-        <div class="card-panel p-4">
-          <p class="text-xs font-medium text-text-muted">Total Candles</p>
-          <p class="mt-1 text-xl font-bold text-text-primary">
-            {{ formatNumber(status.reduce((sum, s) => sum + s.candleCount, 0)) }}
-          </p>
-        </div>
-      </div>
 
-      <!-- Status Table -->
-      <div class="card-panel overflow-x-auto">
-        <table class="min-w-full">
-          <thead>
-            <tr class="border-b border-border-subtle bg-bg-primary/50">
-              <th
-                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Symbol
-              </th>
-              <th
-                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Name
-              </th>
-              <th
-                class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Candles
-              </th>
-              <th
-                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Date Range
-              </th>
-              <th
-                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Last Sync
-              </th>
-              <th
-                class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Quality
-              </th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-border-subtle/50">
-            <tr
-              v-for="entry in status"
-              :key="entry.symbol"
-              class="transition-colors hover:bg-bg-hover"
-            >
-              <td class="px-5 py-4 text-sm font-semibold text-text-primary">
-                {{ entry.symbol }}
-              </td>
-              <td class="px-5 py-4 text-sm text-text-secondary">
-                {{ entry.name || '—' }}
-              </td>
-              <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                {{ entry.candleCount }}
-              </td>
-              <td class="px-5 py-4 text-sm text-text-muted">
-                <template v-if="entry.hasData">
-                  {{ entry.earliestCandleDate }} → {{ entry.lastCandleDate }}
-                </template>
-                <template v-else> — </template>
-              </td>
-              <td class="px-5 py-4 text-sm text-text-muted">
-                <template v-if="entry.lastSyncedAt">
-                  {{ formatDate(entry.lastSyncedAt) }}
-                </template>
-                <template v-else> — </template>
-              </td>
-              <td class="px-5 py-4 text-center">
-                <span
-                  class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                  :class="qualityBadge(entry.dataQuality)"
+        <!-- Status Table -->
+        <div class="card-panel overflow-x-auto">
+          <table class="min-w-full">
+            <thead>
+              <tr class="border-b border-border-subtle bg-bg-primary/50">
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
                 >
-                  {{ entry.dataQuality }}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </template>
-      </ErrorBoundary>
-    </div>
+                  Symbol
+                </th>
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Name
+                </th>
+                <th
+                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Candles
+                </th>
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Date Range
+                </th>
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Last Sync
+                </th>
+                <th
+                  class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Quality
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border-subtle/50">
+              <tr
+                v-for="entry in status"
+                :key="entry.symbol"
+                class="transition-colors hover:bg-bg-hover"
+              >
+                <td class="px-5 py-4 text-sm font-semibold text-text-primary">
+                  {{ entry.symbol }}
+                </td>
+                <td class="px-5 py-4 text-sm text-text-secondary">
+                  {{ entry.name || '—' }}
+                </td>
+                <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                  {{ entry.candleCount }}
+                </td>
+                <td class="px-5 py-4 text-sm text-text-muted">
+                  <template v-if="entry.hasData">
+                    {{ entry.earliestCandleDate }} → {{ entry.lastCandleDate }}
+                  </template>
+                  <template v-else> — </template>
+                </td>
+                <td class="px-5 py-4 text-sm text-text-muted">
+                  <template v-if="entry.lastSyncedAt">
+                    {{ formatDate(entry.lastSyncedAt) }}
+                  </template>
+                  <template v-else> — </template>
+                </td>
+                <td class="px-5 py-4 text-center">
+                  <span
+                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                    :class="qualityBadge(entry.dataQuality)"
+                  >
+                    {{ entry.dataQuality }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </ErrorBoundary>
   </div>
 </template>
 

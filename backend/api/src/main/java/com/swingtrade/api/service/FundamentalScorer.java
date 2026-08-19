@@ -27,13 +27,13 @@ public class FundamentalScorer {
         this.technicalIndicators = technicalIndicators;
     }
 
-    public com.swingtrade.api.dto.CompositeAnalysis.FundamentalScore compute(String symbol) {
+    public com.swingtrade.domain.CompositeAnalysis.FundamentalScore compute(String symbol) {
         String sym = symbol.toUpperCase();
         List<OhlcvCandle> candles = candleStore.findAllBySymbolOrderByDateDesc(sym);
 
         if (candles.size() < 30) {
             logger.warn("Insufficient candles for fundamental scoring: {} ({} candles)", sym, candles.size());
-            return new com.swingtrade.api.dto.CompositeAnalysis.FundamentalScore(0, List.of("Insufficient data"));
+            return new com.swingtrade.domain.CompositeAnalysis.FundamentalScore(0, List.of("Insufficient data"));
         }
 
         List<OhlcvCandle> chrono = prepareChronological(candles);
@@ -48,7 +48,7 @@ public class FundamentalScorer {
         score += applyPricePositionScore(chrono, price, factors);
 
         String signal = score > 0 ? "BULLISH" : score < 0 ? "BEARISH" : "NEUTRAL";
-        return new com.swingtrade.api.dto.CompositeAnalysis.FundamentalScore(score, factors);
+        return new com.swingtrade.domain.CompositeAnalysis.FundamentalScore(score, factors);
     }
 
     private List<OhlcvCandle> prepareChronological(List<OhlcvCandle> candles) {

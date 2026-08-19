@@ -11,7 +11,6 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
@@ -26,8 +25,8 @@ import java.util.regex.Pattern;
 /**
  * Downloads and caches the Fyers NSE equity symbol master (unauthenticated CSV endpoint).
  * Backs symbol search and instrument-detail lookups for FyersServiceClient.
+ * Not a Spring bean — Fyers SDK has broken internal dependencies. Instantiate manually.
  */
-@Service
 public class FyersSymbolMasterService {
 
     private static final Logger logger = LoggerFactory.getLogger(FyersSymbolMasterService.class);

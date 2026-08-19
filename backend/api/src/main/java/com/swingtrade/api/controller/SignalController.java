@@ -37,6 +37,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -364,7 +367,11 @@ public class SignalController {
     @Transactional
     public ResponseEntity<Map<String, Object>> clearSignalForSymbol(@PathVariable String symbol) {
         logger.info("Clearing signals for {}", symbol);
-        int cleared = signalStore.deleteByDate(LocalDate.now());
+        List<Signal> signals = signalStore.findBySymbol(symbol);
+        int cleared = 0;
+        for (Signal s : signals) {
+            cleared += signalStore.deleteByDate(s.date());
+        }
         return ResponseEntity.ok(Map.of("cleared", cleared, "symbol", symbol));
     }
 

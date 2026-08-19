@@ -5,9 +5,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 function createRouterMock() {
   return createRouter({
     history: createWebHistory(),
-    routes: [
-      { path: '/', name: 'Dashboard', component: { template: '<div />' } },
-    ],
+    routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
   })
 }
 
@@ -193,7 +191,7 @@ describe('SettingsView — Save Flow', () => {
       },
     })
     const buttons = wrapper.findAll('button')
-    const saveBtn = buttons.find(b => b.text().includes('Save'))
+    const saveBtn = buttons.find((b) => b.text().includes('Save'))
     expect(saveBtn).toBeTruthy()
     await saveBtn!.trigger('click')
     // After save, text should change to "Saving..." then "Saved!"
@@ -217,7 +215,7 @@ describe('SettingsView — Save Flow', () => {
       },
     })
     const buttons = wrapper.findAll('button')
-    const saveBtn = buttons.find(b => b.text().includes('Save'))
+    const saveBtn = buttons.find((b) => b.text().includes('Save'))
     expect(saveBtn).toBeTruthy()
     await saveBtn!.trigger('click')
     await wrapper.vm.$nextTick()

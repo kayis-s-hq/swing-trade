@@ -44,121 +44,120 @@
       </div>
 
       <template v-else>
-      <PerformanceMetrics
-        :portfolio-summary="portfolioSummary ?? undefined"
-        :equity-points="equityPoints"
-        @range-change="handleRangeChange"
-      />
+        <PerformanceMetrics
+          :portfolio-summary="portfolioSummary ?? undefined"
+          :equity-points="equityPoints"
+          @range-change="handleRangeChange"
+        />
 
-      <!-- Trade History -->
-      <div class="mt-6 card-panel">
-        <div class="flex items-center justify-between border-b border-border-subtle px-5 py-3">
-          <div>
-            <h2 class="text-sm font-semibold text-text-primary">Trade History</h2>
-            <p class="text-xs text-text-muted">{{ recentTrades.length }} records</p>
+        <!-- Trade History -->
+        <div class="mt-6 card-panel">
+          <div class="flex items-center justify-between border-b border-border-subtle px-5 py-3">
+            <div>
+              <h2 class="text-sm font-semibold text-text-primary">Trade History</h2>
+              <p class="text-xs text-text-muted">{{ recentTrades.length }} records</p>
+            </div>
+            <select
+              v-model="timeRange"
+              class="rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition-colors focus:border-brand/50 focus:outline-none"
+            >
+              <option value="1W">1 Week</option>
+              <option value="1M">1 Month</option>
+              <option value="3M">3 Months</option>
+              <option value="6M">6 Months</option>
+              <option value="1Y">1 Year</option>
+              <option value="ALL">All Time</option>
+            </select>
           </div>
-          <select
-            v-model="timeRange"
-            class="rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition-colors focus:border-brand/50 focus:outline-none"
-          >
-            <option value="1W">1 Week</option>
-            <option value="1M">1 Month</option>
-            <option value="3M">3 Months</option>
-            <option value="6M">6 Months</option>
-            <option value="1Y">1 Year</option>
-            <option value="ALL">All Time</option>
-          </select>
-        </div>
-        <div class="w-full overflow-x-auto">
-          <table class="min-w-full">
-            <thead>
-              <tr class="border-b border-border-subtle bg-bg-primary/50">
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Date
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Symbol
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Type
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Entry
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Exit
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  P&L
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Duration
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border-subtle/50">
-              <tr
-                v-for="trade in recentTrades"
-                :key="trade.id"
-                class="transition-colors hover:bg-bg-hover"
-              >
-                <td class="px-5 py-4 text-sm text-text-secondary">
-                  {{ trade.entryDate }}
-                </td>
-                <td class="px-5 py-4 text-sm font-semibold text-text-primary">
-                  {{ trade.symbol }}
-                </td>
-                <td class="px-5 py-4">
-                  <span
-                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                    :class="
-                      trade.status === 'OPEN'
-                        ? 'bg-success-bg text-success'
-                        : 'bg-danger-bg text-danger'
-                    "
-                    >{{ trade.status }}</span
+          <div class="w-full overflow-x-auto">
+            <table class="min-w-full">
+              <thead>
+                <tr class="border-b border-border-subtle bg-bg-primary/50">
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
                   >
-                </td>
-                <td class="px-5 py-4 text-sm text-text-secondary">₹{{ trade.entryPrice }}</td>
-                <td class="px-5 py-4 text-sm text-text-secondary">
-                  {{ trade.currentPrice ? '$' + trade.currentPrice : '—' }}
-                </td>
-                <td
-                  class="px-5 py-4 text-right text-sm font-semibold"
-                  :class="trade.pnl >= 0 ? 'text-success' : 'text-danger'"
+                    Date
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Symbol
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Type
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Entry
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Exit
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    P&L
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Duration
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border-subtle/50">
+                <tr
+                  v-for="trade in recentTrades"
+                  :key="trade.id"
+                  class="transition-colors hover:bg-bg-hover"
                 >
-                  {{ trade.pnl >= 0 ? '+' : '' }}₹{{ trade.pnl }}
-                </td>
-                <td class="px-5 py-4 text-sm text-text-muted">
-                  {{ tradeDuration(trade.entryDate) }}
-                </td>
-              </tr>
-              <tr v-if="recentTrades.length === 0">
-                <td colspan="7" class="px-5 py-12 text-center text-sm text-text-muted">
-                  No trade history
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  <td class="px-5 py-4 text-sm text-text-secondary">
+                    {{ trade.entryDate }}
+                  </td>
+                  <td class="px-5 py-4 text-sm font-semibold text-text-primary">
+                    {{ trade.symbol }}
+                  </td>
+                  <td class="px-5 py-4">
+                    <span
+                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      :class="
+                        trade.status === 'OPEN'
+                          ? 'bg-success-bg text-success'
+                          : 'bg-danger-bg text-danger'
+                      "
+                      >{{ trade.status }}</span
+                    >
+                  </td>
+                  <td class="px-5 py-4 text-sm text-text-secondary">₹{{ trade.entryPrice }}</td>
+                  <td class="px-5 py-4 text-sm text-text-secondary">
+                    {{ trade.currentPrice ? '$' + trade.currentPrice : '—' }}
+                  </td>
+                  <td
+                    class="px-5 py-4 text-right text-sm font-semibold"
+                    :class="trade.pnl >= 0 ? 'text-success' : 'text-danger'"
+                  >
+                    {{ trade.pnl >= 0 ? '+' : '' }}₹{{ trade.pnl }}
+                  </td>
+                  <td class="px-5 py-4 text-sm text-text-muted">
+                    {{ tradeDuration(trade.entryDate) }}
+                  </td>
+                </tr>
+                <tr v-if="recentTrades.length === 0">
+                  <td colspan="7" class="px-5 py-12 text-center text-sm text-text-muted">
+                    No trade history
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    </template>
-      </ErrorBoundary>
-    </div>
+      </template>
+    </ErrorBoundary>
   </div>
 </template>
 

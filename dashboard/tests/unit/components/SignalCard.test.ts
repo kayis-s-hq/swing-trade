@@ -187,7 +187,7 @@ describe('SignalCard', () => {
     const wrapper = mount(SignalCard, { props: { signal: noSentiment } })
     // The badge span should not exist
     const badges = wrapper.findAll('span.rounded-full.px-2')
-    const sentimentBadges = badges.filter(b => b.text().match(/^(POS|NEG|NEUTRAL|UNK)$/))
+    const sentimentBadges = badges.filter((b) => b.text().match(/^(POS|NEG|NEUTRAL|UNK)$/))
     expect(sentimentBadges.length).toBe(0)
   })
 
@@ -219,15 +219,15 @@ describe('SignalCard', () => {
     // No indicator badge spans should exist when indicators is empty
     const indicatorSpans = wrapper.findAll('span.rounded')
     // Filter to only those that would be indicator badges (contain indicator-like text)
-    const indicatorTexts = indicatorSpans.map(s => s.text())
-    expect(indicatorTexts.some(t => ['RSI', 'MACD', 'Volume'].includes(t))).toBe(false)
+    const indicatorTexts = indicatorSpans.map((s) => s.text())
+    expect(indicatorTexts.some((t) => ['RSI', 'MACD', 'Volume'].includes(t))).toBe(false)
   })
 
   it('does not render indicators section when undefined', () => {
     const signal = { ...sampleSignal, indicators: undefined }
     const wrapper = mount(SignalCard, { props: { signal } })
-    const indicatorTexts = wrapper.findAll('span.rounded').map(s => s.text())
-    expect(indicatorTexts.some(t => ['RSI', 'MACD', 'Volume'].includes(t))).toBe(false)
+    const indicatorTexts = wrapper.findAll('span.rounded').map((s) => s.text())
+    expect(indicatorTexts.some((t) => ['RSI', 'MACD', 'Volume'].includes(t))).toBe(false)
   })
 
   it('clicking card navigates to Sentiment view', async () => {
@@ -235,7 +235,10 @@ describe('SignalCard', () => {
       props: { signal: sampleSignal },
     })
     await wrapper.trigger('click')
-    expect(mockRouter.push).toHaveBeenCalledWith({ name: 'Sentiment', query: { symbol: 'HDFCBANK' } })
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      name: 'Sentiment',
+      query: { symbol: 'HDFCBANK' },
+    })
   })
 
   it('has card-panel styling class', () => {

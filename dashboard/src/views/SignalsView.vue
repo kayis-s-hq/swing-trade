@@ -114,104 +114,105 @@
       </div>
 
       <template v-else>
-      <!-- Generation progress -->
-      <div v-if="generating" class="mb-4 card-panel p-4">
-        <div class="mb-2 flex items-center justify-between">
-          <span class="text-sm font-medium text-text-primary">Signal Generation</span>
-          <span class="text-xs text-text-muted">{{ progressCurrent }}/{{ progressTotal }}</span>
-        </div>
-        <div class="h-2 rounded-full bg-bg-primary/50">
-          <div
-            class="h-full rounded-full bg-brand transition-all duration-300"
-            :style="{ width: progressTotal > 0 ? (progressCurrent / progressTotal) * 100 + '%' : '0%' }"
-          />
-        </div>
-        <p class="mt-2 text-xs text-text-muted">{{ progressMessage || 'Starting...' }}</p>
-      </div>
-
-      <!-- Filters -->
-      <div class="mb-4 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <label class="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              :checked="isSelectAll"
-              class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
-              @change="toggleSelectAll"
+        <!-- Generation progress -->
+        <div v-if="generating" class="mb-4 card-panel p-4">
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-sm font-medium text-text-primary">Signal Generation</span>
+            <span class="text-xs text-text-muted">{{ progressCurrent }}/{{ progressTotal }}</span>
+          </div>
+          <div class="h-2 rounded-full bg-bg-primary/50">
+            <div
+              class="h-full rounded-full bg-brand transition-all duration-300"
+              :style="{
+                width: progressTotal > 0 ? (progressCurrent / progressTotal) * 100 + '%' : '0%',
+              }"
             />
-            <span class="text-xs font-medium text-text-muted"
-              >Select all ({{ filteredSignals.length }})</span
-            >
-          </label>
-          <div class="flex rounded-md border border-border-subtle">
-            <button
-              v-for="dir in ['ALL', 'BUY', 'SELL']"
-              :key="dir"
-              class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
-              :class="
-                directionFilter === dir
-                  ? 'bg-brand-subtle text-brand'
-                  : 'text-text-muted hover:bg-bg-hover'
-              "
-              @click="directionFilter = dir"
-            >
-              {{ dir }}
-            </button>
           </div>
-          <div class="flex rounded-md border border-border-subtle">
-            <button
-              v-for="st in ['ALL', 'ACTIVE', 'PENDING']"
-              :key="st"
-              class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
-              :class="
-                statusFilter === st
-                  ? 'bg-brand-subtle text-brand'
-                  : 'text-text-muted hover:bg-bg-hover'
-              "
-              @click="statusFilter = st"
-            >
-              {{ st }}
-            </button>
-          </div>
+          <p class="mt-2 text-xs text-text-muted">{{ progressMessage || 'Starting...' }}</p>
         </div>
-        <span v-if="selectedCount > 0" class="text-xs font-medium text-brand"
-          >{{ selectedCount }} selected</span
-        >
-      </div>
 
-      <!-- Signal Grid -->
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <div
-          v-for="signal in filteredSignals"
-          :key="signal.id"
-          class="relative transition-all"
-          :class="isSelected(signal.id) ? 'ring-2 ring-brand/50 rounded-lg' : ''"
-        >
-          <div class="absolute top-2 left-2 z-10">
-            <label class="flex items-center gap-1 cursor-pointer">
+        <!-- Filters -->
+        <div class="mb-4 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
-                :checked="isSelected(signal.id)"
+                :checked="isSelectAll"
                 class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
-                @change="toggleSignal(signal.id)"
+                @change="toggleSelectAll"
               />
+              <span class="text-xs font-medium text-text-muted"
+                >Select all ({{ filteredSignals.length }})</span
+              >
             </label>
+            <div class="flex rounded-md border border-border-subtle">
+              <button
+                v-for="dir in ['ALL', 'BUY', 'SELL']"
+                :key="dir"
+                class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
+                :class="
+                  directionFilter === dir
+                    ? 'bg-brand-subtle text-brand'
+                    : 'text-text-muted hover:bg-bg-hover'
+                "
+                @click="directionFilter = dir"
+              >
+                {{ dir }}
+              </button>
+            </div>
+            <div class="flex rounded-md border border-border-subtle">
+              <button
+                v-for="st in ['ALL', 'ACTIVE', 'PENDING']"
+                :key="st"
+                class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
+                :class="
+                  statusFilter === st
+                    ? 'bg-brand-subtle text-brand'
+                    : 'text-text-muted hover:bg-bg-hover'
+                "
+                @click="statusFilter = st"
+              >
+                {{ st }}
+              </button>
+            </div>
           </div>
-          <div class="ml-7">
-            <SignalCard :signal="signal" />
+          <span v-if="selectedCount > 0" class="text-xs font-medium text-brand"
+            >{{ selectedCount }} selected</span
+          >
+        </div>
+
+        <!-- Signal Grid -->
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <div
+            v-for="signal in filteredSignals"
+            :key="signal.id"
+            class="relative transition-all"
+            :class="isSelected(signal.id) ? 'ring-2 ring-brand/50 rounded-lg' : ''"
+          >
+            <div class="absolute top-2 left-2 z-10">
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  :checked="isSelected(signal.id)"
+                  class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
+                  @change="toggleSignal(signal.id)"
+                />
+              </label>
+            </div>
+            <div class="ml-7">
+              <SignalCard :signal="signal" />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div
-        v-if="filteredSignals.length === 0"
-        class="flex flex-col items-center justify-center py-16"
-      >
-        <p class="text-sm text-text-muted">No signals matching filter</p>
-      </div>
-    </template>
-      </ErrorBoundary>
-    </div>
+        <div
+          v-if="filteredSignals.length === 0"
+          class="flex flex-col items-center justify-center py-16"
+        >
+          <p class="text-sm text-text-muted">No signals matching filter</p>
+        </div>
+      </template>
+    </ErrorBoundary>
 
     <!-- Execution results toast -->
     <div v-if="execResult" class="fixed bottom-4 right-4 z-50 max-w-md">

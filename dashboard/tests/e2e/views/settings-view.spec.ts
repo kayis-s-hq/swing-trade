@@ -8,19 +8,27 @@ test.describe('Settings View', () => {
     await page.waitForLoadState('networkidle')
 
     await expect(page.locator('h1', { hasText: 'Settings' })).toBeVisible()
-    await expect(page.locator('p', { hasText: /Broker connections and trading configuration/ })).toBeVisible()
+    await expect(
+      page.locator('p', { hasText: /Broker connections and trading configuration/ })
+    ).toBeVisible()
   })
 
   test('shows loading state then resolves', async ({ page }) => {
     await page.goto(`${DASHBOARD}/settings`)
 
     // Loading spinner should appear briefly
-    const loadingVisible = await page.locator('text=Checking system').isVisible().catch(() => false)
+    const loadingVisible = await page
+      .locator('text=Checking system')
+      .isVisible()
+      .catch(() => false)
 
     await page.waitForLoadState('networkidle')
 
     // Loading should be gone after networkidle
-    const loadingGone = await page.locator('text=Checking system').isVisible().catch(() => false)
+    const loadingGone = await page
+      .locator('text=Checking system')
+      .isVisible()
+      .catch(() => false)
     expect(loadingGone).toBe(false)
   })
 
@@ -85,8 +93,14 @@ test.describe('Settings View', () => {
     await page.waitForLoadState('networkidle')
 
     // Should show Connected or Disconnected text
-    const hasConnected = await page.locator('text=Connected').isVisible().catch(() => false)
-    const hasDisconnected = await page.locator('text=Disconnected').isVisible().catch(() => false)
+    const hasConnected = await page
+      .locator('text=Connected')
+      .isVisible()
+      .catch(() => false)
+    const hasDisconnected = await page
+      .locator('text=Disconnected')
+      .isVisible()
+      .catch(() => false)
     expect(hasConnected || hasDisconnected).toBe(true)
   })
 
@@ -255,7 +269,10 @@ test.describe('Settings View', () => {
     await saveBtn.click()
 
     // Should show "Saving..." briefly
-    const savingState = await page.locator('button:has-text("Saving...")').isVisible().catch(() => false)
+    const savingState = await page
+      .locator('button:has-text("Saving...")')
+      .isVisible()
+      .catch(() => false)
     if (savingState) {
       await expect(page.locator('button:has-text("Saving...")')).toBeVisible()
     }
@@ -269,7 +286,10 @@ test.describe('Settings View', () => {
     await saveBtn.click()
 
     // Should briefly show "Saved!" with success styling
-    const savedState = await page.locator('button:has-text("Saved!")').isVisible().catch(() => false)
+    const savedState = await page
+      .locator('button:has-text("Saved!")')
+      .isVisible()
+      .catch(() => false)
     if (savedState) {
       await expect(page.locator('button:has-text("Saved!")')).toBeVisible()
     }
@@ -288,7 +308,10 @@ test.describe('Settings View', () => {
     const badgeCount = await statusBadges.count()
 
     // Either badges are visible or loading spinner is visible
-    const loadingVisible = await page.locator('text=Checking system').isVisible().catch(() => false)
+    const loadingVisible = await page
+      .locator('text=Checking system')
+      .isVisible()
+      .catch(() => false)
     expect(badgeCount > 0 || loadingVisible).toBe(true)
   })
 
@@ -301,7 +324,11 @@ test.describe('Settings View', () => {
     const healthText = (await healthSection.textContent()) || ''
 
     // Should contain status indicators (UP/DOWN/DEGRADED or similar)
-    const hasStatus = healthText.includes('UP') || healthText.includes('DOWN') || healthText.includes('DEGRADED') || healthText.includes('Checking')
+    const hasStatus =
+      healthText.includes('UP') ||
+      healthText.includes('DOWN') ||
+      healthText.includes('DEGRADED') ||
+      healthText.includes('Checking')
     expect(hasStatus).toBe(true)
   })
 
@@ -406,9 +433,9 @@ test.describe('Settings View', () => {
     const options = await modeSelect.locator('option').all()
     expect(options.length).toBeGreaterThanOrEqual(2)
 
-    const optionValues = await Promise.all(options.map(o => o.textContent()))
-    expect(optionValues.some(o => o.includes('Paper'))).toBe(true)
-    expect(optionValues.some(o => o.includes('Live'))).toBe(true)
+    const optionValues = await Promise.all(options.map((o) => o.textContent()))
+    expect(optionValues.some((o) => o.includes('Paper'))).toBe(true)
+    expect(optionValues.some((o) => o.includes('Live'))).toBe(true)
   })
 
   test('All sections are card-panel styled', async ({ page }) => {

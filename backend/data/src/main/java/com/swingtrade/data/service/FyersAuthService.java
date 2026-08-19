@@ -9,7 +9,6 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
@@ -19,8 +18,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Service for handling Fyers authentication, token generation, and refresh logic.
+ * Not a Spring bean — Fyser SDK has broken internal dependencies.
  */
-@Service
 public class FyersAuthService {
     private static final Logger logger = LoggerFactory.getLogger(FyersAuthService.class);
     private static final String BASE_URL = "https://api-t1.fyers.in";
@@ -36,10 +35,9 @@ public class FyersAuthService {
     private final AtomicReference<String> accessTokenRef = new AtomicReference<>();
     private final AtomicReference<String> refreshTokenRef = new AtomicReference<>();
 
-    @Autowired
-    public FyersAuthService(FyersConfig fyersConfig, WebClient.Builder webClientBuilder) {
+    public FyersAuthService(FyersConfig fyersConfig) {
         this.fyersConfig = fyersConfig;
-        this.webClient = webClientBuilder
+        this.webClient = WebClient.builder()
                 .baseUrl(BASE_URL)
                 .defaultHeader("Content-Type", "application/json")
                 .build();

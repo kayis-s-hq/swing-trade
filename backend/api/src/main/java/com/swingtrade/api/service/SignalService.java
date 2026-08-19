@@ -1,6 +1,6 @@
 package com.swingtrade.api.service;
 
-import com.swingtrade.api.dto.CompositeAnalysis;
+import com.swingtrade.domain.CompositeAnalysis;
 import com.swingtrade.api.dto.SignalQueryResult.CombinedSignal;
 import com.swingtrade.api.dto.SignalQueryResult.SentimentAnalysis;
 import com.swingtrade.api.dto.SignalQueryResult.TechnicalAnalysis;

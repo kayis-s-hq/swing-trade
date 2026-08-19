@@ -60,382 +60,382 @@
       </div>
 
       <template v-else>
-      <!-- Filters -->
-      <div class="mb-4 flex items-center gap-3">
-        <input
-          v-model="searchQuery"
-          placeholder="Search symbol..."
-          class="w-56 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 transition-colors focus:border-brand/50 focus:outline-none"
-        />
-        <div class="flex rounded-md border border-border-subtle">
+        <!-- Filters -->
+        <div class="mb-4 flex items-center gap-3">
+          <input
+            v-model="searchQuery"
+            placeholder="Search symbol..."
+            class="w-56 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 transition-colors focus:border-brand/50 focus:outline-none"
+          />
+          <div class="flex rounded-md border border-border-subtle">
+            <button
+              v-for="filter in ['ALL', 'OPEN', 'CLOSED']"
+              :key="filter"
+              class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
+              :class="
+                statusFilter === filter
+                  ? 'bg-brand-subtle text-brand'
+                  : 'text-text-muted hover:bg-bg-hover'
+              "
+              @click="statusFilter = filter"
+            >
+              {{ filter }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="card-panel">
+          <div class="w-full overflow-x-auto">
+            <table class="min-w-full">
+              <thead>
+                <tr class="border-b border-border-subtle bg-bg-primary/50">
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Symbol
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Entry
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Qty
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Current
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Stop Loss
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Target
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Status
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    P&L
+                  </th>
+                  <th
+                    class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border-subtle/50">
+                <tr
+                  v-for="pos in filteredPositions"
+                  :key="pos.id"
+                  class="transition-colors hover:bg-bg-hover"
+                >
+                  <td class="px-5 py-4 text-sm font-semibold text-text-primary">
+                    {{ pos.symbol }}
+                  </td>
+                  <td class="px-5 py-4 text-sm text-text-secondary">₹{{ pos.entryPrice }}</td>
+                  <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                    {{ pos.quantity }}
+                  </td>
+                  <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                    ₹{{ pos.currentPrice }}
+                  </td>
+                  <td class="px-5 py-4 text-right text-sm text-danger">
+                    {{ pos.stopLoss ?? '—' }}
+                  </td>
+                  <td class="px-5 py-4 text-right text-sm text-success">
+                    {{ pos.target ?? '—' }}
+                  </td>
+                  <td class="px-5 py-4">
+                    <span
+                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      :class="
+                        pos.status === 'OPEN'
+                          ? 'bg-success-bg text-success'
+                          : 'bg-danger-bg text-danger'
+                      "
+                      >{{ pos.status }}</span
+                    >
+                  </td>
+                  <td
+                    class="px-5 py-4 text-right text-sm font-semibold"
+                    :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
+                  >
+                    {{ pos.pnl >= 0 ? '+' : '' }}₹{{ pos.pnl }}
+                    <span class="ml-1 text-xs font-normal opacity-70"
+                      >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
+                    >
+                  </td>
+                  <td class="px-5 py-4 text-center">
+                    <button
+                      v-if="pos.status === 'OPEN'"
+                      class="rounded-md border border-danger/30 px-2.5 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+                      @click="showCloseModal(pos)"
+                    >
+                      Close
+                    </button>
+                    <span v-else class="text-xs text-text-muted">—</span>
+                  </td>
+                </tr>
+                <tr v-if="filteredPositions.length === 0">
+                  <td colspan="9" class="px-5 py-12 text-center text-sm text-text-muted">
+                    No positions found
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </ErrorBoundary>
+  </div>
+
+  <!-- New Position Modal -->
+  <Teleport to="body">
+    <div
+      v-if="showNewPositionModal"
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      @click.self="showNewPositionModal = false"
+    >
+      <div class="absolute inset-0 bg-black/50" />
+      <div class="relative w-full max-w-md rounded-xl bg-bg-primary p-6 shadow-xl">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-text-primary">New Position</h2>
           <button
-            v-for="filter in ['ALL', 'OPEN', 'CLOSED']"
-            :key="filter"
-            class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
-            :class="
-              statusFilter === filter
-                ? 'bg-brand-subtle text-brand'
-                : 'text-text-muted hover:bg-bg-hover'
-            "
-            @click="statusFilter = filter"
+            class="text-text-muted hover:text-text-primary"
+            @click="showNewPositionModal = false"
           >
-            {{ filter }}
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
         </div>
-      </div>
 
-      <!-- Table -->
-      <div class="card-panel">
-        <div class="w-full overflow-x-auto">
-          <table class="min-w-full">
-            <thead>
-              <tr class="border-b border-border-subtle bg-bg-primary/50">
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Symbol
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Entry
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Qty
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Current
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Stop Loss
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Target
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Status
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  P&L
-                </th>
-                <th
-                  class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border-subtle/50">
-              <tr
-                v-for="pos in filteredPositions"
-                :key="pos.id"
-                class="transition-colors hover:bg-bg-hover"
+        <form class="space-y-4" @submit.prevent="submitNewPosition">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-text-muted">Symbol</label>
+            <input
+              v-model="newPos.symbol"
+              required
+              placeholder="e.g. RELIANCE"
+              class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
+            />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text-muted">Direction</label>
+              <select
+                v-model="newPos.direction"
+                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-brand/50 focus:outline-none"
               >
-                <td class="px-5 py-4 text-sm font-semibold text-text-primary">
-                  {{ pos.symbol }}
-                </td>
-                <td class="px-5 py-4 text-sm text-text-secondary">₹{{ pos.entryPrice }}</td>
-                <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                  {{ pos.quantity }}
-                </td>
-                <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                  ₹{{ pos.currentPrice }}
-                </td>
-                <td class="px-5 py-4 text-right text-sm text-danger">
-                  {{ pos.stopLoss ?? '—' }}
-                </td>
-                <td class="px-5 py-4 text-right text-sm text-success">
-                  {{ pos.target ?? '—' }}
-                </td>
-                <td class="px-5 py-4">
-                  <span
-                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                    :class="
-                      pos.status === 'OPEN'
-                        ? 'bg-success-bg text-success'
-                        : 'bg-danger-bg text-danger'
-                    "
-                    >{{ pos.status }}</span
-                  >
-                </td>
-                <td
-                  class="px-5 py-4 text-right text-sm font-semibold"
-                  :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
-                >
-                  {{ pos.pnl >= 0 ? '+' : '' }}₹{{ pos.pnl }}
-                  <span class="ml-1 text-xs font-normal opacity-70"
-                    >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
-                  >
-                </td>
-                <td class="px-5 py-4 text-center">
-                  <button
-                    v-if="pos.status === 'OPEN'"
-                    class="rounded-md border border-danger/30 px-2.5 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
-                    @click="showCloseModal(pos)"
-                  >
-                    Close
-                  </button>
-                  <span v-else class="text-xs text-text-muted">—</span>
-                </td>
-              </tr>
-              <tr v-if="filteredPositions.length === 0">
-                <td colspan="9" class="px-5 py-12 text-center text-sm text-text-muted">
-                  No positions found
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </template>
-      </ErrorBoundary>
-    </div>
+                <option value="LONG">Long</option>
+                <option value="SHORT">Short</option>
+              </select>
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text-muted">Order Type</label>
+              <select
+                v-model="newPos.orderType"
+                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-brand/50 focus:outline-none"
+              >
+                <option value="MARKET">Market</option>
+                <option value="LIMIT">Limit</option>
+              </select>
+            </div>
+          </div>
 
-    <!-- New Position Modal -->
-    <Teleport to="body">
-      <div
-        v-if="showNewPositionModal"
-        class="fixed inset-0 z-50 flex items-center justify-center"
-        @click.self="showNewPositionModal = false"
-      >
-        <div class="absolute inset-0 bg-black/50" />
-        <div class="relative w-full max-w-md rounded-xl bg-bg-primary p-6 shadow-xl">
-          <div class="mb-4 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-text-primary">New Position</h2>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text-muted">Quantity</label>
+              <input
+                v-model.number="newPos.quantity"
+                type="number"
+                min="1"
+                required
+                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text-muted">Entry Price</label>
+              <input
+                v-model.number="newPos.price"
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div v-if="newPos.orderType === 'LIMIT'" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text-muted">Limit Price</label>
+              <input
+                v-model.number="newPos.limitPrice"
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text-muted">Stop Loss</label>
+              <input
+                v-model.number="newPos.stopLoss"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Optional"
+                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text-muted">Target</label>
+              <input
+                v-model.number="newPos.target"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Optional"
+                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="mb-1 block text-xs font-medium text-text-muted"
+              >Entry Reason (Optional)</label
+            >
+            <textarea
+              v-model="newPos.entryReason"
+              rows="2"
+              placeholder="Why are you entering this trade?"
+              class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
+            />
+          </div>
+
+          <div class="flex gap-3">
             <button
-              class="text-text-muted hover:text-text-primary"
+              type="button"
+              class="flex-1 rounded-md border border-border-subtle px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-bg-hover"
               @click="showNewPositionModal = false"
             >
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              :disabled="submitting"
+              class="flex-1 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
+            >
+              {{ submitting ? 'Creating...' : 'Create Position' }}
             </button>
           </div>
-
-          <form class="space-y-4" @submit.prevent="submitNewPosition">
-            <div>
-              <label class="mb-1 block text-xs font-medium text-text-muted">Symbol</label>
-              <input
-                v-model="newPos.symbol"
-                required
-                placeholder="e.g. RELIANCE"
-                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-              />
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="mb-1 block text-xs font-medium text-text-muted">Direction</label>
-                <select
-                  v-model="newPos.direction"
-                  class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-brand/50 focus:outline-none"
-                >
-                  <option value="LONG">Long</option>
-                  <option value="SHORT">Short</option>
-                </select>
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium text-text-muted">Order Type</label>
-                <select
-                  v-model="newPos.orderType"
-                  class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-brand/50 focus:outline-none"
-                >
-                  <option value="MARKET">Market</option>
-                  <option value="LIMIT">Limit</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="mb-1 block text-xs font-medium text-text-muted">Quantity</label>
-                <input
-                  v-model.number="newPos.quantity"
-                  type="number"
-                  min="1"
-                  required
-                  class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium text-text-muted">Entry Price</label>
-                <input
-                  v-model.number="newPos.price"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div v-if="newPos.orderType === 'LIMIT'" class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="mb-1 block text-xs font-medium text-text-muted">Limit Price</label>
-                <input
-                  v-model.number="newPos.limitPrice"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="mb-1 block text-xs font-medium text-text-muted">Stop Loss</label>
-                <input
-                  v-model.number="newPos.stopLoss"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  placeholder="Optional"
-                  class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium text-text-muted">Target</label>
-                <input
-                  v-model.number="newPos.target"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  placeholder="Optional"
-                  class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label class="mb-1 block text-xs font-medium text-text-muted"
-                >Entry Reason (Optional)</label
-              >
-              <textarea
-                v-model="newPos.entryReason"
-                rows="2"
-                placeholder="Why are you entering this trade?"
-                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-              />
-            </div>
-
-            <div class="flex gap-3">
-              <button
-                type="button"
-                class="flex-1 rounded-md border border-border-subtle px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-bg-hover"
-                @click="showNewPositionModal = false"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                :disabled="submitting"
-                class="flex-1 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
-              >
-                {{ submitting ? 'Creating...' : 'Create Position' }}
-              </button>
-            </div>
-          </form>
-        </div>
+        </form>
       </div>
-    </Teleport>
+    </div>
+  </Teleport>
 
-    <!-- Close Position Modal -->
-    <Teleport to="body">
-      <div
-        v-if="showClosePositionModal && closeTarget"
-        class="fixed inset-0 z-50 flex items-center justify-center"
-        @click.self="showClosePositionModal = false"
-      >
-        <div class="absolute inset-0 bg-black/50" />
-        <div class="relative w-full max-w-sm rounded-xl bg-bg-primary p-6 shadow-xl">
-          <div class="mb-4 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-text-primary">Close Position</h2>
+  <!-- Close Position Modal -->
+  <Teleport to="body">
+    <div
+      v-if="showClosePositionModal && closeTarget"
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      @click.self="showClosePositionModal = false"
+    >
+      <div class="absolute inset-0 bg-black/50" />
+      <div class="relative w-full max-w-sm rounded-xl bg-bg-primary p-6 shadow-xl">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-text-primary">Close Position</h2>
+          <button
+            class="text-text-muted hover:text-text-primary"
+            @click="showClosePositionModal = false"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div class="mb-4 rounded-lg bg-bg-surface p-4">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-text-primary">{{ closeTarget.symbol }}</span>
+            <span class="text-xs text-text-muted"
+              >{{ closeTarget.quantity }} shares @ ₹{{ closeTarget.entryPrice }}</span
+            >
+          </div>
+          <div class="mt-2 text-right">
+            <span
+              class="text-sm font-semibold"
+              :class="closeTarget.pnl >= 0 ? 'text-success' : 'text-danger'"
+            >
+              {{ closeTarget.pnl >= 0 ? '+' : '' }}₹{{ closeTarget.pnl }} ({{
+                closeTarget.pnlPercent >= 0 ? '+' : ''
+              }}{{ closeTarget.pnlPercent.toFixed(2) }}%)
+            </span>
+          </div>
+        </div>
+
+        <form class="space-y-4" @submit.prevent="submitClosePosition">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-text-muted"
+              >Exit Reason (Optional)</label
+            >
+            <input
+              v-model="closeReason"
+              placeholder="e.g. Stop loss hit, target reached"
+              class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
+            />
+          </div>
+
+          <div class="flex gap-3">
             <button
-              class="text-text-muted hover:text-text-primary"
+              type="button"
+              class="flex-1 rounded-md border border-border-subtle px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-bg-hover"
               @click="showClosePositionModal = false"
             >
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              :disabled="closing"
+              class="flex-1 rounded-md bg-danger px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-danger/90 disabled:opacity-50"
+            >
+              {{ closing ? 'Closing...' : 'Confirm Close' }}
             </button>
           </div>
-
-          <div class="mb-4 rounded-lg bg-bg-surface p-4">
-            <div class="flex items-center justify-between">
-              <span class="text-sm font-semibold text-text-primary">{{ closeTarget.symbol }}</span>
-              <span class="text-xs text-text-muted"
-                >{{ closeTarget.quantity }} shares @ ₹{{ closeTarget.entryPrice }}</span
-              >
-            </div>
-            <div class="mt-2 text-right">
-              <span
-                class="text-sm font-semibold"
-                :class="closeTarget.pnl >= 0 ? 'text-success' : 'text-danger'"
-              >
-                {{ closeTarget.pnl >= 0 ? '+' : '' }}₹{{ closeTarget.pnl }} ({{
-                  closeTarget.pnlPercent >= 0 ? '+' : ''
-                }}{{ closeTarget.pnlPercent.toFixed(2) }}%)
-              </span>
-            </div>
-          </div>
-
-          <form class="space-y-4" @submit.prevent="submitClosePosition">
-            <div>
-              <label class="mb-1 block text-xs font-medium text-text-muted"
-                >Exit Reason (Optional)</label
-              >
-              <input
-                v-model="closeReason"
-                placeholder="e.g. Stop loss hit, target reached"
-                class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-              />
-            </div>
-
-            <div class="flex gap-3">
-              <button
-                type="button"
-                class="flex-1 rounded-md border border-border-subtle px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-bg-hover"
-                @click="showClosePositionModal = false"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                :disabled="closing"
-                class="flex-1 rounded-md bg-danger px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-danger/90 disabled:opacity-50"
-              >
-                {{ closing ? 'Closing...' : 'Confirm Close' }}
-              </button>
-            </div>
-          </form>
-        </div>
+        </form>
       </div>
-    </Teleport>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -462,9 +462,9 @@ const filteredPositions = computed(() => {
 const refreshPositions = () => {
   execute(async () => {
     const openRes = await getPositions()
-    const openPositions: Position[] = (openRes.success && openRes.data) ? openRes.data : []
+    const openPositions: Position[] = openRes.success && openRes.data ? openRes.data : []
     const closedRes = await getClosedPositions()
-    const closedPositions: Position[] = (closedRes.success && closedRes.data) ? closedRes.data : []
+    const closedPositions: Position[] = closedRes.success && closedRes.data ? closedRes.data : []
     positions.value = [...openPositions, ...closedPositions]
     if (openRes.error || closedRes.error) throw new Error(openRes.error || closedRes.error)
   })

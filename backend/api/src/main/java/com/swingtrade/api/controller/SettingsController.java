@@ -5,6 +5,10 @@ import com.swingtrade.broker.service.DiscordNotificationService;
 import com.swingtrade.data.service.AppSettingsService;
 import com.swingtrade.data.service.MarketDataClientProvider;
 import com.swingtrade.llm.service.LlamaCppServerManager;
+import com.swingtrade.llm.service.LlmBackendSelector;
+import com.swingtrade.llm.service.LlmServerManager;
+import com.swingtrade.llm.service.PiLlamaServerManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,16 +32,23 @@ public class SettingsController {
     private final MarketDataClientProvider marketDataClientProvider;
     private final AppSettingsService appSettingsService;
     private final DiscordNotificationService discordNotificationService;
-    private final LlamaCppServerManager serverManager;
+    private final LlmBackendSelector selector;
+    private final LlamaCppServerManager localServerManager;
+    private final PiLlamaServerManager piServerManager;
 
+    @Autowired
     public SettingsController(MarketDataClientProvider marketDataClientProvider,
                               AppSettingsService appSettingsService,
                               DiscordNotificationService discordNotificationService,
-                              LlamaCppServerManager serverManager) {
+                              LlmBackendSelector selector,
+                              LlamaCppServerManager localServerManager,
+                              PiLlamaServerManager piServerManager) {
         this.marketDataClientProvider = marketDataClientProvider;
         this.appSettingsService = appSettingsService;
         this.discordNotificationService = discordNotificationService;
-        this.serverManager = serverManager;
+        this.selector = selector;
+        this.localServerManager = localServerManager;
+        this.piServerManager = piServerManager;
     }
 
     @GetMapping("/settings")
@@ -65,7 +76,10 @@ public class SettingsController {
     public ResponseEntity<ApiResponse<Map<String, String>>> getLlmSettings() {
         Map<String, String> settings = new java.util.LinkedHashMap<>();
         settings.put("llm.base_url", appSettingsService.get("llm.base_url", ""));
-        settings.put("llm.gpuhub.base_url", appSettingsService.get("llm.gpuhub.base_url", ""));
+        settings.put("llm.backend", appSettingsService.get("llm.backend", "local"));
+        settings.put("openai.base_url", appSettingsService.get("openai.base_url", "https://api.openai.com/v1"));
+        settings.put("openai.model", appSettingsService.get("openai.model", "gpt-4o"));
+        settings.put("openai.api_key", appSettingsService.get("openai.api_key", ""));
         settings.put("llamacpp.model", appSettingsService.get("llamacpp.model", "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"));
         settings.put("llm.pdf.base_url", appSettingsService.get("llm.pdf.base_url", ""));
         settings.put("llm.pdf.model", appSettingsService.get("llm.pdf.model", ""));
@@ -76,17 +90,31 @@ public class SettingsController {
     @PutMapping("/settings/llm")
     public ResponseEntity<ApiResponse<Map<String, String>>> setLlmSettings(
             @RequestBody Map<String, String> body) {
+        String oldBackend = appSettingsService.get("llm.backend", "local");
+        body.forEach((key, value) -> appSettingsService.set(key, value));
+
+        // Handle server restart when backend or model changes
+        String newBackend = body.getOrDefault("llm.backend", oldBackend);
+        boolean backendChanged = !oldBackend.equals(newBackend);
         boolean modelChanged = body.containsKey("llamacpp.model")
                 && !body.get("llamacpp.model").equals(appSettingsService.get("llamacpp.model", ""));
-        body.forEach((key, value) -> appSettingsService.set(key, value));
-        if (modelChanged) {
+
+        if (backendChanged || modelChanged) {
             try {
-                serverManager.restart();
+                var backend = selector.resolve();
+                LlmServerManager manager = switch (backend) {
+                    case LOCAL -> localServerManager;
+                    case PI_SSH -> piServerManager;
+                    case GPUHUB -> null; // no server to manage
+                };
+                if (manager != null && manager.isRunning()) {
+                    manager.restart();
+                }
             } catch (Exception e) {
                 logger.warn("llama-server restart failed: {}", e.getMessage());
             }
         }
-        return getLlmSettings();
+        return ResponseEntity.ok(ApiResponse.ok(body));
     }
 
     @GetMapping("/settings/gpuhub")
@@ -101,7 +129,7 @@ public class SettingsController {
     public ResponseEntity<ApiResponse<Map<String, String>>> setGpuHubSettings(
             @RequestBody Map<String, String> body) {
         body.forEach((key, value) -> appSettingsService.set(key, value));
-        return getGpuHubSettings();
+        return ResponseEntity.ok(ApiResponse.ok(body));
     }
 
     @GetMapping("/settings/discord")
@@ -117,13 +145,41 @@ public class SettingsController {
     public ResponseEntity<ApiResponse<Map<String, String>>> setDiscordSettings(
             @RequestBody Map<String, String> body) {
         body.forEach((key, value) -> appSettingsService.set(key, value));
-        return getDiscordSettings();
+        return ResponseEntity.ok(ApiResponse.ok(body));
     }
 
     @PostMapping("/settings/test/discord")
     public ResponseEntity<ApiResponse<Map<String, Boolean>>> testDiscord() {
         boolean success = discordNotificationService.sendMessage("SwingTrade: webhook test successful");
         return ResponseEntity.ok(ApiResponse.ok(Map.of("success", success)));
+    }
+
+    @PostMapping("/settings/test/pi")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> testPiConnection() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            logger.info("Testing Pi SSH connection and lazy start...");
+            piServerManager.ensureRunning();
+            boolean running = piServerManager.isRunning();
+            result.put("success", running);
+            if (running) {
+                result.put("message", "Pi SSH connection successful, llama-server started");
+                appSettingsService.set("llm.backend", "pi_ssh");
+                logger.info("Pi SSH test passed — backend switched to pi_ssh");
+            } else {
+                result.put("message", "SSH connected but llama-server failed to start");
+                appSettingsService.set("llm.backend", "local");
+            }
+            if (!running) {
+                piServerManager.stop();
+            }
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        } catch (Exception e) {
+            logger.warn("Pi SSH test failed: {}", e.getMessage());
+            result.put("success", false);
+            result.put("message", "SSH connection failed: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -144,7 +200,7 @@ public class SettingsController {
     public ResponseEntity<ApiResponse<Map<String, String>>> setTradingSettings(
             @RequestBody Map<String, String> body) {
         body.forEach((key, value) -> appSettingsService.set(key, value));
-        return getTradingSettings();
+        return ResponseEntity.ok(ApiResponse.ok(body));
     }
 
     // -----------------------------------------------------------------------

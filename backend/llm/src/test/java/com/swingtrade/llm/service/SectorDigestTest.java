@@ -44,17 +44,14 @@ class SectorDigestTest {
     void setUp() {
         // Create real SentimentService with mocked dependencies
         sentimentAnalysisService = new SentimentService(
-                null,  // llamaCppClient not needed for sector digest tests
-                null,  // serverManager not needed for sector digest tests
+                null,  // clientProvider not needed for sector digest tests
+                null,  // serverManagerProvider not needed
+                null,  // promptLoader not needed
                 null,  // sentimentAnalyzer not needed
                 null,  // newsIngestionService not needed
-                null,  // sentimentCacheService not needed
                 sentimentStore,
                 stockStore,
                 null,  // appSettingsStore not needed
-                100,   // maxCacheSize
-                60L,   // cacheExpiryMinutes
-                true,  // enableCaching
                 0.75   // defaultConfidence
         );
     }
@@ -360,6 +357,6 @@ class SectorDigestTest {
      * Creates a mock Stock domain object for testing.
      */
     private Stock createMockStock(String symbol, Stock.Sector sector) {
-        return new Stock(symbol, "Test Company " + symbol, sector.name(), "NSE");
+        return new Stock(symbol, Stock.Exchange.NSE, "Test Company " + symbol, sector, null, null, null, null, null, null);
     }
 }

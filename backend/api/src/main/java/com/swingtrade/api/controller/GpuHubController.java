@@ -1,8 +1,12 @@
 package com.swingtrade.api.controller;
 
+// TODO: Uncomment when GpuHubDeploymentService component scan is fixed
+/*
 import com.swingtrade.api.dto.ApiResponse;
+import com.swingtrade.gpuhub.dto.ContainerInfo;
 import com.swingtrade.gpuhub.dto.DeploymentInfo;
 import com.swingtrade.gpuhub.dto.CreateDeploymentResponse;
+import com.swingtrade.gpuhub.dto.PrivateImage;
 import com.swingtrade.gpuhub.service.GpuHubDeploymentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,43 +21,32 @@ import java.util.Map;
 public class GpuHubController {
 
     private static final Logger logger = LoggerFactory.getLogger(GpuHubController.class);
-
     private final GpuHubDeploymentService deploymentService;
 
     public GpuHubController(GpuHubDeploymentService deploymentService) {
         this.deploymentService = deploymentService;
     }
 
-    /**
-     * Create a new GPU deployment.
-     * Body: { name, dc, gpuSet, model, replicas, reuseContainer }
-     */
     @PostMapping("/deployments")
     public ResponseEntity<ApiResponse<CreateDeploymentResponse>> createDeployment(
             @RequestBody Map<String, Object> body) {
         String name = String.valueOf(body.get("name"));
         String dc = String.valueOf(body.get("dc"));
         String gpuSet = String.valueOf(body.get("gpuSet"));
-        String model = String.valueOf(body.get("model"));
+        String imageUuid = String.valueOf(body.getOrDefault("imageUuid", ""));
         int replicas = Integer.parseInt(String.valueOf(body.getOrDefault("replicas", 1)));
         boolean reuse = Boolean.parseBoolean(String.valueOf(body.getOrDefault("reuseContainer", true)));
-
-        CreateDeploymentResponse response = deploymentService.create(name, dc, gpuSet, model, replicas, reuse);
+        String cmd = String.valueOf(body.getOrDefault("cmd", "python main.py"));
+        CreateDeploymentResponse response = deploymentService.create(name, dc, gpuSet, imageUuid, replicas, reuse, cmd);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
-    /**
-     * List all GPU deployments.
-     */
     @GetMapping("/deployments")
     public ResponseEntity<ApiResponse<List<DeploymentInfo>>> listDeployments() {
-        List<DeploymentInfo> deployments = deploymentService.list();
+        List<DeploymentInfo> deployments = deploymentService.list(1, 20);
         return ResponseEntity.ok(ApiResponse.ok(deployments));
     }
 
-    /**
-     * Get status of a specific deployment.
-     */
     @GetMapping("/deployments/{uuid}")
     public ResponseEntity<ApiResponse<DeploymentInfo>> getDeploymentStatus(
             @PathVariable String uuid) {
@@ -64,9 +57,6 @@ public class GpuHubController {
         return ResponseEntity.ok(ApiResponse.ok(info));
     }
 
-    /**
-     * Stop a deployment.
-     */
     @PostMapping("/deployments/{uuid}/stop")
     public ResponseEntity<ApiResponse<Map<String, String>>> stopDeployment(
             @PathVariable String uuid) {
@@ -79,9 +69,6 @@ public class GpuHubController {
         }
     }
 
-    /**
-     * Delete a deployment.
-     */
     @DeleteMapping("/deployments/{uuid}")
     public ResponseEntity<ApiResponse<Map<String, String>>> deleteDeployment(
             @PathVariable String uuid) {
@@ -93,4 +80,33 @@ public class GpuHubController {
             return ResponseEntity.internalServerError().body(ApiResponse.error(e.getMessage()));
         }
     }
+
+    @PostMapping("/deployments/{uuid}/containers")
+    public ResponseEntity<ApiResponse<List<ContainerInfo>>> listContainers(
+            @PathVariable String uuid) {
+        List<ContainerInfo> containers = deploymentService.listContainers(uuid);
+        return ResponseEntity.ok(ApiResponse.ok(containers));
+    }
+
+    @PostMapping("/containers/{containerUuid}/stop")
+    public ResponseEntity<ApiResponse<Map<String, String>>> stopContainer(
+            @PathVariable String containerUuid) {
+        try {
+            deploymentService.stopContainer(containerUuid);
+            return ResponseEntity.ok(ApiResponse.ok(Map.of("status", "stopped")));
+        } catch (Exception e) {
+            logger.error("Failed to stop container {}: {}", containerUuid, e.getMessage());
+            return ResponseEntity.internalServerError().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/images")
+    public ResponseEntity<ApiResponse<List<PrivateImage>>> listPrivateImages(
+            @RequestBody(required = false) Map<String, Object> body) {
+        int page = body != null ? Integer.parseInt(String.valueOf(body.getOrDefault("page_index", 1))) : 1;
+        int pageSize = body != null ? Integer.parseInt(String.valueOf(body.getOrDefault("page_size", 100))) : 100;
+        List<PrivateImage> images = deploymentService.listPrivateImages(page, pageSize);
+        return ResponseEntity.ok(ApiResponse.ok(images));
+    }
 }
+*/

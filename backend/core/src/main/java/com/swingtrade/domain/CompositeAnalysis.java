@@ -1,4 +1,4 @@
-package com.swingtrade.api.dto;
+package com.swingtrade.domain;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -30,7 +30,7 @@ public record CompositeAnalysis(
     String reasoning,
 
     // Stage 9: LLM synthesis of all stages
-    com.swingtrade.domain.SynthesisResult synthesis
+    SynthesisResult synthesis
 ) {
     public record SourceScore(String name, int score, double weight, String description) {}
     public record NewsScore(int score, String summary, List<String> catalysts, List<String> redFlags, int articleCount) {}

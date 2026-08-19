@@ -2,8 +2,8 @@ package com.swingtrade.llm;
 
 import com.swingtrade.domain.Signal;
 import com.swingtrade.llm.client.LlamaCppClient;
-import com.swingtrade.llm.service.SentimentOutput;
-import com.swingtrade.llm.service.SentimentType;
+import com.swingtrade.llm.SentimentOutput;
+import com.swingtrade.llm.SentimentType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

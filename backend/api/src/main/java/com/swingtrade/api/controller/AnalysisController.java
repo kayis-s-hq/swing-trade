@@ -1,6 +1,6 @@
 package com.swingtrade.api.controller;
 
-import com.swingtrade.api.dto.CompositeAnalysis;
+import com.swingtrade.domain.CompositeAnalysis;
 import com.swingtrade.api.service.CompositeAnalysisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -21,13 +23,17 @@ public class AnalysisController {
     private CompositeAnalysisService analysisService;
 
     @PostMapping("/analysis/analyze")
-    public ResponseEntity<CompositeAnalysis> analyze(@RequestParam String symbol) {
+    public ResponseEntity<?> analyze(@RequestParam(required = true) String symbol) {
+        if (symbol.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "symbol is required"));
+        }
         try {
             CompositeAnalysis result = analysisService.analyze(symbol);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             logger.error("Analysis failed for {}: {}", symbol, e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Analysis failed: " + e.getMessage()));
         }
     }
 }

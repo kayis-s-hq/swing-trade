@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,8 +19,7 @@ import java.util.Map;
 
 /**
  * Controller for Fyers authentication flow.
- * Available in all profiles — the UI controls the active broker at runtime,
- * so the auth endpoints must be reachable regardless of which profile started the app.
+ * Instantiates FyersAuthService manually to avoid SDK class loading at startup.
  */
 @RestController
 @RequestMapping("/api/fyers")
@@ -30,9 +30,9 @@ public class FyersAuthController {
     private final FyersAuthService authService;
     private final FyersConfig fyersConfig;
 
-    public FyersAuthController(FyersAuthService authService, FyersConfig fyersConfig) {
-        this.authService = authService;
+    public FyersAuthController(FyersConfig fyersConfig) {
         this.fyersConfig = fyersConfig;
+        this.authService = new FyersAuthService(fyersConfig);
     }
 
     /**

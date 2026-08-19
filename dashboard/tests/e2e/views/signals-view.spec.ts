@@ -65,7 +65,7 @@ test.describe('Signals View', () => {
       // Filter buttons are in a group — find them
       const buttons = page.locator('.flex.rounded-md.border button')
       const texts = await buttons.allTextContents()
-      const found = texts.some(t => t.trim() === dir)
+      const found = texts.some((t) => t.trim() === dir)
       expect(found).toBe(true)
     }
   })

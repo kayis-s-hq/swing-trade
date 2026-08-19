@@ -1,6 +1,7 @@
 package com.swingtrade.llm.client;
 
 import com.swingtrade.domain.store.AppSettingsStore;
+import com.swingtrade.llm.service.LlmBackendSelector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -27,7 +28,9 @@ class LlamaCppClientTest {
         var appSettings = mock(AppSettingsStore.class);
         when(appSettings.get(any())).thenReturn(Optional.of("http://localhost:8080/v1"));
         when(appSettings.get("llamacpp.model")).thenReturn(Optional.of("/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"));
-        llamaCppClient = new LlamaCppClient(WebClient.builder(), appSettings);
+        LlmBackendSelector selector = mock(LlmBackendSelector.class);
+        when(selector.resolve()).thenReturn(LlmBackendSelector.Backend.LOCAL);
+        llamaCppClient = new LlamaCppClient(WebClient.builder(), appSettings, selector, "localhost", 8090);
     }
 
     @Test

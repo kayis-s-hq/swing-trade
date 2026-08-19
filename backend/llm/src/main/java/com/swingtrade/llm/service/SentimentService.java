@@ -8,8 +8,10 @@ import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
-import com.swingtrade.llm.client.LlamaCppClient;
-import com.swingtrade.llm.service.LlamaCppServerManager;
+import com.swingtrade.llm.client.LlmClient;
+import com.swingtrade.llm.config.SentimentPromptLoader;
+import com.swingtrade.llm.service.LlmClientProvider;
+import com.swingtrade.llm.service.LlmServerManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,26 +47,21 @@ public class SentimentService {
 
     private static final Logger logger = LoggerFactory.getLogger(SentimentService.class);
 
-    // Cache configuration
-    private static final int DEFAULT_CACHE_MAX_SIZE = 100;
-    private static final long DEFAULT_CACHE_EXPIRY_MINUTES = 60;
-    private static final long ANALYSIS_TIMEOUT_SECONDS = 180;
+    private static final long ANALYSIS_TIMEOUT_SECONDS = 600;
+    private static final int MAX_ARTICLES_FOR_LLM = 10;
 
     // Thread pool for async operations
     private final ExecutorService analysisExecutor;
 
-    private final LlamaCppClient llamaCppClient;
-    private final LlamaCppServerManager serverManager;
+    private final LlmClientProvider clientProvider;
+    private final LlmServerManagerProvider serverManagerProvider;
+    private final SentimentPromptLoader promptLoader;
     private final SentimentAnalyzer sentimentAnalyzer;
     private final NewsIngestionService newsIngestionService;
-    private final SentimentCacheService sentimentCacheService;
     private final SentimentStore sentimentStore;
     private final StockStore stockStore;
     private final AppSettingsStore appSettingsStore;
 
-    private final int maxCacheSize;
-    private final long cacheExpiryMinutes;
-    private boolean enableCaching = false; // temporarily disabled
     private final double defaultConfidence;
 
     /**
@@ -72,31 +69,24 @@ public class SentimentService {
      */
     @Autowired
     public SentimentService(
-            LlamaCppClient llamaCppClient,
-            LlamaCppServerManager serverManager,
+            LlmClientProvider clientProvider,
+            LlmServerManagerProvider serverManagerProvider,
+            SentimentPromptLoader promptLoader,
             SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService,
-            SentimentCacheService sentimentCacheService,
             SentimentStore sentimentStore,
             StockStore stockStore,
             AppSettingsStore appSettingsStore,
-            @Value("${llm.sentiment.cache.max-size:100}") int maxCacheSize,
-            @Value("${llm.sentiment.cache.expiry-minutes:60}") long cacheExpiryMinutes,
-            @Value("${llm.sentiment.cache.enabled:false}") boolean enableCaching,
             @Value("${llm.sentiment.default-confidence:0.75}") double defaultConfidence) {
 
-        this.llamaCppClient = llamaCppClient;
-        this.serverManager = serverManager;
+        this.clientProvider = clientProvider;
+        this.serverManagerProvider = serverManagerProvider;
+        this.promptLoader = promptLoader;
         this.sentimentAnalyzer = sentimentAnalyzer;
         this.newsIngestionService = newsIngestionService;
-        this.sentimentCacheService = sentimentCacheService;
         this.sentimentStore = sentimentStore;
         this.stockStore = stockStore;
         this.appSettingsStore = appSettingsStore;
-
-        this.maxCacheSize = maxCacheSize;
-        this.cacheExpiryMinutes = cacheExpiryMinutes;
-        this.enableCaching = enableCaching;
         this.defaultConfidence = defaultConfidence;
 
         // Initialize thread pool with bounded capacity
@@ -118,17 +108,6 @@ public class SentimentService {
      */
     public SentimentResult analyzeStockSentiment(String stockSymbol, LocalDate date) {
         logger.info("Starting sentiment analysis for stock: {} on date: {}", stockSymbol, date);
-
-        // Check cache first
-        String cacheKey = generateCacheKey(stockSymbol, date);
-        if (enableCaching && sentimentCacheService.isCached(cacheKey)) {
-            logger.debug("Cache hit for {}: {}", stockSymbol, cacheKey);
-            var cached = sentimentCacheService.getValue(cacheKey);
-            if (cached.isPresent()) {
-                CachedSentiment sentimentData = (CachedSentiment) cached.get();
-                return buildSentimentResultFromCache(stockSymbol, date, sentimentData);
-            }
-        }
 
         try {
             // Fetch news articles
@@ -153,6 +132,14 @@ public class SentimentService {
                 return createDefaultSentimentResult(stockSymbol, date, SentimentType.NEUTRAL);
             }
 
+            // Limit articles to fit within LLM context window
+            int articleCountForLlm = newsContent.size();
+            if (newsContent.size() > MAX_ARTICLES_FOR_LLM) {
+                logger.info("Truncating {} articles to {} for LLM analysis (Pi context limit)",
+                        newsContent.size(), MAX_ARTICLES_FOR_LLM);
+                newsContent = newsContent.subList(0, MAX_ARTICLES_FOR_LLM);
+            }
+
             // Perform sentiment analysis
             SentimentOutput analysisResult;
             try {
@@ -174,8 +161,7 @@ public class SentimentService {
             }
 
             // Build and cache result
-            int articleCount = newsContent.size();
-            SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult, articleCount);
+            SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult, articleCountForLlm);
 
             // Persist to database
             try {
@@ -184,11 +170,6 @@ public class SentimentService {
             } catch (Exception e) {
                 logger.warn("Failed to persist sentiment result for {}: {}", stockSymbol, e.getMessage());
                 // Don't fail the analysis if persistence fails
-            }
-
-            // Cache the result
-            if (enableCaching) {
-                cacheSentimentResult(cacheKey, result, analysisResult);
             }
 
             logger.info("Sentiment analysis complete for {}: {} (confidence: {})",
@@ -224,15 +205,24 @@ public class SentimentService {
         // Combine all news content into a single prompt for comprehensive analysis
         String combinedContent = String.join("\n\n---\n\n", newsContent);
 
-        // Create prompt using SentimentAnalyzer
-        List<Map<String, String>> messages =
-                sentimentAnalyzer.createSentimentAnalysisPrompt(stockSymbol, combinedContent);
+        // Create prompt using loaded templates
+        String formattedUser = promptLoader.getUserPrompt()
+                .replace("{symbol}", stockSymbol)
+                .replace("{newsContent}", combinedContent);
+        List<Map<String, String>> messages = List.of(
+                Map.of("role", "system", "content", promptLoader.getSystemPrompt()),
+                Map.of("role", "user", "content", formattedUser)
+        );
 
         // Call LLM for sentiment analysis
         String llmResponse;
         try {
-            serverManager.ensureRunning();
-            llmResponse = llamaCppClient.generateChatCompletion(messages, 512, 0.3)
+            LlmServerManager manager = serverManagerProvider.getManager();
+            if (manager != null) {
+                manager.ensureRunning();
+            }
+            LlmClient client = clientProvider.getClient();
+            llmResponse = client.generateChatCompletion(messages, 512, 0.3)
                     .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
         } catch (Exception e) {
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
@@ -311,7 +301,7 @@ public class SentimentService {
     private String computePromptHash() {
         try {
             java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(sentimentAnalyzer.getSystemPrompt().getBytes("UTF-8"));
+            byte[] hash = digest.digest(promptLoader.getSystemPrompt().getBytes("UTF-8"));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) {
                 sb.append(String.format("%02x", b));
@@ -356,109 +346,6 @@ public class SentimentService {
                 List.of(),
                 List.of()
         );
-    }
-
-    /**
-     * Builds SentimentResult from cached sentiment data.
-     *
-     * @param stockSymbol the stock symbol
-     * @param date the analysis date
-     * @param cached the cached sentiment data
-     * @return built sentiment result
-     */
-    private SentimentResult buildSentimentResultFromCache(
-            String stockSymbol,
-            LocalDate date,
-            CachedSentiment cached) {
-
-        SentimentResult.SentimentScore score;
-        switch (cached.sentimentType()) {
-            case POSITIVE:
-                score = SentimentResult.SentimentScore.POSITIVE;
-                break;
-            case NEGATIVE:
-                score = SentimentResult.SentimentScore.NEGATIVE;
-                break;
-            default:
-                score = SentimentResult.SentimentScore.NEUTRAL;
-        }
-
-        return new SentimentResult(
-                cached.resultId(),
-                stockSymbol,
-                date,
-                score,
-                cached.reasoning(),
-                "",
-                cached.confidence(),
-                LocalDate.now(),
-                cached.redFlags(),
-                cached.catalysts(),
-                null,
-                null,
-                cached.articleCount()
-        );
-    }
-
-    /**
-     * Caches sentiment result for future retrieval.
-     *
-     * @param cacheKey the cache key
-     * @param result the sentiment result
-     * @param analysisResult the LLM analysis result
-     */
-    private void cacheSentimentResult(
-            String cacheKey,
-            SentimentResult result,
-            SentimentOutput analysisResult) {
-
-        if (sentimentCacheService.isCacheFull()) {
-            logger.debug("Cache is full, pruning oldest entry");
-            sentimentCacheService.pruneOldest();
-        }
-
-        CachedSentiment cached = new CachedSentiment(
-                result.id(),
-                analysisResult.getSentiment(),
-                analysisResult.getReasoning(),
-                analysisResult.getRedFlags(),
-                analysisResult.getCatalysts(),
-                analysisResult.getConfidence(),
-                result.articleCount()
-        );
-
-        sentimentCacheService.cache(cacheKey, cached, cacheExpiryMinutes);
-    }
-
-    /**
-     * Generates cache key for sentiment analysis result.
-     *
-     * @param stockSymbol the stock symbol
-     * @param date the analysis date
-     * @return cache key
-     */
-    private String generateCacheKey(String stockSymbol, LocalDate date) {
-        return String.format("%s_%s", stockSymbol.toUpperCase(), date);
-    }
-
-    /**
-     * Clears cache entry for a specific stock and date.
-     *
-     * @param stockSymbol the stock symbol
-     * @param date the date
-     */
-    public void clearCache(String stockSymbol, LocalDate date) {
-        String cacheKey = generateCacheKey(stockSymbol, date);
-        sentimentCacheService.remove(cacheKey);
-        logger.debug("Cleared cache for {}", cacheKey);
-    }
-
-    /**
-     * Clears all cached sentiment results.
-     */
-    public void clearAllCache() {
-        sentimentCacheService.clearAll();
-        logger.info("Cleared all sentiment cache entries");
     }
 
     /**
@@ -507,57 +394,6 @@ public class SentimentService {
                 results.size() - failedSymbols.size(), failedSymbols.size());
 
         return results;
-    }
-
-    /**
-     * Gets cached sentiment results for a stock.
-     *
-     * @param stockSymbol the stock symbol
-     * @return map of date to cached sentiment
-     */
-    public Map<LocalDate, CachedSentiment> getCachedSentiments(String stockSymbol) {
-        return sentimentCacheService.getCacheForSymbol(stockSymbol.toUpperCase());
-    }
-
-    /**
-     * Checks if sentiment is cached for a specific stock and date.
-     *
-     * @param stockSymbol the stock symbol
-     * @param date the date
-     * @return true if cached
-     */
-    public boolean isSentimentCached(String stockSymbol, LocalDate date) {
-        return enableCaching && sentimentCacheService.isCached(
-                generateCacheKey(stockSymbol, date));
-    }
-
-    /**
-     * Refreshes cached sentiment for a stock (forces re-analysis).
-     *
-     * @param stockSymbol the stock symbol
-     * @param date the date
-     * @return refreshed sentiment result
-     */
-    public SentimentResult refreshSentiment(String stockSymbol, LocalDate date) {
-        // Remove from cache first
-        clearCache(stockSymbol, date);
-
-        // Re-analyze
-        return analyzeStockSentiment(stockSymbol, date);
-    }
-
-    /**
-     * Gets statistics about cached sentiment data.
-     *
-     * @return cache statistics
-     */
-    public CacheStatistics getCacheStatistics() {
-        return new CacheStatistics(
-                sentimentCacheService.getCacheSize(),
-                maxCacheSize,
-                enableCaching,
-                cacheExpiryMinutes
-        );
     }
 
     /**
@@ -1065,31 +901,6 @@ public class SentimentService {
         // Fallback: return first 30 chars of snippet
         return snippet.trim().length() > 30 ? snippet.trim().substring(0, 30) + "..." : snippet.trim();
     }
-
-    // ============ Inner Classes ============
-
-    /**
-     * Record representing cached sentiment data.
-     */
-    public record CachedSentiment(
-            Long resultId,
-            SentimentType sentimentType,
-            String reasoning,
-            List<String> redFlags,
-            List<String> catalysts,
-            Double confidence,
-            int articleCount
-    ) {}
-
-    /**
-     * Record representing cache statistics.
-     */
-    public record CacheStatistics(
-            int currentSize,
-            int maxSize,
-            boolean isEnabled,
-            long expiryMinutes
-    ) {}
 
     // ============ Test Accessor Methods ============
 

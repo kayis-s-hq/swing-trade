@@ -1,6 +1,6 @@
 package com.swingtrade.api.service;
 
-import com.swingtrade.api.dto.CompositeAnalysis;
+import com.swingtrade.domain.CompositeAnalysis;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.StrategyParams;
 import com.swingtrade.strategy.TechnicalIndicators;

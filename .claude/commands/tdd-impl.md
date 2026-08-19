@@ -6,6 +6,35 @@ description: Execute a TDD plan from docs/plans/ step by step with strict RED-GR
 
 Execute a TDD plan from `docs/plans/` step by step. Strict RED-GREEN-REFACTOR cycle.
 
+## Tail End — Pending Plans Check
+
+Before executing, check for pending TDD plans:
+
+```bash
+for f in docs/plans/*.md; do
+  grep -A 10 "## Phase Status" "$f" | head -15
+done
+```
+
+Report pending plans:
+
+```markdown
+## Pending TDD Plans
+
+| Plan | Phases | Status |
+|------|--------|--------|
+| plan-name.md | 4 phases | [x] 2 done / [ ] 2 pending |
+| other-plan.md | 7 phases | [ ] 7 pending |
+
+No pending plans — all clear.
+```
+
+If pending plans exist:
+
+> "You have [N] pending TDD plan(s). Execute one before starting new work?"
+
+Let the user decide: execute pending, skip, or proceed with current plan.
+
 ## When to Use
 
 - A TDD plan exists in `docs/plans/` for the current task

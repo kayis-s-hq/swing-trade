@@ -44,19 +44,17 @@ public class JobRunController {
             : JobRun.TriggerType.MANUAL;
 
         JobRun run = orchestratorService.startRun(type);
-        return ResponseEntity.ok(JobRunResponse.from(
-            new JobRunEntity() {{
-                setRunId(run.runId());
-                setTriggerType(run.triggerType().name());
-                setStatus(run.status().name());
-                setStartedAt(run.startedAt());
-                setCompletedAt(run.completedAt());
-                setSymbolsCount(run.symbolsCount());
-                setCompletedCount(run.completedCount());
-                setFailedCount(run.failedCount());
-                setErrorMessage(run.errorMessage());
-            }}
-        ));
+        JobRunEntity entity = new JobRunEntity();
+        entity.setRunId(run.runId());
+        entity.setTriggerType(run.triggerType().name());
+        entity.setStatus(run.status().name());
+        entity.setStartedAt(run.startedAt());
+        entity.setCompletedAt(run.completedAt());
+        entity.setSymbolsCount(run.symbolsCount());
+        entity.setCompletedCount(run.completedCount());
+        entity.setFailedCount(run.failedCount());
+        entity.setErrorMessage(run.errorMessage());
+        return ResponseEntity.ok(JobRunResponse.from(entity));
     }
 
     /**

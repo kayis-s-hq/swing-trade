@@ -45,11 +45,7 @@ interface RawFetchResult {
   error?: string
 }
 
-async function rawFetch(
-  path: string,
-  init?: RequestInit,
-  retries = 3
-): Promise<RawFetchResult> {
+async function rawFetch(path: string, init?: RequestInit, retries = 3): Promise<RawFetchResult> {
   let lastError: string = ''
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -335,7 +331,8 @@ export async function generateAllSignals(): Promise<
 // ---------------------------------------------------------------------------
 
 export interface SignalGenerationProgress {
-  eventType: 'STARTED' | 'GENERATING' | 'SENTIMENT_ANALYZING' | 'SIGNAL_DONE' | 'SKIPPED' | 'COMPLETE'
+  eventType:
+    'STARTED' | 'GENERATING' | 'SENTIMENT_ANALYZING' | 'SIGNAL_DONE' | 'SKIPPED' | 'COMPLETE'
   symbol?: string
   status: 'PROCESSING' | 'DONE' | 'SKIPPED' | 'ERROR'
   message: string
@@ -347,7 +344,7 @@ export interface SignalGenerationProgress {
 export async function* generateAllSignalsStream(): AsyncIterable<SignalGenerationProgress> {
   const url = `${API_BASE_URL}/signals/generate-all/stream`
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 60_000)
+  const timeoutId = setTimeout(() => controller.abort(), 600_000) // 10 min (Pi llama-server can be slow)
 
   const response = await fetch(url, {
     method: 'POST',
@@ -738,6 +735,14 @@ export async function testDiscordWebhook(): Promise<ApiResponse<{ success: boole
   return { success: true, data: unwrap<{ success: boolean }>(raw) }
 }
 
+export async function testPiConnection(): Promise<
+  ApiResponse<{ success: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/test/pi', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
+}
+
 export async function getGpuHubSettings(): Promise<ApiResponse<Record<string, string>>> {
   const raw = await rawFetch('/settings/gpuhub')
   if (!raw.ok) return errResponse(raw.error!)
@@ -971,7 +976,7 @@ export async function* runFullAnalysis(
 
   const url = `${API_BASE_URL}/analysis/run-full?${params}`
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 60_000)
+  const timeoutId = setTimeout(() => controller.abort(), 600_000) // 10 min (Pi llama-server can be slow)
 
   const response = await fetch(url, {
     method: 'POST',
@@ -1055,7 +1060,9 @@ export async function startJobRun(triggerType = 'MANUAL'): Promise<ApiResponse<J
   return { success: true, data: raw.data as JobRunResponse }
 }
 
-export async function getJobRunProgress(runId: string): Promise<ApiResponse<JobRunProgressResponse>> {
+export async function getJobRunProgress(
+  runId: string
+): Promise<ApiResponse<JobRunProgressResponse>> {
   const raw = await rawFetch(`/job/runs/${runId}/progress`)
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: raw.data as JobRunProgressResponse }

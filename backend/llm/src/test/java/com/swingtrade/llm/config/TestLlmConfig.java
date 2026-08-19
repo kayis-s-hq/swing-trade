@@ -4,12 +4,17 @@ import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.llm.client.LlamaCppClient;
+import com.swingtrade.llm.service.LlmBackendSelector;
 import com.swingtrade.llm.service.LlamaCppServerManager;
 import com.swingtrade.llm.service.NewsFilterService;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
-import com.swingtrade.llm.service.SentimentCacheService;
+import com.swingtrade.llm.config.SentimentPromptLoader;
+import com.swingtrade.llm.config.PdfExtractionPromptLoader;
+import com.swingtrade.llm.config.SynthesisPromptLoader;
 import com.swingtrade.llm.service.SentimentAnalyzer;
+import com.swingtrade.llm.service.LlmClientProvider;
+import com.swingtrade.llm.service.LlmServerManagerProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
@@ -62,8 +67,33 @@ public class TestLlmConfig {
 
     @Primary
     @Bean
-    public LlamaCppClient llamaCppClient(WebClient.Builder webClientBuilder, AppSettingsStore appSettingsStore) {
-        return new LlamaCppClient(webClientBuilder, appSettingsStore);
+    public LlamaCppClient llamaCppClient(WebClient.Builder webClientBuilder,
+                                         AppSettingsStore appSettingsStore,
+                                         LlmBackendSelector selector) {
+        return new LlamaCppClient(webClientBuilder, appSettingsStore, selector, "localhost", 8090);
+    }
+
+    @Primary
+    @Bean
+    public SentimentPromptLoader sentimentPromptLoader() {
+        return new SentimentPromptLoader(
+                new org.springframework.core.io.ClassPathResource("prompts/sentiment-system.md"),
+                new org.springframework.core.io.ClassPathResource("prompts/sentiment-user.md"));
+    }
+
+    @Primary
+    @Bean
+    public SynthesisPromptLoader synthesisPromptLoader() {
+        return new SynthesisPromptLoader(
+                new org.springframework.core.io.ClassPathResource("prompts/synthesis-system.md"),
+                new org.springframework.core.io.ClassPathResource("prompts/synthesis-user.md"));
+    }
+
+    @Primary
+    @Bean
+    public PdfExtractionPromptLoader pdfExtractionPromptLoader() {
+        return new PdfExtractionPromptLoader(
+                new org.springframework.core.io.ClassPathResource("prompts/pdf-extraction.md"));
     }
 
     @Primary
@@ -82,12 +112,6 @@ public class TestLlmConfig {
     @Bean
     public ObjectMapper objectMapper() {
         return new ObjectMapper();
-    }
-
-    @Primary
-    @Bean
-    public SentimentCacheService sentimentCacheService() {
-        return new SentimentCacheService(100, 60);
     }
 
     // ===== H2 Database Configuration for Testing =====
@@ -127,26 +151,23 @@ public class TestLlmConfig {
     @Primary
     @Bean
     public SentimentService sentimentAnalysisService(
-            LlamaCppClient llamaCppClient,
-            LlamaCppServerManager serverManager,
+            LlmClientProvider clientProvider,
+            LlmServerManagerProvider serverManagerProvider,
+            SentimentPromptLoader promptLoader,
             SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService,
-            SentimentCacheService sentimentCacheService,
             SentimentStore sentimentStore,
             StockStore stockStore,
             AppSettingsStore appSettingsStore) {
         return new SentimentService(
-                llamaCppClient,
-                serverManager,
+                clientProvider,
+                serverManagerProvider,
+                promptLoader,
                 sentimentAnalyzer,
                 newsIngestionService,
-                sentimentCacheService,
                 sentimentStore,
                 stockStore,
                 appSettingsStore,
-                100,
-                60,
-                false,
                 0.75
         );
     }

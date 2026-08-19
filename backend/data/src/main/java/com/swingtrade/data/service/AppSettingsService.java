@@ -12,8 +12,10 @@ import java.util.Optional;
 
 import org.springframework.transaction.annotation.Transactional;
 
+import com.swingtrade.domain.store.AppSettingsStore;
+
 @Service
-public class AppSettingsService {
+public class AppSettingsService implements AppSettingsStore {
 
     private static final Logger log = LoggerFactory.getLogger(AppSettingsService.class);
 
@@ -26,16 +28,24 @@ public class AppSettingsService {
     /**
      * Read a setting: env var override → DB → default.
      */
-    public String get(String key, String defaultValue) {
+    @Override
+    public Optional<String> get(String key) {
         String envValue = AppSettingEntity.fromEnv(key, null);
         if (envValue != null) {
-            return envValue;
+            return Optional.of(envValue);
         }
         Optional<AppSettingEntity> entity = repo.findByKey(key);
         if (entity.isPresent() && entity.get().getValue() != null) {
-            return entity.get().getValue();
+            return Optional.of(entity.get().getValue());
         }
-        return defaultValue;
+        return Optional.empty();
+    }
+
+    /**
+     * Read a setting: env var override → DB → default.
+     */
+    public String get(String key, String defaultValue) {
+        return get(key).orElse(defaultValue);
     }
 
     /**

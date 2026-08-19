@@ -19,26 +19,38 @@ const props = defineProps<{
 const badgeClass = computed(() => {
   const s = props.status.toUpperCase()
   switch (s) {
-    case 'RUNNING': return 'bg-brand-subtle text-brand'
-    case 'COMPLETED': return 'bg-success-subtle text-success'
+    case 'RUNNING':
+      return 'bg-brand-subtle text-brand'
+    case 'COMPLETED':
+      return 'bg-success-subtle text-success'
     case 'FAILED':
-    case 'ERROR': return 'bg-danger-subtle text-danger'
-    case 'CANCELLED': return 'bg-warning-subtle text-warning'
-    case 'PENDING': return 'bg-bg-primary text-text-muted'
-    case 'SKIPPED': return 'bg-bg-primary text-text-muted'
-    default: return 'bg-bg-primary text-text-muted'
+    case 'ERROR':
+      return 'bg-danger-subtle text-danger'
+    case 'CANCELLED':
+      return 'bg-warning-subtle text-warning'
+    case 'PENDING':
+      return 'bg-bg-primary text-text-muted'
+    case 'SKIPPED':
+      return 'bg-bg-primary text-text-muted'
+    default:
+      return 'bg-bg-primary text-text-muted'
   }
 })
 
 const dotClass = computed(() => {
   const s = props.status.toUpperCase()
   switch (s) {
-    case 'RUNNING': return 'bg-brand animate-pulse'
-    case 'COMPLETED': return 'bg-success'
+    case 'RUNNING':
+      return 'bg-brand animate-pulse'
+    case 'COMPLETED':
+      return 'bg-success'
     case 'FAILED':
-    case 'ERROR': return 'bg-danger'
-    case 'CANCELLED': return 'bg-warning'
-    default: return 'bg-text-muted'
+    case 'ERROR':
+      return 'bg-danger'
+    case 'CANCELLED':
+      return 'bg-warning'
+    default:
+      return 'bg-text-muted'
   }
 })
 </script>

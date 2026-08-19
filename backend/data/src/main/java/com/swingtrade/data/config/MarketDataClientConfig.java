@@ -1,9 +1,6 @@
 package com.swingtrade.data.config;
 
 import com.swingtrade.data.client.YahooFinanceClient;
-import com.swingtrade.data.service.FyersAuthService;
-import com.swingtrade.data.service.FyersServiceClient;
-import com.swingtrade.data.service.FyersSymbolMasterService;
 import com.swingtrade.data.service.MarketDataClient;
 import com.swingtrade.data.service.NseInstrumentService;
 import com.swingtrade.data.service.UpstoxAuthService;
@@ -28,13 +25,5 @@ public class MarketDataClientConfig {
             UpstoxAuthService authService,
             NseInstrumentService instrumentService) {
         return new UpstoxServiceClient(webClientBuilder, authService, instrumentService);
-    }
-
-    @Bean(name = "fyers")
-    public MarketDataClient fyersServiceClient(
-            WebClient.Builder webClientBuilder,
-            FyersAuthService authService,
-            FyersSymbolMasterService symbolMasterService) {
-        return new FyersServiceClient(webClientBuilder, authService, symbolMasterService);
     }
 }

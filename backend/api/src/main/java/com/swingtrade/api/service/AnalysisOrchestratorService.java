@@ -1,16 +1,16 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.AnalysisProgress;
-import com.swingtrade.api.dto.CompositeAnalysis;
+import com.swingtrade.domain.CompositeAnalysis;
 import com.swingtrade.api.dto.FullAnalysisResult;
 import com.swingtrade.domain.SynthesisResult;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.store.CandleStore;
-import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
+import com.swingtrade.llm.service.SynthesisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -35,7 +35,6 @@ public class AnalysisOrchestratorService {
     private final FundamentalScorer fundamentalScorer;
     private final SynthesisService synthesisService;
     private final CandleStore candleStore;
-    private final SentimentStore sentimentStore;
 
     public AnalysisOrchestratorService(DataIngestionService dataIngestionService,
                                        NewsIngestionService newsIngestionService,
@@ -45,8 +44,7 @@ public class AnalysisOrchestratorService {
                                        BacktestScorer backtestScorer,
                                        FundamentalScorer fundamentalScorer,
                                        SynthesisService synthesisService,
-                                       CandleStore candleStore,
-                                       SentimentStore sentimentStore) {
+                                       CandleStore candleStore) {
         this.dataIngestionService = dataIngestionService;
         this.newsIngestionService = newsIngestionService;
         this.sentimentService = sentimentService;
@@ -56,7 +54,6 @@ public class AnalysisOrchestratorService {
         this.fundamentalScorer = fundamentalScorer;
         this.synthesisService = synthesisService;
         this.candleStore = candleStore;
-        this.sentimentStore = sentimentStore;
     }
 
     public FullAnalysisResult runFullAnalysis(String symbol, SseEmitter emitter, int backfillYears) {
@@ -121,34 +118,48 @@ public class AnalysisOrchestratorService {
 
     private void runStage3FetchNews(SseEmitter emitter, List<AnalysisProgress> progress, String sym, StageContext ctx) {
         long s3 = System.currentTimeMillis();
-        if (!hasSentimentForToday(sym)) {
-            emitProgress(emitter, progress, AnalysisProgress.running(3, "fetching news"));
-            try {
-                List<NewsArticle> articles = newsIngestionService.fetchStockNews(sym);
-                int articleCount = articles.size();
-                int sourceCount = (int) articles.stream()
-                    .map(a -> a.source())
-                    .distinct()
-                    .count();
-                emitProgress(emitter, progress, AnalysisProgress.completed(3, "fetching news",
-                    String.format("Fetched %d news articles", articleCount),
-                    new AnalysisProgress.StageDetails("news", Map.of(
-                        "articleCount", articleCount,
-                        "sourceCount", sourceCount,
-                        "sources", articles.stream().map(a -> a.source()).distinct().toList()
-                    ))));
-            } catch (Exception e) {
-                emitProgress(emitter, progress, AnalysisProgress.error(3, "fetching news", e.getMessage()));
-            }
-        } else {
+        if (ctx.newsFetched) {
             emitProgress(emitter, progress, AnalysisProgress.skipped(3, "fetching news",
-                "Sentiment already exists for today"));
+                "Already fetched in this run"));
+            logger.info("Stage 3 done in {}ms", System.currentTimeMillis() - s3);
+            return;
+        }
+        emitProgress(emitter, progress, AnalysisProgress.running(3, "fetching news"));
+        try {
+            List<NewsArticle> articles = newsIngestionService.fetchStockNews(sym);
+            ctx.newsFetched = true;
+            int articleCount = articles.size();
+            int sourceCount = (int) articles.stream()
+                .map(a -> a.source())
+                .distinct()
+                .count();
+            emitProgress(emitter, progress, AnalysisProgress.completed(3, "fetching news",
+                String.format("Fetched %d news articles", articleCount),
+                new AnalysisProgress.StageDetails("news", Map.of(
+                    "articleCount", articleCount,
+                    "sourceCount", sourceCount,
+                    "sources", articles.stream().map(a -> a.source()).distinct().toList()
+                ))));
+        } catch (Exception e) {
+            ctx.newsFetched = true; // mark to avoid retrying
+            emitProgress(emitter, progress, AnalysisProgress.error(3, "fetching news", e.getMessage()));
         }
         logger.info("Stage 3 done in {}ms", System.currentTimeMillis() - s3);
     }
 
     private void runStage4Sentiment(SseEmitter emitter, List<AnalysisProgress> progress, String sym, StageContext ctx) {
         long s4 = System.currentTimeMillis();
+        // Always fetch fresh news for sentiment analysis (no DB skip)
+        if (!ctx.newsFetched) {
+            try {
+                List<NewsArticle> articles = newsIngestionService.fetchStockNews(sym);
+                ctx.newsFetched = true;
+                logger.info("Stage 4: fetched {} articles for {}", articles.size(), sym);
+            } catch (Exception e) {
+                ctx.newsFetched = true;
+                logger.warn("Stage 4: failed to fetch news for {}: {}", sym, e.getMessage());
+            }
+        }
         try {
             ctx.sentiment = sentimentService.analyzeStockSentiment(sym, LocalDate.now());
             emitProgress(emitter, progress, AnalysisProgress.completed(4, "LLM sentiment",
@@ -162,8 +173,7 @@ public class AnalysisOrchestratorService {
                     "articleCount", ctx.sentiment.articleCount()
                 ))));
         } catch (Exception e) {
-            ctx.sentiment = SentimentResult.create(sym, LocalDate.now(),
-                SentimentResult.SentimentScore.NEUTRAL, "LLM sentiment unavailable", "", 0.3, List.of(), List.of());
+            ctx.sentiment = null;
             emitProgress(emitter, progress, AnalysisProgress.error(4, "LLM sentiment", e.getMessage()));
         }
         logger.info("Stage 4 done in {}ms", System.currentTimeMillis() - s4);
@@ -182,7 +192,6 @@ public class AnalysisOrchestratorService {
                     "indicators", ctx.technical.indicators()
                 ))));
         } catch (Exception e) {
-            ctx.technical = new CompositeAnalysis.TechnicalScore(0, "HOLD", 0.0, List.of());
             emitProgress(emitter, progress, AnalysisProgress.error(5, "technical analysis", e.getMessage()));
         }
         logger.info("Stage 5 done in {}ms", System.currentTimeMillis() - s5);
@@ -200,7 +209,6 @@ public class AnalysisOrchestratorService {
                     "factors", ctx.fundamentals.factors()
                 ))));
         } catch (Exception e) {
-            ctx.fundamentals = new CompositeAnalysis.FundamentalScore(0, List.of("Analysis failed: " + e.getMessage()));
             emitProgress(emitter, progress, AnalysisProgress.error(6, "fundamentals", e.getMessage()));
         }
         logger.info("Stage 6 done in {}ms", System.currentTimeMillis() - s6);
@@ -223,7 +231,6 @@ public class AnalysisOrchestratorService {
                     "hasEnoughData", ctx.backtest.hasEnoughData()
                 ))));
         } catch (Exception e) {
-            ctx.backtest = new CompositeAnalysis.BacktestScore(0, 0, 0, 0, 0, 0, false);
             emitProgress(emitter, progress, AnalysisProgress.error(7, "backtest", e.getMessage()));
         }
         logger.info("Stage 7 done in {}ms", System.currentTimeMillis() - s7);
@@ -263,15 +270,18 @@ public class AnalysisOrchestratorService {
                     ctx.composite.fundamentals(), ctx.composite.backtest(), ctx.composite.reasoning(),
                     synthesisResult);
                 emitProgress(emitter, progress, AnalysisProgress.completed(9, "LLM synthesis",
-                    String.format("Recommendation: %s (%.0f%% confidence)",
-                        synthesisResult.recommendation(), synthesisResult.confidence() * 100),
+                    synthesisResult.success()
+                        ? String.format("Recommendation: %s (%.0f%% confidence)",
+                            synthesisResult.recommendation(), synthesisResult.confidence() * 100)
+                        : "LLM unavailable — template-based summary",
                     new AnalysisProgress.StageDetails("synthesis", Map.of(
                         "narrative", synthesisResult.narrative(),
                         "recommendation", synthesisResult.recommendation(),
                         "confidence", synthesisResult.confidence(),
                         "keyDrivers", synthesisResult.keyDrivers(),
                         "bullishFactors", synthesisResult.bullishFactors(),
-                        "bearishFactors", synthesisResult.bearishFactors()
+                        "bearishFactors", synthesisResult.bearishFactors(),
+                        "success", synthesisResult.success()
                     ))));
             } else {
                 emitProgress(emitter, progress, AnalysisProgress.error(9, "LLM synthesis",
@@ -294,14 +304,7 @@ public class AnalysisOrchestratorService {
         }
     }
 
-    private boolean hasSentimentForToday(String symbol) {
-        try {
-            return sentimentStore.findBySymbolAndDate(symbol, LocalDate.now()).isPresent();
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
+    
     /**
      * Mutable context shared across pipeline stages.
      */
@@ -312,6 +315,7 @@ public class AnalysisOrchestratorService {
         private CompositeAnalysis.FundamentalScore fundamentals;
         private CompositeAnalysis.BacktestScore backtest;
         private CompositeAnalysis composite;
+        private boolean newsFetched;
 
         public int getCandleCount() {
             return candleCount;
@@ -359,6 +363,14 @@ public class AnalysisOrchestratorService {
 
         public void setComposite(CompositeAnalysis composite) {
             this.composite = composite;
+        }
+
+        public boolean isNewsFetched() {
+            return newsFetched;
+        }
+
+        public void setNewsFetched(boolean newsFetched) {
+            this.newsFetched = newsFetched;
         }
     }
 }

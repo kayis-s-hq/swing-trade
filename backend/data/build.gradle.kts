@@ -3,6 +3,11 @@ plugins {
     id("io.spring.dependency-management")
 }
 
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
 dependencyManagement {
     imports {
         mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")
@@ -23,7 +28,7 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql:10.13.0")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
 
-    implementation(files("${project.rootProject.layout.projectDirectory.dir("../libs/fyersjavasdk-1.9.0.jar")}"))
+    implementation("com.fyers:fyersjavasdk:1.9.0")
     implementation("org.json:json:20231013")
     implementation("org.apache.commons:commons-csv:1.11.0")
     implementation("org.jsoup:jsoup:1.18.3")
@@ -32,7 +37,7 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
+    testImplementation("org.junit.jupiter:junit.jupiter:5.11.0")
     testImplementation("org.mockito:mockito-core:5.12.0")
     testImplementation("org.assertj:assertj-core:3.26.3")
     testImplementation("org.wiremock:wiremock:3.8.0")
@@ -60,4 +65,3 @@ tasks {
         options.encoding = "UTF-8"
     }
 }
-

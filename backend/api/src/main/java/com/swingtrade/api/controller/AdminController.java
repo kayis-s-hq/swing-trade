@@ -3,12 +3,12 @@ package com.swingtrade.api.controller;
 import com.swingtrade.api.dto.ApiResponse;
 import com.swingtrade.api.dto.KillSwitchRequest;
 import com.swingtrade.broker.risk.KillSwitchService;
+import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.data.service.FyersSymbolMasterService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,17 +34,14 @@ public class AdminController {
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
 
     private final KillSwitchService killSwitchService;
-
     private final DataIngestionService dataIngestionService;
-
     private final FyersSymbolMasterService symbolMasterService;
 
-    @Autowired
     public AdminController(KillSwitchService killSwitchService, DataIngestionService dataIngestionService,
-                            FyersSymbolMasterService symbolMasterService) {
+                           WebClient.Builder webClientBuilder, FyersSymbolRepository symbolRepository) {
         this.killSwitchService = killSwitchService;
         this.dataIngestionService = dataIngestionService;
-        this.symbolMasterService = symbolMasterService;
+        this.symbolMasterService = new FyersSymbolMasterService(webClientBuilder, symbolRepository);
         logger.info("AdminController initialized with kill switch and data ingestion services");
     }
 

@@ -3,42 +3,59 @@ package com.swingtrade.llm.client;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.swingtrade.domain.store.AppSettingsStore;
+import com.swingtrade.llm.service.LlmBackendSelector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import io.netty.channel.ConnectTimeoutException;
 import reactor.core.publisher.Mono;
 
+import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Client for communicating with local llama.cpp server via OpenAI-compatible API.
- * Primary endpoint for sentiment analysis.
- * Reads model config from AppSettingsStore so changes persist at runtime.
+ * Client for communicating with llama.cpp server via OpenAI-compatible API.
+ * Used for both local and Pi SSH backends.
+ * Reads base URL from AppSettingsStore so changes persist at runtime.
  */
 @Component
-public class LlamaCppClient {
+public class LlamaCppClient implements LlmClient {
 
     private static final Logger logger = LoggerFactory.getLogger(LlamaCppClient.class);
 
     private static final String DEFAULT_BASE_URL = "http://localhost:8080/v1";
     private static final String DEFAULT_MODEL = "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf";
+    private static final Duration READ_TIMEOUT = Duration.ofMinutes(10);
 
     private final WebClient webClient;
     private final AppSettingsStore appSettingsStore;
+    private final LlmBackendSelector selector;
+    private final String sshHost;
+    private final int sshPort;
 
     public LlamaCppClient(WebClient.Builder webClientBuilder,
-                          AppSettingsStore appSettingsStore) {
+                          AppSettingsStore appSettingsStore,
+                          LlmBackendSelector selector,
+                          @Value("${llamacpp.ssh.host:192.168.0.100}") String sshHost,
+                          @Value("${llamacpp.port:8090}") int sshPort) {
         this.webClient = webClientBuilder
                 .defaultHeader("Content-Type", "application/json")
+                .codecs(config -> config.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
                 .build();
         this.appSettingsStore = appSettingsStore;
+        this.selector = selector;
+        this.sshHost = sshHost;
+        this.sshPort = sshPort;
     }
 
     /**
-     * Generates chat completion using the local llama.cpp server.
+     * Generates chat completion using the llama.cpp server.
      */
     public Mono<String> generateChatCompletion(List<Map<String, String>> messages,
                                                 int maxTokens,
@@ -46,8 +63,7 @@ public class LlamaCppClient {
         logger.debug("Generating chat completion with {} messages (model: {}, maxTokens: {})",
                 messages.size(), getModelName(), maxTokens);
 
-        String baseUrl = appSettingsStore.get("llm.base_url")
-                .orElse(DEFAULT_BASE_URL);
+        String baseUrl = resolveBaseUrl();
 
         Map<String, Object> request = Map.of(
                 "model", getModelName(),
@@ -66,6 +82,7 @@ public class LlamaCppClient {
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(ChatCompletionResponse.class)
+                .timeout(READ_TIMEOUT)
                 .map(response -> {
                     if (response != null && response.getChoices() != null && !response.getChoices().isEmpty()) {
                         return response.getChoices().get(0).getMessage().getContent();
@@ -74,7 +91,13 @@ public class LlamaCppClient {
                 })
                 .doOnSuccess(result -> logger.debug("Chat completion complete, received {} chars",
                         result != null ? result.length() : 0))
-                .doOnError(error -> logger.error("Chat completion failed: {}", error.getMessage()));
+                .doOnError(error -> {
+                    if (error instanceof java.util.concurrent.TimeoutException) {
+                        logger.error("Chat completion timed out after {}s: {}", READ_TIMEOUT.toSeconds(), error.getMessage());
+                    } else {
+                        logger.error("Chat completion failed: {}", error.getMessage());
+                    }
+                });
     }
 
     /**
@@ -100,6 +123,17 @@ public class LlamaCppClient {
     private String getModelName() {
         return appSettingsStore.get("llamacpp.model")
                 .orElse(DEFAULT_MODEL);
+    }
+
+    private String resolveBaseUrl() {
+        var backend = selector.resolve();
+        if (backend == LlmBackendSelector.Backend.PI_SSH) {
+            String url = String.format("http://%s:%d/v1", sshHost, sshPort);
+            logger.debug("Using Pi SSH base URL: {}", url);
+            return url;
+        }
+        return appSettingsStore.get("llm.base_url")
+                .orElse(DEFAULT_BASE_URL);
     }
 
     // ========== Response DTOs ==========

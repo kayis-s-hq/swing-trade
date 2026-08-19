@@ -44,156 +44,161 @@
       </div>
 
       <template v-else>
-      <!-- P&L Card -->
-      <div class="mb-6 card-panel p-5">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-text-muted">Today's P&L</p>
-            <div class="mt-2 flex items-baseline gap-3">
+        <!-- P&L Card -->
+        <div class="mb-6 card-panel p-5">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-text-muted">Today's P&L</p>
+              <div class="mt-2 flex items-baseline gap-3">
+                <span
+                  class="text-3xl font-bold tracking-tight"
+                  :class="(marketOverview?.todayPnl ?? 0) >= 0 ? 'text-success' : 'text-danger'"
+                >
+                  {{ (marketOverview?.todayPnl ?? 0) >= 0 ? '+' : '' }}Rs.{{
+                    (marketOverview?.todayPnl ?? 0).toLocaleString()
+                  }}
+                </span>
+                <span
+                  class="text-lg font-medium"
+                  :class="
+                    (portfolioSummary?.totalPnlPercent ?? 0) >= 0 ? 'text-success' : 'text-danger'
+                  "
+                >
+                  ({{ (portfolioSummary?.totalPnlPercent ?? 0).toFixed(2) }}%)
+                </span>
+              </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <HealthStatus v-if="healthData" :health="healthData" />
+              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-brand/10">
+                <svg
+                  class="h-6 w-6 text-brand"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
+          <div v-for="metric in metrics" :key="metric.title" class="card-panel p-4">
+            <p class="text-xs font-medium text-text-muted">
+              {{ metric.title }}
+            </p>
+            <p class="mt-1 text-xl font-bold text-text-primary">
+              {{ metric.value }}
+            </p>
+            <div v-if="metric.trend" class="mt-1 flex items-center gap-1">
               <span
-                class="text-3xl font-bold tracking-tight"
-                :class="(marketOverview?.todayPnl ?? 0) >= 0 ? 'text-success' : 'text-danger'"
+                class="text-xs font-medium"
+                :class="metric.trend.isPositive ? 'text-success' : 'text-danger'"
               >
-                {{ (marketOverview?.todayPnl ?? 0) >= 0 ? '+' : '' }}Rs.{{
-                  (marketOverview?.todayPnl ?? 0).toLocaleString()
-                }}
-              </span>
-              <span
-                class="text-lg font-medium"
-                :class="
-                  (portfolioSummary?.totalPnlPercent ?? 0) >= 0 ? 'text-success' : 'text-danger'
-                "
-              >
-                ({{ (portfolioSummary?.totalPnlPercent ?? 0).toFixed(2) }}%)
+                {{ metric.trend.isPositive ? '↑' : '↓' }} {{ metric.trend.value }}
               </span>
             </div>
           </div>
-          <div class="flex items-center gap-4">
-            <HealthStatus v-if="healthData" :health="healthData" />
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-brand/10">
-              <svg class="h-6 w-6 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                />
-              </svg>
+        </div>
+
+        <!-- Positions Table -->
+        <div class="card-panel">
+          <div class="flex items-center justify-between border-b border-border-subtle px-5 py-3">
+            <div>
+              <h2 class="text-sm font-semibold text-text-primary">Active Positions</h2>
+              <p class="text-xs text-text-muted">{{ positions.length }} positions</p>
             </div>
+            <router-link to="/positions" class="text-sm font-medium text-brand hover:underline">
+              View All →
+            </router-link>
           </div>
-        </div>
-      </div>
-
-      <!-- Metrics Grid -->
-      <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
-        <div v-for="metric in metrics" :key="metric.title" class="card-panel p-4">
-          <p class="text-xs font-medium text-text-muted">
-            {{ metric.title }}
-          </p>
-          <p class="mt-1 text-xl font-bold text-text-primary">
-            {{ metric.value }}
-          </p>
-          <div v-if="metric.trend" class="mt-1 flex items-center gap-1">
-            <span
-              class="text-xs font-medium"
-              :class="metric.trend.isPositive ? 'text-success' : 'text-danger'"
-            >
-              {{ metric.trend.isPositive ? '↑' : '↓' }} {{ metric.trend.value }}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Positions Table -->
-      <div class="card-panel">
-        <div class="flex items-center justify-between border-b border-border-subtle px-5 py-3">
-          <div>
-            <h2 class="text-sm font-semibold text-text-primary">Active Positions</h2>
-            <p class="text-xs text-text-muted">{{ positions.length }} positions</p>
-          </div>
-          <router-link to="/positions" class="text-sm font-medium text-brand hover:underline">
-            View All →
-          </router-link>
-        </div>
-        <div class="w-full overflow-x-auto">
-          <table class="min-w-full">
-            <thead>
-              <tr class="border-b border-border-subtle bg-bg-primary/50">
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Symbol
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Entry
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Qty
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Current
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Status
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  P&L
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border-subtle/50">
-              <tr
-                v-for="pos in positions.slice(0, 5)"
-                :key="pos.id"
-                class="transition-colors hover:bg-bg-hover"
-              >
-                <td class="px-5 py-4 text-sm font-semibold text-text-primary">
-                  {{ pos.symbol }}
-                </td>
-                <td class="px-5 py-4 text-sm text-text-secondary">Rs.{{ pos.entryPrice }}</td>
-                <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                  {{ pos.quantity }}
-                </td>
-                <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                  Rs.{{ pos.currentPrice }}
-                </td>
-                <td class="px-5 py-4">
-                  <span
-                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                    :class="
-                      pos.status === 'OPEN'
-                        ? 'bg-success-bg text-success'
-                        : 'bg-danger-bg text-danger'
-                    "
-                    >{{ pos.status }}</span
+          <div class="w-full overflow-x-auto">
+            <table class="min-w-full">
+              <thead>
+                <tr class="border-b border-border-subtle bg-bg-primary/50">
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
                   >
-                </td>
-                <td
-                  class="px-5 py-4 text-right text-sm font-semibold"
-                  :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
-                >
-                  {{ pos.pnl >= 0 ? '+' : '' }}Rs.{{ pos.pnl }}
-                  <span class="ml-1 text-xs font-normal opacity-70"
-                    >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
+                    Symbol
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
                   >
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                    Entry
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Qty
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Current
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Status
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    P&L
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border-subtle/50">
+                <tr
+                  v-for="pos in positions.slice(0, 5)"
+                  :key="pos.id"
+                  class="transition-colors hover:bg-bg-hover"
+                >
+                  <td class="px-5 py-4 text-sm font-semibold text-text-primary">
+                    {{ pos.symbol }}
+                  </td>
+                  <td class="px-5 py-4 text-sm text-text-secondary">Rs.{{ pos.entryPrice }}</td>
+                  <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                    {{ pos.quantity }}
+                  </td>
+                  <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                    Rs.{{ pos.currentPrice }}
+                  </td>
+                  <td class="px-5 py-4">
+                    <span
+                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      :class="
+                        pos.status === 'OPEN'
+                          ? 'bg-success-bg text-success'
+                          : 'bg-danger-bg text-danger'
+                      "
+                      >{{ pos.status }}</span
+                    >
+                  </td>
+                  <td
+                    class="px-5 py-4 text-right text-sm font-semibold"
+                    :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
+                  >
+                    {{ pos.pnl >= 0 ? '+' : '' }}Rs.{{ pos.pnl }}
+                    <span class="ml-1 text-xs font-normal opacity-70"
+                      >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
+                    >
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    </template>
-      </ErrorBoundary>
+      </template>
+    </ErrorBoundary>
   </div>
 </template>
 

@@ -8,19 +8,27 @@ test.describe('Positions View', () => {
     await page.waitForLoadState('networkidle')
 
     await expect(page.locator('h1', { hasText: 'Positions' })).toBeVisible()
-    await expect(page.locator('p', { hasText: /Active and closed paper trading positions/ })).toBeVisible()
+    await expect(
+      page.locator('p', { hasText: /Active and closed paper trading positions/ })
+    ).toBeVisible()
   })
 
   test('shows loading state then resolves', async ({ page }) => {
     await page.goto(`${DASHBOARD}/positions`)
 
     // Loading spinner should appear briefly
-    const loadingVisible = await page.locator('text=Loading positions').isVisible().catch(() => false)
+    const loadingVisible = await page
+      .locator('text=Loading positions')
+      .isVisible()
+      .catch(() => false)
 
     await page.waitForLoadState('networkidle')
 
     // Loading should be gone after networkidle
-    const loadingGone = await page.locator('text=Loading positions').isVisible().catch(() => false)
+    const loadingGone = await page
+      .locator('text=Loading positions')
+      .isVisible()
+      .catch(() => false)
     expect(loadingGone).toBe(false)
   })
 
@@ -98,8 +106,18 @@ test.describe('Positions View', () => {
     await page.waitForLoadState('networkidle')
 
     const headers = page.locator('thead th')
-    const headerTexts = (await headers.allTextContents()).map(t => t.trim())
-    const expected = ['Symbol', 'Entry', 'Qty', 'Current', 'Stop Loss', 'Target', 'Status', 'P&L', 'Action']
+    const headerTexts = (await headers.allTextContents()).map((t) => t.trim())
+    const expected = [
+      'Symbol',
+      'Entry',
+      'Qty',
+      'Current',
+      'Stop Loss',
+      'Target',
+      'Status',
+      'P&L',
+      'Action',
+    ]
 
     for (const expectedHeader of expected) {
       expect(headerTexts).toContain(expectedHeader)
@@ -203,7 +221,7 @@ test.describe('Positions View', () => {
     expect(pnlText).toContain('₹')
 
     // Should have either text-success or text-danger class on the td itself
-    const pnlClass = await pnlCell.evaluate(el => el.className)
+    const pnlClass = await pnlCell.evaluate((el) => el.className)
     expect(pnlClass.includes('text-success') || pnlClass.includes('text-danger')).toBe(true)
   })
 
@@ -275,7 +293,9 @@ test.describe('Positions View', () => {
     await targetInput.fill('3700')
 
     // Fill entry reason
-    await page.locator('textarea[placeholder="Why are you entering this trade?"]').fill('Breakout above resistance')
+    await page
+      .locator('textarea[placeholder="Why are you entering this trade?"]')
+      .fill('Breakout above resistance')
 
     // Verify Cancel button exists
     await expect(page.locator('button', { hasText: 'Cancel' })).toBeVisible()
@@ -291,7 +311,10 @@ test.describe('Positions View', () => {
     await page.getByRole('button', { name: 'New Position' }).click()
 
     // Default order type is MARKET — Limit Price field should be hidden
-    const limitPriceVisible = await page.locator('label', { hasText: 'Limit Price' }).isVisible().catch(() => false)
+    const limitPriceVisible = await page
+      .locator('label', { hasText: 'Limit Price' })
+      .isVisible()
+      .catch(() => false)
     expect(limitPriceVisible).toBe(false)
   })
 
@@ -369,8 +392,11 @@ test.describe('Positions View', () => {
     await page.waitForLoadState('networkidle')
 
     // Could be data rows OR empty state
-    const hasRows = await page.locator('tbody tr').count() > 0
-    const hasEmpty = await page.locator('text=No positions found').isVisible().catch(() => false)
+    const hasRows = (await page.locator('tbody tr').count()) > 0
+    const hasEmpty = await page
+      .locator('text=No positions found')
+      .isVisible()
+      .catch(() => false)
 
     expect(hasRows || hasEmpty).toBe(true)
   })
@@ -465,7 +491,7 @@ test.describe('Positions View', () => {
       const firstRow = rows.first()
       // The row template has transition-colors hover:bg-bg-hover as CSS classes
       // Verify the row element has the hover CSS class defined
-      const classAttr = await firstRow.evaluate(el => el.className)
+      const classAttr = await firstRow.evaluate((el) => el.className)
       expect(classAttr).toContain('hover:bg-bg-hover')
     }
   })

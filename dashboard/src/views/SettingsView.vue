@@ -28,7 +28,9 @@
             : 'text-text-muted hover:text-text-primary'
         "
         @click="activeTab = 'broker'"
-      >Broker</button>
+      >
+        Broker
+      </button>
       <button
         role="tab"
         aria-label="AI/LLM"
@@ -40,7 +42,9 @@
             : 'text-text-muted hover:text-text-primary'
         "
         @click="activeTab = 'llm'"
-      >AI/LLM</button>
+      >
+        AI/LLM
+      </button>
       <button
         role="tab"
         aria-label="Trading"
@@ -52,7 +56,9 @@
             : 'text-text-muted hover:text-text-primary'
         "
         @click="activeTab = 'trading'"
-      >Trading</button>
+      >
+        Trading
+      </button>
       <button
         role="tab"
         aria-label="Health"
@@ -64,7 +70,9 @@
             : 'text-text-muted hover:text-text-primary'
         "
         @click="activeTab = 'health'"
-      >Health</button>
+      >
+        Health
+      </button>
     </div>
 
     <div class="max-w-2xl">
@@ -137,7 +145,7 @@
             </div>
           </div>
 
-<!-- Connect Button -->
+          <!-- Connect Button -->
           <div v-if="settings.selectedBroker === 'fyers' && !fyersConnected" class="mt-4 space-y-3">
             <button
               :disabled="authing"
@@ -179,7 +187,10 @@
           </div>
 
           <!-- Upstox Placeholder -->
-          <div v-if="settings.selectedBroker === 'upstox'" class="mt-4 rounded-lg border border-border-subtle p-4 text-center">
+          <div
+            v-if="settings.selectedBroker === 'upstox'"
+            class="mt-4 rounded-lg border border-border-subtle p-4 text-center"
+          >
             <p class="text-sm text-text-muted">Upstox integration coming soon.</p>
           </div>
         </div>
@@ -190,8 +201,48 @@
         <div class="card-panel p-5">
           <h2 class="mb-4 text-base font-semibold text-text-primary">LLM & Intelligence</h2>
 
+          <!-- Backend Selection -->
+          <div class="mb-6">
+            <h3 class="text-sm font-medium text-text-secondary mb-3">LLM Backend</h3>
+            <div class="flex gap-2 mb-4">
+              <button
+                v-for="b in llmBackends"
+                :key="b.value"
+                class="flex-1 rounded-lg border p-3 text-sm font-medium transition-all"
+                :class="
+                  llmSettings.llmBackend === b.value
+                    ? 'border-brand bg-brand-subtle text-brand'
+                    : 'border-border-subtle text-text-muted hover:border-border-default hover:text-text-primary'
+                "
+                @click="llmSettings.llmBackend = b.value"
+              >
+                {{ b.label }}
+              </button>
+            </div>
+
+            <!-- Backend descriptions -->
+            <div class="space-y-2 text-xs text-text-muted">
+              <div v-if="llmSettings.llmBackend === 'local'" class="rounded-md bg-bg-primary p-3">
+                llama.cpp server running on the same machine as this app.
+              </div>
+              <div
+                v-else-if="llmSettings.llmBackend === 'pi_ssh'"
+                class="rounded-md bg-bg-primary p-3"
+              >
+                llama.cpp server on Pi (dietpi@piworm). Java starts/stops it via SSH.
+                <span class="text-text-secondary">Port:</span> 8089
+              </div>
+              <div
+                v-else-if="llmSettings.llmBackend === 'gpuhub'"
+                class="rounded-md bg-bg-primary p-3"
+              >
+                External OpenAI-compatible LLM endpoint. No server management needed.
+              </div>
+            </div>
+          </div>
+
           <!-- Local LLM (llama.cpp) -->
-          <div class="space-y-4 mb-6">
+          <div v-show="llmSettings.llmBackend === 'local'" class="space-y-4 mb-6">
             <h3 class="text-sm font-medium text-text-secondary">Local LLM (llama.cpp)</h3>
 
             <div class="flex gap-2">
@@ -223,35 +274,79 @@
             </p>
           </div>
 
-          <!-- GPUHub (Super Analysis) -->
-          <div class="space-y-4 mb-6">
-            <h3 class="text-sm font-medium text-text-secondary">GPUHub (Super Analysis)</h3>
+          <!-- Pi SSH LLM -->
+          <div v-show="llmSettings.llmBackend === 'pi_ssh'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">Pi SSH LLM (llama.cpp)</h3>
+            <p class="text-xs text-text-muted">
+              llama.cpp server on Pi 5 (dietpi@piworm). Java starts/stops it via SSH on port 8089.
+            </p>
             <div class="flex gap-2">
-              <input
-                v-model="llmSettings.gpuhubBaseUrl"
-                placeholder="https://gpuhub:8443/v1"
-                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              />
+              <select
+                v-model="llmSettings.llamacppModel"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
+              >
+                <option value="/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf">
+                  Qwen3-4B (fast, default)
+                </option>
+                <option value="/home/dietpi/.synapse/models/google_gemma-4-E2B-it-Q4_0.gguf">
+                  Gemma-4 (larger, super analysis)
+                </option>
+              </select>
+              <span class="self-center text-xs text-text-muted">Model</span>
             </div>
             <p class="text-xs text-text-muted">
-              External GPU endpoint used for adhoc "super analysis" via SynthesisService.
+              Model path on the Pi. Switching models requires restarting the llama.cpp service.
             </p>
+            <div class="flex items-center gap-3 pt-2">
+              <button
+                :disabled="testingPi"
+                class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
+                @click="testPiConnection"
+              >
+                {{ testingPi ? 'Testing...' : 'Test Pi Connection' }}
+              </button>
+              <span
+                v-if="piTestResult"
+                class="text-xs"
+                :class="piTestSuccess ? 'text-success' : 'text-danger'"
+              >
+                {{ piTestResult }}
+              </span>
+            </div>
           </div>
 
-          <!-- GPUHub Deployment API -->
-          <div class="space-y-4 mb-6">
-            <h3 class="text-sm font-medium text-text-secondary">GPUHub Deployment API</h3>
+          <!-- OpenAI-compatible LLM (Super Analysis) -->
+          <div v-show="llmSettings.llmBackend === 'gpuhub'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">OpenAI-compatible LLM</h3>
             <div class="flex gap-2">
               <input
-                v-model="llmSettings.gpuhubApiKey"
-                type="password"
-                placeholder="ES256 JWT token (no Bearer prefix)"
+                v-model="llmSettings.openaiBaseUrl"
+                placeholder="https://api.openai.com/v1"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
               />
             </div>
+
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.openaiApiKey"
+                type="password"
+                placeholder="sk-..."
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+              <span class="self-center text-xs text-text-muted">API Key</span>
+            </div>
+
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.openaiModel"
+                placeholder="gpt-4o"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+              <span class="self-center text-xs text-text-muted">Model</span>
+            </div>
             <p class="text-xs text-text-muted">
-              API key for GPUHUB elastic deployment management. Used to create, stop, and list GPU
-              deployments. Stored in AppSettings.
+              External OpenAI-compatible endpoint for sentiment analysis. No server management
+              needed.
             </p>
           </div>
 
@@ -286,7 +381,9 @@
           <!-- Discord Configuration -->
           <div class="space-y-4">
             <h3 class="text-sm font-medium text-text-secondary">Discord Notifications</h3>
-            <div class="flex items-center justify-between rounded-lg border border-border-subtle p-3">
+            <div
+              class="flex items-center justify-between rounded-lg border border-border-subtle p-3"
+            >
               <span class="text-sm">Enable Discord</span>
               <label class="relative inline-flex items-center cursor-pointer">
                 <input v-model="discordSettings.enabled" type="checkbox" class="sr-only peer" />
@@ -417,12 +514,7 @@
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 translate-y-2"
     >
-      <Toast
-        v-if="toastVisible"
-        :message="toastMessage"
-        :type="toastType"
-        :duration="4000"
-      />
+      <Toast v-if="toastVisible" :message="toastMessage" :type="toastType" :duration="4000" />
     </Transition>
   </div>
 </template>
@@ -436,6 +528,7 @@ import {
   fyersAuthCode,
   fyersLogout,
   testDiscordWebhook as apiTestDiscordWebhook,
+  testPiConnection as apiTestPiConnection,
 } from '../api/client'
 import type { FyersStatus, HealthStatus } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -462,6 +555,9 @@ const showAuthCodeInput = ref(false)
 const authCodeInput = ref('')
 const testingPdf = ref(false)
 const testingDiscord = ref(false)
+const testingPi = ref(false)
+const piTestResult = ref('')
+const piTestSuccess = ref(false)
 const saving = ref(false)
 const saved = ref(false)
 const toastMessage = ref('')
@@ -474,6 +570,12 @@ const brokers = [
   { value: 'upstox' as const, label: 'Upstox' },
   { value: 'yahoo' as const, label: 'Yahoo Finance' },
   { value: 'none' as const, label: 'None (Read Only)' },
+]
+
+const llmBackends = [
+  { value: 'local' as const, label: 'Local' },
+  { value: 'pi_ssh' as const, label: 'Pi SSH' },
+  { value: 'gpuhub' as const, label: 'OpenAI' },
 ]
 
 const healthColor = (status: string) => {
@@ -678,6 +780,54 @@ const testDiscordWebhook = async () => {
     }, 4000)
   } finally {
     testingDiscord.value = false
+  }
+}
+
+const testPiConnection = async () => {
+  testingPi.value = true
+  piTestResult.value = ''
+  piTestSuccess.value = false
+  try {
+    const res = await apiTestPiConnection()
+    if (res.success && res.data) {
+      piTestResult.value = res.data.message ?? (res.data.success ? 'Connected!' : 'Failed to start')
+      piTestSuccess.value = res.data.success
+      if (res.data.success) {
+        toastMessage.value = 'Pi SSH connection successful — llama-server started on Pi'
+        toastType.value = 'success'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+      } else {
+        toastMessage.value = 'Pi connected but llama-server failed to start'
+        toastType.value = 'warning'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+      }
+    } else {
+      piTestResult.value = res.error ?? 'Test failed'
+      piTestSuccess.value = false
+      toastMessage.value = piTestResult.value
+      toastType.value = 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    }
+  } catch (err: unknown) {
+    piTestResult.value = err instanceof Error ? err.message : 'Network error'
+    piTestSuccess.value = false
+    toastMessage.value = piTestResult.value
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
+  } finally {
+    testingPi.value = false
   }
 }
 

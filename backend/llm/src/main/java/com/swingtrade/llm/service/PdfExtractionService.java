@@ -2,6 +2,7 @@ package com.swingtrade.llm.service;
 
 import com.swingtrade.data.entity.PdfExtractionEntity;
 import com.swingtrade.data.repository.PdfExtractionRepository;
+import com.swingtrade.llm.config.PdfExtractionPromptLoader;
 import com.swingtrade.llm.domain.EarningsData;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
@@ -29,18 +30,21 @@ public class PdfExtractionService {
     private final String pdfBaseUrl;
     private final String pdfModel;
     private final PdfExtractionRepository pdfRepo;
+    private final PdfExtractionPromptLoader promptLoader;
 
     public PdfExtractionService(
             @Value("${llm.pdf.base-url:}") String pdfBaseUrl,
             @Value("${llm.pdf.model:gemma-4-E2B}") String pdfModel,
             PdfExtractionRepository pdfRepo,
-            Builder webClientBuilder) {
+            Builder webClientBuilder,
+            PdfExtractionPromptLoader promptLoader) {
         this.pdfBaseUrl = pdfBaseUrl;
         this.pdfModel = pdfModel;
         this.pdfRepo = pdfRepo;
         this.webClient = webClientBuilder
                 .defaultHeader("Content-Type", "application/json")
                 .build();
+        this.promptLoader = promptLoader;
     }
 
     /**
@@ -66,20 +70,7 @@ public class PdfExtractionService {
 
             String base64 = Base64.getEncoder().encodeToString(pdfBytes);
 
-            String prompt = """
-                Extract financial data from this earnings document.
-                Return ONLY valid JSON with these fields:
-                {
-                  "symbol": "NSE:RELIANCE",
-                  "quarter": "Q1 2025",
-                  "revenue": 450000000000,
-                  "netProfit": 65000000000,
-                  "eps": 42.50,
-                  "ebitda": 95000000000,
-                  "guidance": "Management expects 10-15% revenue growth"
-                }
-                Use INR values. No other text.
-                """;
+            String prompt = promptLoader.getPrompt();
 
             String llmResponse = webClient.post()
                 .uri("/v1/chat/completions")

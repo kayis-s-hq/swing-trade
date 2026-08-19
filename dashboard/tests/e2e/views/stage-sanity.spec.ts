@@ -110,13 +110,25 @@ test.describe('Stage Dashboard — Feature Tests', () => {
 
   test('sidebar navigation works', async ({ page }) => {
     await page.goto(`${BASE}/`)
-    await page.getByRole('link', { name: /Dashboard/i }).first().click()
+    await page
+      .getByRole('link', { name: /Dashboard/i })
+      .first()
+      .click()
     await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible()
-    await page.getByRole('link', { name: /Positions/i }).first().click()
+    await page
+      .getByRole('link', { name: /Positions/i })
+      .first()
+      .click()
     await expect(page.getByRole('heading', { name: /Positions/i })).toBeVisible()
-    await page.getByRole('link', { name: /Signals/i }).first().click()
+    await page
+      .getByRole('link', { name: /Signals/i })
+      .first()
+      .click()
     await expect(page.getByRole('heading', { name: /Signals/i })).toBeVisible()
-    await page.getByRole('link', { name: /Portfolio/i }).first().click()
+    await page
+      .getByRole('link', { name: /Portfolio/i })
+      .first()
+      .click()
     await expect(page.getByRole('heading', { name: /Portfolio/i })).toBeVisible()
   })
 

@@ -23,7 +23,7 @@ public class BacktestScorer {
         this.watchlistService = watchlistService;
     }
 
-    public com.swingtrade.api.dto.CompositeAnalysis.BacktestScore compute(String symbol) {
+    public com.swingtrade.domain.CompositeAnalysis.BacktestScore compute(String symbol) {
         String sym = symbol.toUpperCase();
         String exchange = watchlistService.getBySymbol(sym)
             .map(WatchlistEntity::getExchange)
@@ -31,7 +31,7 @@ public class BacktestScorer {
 
         try {
             BacktestResult result = backtestEngine.runBacktest(sym, exchange, BacktestConfig.defaults());
-            return new com.swingtrade.api.dto.CompositeAnalysis.BacktestScore(
+            return new com.swingtrade.domain.CompositeAnalysis.BacktestScore(
                 result.totalTrades(),
                 result.winRate(),
                 calculateProfitFactor(result),
@@ -42,10 +42,10 @@ public class BacktestScorer {
             );
         } catch (IllegalStateException e) {
             logger.warn("Insufficient data for backtest: {}", sym);
-            return new com.swingtrade.api.dto.CompositeAnalysis.BacktestScore(0, 0, 0, 0, 0, 0, false);
+            return new com.swingtrade.domain.CompositeAnalysis.BacktestScore(0, 0, 0, 0, 0, 0, false);
         } catch (Exception e) {
             logger.warn("Backtest failed for {}: {}", sym, e.getMessage());
-            return new com.swingtrade.api.dto.CompositeAnalysis.BacktestScore(0, 0, 0, 0, 0, 0, false);
+            return new com.swingtrade.domain.CompositeAnalysis.BacktestScore(0, 0, 0, 0, 0, 0, false);
         }
     }
 

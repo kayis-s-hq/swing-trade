@@ -13,8 +13,19 @@
           @click="startRun"
         >
           <svg v-if="isRunning" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            />
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
           </svg>
           {{ isRunning ? 'Running...' : 'Run' }}
         </button>
@@ -52,191 +63,218 @@
       </div>
 
       <template v-else>
-      <!-- Current Run -->
-      <div v-if="currentRun" class="mb-6 card-panel p-5">
-        <div class="mb-3 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <StatusBadge :status="currentRun.status" :label="currentRun.status" />
-            <span class="text-xs text-text-muted">
-              Started: {{ formatTime(currentRun.startedAt) }}
-            </span>
-            <span v-if="currentRun.triggerType" class="text-xs text-text-muted">
-              ({{ currentRun.triggerType }})
+        <!-- Current Run -->
+        <div v-if="currentRun" class="mb-6 card-panel p-5">
+          <div class="mb-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <StatusBadge :status="currentRun.status" :label="currentRun.status" />
+              <span class="text-xs text-text-muted">
+                Started: {{ formatTime(currentRun.startedAt) }}
+              </span>
+              <span v-if="currentRun.triggerType" class="text-xs text-text-muted">
+                ({{ currentRun.triggerType }})
+              </span>
+            </div>
+            <span v-if="currentRun.completedAt" class="text-xs text-text-muted">
+              Duration: {{ formatDuration(currentRun.startedAt, currentRun.completedAt) }}
             </span>
           </div>
-          <span v-if="currentRun.completedAt" class="text-xs text-text-muted">
-            Duration: {{ formatDuration(currentRun.startedAt, currentRun.completedAt) }}
-          </span>
-        </div>
 
-        <!-- Progress Bar -->
-        <div v-if="currentRun.status === 'RUNNING'" class="mb-3">
-          <div class="mb-1 flex items-center justify-between">
-            <span class="text-xs font-medium text-text-muted">Progress</span>
-            <span class="text-xs text-text-muted">
-              {{ currentRun.completedCount }}/{{ currentRun.symbolsCount }} symbols complete
-              <span v-if="currentRun.failedCount > 0" class="text-danger">({{ currentRun.failedCount }} failed)</span>
-            </span>
-          </div>
-          <div class="h-2 rounded-full bg-bg-primary/50">
-            <div
-              class="h-full rounded-full bg-brand transition-all duration-300"
-              :style="{ width: progressPercent + '%' }"
-            />
-          </div>
-        </div>
-
-        <!-- Stage Table -->
-        <div class="mt-4 overflow-x-auto">
-          <table class="w-full text-sm border-collapse">
-            <thead>
-              <tr class="border-b border-border-subtle">
-                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Symbol</th>
-                <th v-for="stage in stages" :key="stage" class="pb-2 px-3 text-center text-xs font-medium text-text-muted">
-                  {{ stage }}
-                </th>
-                <th class="pb-2 px-3 text-center text-xs font-medium text-text-muted"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="symbol in symbols" :key="symbol">
-                <tr
-                  class="border-b border-border-subtle/50 hover:bg-bg-hover/50 cursor-pointer"
-                  @click="toggleSymbol(symbol)"
+          <!-- Progress Bar -->
+          <div v-if="currentRun.status === 'RUNNING'" class="mb-3">
+            <div class="mb-1 flex items-center justify-between">
+              <span class="text-xs font-medium text-text-muted">Progress</span>
+              <span class="text-xs text-text-muted">
+                {{ currentRun.completedCount }}/{{ currentRun.symbolsCount }} symbols complete
+                <span v-if="currentRun.failedCount > 0" class="text-danger"
+                  >({{ currentRun.failedCount }} failed)</span
                 >
-                  <td class="py-2 pr-4 font-medium text-text-primary">{{ symbol }}</td>
-                  <td
+              </span>
+            </div>
+            <div class="h-2 rounded-full bg-bg-primary/50">
+              <div
+                class="h-full rounded-full bg-brand transition-all duration-300"
+                :style="{ width: progressPercent + '%' }"
+              />
+            </div>
+          </div>
+
+          <!-- Stage Table -->
+          <div class="mt-4 overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-border-subtle">
+                  <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Symbol</th>
+                  <th
                     v-for="stage in stages"
                     :key="stage"
-                    class="py-2 px-3 text-center"
+                    class="pb-2 px-3 text-center text-xs font-medium text-text-muted"
                   >
-                    <StageIcon :status="getStageStatus(symbol, stage)" />
-                  </td>
-                  <td class="py-2 px-3 text-center">
-                    <svg v-if="expandedSymbol === symbol" class="h-4 w-4 mx-auto text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M19 9l-7 7-7-7" />
-                    </svg>
-                    <svg v-else class="h-4 w-4 mx-auto text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M9 5l7 7-7 7" />
-                    </svg>
-                  </td>
+                    {{ stage }}
+                  </th>
+                  <th class="pb-2 px-3 text-center text-xs font-medium text-text-muted"></th>
                 </tr>
-                <tr v-if="expandedSymbol === symbol" class="bg-bg-hover/30">
-                  <td :colspan="8" class="p-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      <div
-                        v-for="stage in stages"
-                        :key="stage"
-                        class="rounded-md border border-border-subtle bg-bg-surface p-3"
+              </thead>
+              <tbody>
+                <template v-for="symbol in symbols" :key="symbol">
+                  <tr
+                    class="border-b border-border-subtle/50 hover:bg-bg-hover/50 cursor-pointer"
+                    @click="toggleSymbol(symbol)"
+                  >
+                    <td class="py-2 pr-4 font-medium text-text-primary">{{ symbol }}</td>
+                    <td v-for="stage in stages" :key="stage" class="py-2 px-3 text-center">
+                      <StageIcon :status="getStageStatus(symbol, stage)" />
+                    </td>
+                    <td class="py-2 px-3 text-center">
+                      <svg
+                        v-if="expandedSymbol === symbol"
+                        class="h-4 w-4 mx-auto text-text-muted"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
                       >
-                        <div class="mb-1 flex items-center justify-between">
-                          <span class="text-xs font-medium text-text-muted">{{ stage }}</span>
-                          <StageIcon :status="getStageStatus(symbol, stage)" />
-                        </div>
-                        <div class="text-xs text-text-primary">
-                          <div v-if="getStageResult(symbol, stage)" class="text-text-primary">
-                            {{ getStageResult(symbol, stage) }}
+                        <path d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <svg
+                        v-else
+                        class="h-4 w-4 mx-auto text-text-muted"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path d="M9 5l7 7-7 7" />
+                      </svg>
+                    </td>
+                  </tr>
+                  <tr v-if="expandedSymbol === symbol" class="bg-bg-hover/30">
+                    <td :colspan="8" class="p-4">
+                      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div
+                          v-for="stage in stages"
+                          :key="stage"
+                          class="rounded-md border border-border-subtle bg-bg-surface p-3"
+                        >
+                          <div class="mb-1 flex items-center justify-between">
+                            <span class="text-xs font-medium text-text-muted">{{ stage }}</span>
+                            <StageIcon :status="getStageStatus(symbol, stage)" />
                           </div>
-                          <div v-if="getStageError(symbol, stage)" class="text-danger mt-1">
-                            {{ getStageError(symbol, stage) }}
-                          </div>
-                          <div v-if="getStageDuration(symbol, stage) != null" class="text-text-muted mt-1">
-                            {{ getStageDuration(symbol, stage) }}ms
+                          <div class="text-xs text-text-primary">
+                            <div v-if="getStageResult(symbol, stage)" class="text-text-primary">
+                              {{ getStageResult(symbol, stage) }}
+                            </div>
+                            <div v-if="getStageError(symbol, stage)" class="text-danger mt-1">
+                              {{ getStageError(symbol, stage) }}
+                            </div>
+                            <div
+                              v-if="getStageDuration(symbol, stage) != null"
+                              class="text-text-muted mt-1"
+                            >
+                              {{ getStageDuration(symbol, stage) }}ms
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                </tr>
-              </template>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Error Summary -->
+          <div
+            v-if="currentRun.errorMessage"
+            class="mt-3 rounded-md border border-danger/30 bg-danger/5 p-3"
+          >
+            <p class="text-xs text-danger">{{ currentRun.errorMessage }}</p>
+          </div>
+        </div>
+
+        <!-- No active run -->
+        <div v-else-if="!currentRunId" class="py-12 text-center">
+          <p class="text-sm text-text-muted">No active run. Click "Run" to start the pipeline.</p>
+        </div>
+
+        <!-- Live Log -->
+        <div v-if="logEntries.length > 0" class="mt-4 card-panel p-4">
+          <h3 class="mb-2 text-sm font-semibold text-text-primary">Live Log</h3>
+          <div class="max-h-48 overflow-y-auto font-mono text-xs">
+            <div
+              v-for="(entry, idx) in logEntries"
+              :key="idx"
+              :class="[
+                'py-0.5',
+                entry.type === 'error'
+                  ? 'text-danger'
+                  : entry.type === 'warn'
+                    ? 'text-warning'
+                    : 'text-text-muted',
+              ]"
+            >
+              [{{ entry.time }}] {{ entry.message }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Past Runs -->
+        <div class="mt-6 card-panel p-5">
+          <h3 class="mb-3 text-sm font-semibold text-text-primary">Past Runs</h3>
+          <div v-if="pastRuns.length === 0" class="text-sm text-text-muted">No past runs.</div>
+          <table v-else class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-border-subtle">
+                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Time</th>
+                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Type</th>
+                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Status</th>
+                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Symbols</th>
+                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Duration</th>
+                <th class="pb-2 text-left text-xs font-medium text-text-muted">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="run in pastRuns"
+                :key="run.runId"
+                class="border-b border-border-subtle/50 hover:bg-bg-hover/50 cursor-pointer"
+                @click="viewRun(run.runId)"
+              >
+                <td class="py-2 pr-4 text-text-primary">{{ formatTime(run.startedAt) }}</td>
+                <td class="py-2 pr-4 text-text-muted">{{ run.triggerType }}</td>
+                <td class="py-2 pr-4">
+                  <StatusBadge :status="run.status" :label="run.status" />
+                </td>
+                <td class="py-2 pr-4 text-text-muted">
+                  {{ run.completedCount }}/{{ run.symbolsCount }}
+                  <span v-if="run.failedCount > 0" class="text-danger"
+                    >({{ run.failedCount }} failed)</span
+                  >
+                </td>
+                <td class="py-2 pr-4 text-text-muted" v-if="run.completedAt">
+                  {{ formatDuration(run.startedAt, run.completedAt) }}
+                </td>
+                <td class="py-2 pr-4 text-text-muted" v-else>-</td>
+                <td class="py-2 text-text-muted">
+                  <button
+                    class="text-xs text-brand hover:underline"
+                    @click.stop="viewRun(run.runId)"
+                  >
+                    View
+                  </button>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
-
-        <!-- Error Summary -->
-        <div v-if="currentRun.errorMessage" class="mt-3 rounded-md border border-danger/30 bg-danger/5 p-3">
-          <p class="text-xs text-danger">{{ currentRun.errorMessage }}</p>
-        </div>
-      </div>
-
-      <!-- No active run -->
-      <div v-else-if="!currentRunId" class="py-12 text-center">
-        <p class="text-sm text-text-muted">No active run. Click "Run" to start the pipeline.</p>
-      </div>
-
-      <!-- Live Log -->
-      <div v-if="logEntries.length > 0" class="mt-4 card-panel p-4">
-        <h3 class="mb-2 text-sm font-semibold text-text-primary">Live Log</h3>
-        <div class="max-h-48 overflow-y-auto font-mono text-xs">
-          <div
-            v-for="(entry, idx) in logEntries"
-            :key="idx"
-            :class="[
-              'py-0.5',
-              entry.type === 'error' ? 'text-danger' : entry.type === 'warn' ? 'text-warning' : 'text-text-muted'
-            ]"
-          >
-            [{{ entry.time }}] {{ entry.message }}
-          </div>
-        </div>
-      </div>
-
-      <!-- Past Runs -->
-      <div class="mt-6 card-panel p-5">
-        <h3 class="mb-3 text-sm font-semibold text-text-primary">Past Runs</h3>
-        <div v-if="pastRuns.length === 0" class="text-sm text-text-muted">No past runs.</div>
-        <table v-else class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border-subtle">
-              <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Time</th>
-              <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Type</th>
-              <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Status</th>
-              <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Symbols</th>
-              <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Duration</th>
-              <th class="pb-2 text-left text-xs font-medium text-text-muted">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="run in pastRuns"
-              :key="run.runId"
-              class="border-b border-border-subtle/50 hover:bg-bg-hover/50 cursor-pointer"
-              @click="viewRun(run.runId)"
-            >
-              <td class="py-2 pr-4 text-text-primary">{{ formatTime(run.startedAt) }}</td>
-              <td class="py-2 pr-4 text-text-muted">{{ run.triggerType }}</td>
-              <td class="py-2 pr-4">
-                <StatusBadge :status="run.status" :label="run.status" />
-              </td>
-              <td class="py-2 pr-4 text-text-muted">
-                {{ run.completedCount }}/{{ run.symbolsCount }}
-                <span v-if="run.failedCount > 0" class="text-danger">({{ run.failedCount }} failed)</span>
-              </td>
-              <td class="py-2 pr-4 text-text-muted" v-if="run.completedAt">
-                {{ formatDuration(run.startedAt, run.completedAt) }}
-              </td>
-              <td class="py-2 pr-4 text-text-muted" v-else>-</td>
-              <td class="py-2 text-text-muted">
-                <button class="text-xs text-brand hover:underline" @click.stop="viewRun(run.runId)">View</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </template>
-      </ErrorBoundary>
-    </div>
+      </template>
+    </ErrorBoundary>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import {
-  startJobRun,
-  getJobRunProgress,
-  listJobRuns,
-  cancelJobRun,
-} from '../api/client'
+import { startJobRun, getJobRunProgress, listJobRuns, cancelJobRun } from '../api/client'
 import type { JobRunResponse, JobRunStageResponse } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -251,7 +289,9 @@ const currentRunId = ref<string | null>(null)
 const currentRun = ref<JobRunResponse | null>(null)
 const pastRuns = ref<JobRunResponse[]>([])
 const stageRows = ref<JobRunStageResponse[]>([])
-const logEntries = ref<Array<{ time: string; message: string; type: 'info' | 'warn' | 'error' }>>([])
+const logEntries = ref<Array<{ time: string; message: string; type: 'info' | 'warn' | 'error' }>>(
+  []
+)
 const expandedSymbol = ref<string | null>(null)
 const isRunning = ref(false)
 
@@ -261,10 +301,9 @@ const stages = STAGES
 
 const symbols = computed(() => {
   const seen = new Set<string>()
-  stageRows.value.forEach(s => seen.add(s.symbol))
+  stageRows.value.forEach((s) => seen.add(s.symbol))
   return Array.from(seen).sort()
 })
-
 
 const progressPercent = computed(() => {
   if (!currentRun.value || !currentRun.value.symbolsCount) return 0
@@ -272,7 +311,15 @@ const progressPercent = computed(() => {
 })
 
 // Plain object lookup — updated imperatively, no computed reactivity issues
-const stageLookup: Record<string, { status: string; resultSummary: string | null; errorMessage: string | null; durationMs: number | null }> = {}
+const stageLookup: Record<
+  string,
+  {
+    status: string
+    resultSummary: string | null
+    errorMessage: string | null
+    durationMs: number | null
+  }
+> = {}
 
 function rebuildLookup() {
   for (const key of Object.keys(stageLookup)) delete stageLookup[key]
@@ -285,7 +332,14 @@ function rebuildLookup() {
       durationMs: row.durationMs ?? null,
     }
   }
-  console.log('[Orchestrator] rebuildLookup: rows=', stageRows.value.length, 'lookup keys=', Object.keys(stageLookup).length, 'sample=', stageLookup['AXISBANK::DATA_FETCH'])
+  console.log(
+    '[Orchestrator] rebuildLookup: rows=',
+    stageRows.value.length,
+    'lookup keys=',
+    Object.keys(stageLookup).length,
+    'sample=',
+    stageLookup['AXISBANK::DATA_FETCH']
+  )
 }
 
 function getStageStatus(symbol: string, stageName: string): string {
@@ -386,7 +440,10 @@ function refresh() {
           if (stage.status === 'COMPLETED' && stage.resultSummary) {
             addLogEntry(`${stage.symbol} ${stage.stageName} -> COMPLETED (${stage.resultSummary})`)
           } else if (stage.status === 'ERROR') {
-            addLogEntry(`${stage.symbol} ${stage.stageName} -> ERROR: ${stage.errorMessage}`, 'error')
+            addLogEntry(
+              `${stage.symbol} ${stage.stageName} -> ERROR: ${stage.errorMessage}`,
+              'error'
+            )
           }
         }
       }
@@ -432,7 +489,7 @@ async function loadHistory() {
 
 async function viewRun(runId: string) {
   currentRunId.value = runId
-  currentRun.value = pastRuns.value.find(r => r.runId === runId) || null
+  currentRun.value = pastRuns.value.find((r) => r.runId === runId) || null
   isRunning.value = false
   stopPolling()
   expandedSymbol.value = null

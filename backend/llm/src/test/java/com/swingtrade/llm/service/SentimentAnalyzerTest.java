@@ -338,39 +338,30 @@ class SentimentAnalyzerTest {
 
     // ===== Additional Prompt Tests =====
 
-    @Test
-    void testCreateMultiArticleSentimentPrompt_formatsMultipleArticles() {
-        // Arrange
-        String stockSymbol = "WIPRO";
-        List<String> articles = List.of(
-                "Article 1: Wipro announces new contracts",
-                "Article 2: Wipro reports Q4 results"
-        );
-
-        // Act
-        String prompt = sentimentAnalyzer.createMultiArticleSentimentPrompt(stockSymbol, articles);
-
-        // Assert
-        assertThat(prompt).contains("WIPRO");
-        assertThat(prompt).contains("Article 1");
-        assertThat(prompt).contains("Article 2");
-    }
-
-    @Test
-    void testCreateSimpleClassificationPrompt_requestsOnlySentiment() {
-        // Arrange
-        String stockSymbol = "MARUTI";
-        String newsText = "Maruti reports strong auto sales";
-
-        // Act
-        String prompt = sentimentAnalyzer.createSimpleClassificationPrompt(stockSymbol, newsText);
-
-        // Assert
-        assertThat(prompt).contains("MARUTI");
-        assertThat(prompt).contains("sentiment");
-        assertThat(prompt).contains("POSITIVE");
-        assertThat(prompt).contains("NEGATIVE");
-    }
+    // @Test commented out: tests for deleted dead-code methods
+    // void testCreateMultiArticleSentimentPrompt_formatsMultipleArticles() {
+    //     // Arrange
+    //     String stockSymbol = "WIPRO";
+    //     List<String> articles = List.of(
+    //             "Article 1: Wipro announces new contracts",
+    //             "Article 2: Wipro reports Q4 results"
+    //     );
+    //     String prompt = sentimentAnalyzer.createMultiArticleSentimentPrompt(stockSymbol, articles);
+    //     assertThat(prompt).contains("WIPRO");
+    //     assertThat(prompt).contains("Article 1");
+    //     assertThat(prompt).contains("Article 2");
+    // }
+    //
+    // @Test
+    // void testCreateSimpleClassificationPrompt_requestsOnlySentiment() {
+    //     String stockSymbol = "MARUTI";
+    //     String newsText = "Maruti reports strong auto sales";
+    //     String prompt = sentimentAnalyzer.createSimpleClassificationPrompt(stockSymbol, newsText);
+    //     assertThat(prompt).contains("MARUTI");
+    //     assertThat(prompt).contains("sentiment");
+    //     assertThat(prompt).contains("POSITIVE");
+    //     assertThat(prompt).contains("NEGATIVE");
+    // }
 
     @Test
     void testValidateSentimentResponse_verifyRequiredFields() {

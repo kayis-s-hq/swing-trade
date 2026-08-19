@@ -9,6 +9,11 @@ plugins {
 group = "com.swingtrade"
 version = "1.0.0"
 
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
 dependencyManagement {
     imports {
         mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")

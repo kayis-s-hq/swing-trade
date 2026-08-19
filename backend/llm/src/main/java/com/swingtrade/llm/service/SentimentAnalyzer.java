@@ -44,6 +44,7 @@ public class SentimentAnalyzer {
             sector tailwinds, FII/DII activity, promoter actions.
 
             CRITICAL: Respond with ONLY a JSON object. No explanation, no reasoning, no other text.
+            Do NOT include <thinking> tags, reasoning text, or any prose.
             Start your response with { and end with }.
 
             {
@@ -73,6 +74,7 @@ public class SentimentAnalyzer {
                 Task: Determine if news sentiment supports a 1-4 week swing trade entry.
 
                 CRITICAL: Respond with ONLY a JSON object. No explanation, no reasoning, no other text.
+                Do NOT include <thinking> tags, reasoning text, or any prose.
                 Start your response with { and end with }.
 
                 {
@@ -108,7 +110,10 @@ public class SentimentAnalyzer {
 
                 Task: Determine if news sentiment supports a 1-4 week swing trade entry.
 
-                Respond in this exact JSON format only, no other text:
+                CRITICAL: Respond with ONLY a JSON object. No explanation, no reasoning, no other text.
+                Do NOT include <thinking> tags, reasoning text, or any prose.
+                Start your response with { and end with }.
+
                 {
                   "score": "POSITIVE|NEUTRAL|NEGATIVE",
                   "confidence": 0.0-1.0,
@@ -138,6 +143,7 @@ public class SentimentAnalyzer {
     public SentimentOutput parseResponse(String jsonResponse) {
         try {
             String content = extractJsonFromReasoning(jsonResponse);
+            logger.debug("extracted JSON: {} chars, preview: {}", content != null ? content.length() : 0, content != null ? content.substring(0, Math.min(100, content.length())) : "null");
             JsonNode root = objectMapper.readTree(content);
 
             if (!root.has("score")) throw new IllegalArgumentException("Missing score field");
@@ -202,220 +208,54 @@ public class SentimentAnalyzer {
     }
 
     /**
-     * Creates a prompt for analyzing multiple news articles about a stock.
-     *
-     * @param stockSymbol the stock symbol being analyzed
-     * @param articles list of news article texts
-     * @return formatted prompt message
-     */
-    public String createMultiArticleSentimentPrompt(String stockSymbol, List<String> articles) {
-        StringBuilder articleBuilder = new StringBuilder();
-        for (int i = 0; i < articles.size(); i++) {
-            articleBuilder.append("Article ").append(i + 1).append(":").append(System.lineSeparator());
-            articleBuilder.append(articles.get(i)).append(System.lineSeparator());
-            articleBuilder.append("---").append(System.lineSeparator());
-        }
-
-        String userMessage = """
-                Analyze the overall sentiment by considering the following news articles about stock %s:
-
-                %s
-
-                Please provide a comprehensive sentiment analysis in JSON format:
-                {
-                    "sentiment": "POSITIVE|NEUTRAL|NEGATIVE",
-                    "confidence": 0.0-1.0,
-                    "reasoning": "Analysis considering all articles (max 250 words)",
-                    "keyFactors": ["factor1", "factor2"],
-                    "articleCount": %d,
-                    "positiveArticles": %d,
-                    "negativeArticles": %d,
-                    "tradingImplication": "How this combined sentiment affects trading decisions"
-                }
-                """;
-
-        // Count positive and negative keywords for preliminary analysis
-        int positiveCount = countKeywords(articles, List.of(
-            "positive", "bullish", "upgrade", "growth", "surge", "strong", "gain",
-            "profit", "beat", "better", "success", "opportunity", "expansion"
-        ));
-        int negativeCount = countKeywords(articles, List.of(
-            "negative", "bearish", "downgrade", "decline", "drop", "weak", "loss",
-            "miss", "worse", "risk", "concern", "challenge", "headwind"
-        ));
-
-        return String.format(userMessage, stockSymbol, articleBuilder.toString(),
-                            articles.size(), positiveCount, negativeCount);
-    }
-
-    /**
-     * Creates a prompt for comparing sentiment with technical indicators.
-     *
-     * @param stockSymbol the stock symbol
-     * @param sentimentResult the sentiment analysis result
-     * @param technicalSummary summary of technical indicators
-     * @return combined analysis prompt
-     */
-    public String createCombinedAnalysisPrompt(
-            String stockSymbol,
-            String sentimentResult,
-            String technicalSummary) {
-
-        String userMessage = """
-                Combine sentiment and technical analysis for stock %s.
-
-                SENTIMENT ANALYSIS:
-                %s
-
-                TECHNICAL ANALYSIS SUMMARY:
-                %s
-
-                Based on both analyses, determine the overall trading signal:
-                - If sentiment and technicals align (both positive/negative), confidence should be higher
-                - If they conflict, note the disagreement and provide a weighted recommendation
-
-                Provide your combined analysis in JSON format:
-                {
-                    "overallSignal": "BUY|SELL|HOLD",
-                    "sentimentScore": "POSITIVE|NEUTRAL|NEGATIVE",
-                    "technicalScore": "BULLISH|BEARISH|NEUTRAL",
-                    "alignment": "ALIGNED|MIXED|CONFLICTING",
-                    "confidence": 0.0-1.0,
-                    "reasoning": "Combined analysis reasoning (max 300 words)",
-                    "entryPrice": "Recommended entry zone if applicable",
-                    "stopLoss": "Recommended stop loss level if applicable",
-                    "target": "Recommended target if applicable",
-                    "riskReward": "Calculated risk-reward ratio if applicable"
-                }
-                """;
-
-        return String.format(userMessage, stockSymbol, sentimentResult, technicalSummary);
-    }
-
-    /**
-     * Creates a prompt for generating a trading recommendation based on sentiment.
-     *
-     * @param stockSymbol the stock symbol
-     * @param sentimentType the analyzed sentiment
-     * @param reasoning the sentiment reasoning
-     * @param currentPrice the current stock price
-     * @return trading recommendation prompt
-     */
-    public String createTradingRecommendationPrompt(
-            String stockSymbol,
-            SentimentType sentimentType,
-            String reasoning,
-            Double currentPrice) {
-
-        String sentimentDescription = switch (sentimentType) {
-            case POSITIVE -> "Positive sentiment indicates potential upward price movement. " +
-                            "This suggests buyers are more active than sellers.";
-            case NEGATIVE -> "Negative sentiment indicates potential downward price movement. " +
-                            "This suggests sellers are more active than buyers.";
-            case NEUTRAL -> "Neutral sentiment indicates balanced market conditions. " +
-                           "No strong directional bias at this time.";
-        };
-
-        String userMessage = """
-                Based on the sentiment analysis, provide a concrete trading recommendation for %s.
-
-                SENTIMENT ANALYSIS RESULTS:
-                - Sentiment: %s
-                - Confidence: N/A
-                - Reasoning: %s
-                - Current Price: Rs. %s
-
-                %s
-
-                Provide trading recommendation in JSON format:
-                {
-                    "signal": "BUY|SELL|HOLD",
-                    "signalStrength": "STRONG|MODERATE|WEAK",
-                    "timeHorizon": "SHORT_TERM|MEDIUM_TERM|LONG_TERM",
-                    "confidence": 0.0-1.0,
-                    "entryStrategy": "EXACT_PRICE|ZONE|LIMITED_ENTRY",
-                    "entryPrice": "Recommended entry price",
-                    "entryZone": {
-                        "low": "Lower bound of entry zone",
-                        "high": "Upper bound of entry zone"
-                    },
-                    "stopLoss": "Price level for stop loss",
-                    "target1": "First target price",
-                    "target2": "Second target price",
-                    "target3": "Third target price (optional)",
-                    "riskRewardRatio": "Calculated risk-reward ratio",
-                    "positionSizing": "Recommended position size as percentage of capital",
-                    "reasoning": "Detailed reasoning for this recommendation (max 300 words)",
-                    "riskFactors": ["factor1", "factor2"],
-                    "catalysts": ["potential positive events", "potential negative events"]
-                }
-                """;
-
-        return String.format(userMessage, stockSymbol, sentimentType, reasoning,
-                            currentPrice, sentimentDescription);
-    }
-
-    /**
-     * Creates a simple classification prompt for basic sentiment tagging.
-     *
-     * @param stockSymbol the stock symbol
-     * @param newsText the news text to classify
-     * @return simple classification prompt
-     */
-    public String createSimpleClassificationPrompt(String stockSymbol, String newsText) {
-        String userMessage = """
-                Classify the sentiment of this news about stock %s:
-
-                %s
-
-                Respond with ONLY the sentiment classification: POSITIVE, NEUTRAL, or NEGATIVE.
-                """;
-
-        return String.format(userMessage, stockSymbol, newsText);
-    }
-
-    /**
-     * Counts occurrences of keywords in a list of articles.
-     *
-     * @param articles list of article texts
-     * @param keywords list of keywords to count
-     * @return total count of keyword matches
-     */
-    /**
      * Extracts JSON from reasoning text that wraps it (common with reasoning models).
-     * Scans for the first '{', then tries to find the matching '}' that produces valid JSON.
-     * Falls back to first/last brace pair, then returns raw text.
+     * Strips reasoning tags, markdown code blocks, then scans for valid JSON.
+     * Tries each '{' in the text until one produces valid JSON.
      */
     private String extractJsonFromReasoning(String text) {
         if (text == null || text.isBlank()) return text;
 
-        // Try: find first '{', then scan for valid JSON end
-        int firstOpen = findBrace(text, '{');
-        if (firstOpen < 0) return text;
+        String cleaned = text;
+        // Strip reasoning tags (Sonnet, Claude, etc.)
+        cleaned = cleaned.replaceAll("(?s)<thinking>.*?</thinking>\\s*", "");
+        cleaned = cleaned.replaceAll("(?s)<think>.*?</think>\\s*", "");
+        cleaned = cleaned.replaceAll("(?s)<reasoning>.*?</reasoning>\\s*", "");
+        // Strip markdown code block markers: ```json and ```
+        cleaned = cleaned.replaceAll("(?m)^```(?:json)?$\\s*", "");
 
-        for (int i = firstOpen + 1; i < text.length(); i++) {
-            if (text.charAt(i) == '}') {
-                String candidate = text.substring(firstOpen, i + 1);
-                if (isValidJson(candidate)) return candidate;
+        // Try each '{' in the text until one produces valid JSON
+        int pos = 0;
+        while (pos < cleaned.length()) {
+            int firstOpen = findBrace(cleaned, '{', pos);
+            if (firstOpen < 0) break;
+
+            for (int i = firstOpen + 1; i < cleaned.length(); i++) {
+                if (cleaned.charAt(i) == '}') {
+                    String candidate = cleaned.substring(firstOpen, i + 1);
+                    if (isValidJson(candidate)) return candidate;
+                }
             }
+            // This '{' didn't produce valid JSON — try the next one
+            pos = firstOpen + 1;
         }
 
         // Fallback: first '{' and last '}'
-        int lastClose = findBrace(text, '}');
-        if (lastClose > firstOpen) {
-            return text.substring(firstOpen, lastClose + 1);
+        int firstOpen = findBrace(cleaned, '{', 0);
+        int lastClose = findBrace(cleaned, '}', 0);
+        if (lastClose > firstOpen && lastClose > 0) {
+            return cleaned.substring(firstOpen, lastClose + 1);
         }
         return text;
     }
 
     /**
-     * Finds the index of a character that is not inside quotes or nested braces.
-     * Returns -1 if not found.
+     * Finds the index of a character that is not inside quotes or nested braces,
+     * starting from the given position. Returns -1 if not found.
      */
-    private int findBrace(String text, char c) {
+    private int findBrace(String text, char c, int from) {
         boolean inString = false;
         boolean escaped = false;
-        for (int i = 0; i < text.length(); i++) {
+        for (int i = from; i < text.length(); i++) {
             if (escaped) {
                 escaped = false;
                 continue;
@@ -446,19 +286,6 @@ public class SentimentAnalyzer {
         } catch (Exception e) {
             return false;
         }
-    }
-
-    private int countKeywords(List<String> articles, List<String> keywords) {
-        int count = 0;
-        for (String article : articles) {
-            String lowerArticle = article.toLowerCase();
-            for (String keyword : keywords) {
-                if (lowerArticle.contains(keyword.toLowerCase())) {
-                    count++;
-                }
-            }
-        }
-        return count;
     }
 
     /**

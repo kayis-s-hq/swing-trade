@@ -83,100 +83,99 @@
       </div>
 
       <template v-else>
-      <div class="card-panel overflow-x-auto">
-        <table class="min-w-full">
-          <thead>
-            <tr class="border-b border-border-subtle bg-bg-primary/50">
-              <th
-                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Symbol
-              </th>
-              <th
-                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Name
-              </th>
-              <th
-                class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Exchange
-              </th>
-              <th
-                class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Status
-              </th>
-              <th
-                class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Candles
-              </th>
-              <th
-                class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-              >
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-border-subtle/50">
-            <tr
-              v-for="entry in watchlist"
-              :key="entry.symbol"
-              class="transition-colors hover:bg-bg-hover"
-            >
-              <td class="px-5 py-4 text-sm font-semibold text-text-primary">
-                {{ entry.symbol }}
-              </td>
-              <td class="px-5 py-4 text-sm text-text-secondary">
-                {{ entry.name || '—' }}
-              </td>
-              <td class="px-5 py-4 text-sm text-text-muted">
-                {{ entry.exchange }}
-              </td>
-              <td class="px-5 py-4 text-center">
-                <button
-                  class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors"
-                  :class="
-                    entry.isActive
-                      ? 'bg-success-bg text-success hover:bg-success-bg/80'
-                      : 'bg-bg-hover text-text-muted hover:bg-border-subtle'
-                  "
-                  @click="toggleEntry(entry.symbol)"
+        <div class="card-panel overflow-x-auto">
+          <table class="min-w-full">
+            <thead>
+              <tr class="border-b border-border-subtle bg-bg-primary/50">
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
                 >
-                  {{ entry.isActive ? 'Active' : 'Inactive' }}
-                </button>
-              </td>
-              <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                {{ entry.candleCount ?? 0 }}
-              </td>
-              <td class="px-5 py-4 text-right">
-                <button
-                  class="rounded-md p-1 text-text-muted transition-colors hover:bg-danger-bg hover:text-danger"
-                  :title="'Remove ' + entry.symbol"
-                  @click="removeEntry(entry.symbol)"
+                  Symbol
+                </th>
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
                 >
-                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 7l-.867 12.14A2 2 0 0116.237 21H7.763a2 2 0 01-1.896-1.86L5 7m1 0h4m-4 0V3h4v4m-4 0H5m14-4H15m4 0v4m-4-4h1m-5 0h.01"
-                    />
-                  </svg>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                  Name
+                </th>
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Exchange
+                </th>
+                <th
+                  class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Status
+                </th>
+                <th
+                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Candles
+                </th>
+                <th
+                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border-subtle/50">
+              <tr
+                v-for="entry in watchlist"
+                :key="entry.symbol"
+                class="transition-colors hover:bg-bg-hover"
+              >
+                <td class="px-5 py-4 text-sm font-semibold text-text-primary">
+                  {{ entry.symbol }}
+                </td>
+                <td class="px-5 py-4 text-sm text-text-secondary">
+                  {{ entry.name || '—' }}
+                </td>
+                <td class="px-5 py-4 text-sm text-text-muted">
+                  {{ entry.exchange }}
+                </td>
+                <td class="px-5 py-4 text-center">
+                  <button
+                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors"
+                    :class="
+                      entry.isActive
+                        ? 'bg-success-bg text-success hover:bg-success-bg/80'
+                        : 'bg-bg-hover text-text-muted hover:bg-border-subtle'
+                    "
+                    @click="toggleEntry(entry.symbol)"
+                  >
+                    {{ entry.isActive ? 'Active' : 'Inactive' }}
+                  </button>
+                </td>
+                <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                  {{ entry.candleCount ?? 0 }}
+                </td>
+                <td class="px-5 py-4 text-right">
+                  <button
+                    class="rounded-md p-1 text-text-muted transition-colors hover:bg-danger-bg hover:text-danger"
+                    :title="'Remove ' + entry.symbol"
+                    @click="removeEntry(entry.symbol)"
+                  >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 7l-.867 12.14A2 2 0 0116.237 21H7.763a2 2 0 01-1.896-1.86L5 7m1 0h4m-4 0V3h4v4m-4 0H5m14-4H15m4 0v4m-4-4h1m-5 0h.01"
+                      />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      <div v-if="watchlist.length === 0" class="mt-6 text-center text-sm text-text-muted">
-        No stocks in watchlist. Click "Add Stock" to get started.
-      </div>
-    </template>
-      </ErrorBoundary>
-    </div>
+        <div v-if="watchlist.length === 0" class="mt-6 text-center text-sm text-text-muted">
+          No stocks in watchlist. Click "Add Stock" to get started.
+        </div>
+      </template>
+    </ErrorBoundary>
   </div>
 </template>
 

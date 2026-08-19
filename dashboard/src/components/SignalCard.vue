@@ -98,13 +98,8 @@
     </div>
 
     <!-- Sentiment Reasoning -->
-    <div
-      v-if="signal.sentimentReasoning"
-      class="border-t border-border-subtle/50 px-4 py-3"
-    >
-      <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
-        Sentiment
-      </p>
+    <div v-if="signal.sentimentReasoning" class="border-t border-border-subtle/50 px-4 py-3">
+      <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">Sentiment</p>
       <p class="text-xs leading-relaxed text-text-secondary">
         {{ signal.sentimentReasoning }}
       </p>

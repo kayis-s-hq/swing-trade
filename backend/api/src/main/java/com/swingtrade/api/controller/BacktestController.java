@@ -48,6 +48,26 @@ public class BacktestController {
     }
 
     /**
+     * Runs a backtest for a single symbol with a tunable JSON config body.
+     */
+    @PostMapping("/run-tune")
+    public ResponseEntity<BacktestResult> runTunedBacktest(
+            @RequestParam String symbol,
+            @RequestParam(defaultValue = "NSE") String exchange,
+            @org.springframework.web.bind.annotation.RequestBody BacktestConfig config) {
+        logger.info("Running tuned backtest for {} with config: {}", symbol, config);
+        try {
+            BacktestResult result = backtestEngine.runBacktest(symbol, exchange, config);
+            return ResponseEntity.ok(result);
+        } catch (IllegalStateException e) {
+            logger.warn("Backtest failed for {}: {}", symbol, e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
      * Runs a backtest for a single symbol using default {@link BacktestConfig} parameters.
      *
      * @param symbol   stock symbol
@@ -68,6 +88,19 @@ public class BacktestController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         }
+    }
+
+    /**
+     * Runs a backtest across every symbol in the active watchlist with a tunable JSON config body.
+     */
+    @PostMapping("/run-all-tune")
+    public ResponseEntity<BacktestReportSummary> runTunedBacktestAll(
+            @RequestParam(defaultValue = "NSE") String exchange,
+            @org.springframework.web.bind.annotation.RequestBody BacktestConfig config) {
+        logger.info("Running tuned backtest-all with config: {}", config);
+        List<BacktestResult> results = backtestEngine.runBacktestAll(exchange, config);
+        BacktestReportSummary summary = backtestEngine.generateReport(results);
+        return ResponseEntity.ok(summary);
     }
 
     /**

@@ -2,46 +2,52 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Dual Backend Architecture
+## One Active Backend
 
 This repo has **one** active backend:
 
-1. **`backend/`** — Multi-module Gradle project (6 modules: core, data, strategy, llm, broker, api) with Spring Boot 3.3.1. Full-featured architecture with separate data ingestion, TA, LLM sentiment, paper trading, and REST API. Built with Gradle 9.6.1.
+- **`backend/`** — Multi-module Gradle project (8 modules: core, data, strategy, llm, broker, api, gpuhub) with Spring Boot 3.5.9. Architecture: data ingestion, technical analysis, LLM sentiment, paper trading, GPU deployment management, REST API.
 
 ## Java Version
 
-**MUST use Java 21 for Gradle builds.** The system JDK may be Java 25/26, which causes PMD 7.14.0 to crash. Use sdkman to switch:
+**MUST use Java 21 for Gradle builds.** The system JDK may be Java 25/26, which causes PMD 7.14.0 to crash. Use sdkman:
 
 ```bash
 source "$HOME/.sdkman/bin/sdkman-init.sh"
 java -version  # should show openjdk 21.0.2
-./gradlew help  # now works
-```
-
-Verify before running Gradle:
-```bash
-java -version  # must be Java 21, NOT 25/26
+./gradlew help
 ```
 
 ## Git Hooks
 
-**STRICT: NEVER modify, override, or replace `.git/hooks/` files directly.** Git hooks are tracked in `.hooks/` and managed via `git config core.hooksPath`. All hook changes MUST go through `.hooks/` — never edit `.git/hooks/` directly.
+**STRICT: NEVER modify `.git/hooks/` directly.** Git hooks are tracked in `.hooks/` and managed via `git config core.hooksPath`. All hook changes MUST go through `.hooks/`.
+
+**Pre-commit hooks** (`.hooks/pre-commit`):
+- Checkstyle on changed Java modules
+- Prettier format check on Vue/TS files
+- TypeScript typecheck on Vue/TS files
+- ESLint --fix on staged Vue/TS files
+- Structural checks: enforces correct file placement (no JARs in backend root, no env files outside infra/env/, no Dockerfiles in backend, no build output in source tree, issue files in docs/issues/ not .github/issues/)
+
+**Pre-push hooks** (`.hooks/pre-push`):
+- Checkstyle on changed backend modules before push
 
 ## Project Structure
 
 ```
 swing-trade/
-├── backend/                # Multi-module Gradle project (Spring Boot 3.3.1)
-│   ├── build.gradle.kts    # Root build + dependency management
+├── backend/                # Multi-module Gradle project (Spring Boot 3.5.9)
+│   ├── build.gradle.kts    # Root build + dependency management (BOMs, shared plugins, test configs)
 │   ├── settings.gradle.kts # Project settings + repository config
 │   ├── gradle.properties   # Gradle config (cache, JVM args)
 │   ├── config/             # Shared checkstyle + PMD config
-│   ├── core/               # Domain models (Stock, OhlcvCandle, Signal, Position, Trade, SentimentResult)
-│   ├── data/               # Data ingestion & storage (Upstox client, JPA entities, repositories, Flyway migrations)
+│   ├── core/               # Domain models (com.swingtrade.domain: Stock, OhlcvCandle, Signal, Position, Trade, SentimentResult, JobRun, NewsArticle, Order, StrategyParams, etc.)
+│   ├── data/               # Data ingestion & storage (Upstox, Fyers, Yahoo, JPA repos, Flyway)
 │   ├── strategy/           # TA with TA4j, signal generation, backtesting engine
 │   ├── llm/                # LLM client (vLLM/OpenAI-compatible), sentiment analysis, news ingestion
 │   ├── broker/             # Paper trading engine, order/position management, risk controls
-│   └── api/                # REST endpoints (Health, Signal, Trade, Position, Scan, Performance), scheduled jobs
+│   ├── gpuhub/             # GPUHub elastic deployment API client (WebFlux)
+│   └── api/                # REST endpoints, scheduled jobs, backtest API, GPUHub controller, metric collectors
 │
 ├── infra/                  # Infrastructure (Docker, env, monitoring, nginx)
 │   ├── env/                # Environment files (.env, .env.dev, .env.stage, .env.example)
@@ -62,138 +68,122 @@ swing-trade/
 ├── dashboard/              # Vue 3 + TypeScript frontend
 │   ├── src/
 │   │   ├── api/            # API client, types, config
-│   │   ├── components/     # PositionCard, SignalCard, MetricCard, HealthStatus, PerformanceMetrics
-│   │   ├── views/          # Dashboard, Positions, Signals, Portfolio, Watchlist, DataIngestion, Settings
+│   │   ├── components/     # 25 components: cards, badges, status indicators, stage detail views, error boundary, article browser
+│   │   ├── views/          # 13 views: Dashboard, Positions, Signals, Portfolio, Watchlist, DataIngestion, Settings, Backtest, Monitoring, News, Orchestrator, Sentiment, NotFound
 │   │   ├── router/         # Vue Router
-│   │   └── stores/         # Pinia stores (theme)
+│   │   ├── stores/         # Pinia stores: appState, settings, theme
+│   │   ├── composables/    # useAsyncData and other shared composables
+│   │   └── test/           # Test utilities and helpers
 │   └── tests/              # Vitest unit tests + Playwright E2E tests
 │
 ├── docs/                   # Project documentation
 │   ├── plans/              # Implementation plans (handoff artifacts)
 │   ├── specs/              # Design specs
-│   ├── analysis/           # Architecture audits, analysis reports
-│   ├── api-references/     # External API docs (Fyers, Yahoo Finance)
-│   └── infra/              # CI/CD and deployment docs
+│   ├── analysis/           # Architecture audits, orchestration analysis, sentiment redesign, LLM accuracy monitoring
+│   ├── api-references/     # External API docs (Fyers v3, Yahoo Finance, GPUHub)
+│   ├── infra/              # CI/CD and deployment docs
+│   ├── issues/             # 20 feature issues (001-020): watchlist, portfolio, chart, settings, signals, CI, auth, etc.
+│   ├── backtesting.md      # Backtest engine entry/exit rules
+│   ├── yahoo-finance-api.md # Yahoo Finance unofficial API reference
+│   └── status.md           # Project status tracker
 │
 ├── .github/                # GitHub CI/CD workflows
-│   └── workflows/
+│   └── workflows/          # ci.yml, deploy-main.yml, deploy-stage.yml
 │
-├── .github/issues/         # Feature issue descriptions
+├── .hooks/                 # Git hooks (pre-commit, pre-push)
 ├── bin/                    # Shell scripts
-├── dev-stack.sh            # Dev stack orchestration script
-└── README.md
+└── dev-stack.sh            # Dev stack orchestration script
 ```
+
+## Module Dependencies
+
+```
+api -> strategy, llm, broker, gpuhub, data, core
+broker -> strategy, data, core
+strategy -> data, llm, core
+llm -> data, core
+data -> core
+gpuhub -> (none — standalone)
+core -> (none — leaf module)
+```
+
+### Module Highlights
+
+| Module | Package Root | Purpose |
+|--------|-------------|---------|
+| `core` | `com.swingtrade.domain` | Domain models (Stock, OhlcvCandle, Signal, Position, Trade, SentimentResult, JobRun, NewsArticle, Order, StrategyParams, RiskCalculator, Exchange) |
+| `data` | `com.swingtrade.data` | Data ingestion (Upstox/Yahoo/Fyers), JPA repositories, Flyway migrations |
+| `strategy` | `com.swingtrade.strategy` | TA indicator computation with TA4j, signal generation, backtesting engine |
+| `llm` | `com.swingtrade.llm` | vLLM/OpenAI-compatible LLM calls, sentiment analysis, news ingestion |
+| `broker` | `com.swingtrade.broker` | Paper trading engine, order/position management, risk controls |
+| `gpuhub` | `com.swingtrade.gpuhub` | Standalone GPU deployment client (elastic deployments, container templates, DTOs) |
+| `api` | `com.swingtrade.api` | REST endpoints, scheduled jobs, Prometheus metrics, health checks, GPUHub controller, signal pipeline orchestration |
 
 ## Key Technologies
 
 ### Backend
-- Java 21 (MUST use Java 21 via sdkman — `source "$HOME/.sdkman/bin/sdkman-init.sh"` before Gradle; NOT Java 25/26)
-- Spring Boot 3.3.1
+- Java 21 (MUST use via sdkman — NOT Java 25/26)
+- Spring Boot 3.5.9
 - Gradle 9.6.1 (Kotlin DSL, multi-module build)
-- PostgreSQL + TimescaleDB (time-series)
-- Redis (caching)
+- LangChain4j 1.18.1 (LLM integration)
+- PostgreSQL 16 + TimescaleDB (time-series)
+- Redis 7 (caching)
 - TA4j 0.16 (technical analysis)
-- LangChain4j 0.34.0 (LLM integration)
-- Flyway (DB migrations)
-- Lombok 1.18.34/1.18.38
+- Flyway 12.9.0 (22 migrations)
+- Lombok 1.18.34
+- ArchUnit 1.4.1 (module boundary enforcement)
 
 ### Frontend
 - Vue 3.5 + TypeScript + Composition API
 - Tailwind CSS v4
 - Vite 6
 - Pinia + Vue Router
-- Vitest + Playwright for testing
+- ESLint v10 (flat config) + Prettier
+- Vitest 3.x unit tests + Playwright 1.60 E2E tests
 
-## Development Commands
+## Build & Test Commands
 
-### Dev Stack (pi-node infra + local app)
-The dev stack runs infrastructure on a Raspberry Pi (pi-node) via SSH, with Spring Boot and the dashboard running locally on Mac.
-
-**Infrastructure containers** (on `piworm.local` via `docker context pi-node`):
-| Service | Image | Local Port | Container | Notes |
-|---------|-------|------------|-----------|-------|
-| PostgreSQL 16 | `postgres:16` | `5435` | `swing_trade_postgres` | TimescaleDB, trust auth |
-| Redis | `redis:alpine` | `6379` | `swing_trade_redis` | AOF enabled |
-
-Network: `swingtrade-network` (bridge). Volumes: `postgres_data`, `redis_data`.
-
-**Local services**:
-| Service | Port | Profile |
-|---------|------|---------|
-| Spring Boot API | `8080` | `local,fyers` |
-| Vue Dashboard | `3003` | — |
-
-### Backend (multi-module)
+### Backend
 ```bash
 cd backend
-./gradlew build                # Build all modules + run tests
-./gradlew test                 # Run all tests (unit + integration)
-./gradlew :api:test            # Run specific module tests
-
-# Run API module locally (after starting infra)
-cd backend
-./gradlew :api:bootRun --args='--spring.profiles.active=local,fyers'
+./gradlew build                          # Build all modules + run tests
+./gradlew test                           # Run all unit tests (unit + JaCoCo)
+./gradlew :api:test                      # Specific module tests
+./gradlew :api:bootRun --args='--spring.profiles.active=local,fyers'  # Run API locally
+./gradlew check                          # Tests + PMD + checkstyle + integration tests
+./gradlew jacocoTestReport               # Coverage report
+./gradlew jacocoTestCoverageVerification # 80% line coverage threshold check
 ```
-
-## Build Configuration
-
-Gradle 9.6.1 with Kotlin DSL. All build phases configured in `backend/build.gradle.kts`:
-- JaCoCo: 80% line coverage threshold, XML reports
-- Checkstyle: `backend/config/checkstyle/checkstyle.xml`
-- PMD: `backend/config/pmd/pmd-ruleset.xml`
-- Integration tests: `src/integrationTest/` source set
-- Javadoc + source JAR generation
-
-## Test Phase Rules
-
-**All tests run via `./gradlew test`.** Gradle's JVM Test Suite plugin runs ALL unit tests in the `test` phase.
-
-**Naming convention:**
-- Unit tests: `*Test.java` (e.g., `BacktestEngineTest.java`)
-- Integration tests: `*IntegrationTest.java` (e.g., `BacktestEngineIntegrationTest.java`) — placed in `src/integrationTest/`
-
-**Verification:**
-- `./gradlew test` — runs unit tests + JaCoCo report
-- `./gradlew check` — runs tests + PMD + checkstyle + integration tests
-- `./gradlew jacocoTestCoverageVerification` — checks 80% line coverage threshold
 
 ### Frontend
 ```bash
 cd dashboard
-yarn                           # Install dependencies
-yarn dev                       # Start dev server (localhost:3003)
-yarn build                     # Production build
-yarn typecheck                 # TypeScript type check
-yarn test                      # Vitest unit tests
-yarn playwright test           # E2E tests
+yarn                          # Install dependencies
+yarn dev                      # Dev server (localhost:3003)
+yarn build                    # Production build (lint + typecheck + build)
+yarn typecheck                # TypeScript check
+yarn test                     # Vitest unit tests (watch mode)
+yarn test:run                 # Vitest unit tests (run once)
+yarn playwright test          # E2E tests
+yarn lint                     # ESLint with auto-fix
+yarn format:write             # Prettier formatting
 ```
 
-### Dev Stack Script (`dev-stack.sh`)
-
-Manages the full dev environment — infrastructure on pi-node + local services.
-
+### Dev Stack
 ```bash
 ./dev-stack.sh start           # Start infra on pi-node + Spring Boot + Vue locally
 ./dev-stack.sh stop            # Stop all local services + infra on pi-node
 ./dev-stack.sh status          # Check status of infra, backend, frontend
 ./dev-stack.sh logs            # View infrastructure logs
-
-# Frontend management
-./dev-stack.sh frontend start  # Start Vue dev server only
-./dev-stack.sh frontend stop   # Stop Vue dev server only
-./dev-stack.sh frontend-logs   # Tail Vue dev server logs
-
-# Infrastructure
 ./dev-stack.sh infra up -d     # Start infra only
 ./dev-stack.sh infra down      # Stop infra only
+./dev-stack.sh frontend start  # Start Vue dev server only
 ```
 
-## Infrastructure & Configuration
+## Infrastructure
 
-### Dev Stack (pi-node infra + local app)
-The dev stack runs infrastructure on a Raspberry Pi (pi-node) via SSH, with Spring Boot and the dashboard running locally on Mac.
+Infrastructure runs on `piworm.local` via `docker context pi-node`:
 
-**Infrastructure containers** (on `piworm.local` via `docker context pi-node`):
 | Service | Image | Local Port | Container | Notes |
 |---------|-------|------------|-----------|-------|
 | PostgreSQL 16 | `postgres:16` | `5435` | `swing_trade_postgres` | TimescaleDB, trust auth |
@@ -201,194 +191,85 @@ The dev stack runs infrastructure on a Raspberry Pi (pi-node) via SSH, with Spri
 
 Network: `swingtrade-network` (bridge). Volumes: `postgres_data`, `redis_data`.
 
-**Local services**:
-| Service | Port | Profile |
-|---------|------|---------|
-| Spring Boot API | `8080` | `local,fyers` |
-| Vue Dashboard | `3003` | — |
+Local services: Spring Boot API on `8080` (profile `local,fyers`), Vue Dashboard on `3003`.
 
-### Docker Compose Infra
-Located at `infra/`. Manage directly:
-```bash
-./dev-stack.sh infra up -d      # Start
-./dev-stack.sh infra down       # Stop
-./dev-stack.sh infra restart    # Restart
-./dev-stack.sh logs             # View logs
-```
+## DB Migrations
 
-### Spring Profiles
-- `local` — dev config, verbose logging, paper trading only, no Telegram, connects to pi-node infra
-- `dev` — development mode
-- `fyers` — Fyers broker integration
-- `test` — test configuration (H2 in-memory DB in some modules)
+22 Flyway migrations in `backend/data/src/main/resources/db/migration/`:
 
-### Environment
-- `infra/env/.env` — loaded by `dev-stack.sh start`; contains DB, Redis, Upstox, LLM, and broker credentials
-- Spring Boot does NOT auto-load `.env`; the script sources it explicitly
-
-### DB Migrations
-Located in `backend/data/src/main/resources/db/migration/`:
-- `V1__swing_trade_schema.sql` — base schema (TimescaleDB hypertable, stocks, signals, positions, trades, sentiment)
-- `V2__add_ohlcv_adj_close.sql` — adjusted close column
-- `V3__add_watchlist.sql` — watchlist table
-
-### Known Issues
-- `LocalDateTime` needs custom Jackson serializer (not serializable by default)
-- Remove explicit `hibernate.dialect` — auto-detected in Hibernate 6.6+
-- Set `spring.jpa.open-in-view: false` to avoid lazy-loading warnings
-- Set `spring.data.redis.host=piworm.local` for remote Redis
-- Broker module tests have pre-existing compilation errors (Position record constructor mismatch, missing RiskControlsService class)
-- Native image build (GraalVM) not implemented — would need `org.graalvm.buildtools.native` Gradle plugin
+| Migration | Purpose |
+|-----------|---------|
+| V1 | Base schema (TimescaleDB hypertable, stocks, signals, positions, trades, sentiment) |
+| V2 | Adjusted close column for OHLCV |
+| V3 | Watchlist table |
+| V4 | Daily loss circuit breaker + sentiment fix |
+| V5 | Trade labels |
+| V6 | Fyers symbol master |
+| V7 | Signal strategy |
+| V8 | Intelligence tables |
+| V9 | App settings |
+| V10 | Kill switch table |
+| V11 | Sentiment accuracy enhancement |
+| V12 | Sentiment metadata |
+| V13 | Paper trading state |
+| V14 | NSE holidays table |
+| V15 | Snapshot created at |
+| V16 | Positions broker columns |
+| V17 | Article count on sentiment |
+| V18 | News articles table |
+| V19 | Sentiment score on signals |
+| V20 | Job runs (job orchestrator) |
+| V21 | Consolidated positions |
+| V22 | Signal sentiment reasoning |
 
 ## API Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/health` | System health (DB/Redis/Upstox connection states) |
-| `GET /api/signals[/symbol]` | Latest signals or for a specific stock |
-| `GET /api/scan` | Scan multiple stocks (`?days=30&marketCap=min`) |
-| `POST /api/trade` | Execute market order (paper mode) |
-| `GET /api/positions[/symbol]` | View positions |
-| `POST /api/positions/{symbol}/close` | Close a position |
-| `GET /api/performance` | P&L, win rate, trade stats |
-| `GET /actuator/health` | Spring Boot actuator |
-| `POST /api/backtest/run` | Backtest one symbol (`?symbol=X&exchange=NSE`) |
-| `POST /api/backtest/run-all` | Backtest the active watchlist, saves a report |
-| `GET /api/backtest/reports[/{filename}]` | List or fetch saved backtest reports |
+### REST API (`/api/*`)
 
-## Testing
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | System health (DB/Redis/Upstox connection states) |
+| `/api/signals[/symbol]` | GET | Latest signals or for a specific stock |
+| `/api/scan` | GET | Scan multiple stocks (`?days=30&marketCap=min`) |
+| `/api/trade` | POST | Execute market order (paper mode) |
+| `/api/positions[/symbol]` | GET | View positions |
+| `/api/positions/{symbol}/close` | POST | Close a position |
+| `/api/performance` | GET | P&L, win rate, trade stats |
+| `/api/backtest/run` | POST | Backtest one symbol (`?symbol=X&exchange=NSE`) |
+| `/api/backtest/run-all` | POST | Backtest active watchlist, saves report |
+| `/api/backtest/reports[/{filename}]` | GET | List or fetch saved backtest reports |
+| `/api/admin/*` | Various | Admin controller |
+| `/api/analysis/*` | Various | Analysis orchestration |
+| `/api/analysis/orchestration/*` | Various | Full analysis orchestrator |
+| `/api/fyers/auth` | Various | Fyers OAuth endpoints |
+| `/api/upstox/auth` | Various | Upstox OAuth endpoints |
+| `/api/ingestion` | POST | Manual data ingestion trigger |
+| `/api/sentiment` | Various | Sentiment API endpoints |
+| `/api/settings` | Various | App settings management |
+| `/api/job-runs` | Various | Job orchestrator runs |
+| `/actuator/health` | GET | Spring Boot actuator |
 
-```bash
-# Backend — all modules (unit tests)
-cd backend && ./gradlew test
+### GPUHub API (`/gpuhub/*`)
 
-# Backend — specific module
-cd backend && ./gradlew :data:test
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/gpuhub/deployment*` | Various | GPUHub elastic deployment management |
 
-# Backend — all verification (tests + PMD + checkstyle + integration tests)
-cd backend && ./gradlew check
+## Key Features
 
-# Backend — coverage report
-cd backend && ./gradlew jacocoTestReport
-
-# Backend — coverage threshold check (80% line coverage)
-cd backend && ./gradlew jacocoTestCoverageVerification
-
-# Frontend unit tests
-cd dashboard && yarn test
-
-# Frontend E2E tests
-cd dashboard && yarn playwright test
-```
-
-Test resources include `application-test.properties`, `application-e2e.yml`, and test-specific Flyway schemas.
-
-## Context MCP (Library Docs)
-
-The `context` MCP server provides version-specific documentation for libraries, frameworks, SDKs, APIs, and CLI tools. It solves the problem of outdated training data by querying freshly indexed docs locally.
-
-**How it works:**
-- `search_packages` — discovers packages from the online registry (for finding new packages to install)
-- `download_package` — downloads a package for local caching
-- `get_docs` — queries your cached docs. The `library` parameter uses the format `name@version` (e.g., `vue@latest`, `java/spring-boot@3.5.7`)
-
-**Installed packages (15 total):**
-| Category | Packages |
-|----------|----------|
-| Java/Spring | `java/spring-boot@3.5.7`, `java/spring-data@4.1.0`, `java/gradle@8.9.0` |
-| DB | `flyway/flyway@12.9.0` |
-| AI/LLM | `js/langchain4j@1.18.1`, `js/langchain@0.1.16`, `js/openai@1.99.9` |
-| Vue Frontend | `vue@latest`, `tailwindcss@latest`, `js/vue-router@4.6.0`, `pinia@2.2.8` |
-| Testing | `vitest@3.2.7`, `playwright@1.8.1` |
-| Infra | `js/docker@18.09-release`, `js/docker-compose@5.4.0` |
-
-**Usage examples:**
-```
-# Query Vue Composition API docs
-get_docs(library: "vue@latest", topic: "composition API")
-
-# Query Spring Boot REST docs
-get_docs(library: "java/spring-boot@3.5.7", topic: "REST controller")
-
-# Query Gradle build docs
-get_docs(library: "java/gradle@8.9.0", topic: "dependency management")
-
-# Query Playwright E2E test docs
-get_docs(library: "playwright@1.8.1", topic: "browser navigation")
-
-# Discover new packages to install
-search_packages(registry: "npm", name: "axios")
-
-# Install a new package
-download_package(registry: "npm", name: "axios", version: "latest")
-```
-
-**Important:** `search_packages` searches the online neuledge registry for discovery. Locally installed packages are queried via `get_docs` with the exact library name.
-
-## Documentation
-
-All project documentation goes in `docs/` as Markdown files.
-
-### External API References
-
-- [docs/api-references/fyers-api-v3.md](docs/api-references/fyers-api-v3.md) — Fyers v3 API documentation
-- [docs/yahoo-finance-api.md](docs/yahoo-finance-api.md) — Yahoo Finance unofficial API endpoints (v8/chart, v7/quote, v1/search), response formats, parameters, and reliability notes. Based on [yahoo-finance2](https://github.com/gadicc/yahoo-finance2) reverse-engineered docs.
-
-### Analysis & Audits
-
-- [docs/analysis/architecture-audit-2026-07-22.md](docs/analysis/architecture-audit-2026-07-22.md) — Architecture audit findings
-- [docs/analysis/llm-accuracy-monitoring.md](docs/analysis/llm-accuracy-monitoring.md) — LLM accuracy monitoring analysis
-
-### Backtesting
-
-- [docs/backtesting.md](docs/backtesting.md) — `BacktestEngine` entry/exit rules, how to trigger a backtest via curl, and how to interpret `BacktestResult` fields.
-
-## Planning Artifacts
-
-When a multi-step implementation plan is decided (after research and clarification), write it to `docs/plans/<slug>.md`. This file serves as a handoff — paste its contents into a new Claude Code session to continue work after a context cutoff or session restart.
-
-**Structure:**
-- Section 1: "What's already done" — list completed backend renames, refactors, or changes
-- Section 2: "What needs to be done" — numbered steps with file paths and exact code to add/modify
-- Section 3: "Style guide" — patterns to follow (existing components, API client pattern, empty/loading states)
-- Section 4: "Verification" — commands to run to confirm the work
-
-**Rules:**
-- Include exact file paths for every change
-- Include the full code to add (not "add X to Y")
-- Reference existing patterns from the codebase (don't invent new patterns)
-- Keep the file under 300 lines so it fits in a new session's context
-
-## Interaction Rules
-
-### Decision Rule — Ask Before Deciding
-**STRICT:** Before making ANY non-obvious, non-trivial, or irreversible decision, you MUST use the `AskUserQuestion` tool to present options and get user approval. This includes but is not limited to:
-- Architecture choices (framework, library, pattern, module structure)
-- UI/UX changes (layout, styling, component design, state management)
-- API changes (endpoints, DTOs, request/response shapes)
-- Data model changes (schema, entities, migrations)
-- Bug fix approach (quick fix vs proper fix, refactor vs patch)
-- Anything with more than one valid implementation path
-
-**How to apply:** Call `AskUserQuestion` with clear options. The first option MUST be your recommended choice. Do NOT proceed until the user selects.
-
-**Exception:** Trivial, reversible changes with a single obvious answer (typos, single-argument fixes, formatting) do not require asking.
-
-### LLM Ambiguity Rule
-**STRICT:** When LLM output is ambiguous, contradictory, incomplete, or potentially wrong, you MUST use the `AskUserQuestion` tool to clarify with the user before acting on it. Do NOT guess, assume, or silently correct LLM output.
-
-### Documentation Organization Rule
-**STRICT:** All project documentation, plans, and specs live exclusively under `docs/`. No other location is permitted:
-- `docs/` — knowledge docs (API refs, architecture, backtesting, etc.)
-- `docs/plans/` — implementation plans (handoff artifacts)
-- `docs/specs/` — design specs
-- `docs/analysis/` — architecture audits, analysis reports
-- `docs/api-references/` — external API documentation
-- `docs/infra/` — CI/CD and deployment documentation
-
-**Forbidden locations:** `claude/plans/`, `.claude/plans/`, `docs/superpowers/`, `.claude/worktrees/`, or any other ad-hoc directory.
-
-**How to apply:** When creating plans or specs, write to `docs/plans/` or `docs/specs/`. When moving files from forbidden locations to `docs/`, do it immediately. Never create new plan/doc directories outside `docs/`. Never leave stale copies in worktrees or session directories.
+- **Job Orchestrator**: Unified 6-stage pipeline (replaces 8+ scattered `@Scheduled` jobs) with `JobRun`/`JobRunStage` tracking, `DailySignalOrchestrator`, and `JobOrchestratorService`
+- **Signal Pipeline**: `SignalEngine` -> `SignalFilterService` -> `SignalPipeline` -> `SignalPersistenceService` with `SentimentGate` and `SignalFilterService` for multi-stage signal generation
+- **Kill Switch**: Circuit breaker for stopping automated trading, persisted in DB (`kill_switch` table)
+- **Intelligence System**: Full analysis orchestration (`AnalysisOrchestrationController`), news ingestion via `ArticleBrowser`, sentiment analysis with LLM, article storage (`NewsArticle`)
+- **Analysis Pipeline**: `CompositeAnalysisService` -> `TechnicalAnalysisService` -> `FundamentalScorer` -> `SynthesisService` with `BacktestScorer`
+- **Paper Trading**: Full order/position lifecycle (`Order`, `Position`) with risk controls (`RiskCalculator`), broker-agnostic, consolidated positions
+- **Backtesting Engine**: Historical simulation with entry/exit rules per `docs/backtesting.md`, `BacktestController`, `BacktestScorer`
+- **MonitoringView**: Real-time system health dashboard with `HealthStatus` component and `AppSettings`
+- **OrchestratorView**: Job pipeline execution control, stage visualization
+- **SentimentView**: LLM sentiment timeline with `SentimentBadge`, `SentimentTimeline`, accuracy metrics (`AccuracyMetricCard`)
+- **Stage Analysis**: Stage detail components (`StageBacktestDetail`, `StageTechnicalDetail`, `StageFundamentalsDetail`, `StageCompositeDetail`, `StageSynthesisDetail`, `StageNewsDetail`)
+- **Monthly Reports**: `MonthlyReportService` for PDF reports
+- **Settings**: `SettingsController` + `SettingsView` with `appState` and `settings` Pinia stores
 
 ## Market Data Clients
 
@@ -397,3 +278,85 @@ When a multi-step implementation plan is decided (after research and clarificati
 | `YahooFinanceClient` | data | None | Yahoo v8 chart (unofficial) | Active default |
 | `UpstoxServiceClient` | data | OAuth2 token | Upstox v2 API | Active |
 | `FyersServiceClient` | data | API key+secret | Fyers v3 API | Fyers profile |
+
+## CI/CD
+
+Three GitHub Actions workflows on self-hosted runners:
+
+| Workflow | Trigger | Phases |
+|----------|---------|--------|
+| `ci.yml` | push/PR to main, manual | Static analysis -> Compile -> Tests (per module, parallel) + Frontend lint/typecheck/build/E2E |
+| `deploy-main.yml` | push to main | Full pipeline to production stage |
+| `deploy-stage.yml` | push to stage branch | Staged deployment with rollback |
+
+## Test Conventions
+
+- Unit tests: `*Test.java` — run via `./gradlew test`
+- Integration tests: `*IntegrationTest.java` in `src/integrationTest/` — run via `./gradlew check`
+- JaCoCo: 80% line coverage threshold, auto-finalized after `test`
+- ArchUnit: module boundary enforcement (runs as unit test)
+- Frontend E2E: Playwright tests in `dashboard/tests/e2e/` (8 tests: orchestrator-debug, positions-view, settings-view, signal-view-check, signals-selection, signals-view, stage-sanity, visual-check)
+- Frontend unit: Vitest tests in `dashboard/src/` (SettingsView, Toast)
+
+## Spring Profiles
+
+- `local` — dev config, verbose logging, paper trading only, connects to pi-node infra
+- `dev` — development mode
+- `fyers` — Fyers broker integration
+- `test` — test configuration (H2 in-memory DB in some modules)
+- `stage` — stage deployment configuration
+
+## Environment
+
+- `infra/env/.env` — loaded by `dev-stack.sh start`; contains DB, Redis, Upstox, LLM, broker credentials
+- Spring Boot does NOT auto-load `.env`; the script sources it explicitly
+
+## Documentation
+
+All project documentation lives under `docs/`:
+
+| Path | Contents |
+|------|----------|
+| `docs/plans/` | Implementation plans (handoff artifacts) — 9 active plans + archive |
+| `docs/specs/` | Design specs — 2 specs (Indian news sources, sentiment pipeline accordion) |
+| `docs/analysis/` | Architecture audit, full analysis orchestration, LLM accuracy monitoring, sentiment analysis redesign |
+| `docs/api-references/` | Fyers API v3, Yahoo Finance API, GPUHub elastic deployment |
+| `docs/infra/` | CI/CD and deployment documentation |
+| `docs/issues/` | 20 feature issues (001-020): watchlist, portfolio, chart, settings, signals, CI, auth, WebSocket, data quality, etc. |
+| `docs/backtesting.md` | Backtest engine entry/exit rules |
+| `docs/yahoo-finance-api.md` | Yahoo Finance unofficial API reference (v8/chart, v7/quote, v1/search) |
+| `docs/status.md` | Project status tracker |
+
+## Planning Artifacts
+
+Multi-step implementation plans go to `docs/plans/<slug>.md`. Structure:
+1. "What's already done"
+2. "What needs to be done" (numbered steps with file paths and exact code)
+3. "Style guide" (reference existing patterns)
+4. "Verification" (commands to confirm)
+
+Keep under 300 lines.
+
+## Context MCP (Library Docs)
+
+The `context` MCP server provides version-specific docs. Installed packages (15 total):
+
+| Category | Packages |
+|----------|----------|
+| Java/Spring | `java/spring-boot@3.5.9`, `java/spring-data@4.1.0`, `java/gradle@8.9.0` |
+| DB | `flyway/flyway@12.9.0` |
+| AI/LLM | `js/langchain4j@1.18.1`, `js/langchain@0.1.16`, `js/openai@1.99.9` |
+| Vue Frontend | `vue@latest`, `tailwindcss@latest`, `js/vue-router@4.6.0`, `pinia@2.2.8` |
+| Testing | `vitest@3.2.7`, `playwright@1.8.1` |
+| Infra | `js/docker@18.09-release`, `js/docker-compose@5.4.0` |
+
+Usage: `search_packages` (discover), `download_package` (cache), `get_docs(library: "name@version", topic: "...")` (query). One concept per `get_docs` call.
+
+## Known Issues
+
+- `LocalDateTime` needs custom Jackson serializer (not serializable by default)
+- Remove explicit `hibernate.dialect` — auto-detected in Hibernate 6.6+
+- Set `spring.jpa.open-in-view: false` to avoid lazy-loading warnings
+- Set `spring.data.redis.host=piworm.local` for remote Redis
+- Broker module tests have pre-existing compilation errors (Position record constructor mismatch, missing RiskControlsService class)
+- Native image build (GraalVM) not implemented

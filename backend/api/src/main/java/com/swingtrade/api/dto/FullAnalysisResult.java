@@ -1,5 +1,7 @@
 package com.swingtrade.api.dto;
 
+import com.swingtrade.domain.CompositeAnalysis;
+
 import java.util.List;
 
 public record FullAnalysisResult(
