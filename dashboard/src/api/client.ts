@@ -168,6 +168,7 @@ interface BackendPerformance {
   averageLoss: number | string
   profitFactor: number | string
   totalPnL: number | string
+  totalValue: number | string
   closedTrades: number
   asOfDate: string
 }
@@ -250,13 +251,13 @@ export async function getPortfolioSummary(): Promise<ApiResponse<PortfolioSummar
   if (!raw.ok) return errResponse(raw.error!)
 
   const perf = raw.data as BackendPerformance
-  const totalPnL = toNum(perf.totalPnL)
+  const totalPnL = toNum(perf.totalPnL ?? 0)
   const totalReturn = toNum(perf.totalReturn)
 
   return {
     success: true,
     data: {
-      totalValue: 0, // Would need a separate endpoint or derive from positions
+      totalValue: toNum(perf.totalValue),
       totalPnl: totalPnL,
       totalPnlPercent: totalReturn,
       winRate: toNum(perf.winRate),
@@ -739,6 +740,14 @@ export async function testPiConnection(): Promise<
   ApiResponse<{ success: boolean; message: string }>
 > {
   const raw = await rawFetch('/settings/test/pi', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
+}
+
+export async function testOpenAiConnection(): Promise<
+  ApiResponse<{ success: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/test/openai', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
 }

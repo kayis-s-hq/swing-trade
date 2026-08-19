@@ -30,6 +30,7 @@ public class PerformanceResponse {
     private BigDecimal totalFeesPaid;
     private Integer closedTrades;
     private BigDecimal totalPnL;
+    private BigDecimal totalValue;
 
     public PerformanceResponse() {
     }
@@ -203,6 +204,14 @@ public class PerformanceResponse {
         this.totalPnL = totalPnL;
     }
 
+    public BigDecimal getTotalValue() {
+        return totalValue;
+    }
+
+    public void setTotalValue(BigDecimal totalValue) {
+        this.totalValue = totalValue;
+    }
+
     /**
      * Creates a PerformanceResponse from individual values.
      */
@@ -212,7 +221,12 @@ public class PerformanceResponse {
         BigDecimal sharpeRatio,
         BigDecimal maxDrawdown,
         Integer totalTrades,
-        Integer winningTrades
+        Integer winningTrades,
+        BigDecimal totalPnL,
+        BigDecimal totalValue,
+        BigDecimal averageWin,
+        BigDecimal averageLoss,
+        BigDecimal profitFactor
     ) {
         PerformanceResponse response = new PerformanceResponse();
         response.setTotalReturn(totalReturn);
@@ -221,11 +235,17 @@ public class PerformanceResponse {
         response.setMaxDrawdown(maxDrawdown);
         response.setTotalTrades(totalTrades);
         response.setWinningTrades(winningTrades);
+        response.setTotalPnL(totalPnL);
+        response.setTotalValue(totalValue);
+        response.setAverageWin(averageWin);
+        response.setAverageLoss(averageLoss);
+        response.setProfitFactor(profitFactor);
 
         // Calculate derived metrics
-        if (totalTrades != null && totalTrades > 0) {
+        if (totalTrades != null && totalTrades > 0 && winningTrades != null) {
             response.setLosingTrades(totalTrades - winningTrades);
-            response.setWinRate(BigDecimal.valueOf(winningTrades * 100)
+            response.setWinRate(BigDecimal.valueOf(winningTrades)
+                .multiply(BigDecimal.valueOf(100))
                 .divide(BigDecimal.valueOf(totalTrades), 2, java.math.RoundingMode.HALF_UP));
         }
 

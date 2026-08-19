@@ -135,7 +135,7 @@
                   </td>
                   <td class="px-5 py-4 text-sm text-text-secondary">₹{{ trade.entryPrice }}</td>
                   <td class="px-5 py-4 text-sm text-text-secondary">
-                    {{ trade.currentPrice ? '$' + trade.currentPrice : '—' }}
+                    {{ trade.currentPrice ? 'Rs.' + trade.currentPrice : '—' }}
                   </td>
                   <td
                     class="px-5 py-4 text-right text-sm font-semibold"

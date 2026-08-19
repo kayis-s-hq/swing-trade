@@ -233,12 +233,12 @@ const metrics = computed(() => [
     value: marketOverview.value?.totalPositions ?? 0,
     trend: { value: `${marketOverview.value?.openPositions ?? 0} open`, isPositive: true },
   },
-  { title: 'Value', value: `$${(portfolioSummary.value?.totalValue ?? 0).toLocaleString()}` },
+  { title: 'Value', value: `Rs.${(portfolioSummary.value?.totalValue ?? 0).toLocaleString()}` },
   { title: 'Win Rate', value: `${portfolioSummary.value?.winRate ?? 0}%` },
   { title: 'Trades', value: portfolioSummary.value?.totalTrades ?? 0 },
   {
     title: 'P&L',
-    value: `$${(portfolioSummary.value?.totalPnl ?? 0).toLocaleString()}`,
+    value: `Rs.${(portfolioSummary.value?.totalPnl ?? 0).toLocaleString()}`,
     trend: {
       value: `${(portfolioSummary.value?.totalPnlPercent ?? 0).toFixed(2)}%`,
       isPositive: Boolean(

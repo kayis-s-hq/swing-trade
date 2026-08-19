@@ -37,13 +37,25 @@ public class PerformanceService {
      */
     public PerformanceResponse getPortfolioPerformance() {
         PerformanceStats stats = getPerformanceStats();
+        BigDecimal totalPnL = calculateTotalPnL();
+        BigDecimal totalValue = calculateTotalValue();
+        List<PositionEntity> closedPositions = fetchClosedPositions();
+        BigDecimal avgWin = calculateAvgWin(closedPositions);
+        BigDecimal avgLoss = calculateAvgLoss(closedPositions);
+        BigDecimal profitFactor = calculateProfitFactor(closedPositions);
+
         return PerformanceResponse.of(
             stats.getTotalReturn(),
             stats.getAnnualizedReturn(),
             stats.getSharpeRatio(),
             stats.getMaxDrawdown(),
             stats.getTotalTrades(),
-            stats.getWinningTrades()
+            stats.getWinningTrades(),
+            totalPnL,
+            totalValue,
+            avgWin,
+            avgLoss,
+            profitFactor
         );
     }
 
@@ -172,6 +184,29 @@ public class PerformanceService {
         if (losses.isEmpty()) return BigDecimal.ZERO;
         BigDecimal sum = losses.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
         return sum.divide(BigDecimal.valueOf(losses.size()), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateTotalValue() {
+        var portfolio = paperTradingEngine.getPortfolio();
+        if (portfolio == null) return null;
+        return portfolio.getTotalValue();
+    }
+
+    private BigDecimal calculateProfitFactor(List<PositionEntity> closed) {
+        if (closed.isEmpty()) return BigDecimal.ZERO;
+        BigDecimal grossWins = closed.stream()
+            .filter(e -> e.getRealizedPnL() != null && e.getRealizedPnL().compareTo(BigDecimal.ZERO) > 0)
+            .map(PositionEntity::getRealizedPnL)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal grossLosses = closed.stream()
+            .filter(e -> e.getRealizedPnL() != null && e.getRealizedPnL().compareTo(BigDecimal.ZERO) < 0)
+            .map(e -> e.getRealizedPnL().abs())
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (grossLosses.compareTo(BigDecimal.ZERO) == 0) {
+            return grossWins.compareTo(BigDecimal.ZERO) > 0
+                ? BigDecimal.valueOf(999) : BigDecimal.ZERO;
+        }
+        return grossWins.divide(grossLosses, 2, RoundingMode.HALF_UP);
     }
 
     public static class PerformanceStats {
