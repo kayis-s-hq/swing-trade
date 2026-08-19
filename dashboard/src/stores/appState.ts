@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { checkHealth } from '@/api/client'
+import { checkHealth } from '../api/health'
 
 const state = reactive({
   backendUp: true,

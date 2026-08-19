@@ -231,9 +231,9 @@ import {
   getSentimentLatest,
   getSentimentHistory,
   getLatestNews,
-  getWatchlist,
-  runFullAnalysis,
-} from '../api/client'
+} from '../api/sentiment'
+import { getWatchlist } from '../api/watchlist'
+import { runFullAnalysis } from '../api/analysis'
 import type {
   SentimentResult,
   WatchlistEntry,

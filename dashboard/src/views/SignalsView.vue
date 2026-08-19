@@ -250,10 +250,10 @@ import { ref, computed, onMounted } from 'vue'
 import {
   getSignals,
   generateAllSignalsStream,
-  executeTrade,
   clearAllSignals,
   clearSignalsForSymbol,
-} from '../api/client'
+} from '../api/signals'
+import { executeTrade } from '../api/positions'
 import type { Signal } from '../api/types'
 import SignalCard from '../components/SignalCard.vue'
 import { getSettings } from '../stores/settings'
