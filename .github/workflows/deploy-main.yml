@@ -59,6 +59,7 @@ jobs:
           export SPRING_PROFILES_ACTIVE=main
           mkdir -p /home/dietpi/swing-trade/logs
           nohup java -jar swing-trade-api.jar \
+            -Duser.timezone=Asia/Kolkata \
             -Dserver.port=8080 \
             -Dlogging.file.name=/home/dietpi/swing-trade/logs/main.log \
             > /home/dietpi/swing-trade/logs/main-start.log 2>&1 &
