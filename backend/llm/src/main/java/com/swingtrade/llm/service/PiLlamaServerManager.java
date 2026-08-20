@@ -176,6 +176,7 @@ public class PiLlamaServerManager implements LlmServerManager {
         }
 
         running = true;
+        idleCheckTime.set(System.currentTimeMillis());
         startIdleMonitor();
     }
 
@@ -186,7 +187,7 @@ public class PiLlamaServerManager implements LlmServerManager {
             try {
                 // Refresh idle time by checking health — only stop if truly idle
                 long idleSeconds = getIdleSeconds();
-                if (idleSeconds >= idleTimeoutSec && !healthCheck()) {
+                if (idleSeconds >= idleTimeoutSec) {
                     logger.info("llama-server on Pi idle for {}s >= {}s and unhealthy, auto-stopping", idleSeconds, idleTimeoutSec);
                     stop();
                 }
@@ -202,13 +203,21 @@ public class PiLlamaServerManager implements LlmServerManager {
         if (f != null) f.cancel(false);
     }
 
-    private long getIdleSeconds() {
+    long getIdleSeconds() {
         return idleCheckTime.get() > 0
                 ? (System.currentTimeMillis() - idleCheckTime.get()) / 1000
                 : 0;
     }
 
-    private boolean healthCheck() {
+    void setIdleCheckTime(long time) {
+        idleCheckTime.set(time);
+    }
+
+    int getIdleTimeoutSec() {
+        return idleTimeoutSec;
+    }
+
+    boolean healthCheck() {
         try {
             java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
@@ -218,7 +227,6 @@ public class PiLlamaServerManager implements LlmServerManager {
                     .build();
             java.net.http.HttpResponse<String> response = client.send(request,
                     java.net.http.HttpResponse.BodyHandlers.ofString());
-            idleCheckTime.set(System.currentTimeMillis());
             return response.statusCode() == 200;
         } catch (Exception e) {
             return false;

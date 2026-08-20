@@ -6,6 +6,7 @@ import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -15,6 +16,9 @@ import java.util.Map;
 /**
  * Helper component that formats prompts for sentiment analysis using LLM.
  * Provides structured prompt templates for analyzing stock sentiment from news articles.
+ *
+ * Uses Spring AI BeanOutputConverter for structured output parsing
+ * (falls back to manual JSON parsing when the LLM returns non-JSON).
  */
 @Component
 public class SentimentAnalyzer {
@@ -43,8 +47,7 @@ public class SentimentAnalyzer {
             Consider: earnings momentum, regulatory news, management changes,
             sector tailwinds, FII/DII activity, promoter actions.
 
-            CRITICAL: Respond with ONLY a JSON object. No explanation, no reasoning, no other text.
-            Do NOT include <thinking> tags, reasoning text, or any prose.
+            Respond with a JSON object containing sentiment analysis fields.
             Start your response with { and end with }.
 
             {
@@ -73,9 +76,7 @@ public class SentimentAnalyzer {
 
                 Task: Determine if news sentiment supports a 1-4 week swing trade entry.
 
-                CRITICAL: Respond with ONLY a JSON object. No explanation, no reasoning, no other text.
-                Do NOT include <thinking> tags, reasoning text, or any prose.
-                Start your response with { and end with }.
+                Respond with ONLY a JSON object. Start with { and end with }.
 
                 {
                   "score": "POSITIVE|NEUTRAL|NEGATIVE",
@@ -110,9 +111,7 @@ public class SentimentAnalyzer {
 
                 Task: Determine if news sentiment supports a 1-4 week swing trade entry.
 
-                CRITICAL: Respond with ONLY a JSON object. No explanation, no reasoning, no other text.
-                Do NOT include <thinking> tags, reasoning text, or any prose.
-                Start your response with { and end with }.
+                Respond with ONLY a JSON object. Start with { and end with }.
 
                 {
                   "score": "POSITIVE|NEUTRAL|NEGATIVE",
@@ -137,16 +136,36 @@ public class SentimentAnalyzer {
     }
 
     /**
-     * Parses LLM JSON response into SentimentOutput using Jackson.
-     * Handles: reasoning text wrapping JSON, plain text fallback, and empty responses.
+     * Parses LLM response into SentimentOutput using Spring AI BeanOutputConverter.
+     * Falls back to manual JSON parsing when the LLM returns non-JSON.
      */
     public SentimentOutput parseResponse(String jsonResponse) {
         try {
+            BeanOutputConverter<SentimentOutput> converter = new BeanOutputConverter<>(SentimentOutput.class);
+            SentimentOutput result = converter.convert(jsonResponse);
+            logger.debug("BeanOutputConverter parsed: {} (confidence: {})",
+                    result.getSentiment(), result.getConfidence());
+            return result;
+        } catch (Exception e) {
+            logger.debug("BeanOutputConverter failed, falling back to Jackson parsing: {}", e.getMessage());
+            return parseWithJackson(jsonResponse);
+        }
+    }
+
+    /**
+     * Falls back to Jackson-based JSON parsing when BeanOutputConverter fails.
+     */
+    private SentimentOutput parseWithJackson(String jsonResponse) {
+        try {
             String content = extractJsonFromReasoning(jsonResponse);
-            logger.debug("extracted JSON: {} chars, preview: {}", content != null ? content.length() : 0, content != null ? content.substring(0, Math.min(100, content.length())) : "null");
+            logger.debug("extracted JSON: {} chars, preview: {}",
+                    content != null ? content.length() : 0,
+                    content != null ? content.substring(0, Math.min(100, content.length())) : "null");
             JsonNode root = objectMapper.readTree(content);
 
-            if (!root.has("score")) throw new IllegalArgumentException("Missing score field");
+            if (!root.has("score")) {
+                throw new IllegalArgumentException("Missing score field");
+            }
 
             String score = root.get("score").asText();
             double confidence = root.has("confidence") ? root.get("confidence").asDouble() : 0.5;
@@ -209,50 +228,65 @@ public class SentimentAnalyzer {
 
     /**
      * Extracts JSON from reasoning text that wraps it (common with reasoning models).
-     * Strips reasoning tags, markdown code blocks, then scans for valid JSON.
-     * Tries each '{' in the text until one produces valid JSON.
+     * Strips reasoning tags and markdown code blocks, then uses brace-counting
+     * to find the matching closing brace of the JSON object.
      */
-    private String extractJsonFromReasoning(String text) {
-        if (text == null || text.isBlank()) return text;
+    String extractJsonFromReasoning(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
 
         String cleaned = text;
-        // Strip reasoning tags (Sonnet, Claude, etc.)
         cleaned = cleaned.replaceAll("(?s)<thinking>.*?</thinking>\\s*", "");
         cleaned = cleaned.replaceAll("(?s)<think>.*?</think>\\s*", "");
         cleaned = cleaned.replaceAll("(?s)<reasoning>.*?</reasoning>\\s*", "");
-        // Strip markdown code block markers: ```json and ```
         cleaned = cleaned.replaceAll("(?m)^```(?:json)?$\\s*", "");
 
-        // Try each '{' in the text until one produces valid JSON
-        int pos = 0;
-        while (pos < cleaned.length()) {
-            int firstOpen = findBrace(cleaned, '{', pos);
-            if (firstOpen < 0) break;
+        int open = findFirstBrace(cleaned, '{', 0);
+        if (open < 0) {
+            return text;
+        }
 
-            for (int i = firstOpen + 1; i < cleaned.length(); i++) {
-                if (cleaned.charAt(i) == '}') {
-                    String candidate = cleaned.substring(firstOpen, i + 1);
-                    if (isValidJson(candidate)) return candidate;
+        int balance = 0;
+        boolean inString = false;
+        boolean escaped = false;
+
+        for (int i = open; i < cleaned.length(); i++) {
+            char ch = cleaned.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (!inString) {
+                if (ch == '{') {
+                    balance++;
+                } else if (ch == '}') {
+                    balance--;
+                    if (balance == 0) {
+                        String candidate = cleaned.substring(open, i + 1);
+                        if (isValidJson(candidate)) {
+                            return candidate;
+                        }
+                        return null;
+                    }
                 }
             }
-            // This '{' didn't produce valid JSON — try the next one
-            pos = firstOpen + 1;
         }
-
-        // Fallback: first '{' and last '}'
-        int firstOpen = findBrace(cleaned, '{', 0);
-        int lastClose = findBrace(cleaned, '}', 0);
-        if (lastClose > firstOpen && lastClose > 0) {
-            return cleaned.substring(firstOpen, lastClose + 1);
-        }
-        return text;
+        return null;
     }
 
     /**
-     * Finds the index of a character that is not inside quotes or nested braces,
-     * starting from the given position. Returns -1 if not found.
+     * Finds the first occurrence of a character outside of strings and escaped characters.
      */
-    private int findBrace(String text, char c, int from) {
+    private int findFirstBrace(String text, char c, int from) {
         boolean inString = false;
         boolean escaped = false;
         for (int i = from; i < text.length(); i++) {

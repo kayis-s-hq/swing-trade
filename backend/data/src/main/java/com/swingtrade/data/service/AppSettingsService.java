@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,13 +21,14 @@ public class AppSettingsService implements AppSettingsStore {
     private static final Logger log = LoggerFactory.getLogger(AppSettingsService.class);
 
     private final AppSettingRepository repo;
+    private final Map<String, String> cache = new ConcurrentHashMap<>();
 
     public AppSettingsService(AppSettingRepository repo) {
         this.repo = repo;
     }
 
     /**
-     * Read a setting: env var override → DB → default.
+     * Read a setting: env var override → cache → DB.
      */
     @Override
     public Optional<String> get(String key) {
@@ -34,8 +36,13 @@ public class AppSettingsService implements AppSettingsStore {
         if (envValue != null) {
             return Optional.of(envValue);
         }
+        String cached = cache.get(key);
+        if (cached != null) {
+            return Optional.of(cached);
+        }
         Optional<AppSettingEntity> entity = repo.findByKey(key);
         if (entity.isPresent() && entity.get().getValue() != null) {
+            cache.put(key, entity.get().getValue());
             return Optional.of(entity.get().getValue());
         }
         return Optional.empty();
@@ -50,6 +57,7 @@ public class AppSettingsService implements AppSettingsStore {
 
     /**
      * Write a setting (upsert). Skips write if env var is set (read-only in that case).
+     * Updates the in-memory cache so new values are picked up immediately.
      */
     @Transactional
     public void set(String key, String value) {
@@ -64,7 +72,8 @@ public class AppSettingsService implements AppSettingsStore {
         } else {
             repo.save(new AppSettingEntity(key, value));
         }
-        log.debug("Updated setting {}: {}", key, value);
+        cache.put(key, value);
+        log.debug("Updated setting {}: {} (cache + DB)", key, value);
     }
 
     /**

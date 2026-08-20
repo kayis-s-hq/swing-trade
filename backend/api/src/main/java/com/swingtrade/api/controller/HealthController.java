@@ -137,7 +137,7 @@ public class HealthController {
         if (sentimentService != null) {
             status.addComponent("llm", new HealthStatus.ComponentStatus(
                     "llm", "UP", "LLM Sentiment Service",
-                    Map.of("provider", "GPUHUB", "status", "Active")));
+                    Map.of("provider", "OPENAI", "status", "Active")));
         } else {
             status.addComponent("llm", new HealthStatus.ComponentStatus(
                     "llm", "UP", "LLM Service (not configured)"));

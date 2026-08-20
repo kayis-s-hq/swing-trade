@@ -1,16 +1,22 @@
 package com.swingtrade.llm;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Represents structured output for sentiment analysis with POSITIVE/NEUTRAL/NEGATIVE classification.
+ * Used with Spring AI BeanOutputConverter for structured output parsing.
  */
 public class SentimentOutput {
+    @JsonProperty("score")
     private SentimentType sentiment;
+    @JsonProperty("summary")
     private String reasoning;
     private Double confidence;
+    @JsonProperty("red_flags")
     private List<String> redFlags = new ArrayList<>();
+    @JsonProperty("catalysts")
     private List<String> catalysts = new ArrayList<>();
 
     public SentimentOutput(SentimentType sentiment, String reasoning, Double confidence) {

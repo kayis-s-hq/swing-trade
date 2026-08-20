@@ -46,8 +46,8 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("com.h2database:h2")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
-    testImplementation("org.junit.platform:junit-platform-launcher:1.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
+    testImplementation("org.junit.platform:junit-platform-launcher:1.12.2")
     testImplementation("org.mockito:mockito-core:5.12.0")
     testImplementation("org.assertj:assertj-core:3.26.3")
 }
@@ -55,6 +55,10 @@ dependencies {
 springBoot {
     mainClass = "com.swingtrade.api.app.SwingTradeApiApplication"
     buildInfo()
+}
+
+tasks.named("processTestAot").configure {
+    enabled = false
 }
 
 graalvmNative {

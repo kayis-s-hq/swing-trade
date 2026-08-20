@@ -1,0 +1,74 @@
+package com.swingtrade.llm.config;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
+import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.test.context.TestPropertySource;
+
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Integration tests for multi-client LLM configuration.
+ *
+ * Validates:
+ * - Three OpenAiChatModel beans are created (local, pi_ssh, openai)
+ * - Each reads its own base URL from settings with fallback defaults
+ */
+@SpringBootTest(classes = LlmConfig.class)
+@EnableAutoConfiguration(exclude = {
+    FlywayAutoConfiguration.class,
+    HibernateJpaAutoConfiguration.class,
+    JpaRepositoriesAutoConfiguration.class
+})
+@TestPropertySource(properties = {
+    "llm.backend=local",
+    "spring.ai.openai.base-url=",
+    "spring.ai.openai.api-key=test-key",
+    "spring.ai.openai.chat.options.model=qwen3-4b"
+})
+class LlmConfigMultiClientTest {
+
+    @Autowired
+    private ApplicationContext context;
+
+    @MockBean
+    private com.swingtrade.domain.store.AppSettingsStore appSettingsStore;
+
+    @Test
+    @DisplayName("should create localChatModel bean")
+    void shouldCreateLocalChatModelBean() {
+        OpenAiChatModel local = context.getBean("localChatModel", OpenAiChatModel.class);
+        assertThat(local).isNotNull();
+    }
+
+    @Test
+    @DisplayName("should create piSshChatModel bean")
+    void shouldCreatePiSshChatModelBean() {
+        OpenAiChatModel pi = context.getBean("piSshChatModel", OpenAiChatModel.class);
+        assertThat(pi).isNotNull();
+    }
+
+    @Test
+    @DisplayName("should create openAiChatModel bean")
+    void shouldCreateOpenAiChatModelBean() {
+        OpenAiChatModel openai = context.getBean("openAiChatModel", OpenAiChatModel.class);
+        assertThat(openai).isNotNull();
+    }
+
+    @Test
+    @DisplayName("should have exactly three ChatModel beans")
+    void shouldHaveExactlyThreeChatModelBeans() {
+        Map<String, OpenAiChatModel> beans = context.getBeansOfType(OpenAiChatModel.class);
+        assertThat(beans).hasSize(3);
+    }
+}

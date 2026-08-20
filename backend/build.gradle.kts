@@ -33,6 +33,7 @@ subprojects {
         }
     }
 
+    
     // JaCoCo: generate reports after tests
     tasks.named<org.gradle.testing.jacoco.tasks.JacocoReport>("jacocoTestReport") {
         reports {

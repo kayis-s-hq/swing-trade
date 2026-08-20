@@ -59,13 +59,17 @@ export async function testDiscordWebhook(): Promise<ApiResponse<{ success: boole
   return { success: true, data: unwrap<{ success: boolean }>(raw) }
 }
 
-export async function testPiConnection(): Promise<ApiResponse<{ success: boolean; message: string }>> {
+export async function testPiConnection(): Promise<
+  ApiResponse<{ success: boolean; message: string }>
+> {
   const raw = await rawFetch('/settings/test/pi', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
 }
 
-export async function testOpenAiConnection(): Promise<ApiResponse<{ success: boolean; message: string }>> {
+export async function testOpenAiConnection(): Promise<
+  ApiResponse<{ success: boolean; message: string }>
+> {
   const raw = await rawFetch('/settings/test/openai', { method: 'POST' })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
@@ -87,6 +91,39 @@ export async function setGpuHubSettings(
   })
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: unwrap<Record<string, string>>(raw) }
+}
+
+export async function startPiServer(): Promise<
+  ApiResponse<{ success: boolean; running: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/pi/start', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return {
+    success: true,
+    data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
+  }
+}
+
+export async function stopPiServer(): Promise<
+  ApiResponse<{ success: boolean; running: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/pi/stop', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return {
+    success: true,
+    data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
+  }
+}
+
+export async function getPiServerStatus(): Promise<
+  ApiResponse<{ success: boolean; running: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/pi/status')
+  if (!raw.ok) return errResponse(raw.error!)
+  return {
+    success: true,
+    data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
+  }
 }
 
 export async function getTradingSettings(): Promise<ApiResponse<Record<string, string>>> {

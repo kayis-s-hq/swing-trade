@@ -45,6 +45,29 @@ public class SentimentStoreImpl implements SentimentStore {
     }
 
     @Override
+    public SentimentResult saveOrUpdate(SentimentResult result) {
+        var entity = SentimentResultEntity.fromDomain(result);
+        return repository.findBySymbolAndDate(entity.getSymbol(), entity.getDate())
+            .map(existing -> {
+                existing.setId(existing.getId());
+                existing.setSymbol(entity.getSymbol());
+                existing.setDate(entity.getDate());
+                existing.setSentimentScore(entity.getSentimentScore());
+                existing.setSummary(entity.getSummary());
+                existing.setRawContent(entity.getRawContent());
+                existing.setConfidence(entity.getConfidence());
+                existing.setAnalyzedAt(entity.getAnalyzedAt());
+                existing.setRedFlags(entity.getRedFlags());
+                existing.setCatalysts(entity.getCatalysts());
+                existing.setPromptHash(entity.getPromptHash());
+                existing.setModelVersion(entity.getModelVersion());
+                existing.setArticleCount(entity.getArticleCount());
+                return repository.saveAndFlush(existing).toDomain();
+            })
+            .orElseGet(() -> repository.save(entity).toDomain());
+    }
+
+    @Override
     public List<SentimentResult> findAllByDateBetween(LocalDate start, LocalDate end) {
         return repository.findAllByDateBetween(start, end).stream()
             .map(SentimentResultEntity::toDomain)

@@ -297,13 +297,53 @@
             <p class="text-xs text-text-muted">
               Model path on the Pi. Switching models requires restarting the llama.cpp service.
             </p>
+            <!-- Server lifecycle -->
             <div class="flex items-center gap-3 pt-2">
+              <div class="flex items-center gap-2">
+                <span
+                  class="h-2.5 w-2.5 rounded-full"
+                  :class="piServerRunning ? 'bg-success' : 'bg-danger'"
+                />
+                <span class="text-xs" :class="piServerRunning ? 'text-success' : 'text-text-muted'">
+                  {{ piServerRunning ? 'Running' : 'Stopped' }}
+                </span>
+              </div>
+              <span v-if="piServerStatusMsg" class="text-xs text-text-muted">{{
+                piServerStatusMsg
+              }}</span>
+            </div>
+            <div class="flex gap-2 pt-1">
+              <button
+                v-if="!piServerRunning"
+                :disabled="piLoading"
+                class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
+                @click="handlePiStart"
+              >
+                {{ piLoading ? 'Starting...' : 'Start Server' }}
+              </button>
+              <button
+                v-else
+                :disabled="piLoading"
+                class="rounded-md border border-danger/30 bg-danger-bg px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
+                @click="handlePiStop"
+              >
+                {{ piLoading ? 'Stopping...' : 'Stop Server' }}
+              </button>
+              <button
+                :disabled="piLoading"
+                class="rounded-md border border-border-subtle px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary disabled:opacity-50"
+                @click="refreshPiStatus"
+              >
+                Refresh
+              </button>
+            </div>
+            <div class="flex gap-2 pt-1">
               <button
                 :disabled="testingPi"
                 class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
                 @click="testPiConnection"
               >
-                {{ testingPi ? 'Testing...' : 'Test Pi Connection' }}
+                {{ testingPi ? 'Testing...' : 'Test Inference' }}
               </button>
               <span
                 v-if="piTestResult"
@@ -344,10 +384,27 @@
               />
               <span class="self-center text-xs text-text-muted">Model</span>
             </div>
-            <p class="text-xs text-text-muted">
-              External OpenAI-compatible endpoint for sentiment analysis. No server management
-              needed.
-            </p>
+            <div class="flex items-center justify-between">
+              <p class="text-xs text-text-muted">
+                External OpenAI-compatible endpoint for sentiment analysis. No server management
+                needed.
+              </p>
+              <button
+                :disabled="testingOpenai"
+                class="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+                @click="testOpenAiConnection"
+              >
+                {{ testingOpenai ? 'Testing...' : 'Test' }}
+              </button>
+            </div>
+
+            <div
+              v-if="openaiTestResult"
+              class="text-xs"
+              :class="openaiTestSuccess ? 'text-success' : 'text-danger'"
+            >
+              {{ openaiTestResult }}
+            </div>
           </div>
 
           <!-- PDF Extraction -->
@@ -529,6 +586,10 @@ import {
   fyersLogout,
   testDiscordWebhook as apiTestDiscordWebhook,
   testPiConnection as apiTestPiConnection,
+  testOpenAiConnection as apiTestOpenAiConnection,
+  startPiServer as apiStartPiServer,
+  stopPiServer as apiStopPiServer,
+  getPiServerStatus as apiGetPiServerStatus,
 } from '../api/client'
 import type { FyersStatus, HealthStatus } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -556,8 +617,14 @@ const authCodeInput = ref('')
 const testingPdf = ref(false)
 const testingDiscord = ref(false)
 const testingPi = ref(false)
+const testingOpenai = ref(false)
 const piTestResult = ref('')
 const piTestSuccess = ref(false)
+const piServerRunning = ref(false)
+const piServerStatusMsg = ref('')
+const piLoading = ref(false)
+const openaiTestResult = ref('')
+const openaiTestSuccess = ref(false)
 const saving = ref(false)
 const saved = ref(false)
 const toastMessage = ref('')
@@ -783,6 +850,70 @@ const testDiscordWebhook = async () => {
   }
 }
 
+const refreshPiStatus = async () => {
+  try {
+    const res = await apiGetPiServerStatus()
+    if (res.success && res.data) {
+      piServerRunning.value = res.data.running ?? false
+      piServerStatusMsg.value = res.data.message ?? ''
+    }
+  } catch {
+    // ignore
+  }
+}
+
+const handlePiStart = async () => {
+  piLoading.value = true
+  try {
+    const res = await apiStartPiServer()
+    if (res.success && res.data) {
+      piServerRunning.value = res.data.running ?? false
+      piServerStatusMsg.value = res.data.message ?? ''
+      toastMessage.value = res.data.message ?? ''
+      toastType.value = res.data.success ? 'success' : 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    }
+  } catch (err: unknown) {
+    toastMessage.value = err instanceof Error ? err.message : 'Failed to start Pi server'
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
+  } finally {
+    piLoading.value = false
+  }
+}
+
+const handlePiStop = async () => {
+  piLoading.value = true
+  try {
+    const res = await apiStopPiServer()
+    if (res.success && res.data) {
+      piServerRunning.value = res.data.running ?? false
+      piServerStatusMsg.value = res.data.message ?? ''
+      toastMessage.value = res.data.message ?? ''
+      toastType.value = res.data.success ? 'success' : 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    }
+  } catch (err: unknown) {
+    toastMessage.value = err instanceof Error ? err.message : 'Failed to stop Pi server'
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
+  } finally {
+    piLoading.value = false
+  }
+}
+
 const testPiConnection = async () => {
   testingPi.value = true
   piTestResult.value = ''
@@ -799,6 +930,7 @@ const testPiConnection = async () => {
         setTimeout(() => {
           toastVisible.value = false
         }, 4000)
+        refreshPiStatus()
       } else {
         toastMessage.value = 'Pi connected but llama-server failed to start'
         toastType.value = 'warning'
@@ -828,6 +960,54 @@ const testPiConnection = async () => {
     }, 4000)
   } finally {
     testingPi.value = false
+  }
+}
+
+const testOpenAiConnection = async () => {
+  testingOpenai.value = true
+  openaiTestResult.value = ''
+  openaiTestSuccess.value = false
+  try {
+    const res = await apiTestOpenAiConnection()
+    if (res.success && res.data) {
+      openaiTestResult.value = res.data.message ?? (res.data.success ? 'Connected!' : 'Failed')
+      openaiTestSuccess.value = res.data.success
+      if (res.data.success) {
+        toastMessage.value = 'OpenAI-compatible LLM responded successfully'
+        toastType.value = 'success'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+      } else {
+        toastMessage.value = 'LLM responded but unexpected output'
+        toastType.value = 'warning'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+      }
+    } else {
+      openaiTestResult.value = res.error ?? 'Test failed'
+      openaiTestSuccess.value = false
+      toastMessage.value = openaiTestResult.value
+      toastType.value = 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    }
+  } catch (err: unknown) {
+    openaiTestResult.value = err instanceof Error ? err.message : 'Network error'
+    openaiTestSuccess.value = false
+    toastMessage.value = openaiTestResult.value
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
+  } finally {
+    testingOpenai.value = false
   }
 }
 
@@ -861,6 +1041,7 @@ onMounted(async () => {
   }
   refreshFyersStatus()
   refreshHealth()
+  refreshPiStatus()
   await loadSettings()
   window.addEventListener('message', handleMessage)
 })

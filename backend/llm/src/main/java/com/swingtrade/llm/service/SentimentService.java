@@ -165,7 +165,7 @@ public class SentimentService {
 
             // Persist to database
             try {
-                sentimentStore.save(result);
+                sentimentStore.saveOrUpdate(result);
                 logger.debug("Persisted sentiment result for {} on {}", stockSymbol, date);
             } catch (Exception e) {
                 logger.warn("Failed to persist sentiment result for {}: {}", stockSymbol, e.getMessage());

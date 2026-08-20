@@ -1,9 +1,7 @@
 package com.swingtrade.llm;
 
 import com.swingtrade.domain.Signal;
-import com.swingtrade.llm.client.LlamaCppClient;
-import com.swingtrade.llm.SentimentOutput;
-import com.swingtrade.llm.SentimentType;
+import com.swingtrade.llm.client.SpringAiLlmClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -21,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class LlmModuleTest {
 
     @Mock
-    private LlamaCppClient llamaCppClient;
+    private SpringAiLlmClient springAiLlmClient;
 
     @Test
     void testSentimentOutputCreation() {

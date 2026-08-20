@@ -18,6 +18,23 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 
+    implementation("org.springframework.ai:spring-ai-starter-model-openai:1.1.0") {
+        exclude(group = "org.eclipse.jetty", module = "jetty-client")
+        exclude(group = "org.eclipse.jetty", module = "jetty-http")
+        exclude(group = "org.eclipse.jetty", module = "jetty-io")
+        exclude(group = "org.eclipse.jetty", module = "jetty-util")
+    }
+    implementation("org.springframework.ai:spring-ai-openai:1.1.0") {
+        exclude(group = "org.eclipse.jetty", module = "jetty-client")
+        exclude(group = "org.eclipse.jetty", module = "jetty-http")
+        exclude(group = "org.eclipse.jetty", module = "jetty-io")
+        exclude(group = "org.eclipse.jetty", module = "jetty-util")
+    }
+    // Add Jetty 12 explicitly — Spring AI 1.1.0 is compiled against Jetty 12
+    implementation("org.eclipse.jetty:jetty-client:12.0.31")
+    implementation("org.eclipse.jetty:jetty-http:12.0.31")
+    implementation("org.eclipse.jetty:jetty-io:12.0.31")
+    implementation("org.eclipse.jetty:jetty-util:12.0.31")
     implementation("commons-codec:commons-codec:1.16.0")
     implementation("org.apache.commons:commons-lang3:3.14.0")
     implementation("org.jsoup:jsoup:1.18.3")

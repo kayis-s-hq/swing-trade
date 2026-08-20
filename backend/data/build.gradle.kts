@@ -37,7 +37,7 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.junit.jupiter:junit.jupiter:5.11.0")
+    testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.mockito:mockito-core:5.12.0")
     testImplementation("org.assertj:assertj-core:3.26.3")
     testImplementation("org.wiremock:wiremock:3.8.0")

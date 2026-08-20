@@ -3,9 +3,7 @@ package com.swingtrade.llm.config;
 import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
-import com.swingtrade.llm.client.LlamaCppClient;
-import com.swingtrade.llm.service.LlmBackendSelector;
-import com.swingtrade.llm.service.LlamaCppServerManager;
+import com.swingtrade.llm.client.SpringAiLlmClient;
 import com.swingtrade.llm.service.NewsFilterService;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
@@ -13,8 +11,10 @@ import com.swingtrade.llm.config.SentimentPromptLoader;
 import com.swingtrade.llm.config.PdfExtractionPromptLoader;
 import com.swingtrade.llm.config.SynthesisPromptLoader;
 import com.swingtrade.llm.service.SentimentAnalyzer;
+import com.swingtrade.llm.service.LlmBackendSelector;
 import com.swingtrade.llm.service.LlmClientProvider;
 import com.swingtrade.llm.service.LlmServerManagerProvider;
+import org.springframework.ai.openai.OpenAiChatModel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
@@ -28,10 +28,8 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import javax.sql.DataSource;
-import java.util.Optional;
 import java.util.Properties;
 
 /**
@@ -56,22 +54,7 @@ public class TestLlmConfig {
     @MockBean
     private SentimentStore sentimentStore;
 
-    @MockBean
-    private LlamaCppServerManager serverManager;
-
-    @Primary
-    @Bean
-    public WebClient.Builder webClientBuilder() {
-        return WebClient.builder();
-    }
-
-    @Primary
-    @Bean
-    public LlamaCppClient llamaCppClient(WebClient.Builder webClientBuilder,
-                                         AppSettingsStore appSettingsStore,
-                                         LlmBackendSelector selector) {
-        return new LlamaCppClient(webClientBuilder, appSettingsStore, selector, "localhost", 8090);
-    }
+    // LlmServerManagerProvider handles server lifecycle now
 
     @Primary
     @Bean
@@ -112,6 +95,47 @@ public class TestLlmConfig {
     @Bean
     public ObjectMapper objectMapper() {
         return new ObjectMapper();
+    }
+
+    @Primary
+    @Bean
+    public SpringAiLlmClient springAiLlmClient() {
+        // Mock ChatClient for tests — returns empty content
+        var mockChatClient = org.mockito.Mockito.mock(org.springframework.ai.chat.client.ChatClient.class);
+        var mockRequestSpec = org.mockito.Mockito.mock(org.springframework.ai.chat.client.ChatClient.ChatClientRequestSpec.class);
+        var mockCallSpec = org.mockito.Mockito.mock(org.springframework.ai.chat.client.ChatClient.CallResponseSpec.class);
+        var mockChatResponse = org.mockito.Mockito.mock(org.springframework.ai.chat.model.ChatResponse.class);
+        var mockGeneration = org.mockito.Mockito.mock(org.springframework.ai.chat.model.Generation.class);
+        var mockAssistantMessage = org.mockito.Mockito.mock(org.springframework.ai.chat.messages.AssistantMessage.class);
+
+        org.mockito.Mockito.when(mockChatClient.prompt())
+                .thenReturn(mockRequestSpec);
+        org.mockito.Mockito.when(mockRequestSpec.system(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(mockRequestSpec);
+        org.mockito.Mockito.when(mockRequestSpec.user(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(mockRequestSpec);
+        org.mockito.Mockito.when(mockRequestSpec.call())
+                .thenReturn(mockCallSpec);
+        org.mockito.Mockito.when(mockCallSpec.chatResponse())
+                .thenReturn(mockChatResponse);
+        org.mockito.Mockito.when(mockChatResponse.getResult())
+                .thenReturn(mockGeneration);
+        org.mockito.Mockito.when(mockGeneration.getOutput())
+                .thenReturn(mockAssistantMessage);
+        org.mockito.Mockito.when(mockAssistantMessage.getText())
+                .thenReturn("");
+
+        return new SpringAiLlmClient(mockChatClient, false);
+    }
+
+    @Primary
+    @Bean
+    public LlmClientProvider llmClientProvider(
+            LlmBackendSelector selector,
+            OpenAiChatModel localChatModel,
+            OpenAiChatModel piSshChatModel,
+            OpenAiChatModel openAiChatModel) {
+        return new LlmClientProvider(selector, localChatModel, piSshChatModel, openAiChatModel);
     }
 
     // ===== H2 Database Configuration for Testing =====

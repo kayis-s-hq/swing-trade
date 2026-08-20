@@ -231,6 +231,7 @@ public class LlamaCppServerManager implements LlmServerManager {
 
         // Start idle monitor
         startIdleMonitor();
+        idleCheckTime.set(System.currentTimeMillis());
     }
 
     private void startIdleMonitor() {
@@ -255,14 +256,22 @@ public class LlamaCppServerManager implements LlmServerManager {
         if (f != null) f.cancel(false);
     }
 
-    private long getIdleSeconds() {
+    long getIdleSeconds() {
         // Use the last health check time as a proxy for "last activity"
         // Since llama.cpp doesn't expose a request timestamp in /health,
         // we track the last successful health check as a conservative proxy
         return idleCheckTime.get() > 0 ? (System.currentTimeMillis() - idleCheckTime.get()) / 1000 : 0;
     }
 
-    private boolean healthCheck() {
+    void setIdleCheckTime(long time) {
+        idleCheckTime.set(time);
+    }
+
+    int getIdleTimeoutSec() {
+        return idleTimeoutSec;
+    }
+
+    boolean healthCheck() {
         try {
             java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
@@ -271,7 +280,6 @@ public class LlamaCppServerManager implements LlmServerManager {
                     .GET()
                     .build();
             java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-            idleCheckTime.set(System.currentTimeMillis());
             return response.statusCode() == 200;
         } catch (Exception e) {
             return false;

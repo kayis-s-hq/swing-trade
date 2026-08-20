@@ -2,13 +2,14 @@ package com.swingtrade.llm.service;
 
 import com.swingtrade.domain.CompositeAnalysis;
 import com.swingtrade.domain.SynthesisResult;
+import com.swingtrade.llm.SynthesisOutput;
 import com.swingtrade.llm.config.SynthesisPromptLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -96,14 +97,34 @@ public class SynthesisService {
     }
 
     private SynthesisResult parseResponse(String response, CompositeAnalysis composite) {
-        int start = response.indexOf('{');
-        int end = response.lastIndexOf('}');
-        if (start == -1 || end == -1) {
+        try {
+            BeanOutputConverter<SynthesisOutput> converter = new BeanOutputConverter<>(SynthesisOutput.class);
+            SynthesisOutput output = converter.convert(response);
+
+            return new SynthesisResult(
+                output.getNarrative(),
+                output.getRecommendation(),
+                output.getConfidence() != null ? output.getConfidence() : 0.0,
+                output.getKeyDrivers() != null ? output.getKeyDrivers() : List.of(),
+                output.getBullishFactors() != null ? output.getBullishFactors() : List.of(),
+                output.getBearishFactors() != null ? output.getBearishFactors() : List.of(),
+                true
+            );
+        } catch (Exception e) {
+            logger.debug("BeanOutputConverter failed, falling back to Jackson parsing: {}", e.getMessage());
+            return parseWithFallback(response, composite);
+        }
+    }
+
+    /**
+     * Fallback: manual JSON parsing with brace-counting extraction.
+     */
+    private SynthesisResult parseWithFallback(String response, CompositeAnalysis composite) {
+        String json = extractJson(response);
+        if (json == null) {
             logger.warn("No JSON found in LLM response for synthesis");
             return fallbackSynthesis(composite);
         }
-
-        String json = response.substring(start, end + 1);
 
         try {
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
@@ -116,6 +137,68 @@ public class SynthesisService {
             logger.warn("Failed to parse synthesis JSON: {}, fallback", e.getMessage());
             return fallbackSynthesis(composite);
         }
+    }
+
+    private String extractJson(String response) {
+        int open = findFirstBrace(response, '{', 0);
+        if (open < 0) {
+            return null;
+        }
+
+        int balance = 0;
+        boolean inString = false;
+        boolean escaped = false;
+
+        for (int i = open; i < response.length(); i++) {
+            char ch = response.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (!inString) {
+                if (ch == '{') {
+                    balance++;
+                } else if (ch == '}') {
+                    balance--;
+                    if (balance == 0) {
+                        return response.substring(open, i + 1);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private int findFirstBrace(String text, char c, int from) {
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = from; i < text.length(); i++) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            char ch = text.charAt(i);
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (!inString && ch == c) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static class LlmResponseDTO {

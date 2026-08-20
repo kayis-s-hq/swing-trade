@@ -7,7 +7,7 @@ import java.util.Map;
 
 /**
  * Unified interface for LLM chat completion clients.
- * Implemented by LlamaCppClient (local/SSH Pi) and GpuHubLlmClient (GPUHub).
+ * Single implementation: SpringAiLlmClient (handles all backends via Spring AI OpenAiChatModel).
  */
 public interface LlmClient {
 

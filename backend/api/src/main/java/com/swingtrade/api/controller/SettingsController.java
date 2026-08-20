@@ -4,8 +4,10 @@ import com.swingtrade.api.dto.ApiResponse;
 import com.swingtrade.broker.service.DiscordNotificationService;
 import com.swingtrade.data.service.AppSettingsService;
 import com.swingtrade.data.service.MarketDataClientProvider;
+import com.swingtrade.llm.client.LlmClient;
 import com.swingtrade.llm.service.LlamaCppServerManager;
 import com.swingtrade.llm.service.LlmBackendSelector;
+import com.swingtrade.llm.service.LlmClientProvider;
 import com.swingtrade.llm.service.LlmServerManager;
 import com.swingtrade.llm.service.PiLlamaServerManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -33,6 +36,7 @@ public class SettingsController {
     private final AppSettingsService appSettingsService;
     private final DiscordNotificationService discordNotificationService;
     private final LlmBackendSelector selector;
+    private final LlmClientProvider llmClientProvider;
     private final LlamaCppServerManager localServerManager;
     private final PiLlamaServerManager piServerManager;
 
@@ -41,12 +45,14 @@ public class SettingsController {
                               AppSettingsService appSettingsService,
                               DiscordNotificationService discordNotificationService,
                               LlmBackendSelector selector,
+                              LlmClientProvider llmClientProvider,
                               LlamaCppServerManager localServerManager,
                               PiLlamaServerManager piServerManager) {
         this.marketDataClientProvider = marketDataClientProvider;
         this.appSettingsService = appSettingsService;
         this.discordNotificationService = discordNotificationService;
         this.selector = selector;
+        this.llmClientProvider = llmClientProvider;
         this.localServerManager = localServerManager;
         this.piServerManager = piServerManager;
     }
@@ -105,7 +111,7 @@ public class SettingsController {
                 LlmServerManager manager = switch (backend) {
                     case LOCAL -> localServerManager;
                     case PI_SSH -> piServerManager;
-                    case GPUHUB -> null; // no server to manage
+                    case OPENAI -> null; // no server to manage
                 };
                 if (manager != null && manager.isRunning()) {
                     manager.restart();
@@ -160,17 +166,22 @@ public class SettingsController {
         try {
             logger.info("Testing Pi SSH connection and lazy start...");
             piServerManager.ensureRunning();
-            boolean running = piServerManager.isRunning();
-            result.put("success", running);
-            if (running) {
-                result.put("message", "Pi SSH connection successful, llama-server started");
-                appSettingsService.set("llm.backend", "pi_ssh");
-                logger.info("Pi SSH test passed — backend switched to pi_ssh");
-            } else {
+            boolean serverRunning = piServerManager.isRunning();
+            if (!serverRunning) {
+                result.put("success", false);
                 result.put("message", "SSH connected but llama-server failed to start");
-                appSettingsService.set("llm.backend", "local");
+                return ResponseEntity.ok(ApiResponse.ok(result));
             }
-            if (!running) {
+
+            // Test actual LLM inference with a temporary client — does NOT affect the active backend.
+            String piBaseUrl = "http://piworm.local:8090";
+            boolean inferenceOk = testInference(piBaseUrl);
+            result.put("success", inferenceOk);
+            result.put("message", inferenceOk
+                ? "Pi SSH connection successful, llama-server started and responded to inference"
+                : "Pi connected and server started, but inference failed");
+
+            if (!inferenceOk) {
                 piServerManager.stop();
             }
             return ResponseEntity.ok(ApiResponse.ok(result));
@@ -180,6 +191,117 @@ public class SettingsController {
             result.put("message", "SSH connection failed: " + e.getMessage());
             return ResponseEntity.ok(ApiResponse.ok(result));
         }
+    }
+
+    private boolean testInference(String baseUrl) {
+        try {
+            String payload = """
+                {"model":"qwen3-4b","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":8,"temperature":0.2}""";
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(baseUrl + "/v1/chat/completions"))
+                .header("Content-Type", "application/json")
+                .timeout(java.time.Duration.ofSeconds(30))
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+            java.net.http.HttpResponse<String> response = client.send(request,
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) return false;
+            // Parse "choices[0].message.content" from the JSON response
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var node = mapper.readTree(response.body());
+            var content = node.path("choices").path(0).path("message").path("content").asText(null);
+            return content != null && content.trim().equalsIgnoreCase("OK");
+        } catch (Exception e) {
+            logger.debug("Inference test failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    @PostMapping("/settings/test/openai")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> testOpenAiConnection() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            LlmClient client = llmClientProvider.getClient();
+            if (client == null) {
+                result.put("success", false);
+                result.put("message", "No LLM client configured");
+                return ResponseEntity.ok(ApiResponse.ok(result));
+            }
+            // Send a minimal test prompt to verify connectivity
+            var messages = List.of(
+                Map.of("role", "system", "content", "Respond with a single word."),
+                Map.of("role", "user", "content", "Respond with a single word.")
+            );
+            String response = client.generateChatCompletion(messages, 16, 0.0)
+                .block(java.time.Duration.ofSeconds(30));
+            boolean ok = response != null && !response.isBlank();
+            result.put("success", ok);
+            result.put("message", ok ? "OpenAI-compatible LLM responded successfully" : "LLM returned empty response");
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        } catch (Exception e) {
+            logger.warn("OpenAI test failed: {}", e.getMessage());
+            result.put("success", false);
+            result.put("message", "Connection failed: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Pi SSH LLM Server Lifecycle
+    // -----------------------------------------------------------------------
+
+    @PostMapping("/settings/pi/start")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> startPiServer() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            logger.info("Starting Pi llama-server via SSH...");
+            piServerManager.ensureRunning();
+            boolean running = piServerManager.isRunning();
+            result.put("success", running);
+            result.put("running", running);
+            result.put("message", running
+                ? "Pi llama-server started and healthy"
+                : "Pi llama-server failed to start");
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        } catch (Exception e) {
+            logger.warn("Pi start failed: {}", e.getMessage());
+            result.put("success", false);
+            result.put("running", false);
+            result.put("message", "Failed to start: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        }
+    }
+
+    @PostMapping("/settings/pi/stop")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> stopPiServer() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            logger.info("Stopping Pi llama-server via SSH...");
+            piServerManager.stop();
+            result.put("success", true);
+            result.put("running", false);
+            result.put("message", "Pi llama-server stopped");
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        } catch (Exception e) {
+            logger.warn("Pi stop failed: {}", e.getMessage());
+            result.put("success", false);
+            result.put("running", true);
+            result.put("message", "Failed to stop: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        }
+    }
+
+    @GetMapping("/settings/pi/status")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getPiServerStatus() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        boolean running = piServerManager.isRunning();
+        result.put("running", running);
+        result.put("success", true);
+        result.put("message", running
+            ? "Pi llama-server is running"
+            : "Pi llama-server is not running");
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     // -----------------------------------------------------------------------

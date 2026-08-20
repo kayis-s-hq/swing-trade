@@ -1,36 +1,46 @@
 package com.swingtrade.llm.service;
 
-import com.swingtrade.llm.client.GpuHubLlmClient;
-import com.swingtrade.llm.client.LlamaCppClient;
 import com.swingtrade.llm.client.LlmClient;
+import com.swingtrade.llm.client.SpringAiLlmClient;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
- * Provider that returns the correct LlmClient based on the selected backend.
+ * Provider that routes LLM requests to the correct backend.
+ * Creates a SpringAiLlmClient backed by the OpenAiChatModel
+ * selected by LlmBackendSelector at runtime.
  */
 @Component
 public class LlmClientProvider {
 
     private final LlmBackendSelector selector;
-    private final LlamaCppClient llamaCppClient;
-    private final GpuHubLlmClient gpuHubLlmClient;
+    private final OpenAiChatModel localModel;
+    private final OpenAiChatModel piSshModel;
+    private final OpenAiChatModel openAiModel;
 
     public LlmClientProvider(LlmBackendSelector selector,
-                             LlamaCppClient llamaCppClient,
-                             GpuHubLlmClient gpuHubLlmClient) {
+                             @Qualifier("localChatModel") OpenAiChatModel localModel,
+                             @Qualifier("piSshChatModel") OpenAiChatModel piSshModel,
+                             @Qualifier("openAiChatModel") OpenAiChatModel openAiModel) {
         this.selector = selector;
-        this.llamaCppClient = llamaCppClient;
-        this.gpuHubLlmClient = gpuHubLlmClient;
+        this.localModel = localModel;
+        this.piSshModel = piSshModel;
+        this.openAiModel = openAiModel;
     }
 
     /**
-     * Returns the LlmClient for the currently selected backend.
+     * Returns an LlmClient backed by the OpenAiChatModel
+     * selected by the backend selector.
      */
     public LlmClient getClient() {
-        var backend = selector.resolve();
-        return switch (backend) {
-            case LOCAL, PI_SSH -> llamaCppClient;
-            case GPUHUB -> gpuHubLlmClient;
+        OpenAiChatModel model = switch (selector.resolve()) {
+            case LOCAL -> localModel;
+            case PI_SSH -> piSshModel;
+            case OPENAI -> openAiModel;
         };
+        ChatClient chatClient = ChatClient.create(model);
+        return new SpringAiLlmClient(chatClient, false);
     }
 }

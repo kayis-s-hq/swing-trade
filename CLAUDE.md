@@ -2,6 +2,52 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent Routing — STRICT ENFORCEMENT
+
+When ANY task matches an agent's domain below, you MUST use that agent via `Agent(subagent_type="...")`. Do NOT handle these tasks in the main context. This is not optional — routing is mandatory for any matching query.
+
+### Routing Table
+
+| When the task involves | Agent | subagent_type |
+|------------------------|-------|---------------|
+| Backend code, tests, services, domain models, REST endpoints | Backend specialist | `backend-dev` |
+| Frontend code, Vue components, views, Pinia stores, API client | Frontend specialist | `frontend-dev` |
+| TDD implementation, test-first development, RED-GREEN cycle | Test specialist | `test-writer` |
+| Pre-deployment validation (tests, checkstyle, migrations, env vars) | Deploy validator | `deploy-validator` |
+| Architecture review, module boundaries, dependency graph, tech debt | Arch auditor | `arch-auditor` |
+| Flyway migration review (idempotency, rollback, concurrent safety) | Migration reviewer | `migration-reviewer` |
+| Post-deployment verification (health endpoints, E2E tests, smoke tests) | Health check | `health-check` |
+| Diff/PR review, bug hunting, security review, simplification | Code reviewer | `code-reviewer` |
+
+### Enforcement Rules
+
+1. **Auto-detect the agent** — Before responding to ANY user query, check if it matches an agent's domain. If yes, spawn the agent. Do NOT handle the task yourself.
+2. **No exceptions for small tasks** — Even a one-line backend fix goes through `backend-dev`. Even a one-line frontend change goes through `frontend-dev`.
+3. **No exceptions for simple questions** — "What's the Signal class?" → `backend-dev`. "Where is getSignals defined?" → `frontend-dev`.
+4. **Multiple agents for multi-domain tasks** — If a task touches both frontend and backend (e.g., "add a new API endpoint and its UI"), spawn BOTH agents in parallel.
+5. **Never skip routing** — If a query could be answered by an agent, use the agent. Do NOT answer from CLAUDE.md knowledge alone.
+6. **Pass context, not the task** — The agent's file already contains all conventions. Your prompt to the agent should be the specific question, not a re-statement of all conventions.
+
+### When NOT to Route
+
+- Session setup, configuration changes, tool questions → handle directly
+- Git operations (commit, push, branch) → handle directly
+- Shell commands for file exploration → handle directly
+- Questions about this routing table itself → handle directly
+- Caveman mode / persona requests → handle directly
+
+### How to Route
+
+```
+Agent(description="brief", prompt="specific question", subagent_type="backend-dev")
+```
+
+For multi-domain tasks, spawn multiple agents in a single message:
+```
+Agent(description="backend", prompt="...", subagent_type="backend-dev")
+Agent(description="frontend", prompt="...", subagent_type="frontend-dev")
+```
+
 ## One Active Backend
 
 This repo has **one** active backend:
@@ -350,7 +396,7 @@ The `context` MCP server provides version-specific docs. Installed packages (15 
 | Testing | `vitest@3.2.7`, `playwright@1.8.1` |
 | Infra | `js/docker@18.09-release`, `js/docker-compose@5.4.0` |
 
-Usage: `search_packages` (discover), `download_package` (cache), `get_docs(library: "name@version", topic: "...")` (query). One concept per `get_docs` call.
+Usage: `get_docs(library: "name@version", topic: "...")` — works for any library including Maven packages (e.g., `java/spring-ai@1.1.8`). One concept per call.
 
 ## Known Issues
 
