@@ -2,9 +2,6 @@ package com.swingtrade.llm.config;
 
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.llm.client.SpringAiLlmClient;
-import com.swingtrade.llm.service.LlmBackendSelector;
-import io.netty.channel.ChannelOption;
-import io.netty.handler.timeout.ReadTimeoutHandler;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -22,9 +19,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 
-import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -44,8 +39,6 @@ import java.util.concurrent.Executors;
     OpenAiModerationAutoConfiguration.class
 })
 public class LlmConfig {
-
-    private static final Duration LLM_READ_TIMEOUT = Duration.ofMinutes(5);
 
     @Bean
     public ExecutorService newsExecutor() {
@@ -92,7 +85,6 @@ public class LlmConfig {
         OpenAiApi openAiApi = OpenAiApi.builder()
             .baseUrl(baseUrl)
             .apiKey(key)
-            .webClientBuilder(createWebClientBuilder())
             .build();
 
         OpenAiChatOptions options = OpenAiChatOptions.builder()
@@ -104,14 +96,6 @@ public class LlmConfig {
             .openAiApi(openAiApi)
             .defaultOptions(options)
             .build();
-    }
-
-    private WebClient.Builder createWebClientBuilder() {
-        ExchangeFilterFunction timeoutFilter = ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
-            return Mono.just(clientRequest);
-        });
-
-        return WebClient.builder();
     }
 
     private String resolveApiKey(AppSettingsStore settings, String springDefault) {
