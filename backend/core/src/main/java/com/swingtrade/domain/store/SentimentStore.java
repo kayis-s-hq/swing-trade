@@ -16,6 +16,8 @@ public interface SentimentStore {
 
     SentimentResult save(SentimentResult result);
 
+    SentimentResult saveOrUpdate(SentimentResult result);
+
     List<SentimentResult> findAllByDateBetween(LocalDate start, LocalDate end);
 
     long countByDateBetweenAndScore(LocalDate start, LocalDate end, SentimentResult.SentimentScore score);
