@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  JAVA_OPTS: -Xms256m -Xmx512m
+  JAVA_OPTS: -Xms256m -Xmx512m -Duser.timezone=Asia/Kolkata
   GRADLE_OPTS: -Xms256m -Xmx512m
 
 jobs:

@@ -62,7 +62,7 @@ RUN printf '#!/bin/sh\n' > /app/start.sh && \
     printf 'for f in /app/lib/*.jar; do\n' >> /app/start.sh && \
     printf '  CP="${CP:+$CP:}$f"\n' >> /app/start.sh && \
     printf 'done\n' >> /app/start.sh && \
-    printf 'exec java -cp "$CP" -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-stage} -Dserver.port=${SERVER_PORT:-8080} com.swingtrade.api.app.SwingTradeApiApplication\n' && \
+    printf 'exec java -cp "$CP" -Duser.timezone=Asia/Kolkata -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-stage} -Dserver.port=${SERVER_PORT:-8080} com.swingtrade.api.app.SwingTradeApiApplication\n' && \
     chmod +x /app/start.sh
 
 CMD ["/app/start.sh"]

@@ -92,6 +92,7 @@ case "${1:-help}" in
         echo "✓ Loaded environment from $INFRA_DIR/env/.env"
     fi
     cd "$BACKEND_DIR"
+    export JAVA_OPTS="-Duser.timezone=Asia/Kolkata"
     ./gradlew :api:bootRun --args='--spring.profiles.active=local' &
     BACKEND_PID=$!
     save_pid "$BACKEND_PID"
