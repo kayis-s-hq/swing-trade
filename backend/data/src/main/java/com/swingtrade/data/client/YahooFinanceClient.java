@@ -36,6 +36,7 @@ import java.util.List;
 public class YahooFinanceClient implements MarketDataClient {
 
     private static final Logger logger = LoggerFactory.getLogger(YahooFinanceClient.class);
+    private static final String YAHOO_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
@@ -55,7 +56,7 @@ public class YahooFinanceClient implements MarketDataClient {
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
                     HttpClient.create().option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)))
                 .baseUrl("https://query1.finance.yahoo.com")
-                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .defaultHeader(HttpHeaders.USER_AGENT, YAHOO_USER_AGENT)
                 .build();
     }
 
@@ -66,7 +67,7 @@ public class YahooFinanceClient implements MarketDataClient {
         this.webClient = WebClient.builder()
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
                         HttpClient.create().baseUrl(baseUrl)))
-                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .defaultHeader(HttpHeaders.USER_AGENT, YAHOO_USER_AGENT)
                 .build();
     }
 
@@ -83,7 +84,7 @@ public class YahooFinanceClient implements MarketDataClient {
         this.webClient = WebClient.builder()
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
                         HttpClient.create().baseUrl(baseUrl).runOn(loop)))
-                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .defaultHeader(HttpHeaders.USER_AGENT, YAHOO_USER_AGENT)
                 .build();
     }
 
