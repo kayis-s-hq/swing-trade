@@ -268,8 +268,16 @@ public class PositionService {
             logger.info("Auto-created stock entity for symbol: {}", request.getSymbol());
         }
 
+        // Prevent duplicate engine positions for the same symbol
+        if (paperTradingEngine.findOpenPositionBySymbol(request.getSymbol()) != null) {
+            logger.info("Open position already exists for symbol: {}, reusing", request.getSymbol());
+            return convertToResponse(paperTradingEngine.findOpenPositionBySymbol(request.getSymbol()));
+        }
+
         // Create position in engine via order pipeline
-        String positionId = null;
+        // Note: executePendingOrder calls stateService.savePosition() which persists
+        // the position to the DB. We must NOT create a second DB entity.
+        final String[] positionId = {null};
         Order order = switch (request.getDirection()) {
             case LONG -> orderManager.createBuyOrder(
                 request.getSymbol(), request.getQuantity(), entryPrice);
@@ -279,32 +287,37 @@ public class PositionService {
         order = paperTradingEngine.executePendingOrder(order.getOrderId(), entryPrice);
         if (order.getStatus() == OrderStatus.FILLED) {
             com.swingtrade.domain.Position pos = paperTradingEngine.createPositionFromOrder(order);
-            positionId = pos.positionId();
+            positionId[0] = pos.positionId();
         } else {
             throw new RuntimeException("Order not filled for symbol " + request.getSymbol() + ": status=" + order.getStatus());
         }
 
-        PositionEntity entity = new PositionEntity();
-        entity.setSymbol(request.getSymbol());
-        entity.setEntryPrice(entryPrice);
-        entity.setQuantity(request.getQuantity());
-        entity.setEntryDate(LocalDate.now());
-        entity.setEntryReason(request.getEntryReason());
-        entity.setStatus("OPEN");
-        entity.setCurrentPrice(entryPrice);
-        entity.setCreatedAt(LocalDateTime.now());
-        entity.setUpdatedAt(LocalDateTime.now());
-
-        if (request.getStopPrice() != null) {
-            entity.setStopLoss(request.getStopPrice());
-        }
-        if (request.getTarget() != null) {
-            entity.setTarget(request.getTarget());
-        }
+        // The position was already persisted by stateService.savePosition() inside executePendingOrder.
+        // Just fetch the existing entity — do NOT create a second one.
+        PositionEntity entity = positionRepository.findByPositionId(positionId[0])
+            .orElseGet(() -> {
+                logger.warn("Position {} not found in DB after engine create — falling back to symbol lookup", positionId[0]);
+                return positionRepository.findOpenBySymbol(request.getSymbol())
+                    .orElseGet(() -> {
+                        PositionEntity e = new PositionEntity();
+                        e.setSymbol(request.getSymbol());
+                        e.setEntryPrice(entryPrice);
+                        e.setQuantity(request.getQuantity());
+                        e.setEntryDate(LocalDate.now());
+                        e.setEntryReason(request.getEntryReason());
+                        e.setStatus("OPEN");
+                        e.setCurrentPrice(entryPrice);
+                        e.setCreatedAt(LocalDateTime.now());
+                        e.setUpdatedAt(LocalDateTime.now());
+                        if (request.getStopPrice() != null) e.setStopLoss(request.getStopPrice());
+                        if (request.getTarget() != null) e.setTarget(request.getTarget());
+                        return e;
+                    });
+            });
 
         PositionEntity savedEntity = positionRepository.save(entity);
-        logger.info("Created new position for symbol: {} at price: {} (engine position: {})",
-            request.getSymbol(), entryPrice, positionId);
+        logger.info("Position for symbol: {} at price: {} (engine position: {})",
+            request.getSymbol(), entryPrice, positionId[0]);
 
         return convertToResponse(savedEntity);
     }

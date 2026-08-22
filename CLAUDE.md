@@ -56,11 +56,9 @@ This repo has **one** active backend:
 
 ## Java Version
 
-**MUST use Java 21 for Gradle builds.** The system JDK may be Java 25/26, which causes PMD 7.14.0 to crash. Use sdkman:
+**MUST use Java 21 for Gradle builds.** The system JDK may be Java 25/26, which causes PMD 7.14.0 to crash. `JAVA_HOME` is set in `.zshrc` via sdkman's `current` symlink.
 
 ```bash
-source "$HOME/.sdkman/bin/sdkman-init.sh"
-java -version  # should show openjdk 21.0.2
 ./gradlew help
 ```
 
@@ -386,6 +384,28 @@ Keep under 300 lines.
 ## Library Docs
 
 Use the `context` skill to query version-specific docs for 17 installed libraries via the Context MCP server on the Pi. This covers Spring Boot, Spring AI, Spring Data, LangChain4j, Vue, and more. Use `get_docs` before web searching for library APIs.
+
+## External JAR Dependencies
+
+### Fyers SDK (`fyersjavasdk-1.9.0.jar`)
+
+The Fyers v3 API SDK is a local JAR installed into the local Maven repository as a proper Maven dependency.
+
+**Install to local Maven:**
+```bash
+cd backend
+./gradlew installFyersSdk
+```
+
+This runs `mvn install:install-file` with coordinates `com.fyers:sdk:1.9.0` and places the artifact in `~/.m2/repository/com/fyers/sdk/1.9.0/`.
+
+**Usage in build:**
+```kotlin
+// backend/data/build.gradle.kts
+implementation("com.fyers:sdk:1.9.0")
+```
+
+**Source:** `backend/libs/fyersjavasdk-1.9.0.jar`
 
 ## Known Issues
 

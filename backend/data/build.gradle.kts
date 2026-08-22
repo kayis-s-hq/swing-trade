@@ -28,7 +28,7 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql:10.13.0")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
 
-    implementation(files("libs/fyersjavasdk-1.9.0.jar"))
+    implementation("com.fyers:sdk:1.9.0")
     implementation("org.json:json:20231013")
     implementation("org.apache.commons:commons-csv:1.11.0")
     implementation("org.jsoup:jsoup:1.18.3")

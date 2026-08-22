@@ -46,7 +46,7 @@
       </div>
     </div>
 
-    <ErrorBoundary>
+    <ErrorBoundary :error="error">
       <template #error>
         <div class="flex flex-col items-center justify-center py-20">
           <p class="text-sm text-danger">{{ errorMessage }}</p>

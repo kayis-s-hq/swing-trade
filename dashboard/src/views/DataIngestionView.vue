@@ -127,7 +127,7 @@
       </p>
     </div>
 
-    <ErrorBoundary>
+    <ErrorBoundary :error="error">
       <template #error>
         <div class="flex flex-col items-center justify-center py-20">
           <p class="text-sm text-danger">{{ errorMessage }}</p>
@@ -274,7 +274,7 @@ import { getSettings } from '../stores/settings'
 
 const settings = getSettings()
 const backendBroker = ref(settings.selectedBroker)
-const { loading, errorMessage, execute } = useAsyncData()
+const { loading, error, errorMessage, execute } = useAsyncData()
 const status = ref<IngestionStatus[]>([])
 const fyersConnected = ref(false)
 

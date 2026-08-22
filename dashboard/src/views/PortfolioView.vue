@@ -27,7 +27,7 @@
       </button>
     </div>
 
-    <ErrorBoundary>
+    <ErrorBoundary :error="error">
       <template #error>
         <div class="flex flex-col items-center justify-center py-20">
           <p class="text-sm text-danger">{{ errorMessage }}</p>
@@ -170,7 +170,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import { useAsyncData } from '../composables/useAsyncData'
 
-const { loading, errorMessage, execute } = useAsyncData<void>()
+const { loading, error, errorMessage, execute } = useAsyncData<void>()
 const portfolioSummary = ref<PortfolioSummary | null>(null)
 const recentTrades = ref<Position[]>([])
 const equityPoints = ref<EquityPoint[]>([])

@@ -97,9 +97,9 @@
       </div>
     </div>
 
-    <ErrorBoundary>
+    <ErrorBoundary :error="error">
       <template #error>
-        <div class="flex flex-col items-center justify-center py-20">
+        <div v-if="error" class="flex flex-col items-center justify-center py-20">
           <p class="text-sm text-danger">{{ errorMessage }}</p>
           <button
             class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
@@ -129,6 +129,38 @@
             />
           </div>
           <p class="mt-2 text-xs text-text-muted">{{ progressMessage || 'Starting...' }}</p>
+        </div>
+
+        <!-- Generation summary -->
+        <div v-if="generationSummary" class="mb-4 card-panel p-4">
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-sm font-medium text-text-primary">Generation Complete</span>
+            <span class="text-xs text-text-muted">
+              {{ generationSummary.generated }} generated, {{ generationSummary.skipped }} skipped
+            </span>
+          </div>
+          <button
+            v-if="generationSummary.reasons.length > 0"
+            class="text-xs text-brand hover:underline"
+            @click="showSkipReasons = !showSkipReasons"
+          >
+            {{ showSkipReasons ? 'Hide reasons' : 'Show reasons' }}
+          </button>
+          <div v-if="showSkipReasons && generationSummary.reasons.length > 0" class="mt-2 space-y-1">
+            <p
+              v-for="(reason, i) in generationSummary.reasons"
+              :key="i"
+              class="text-xs text-text-muted"
+            >
+              {{ reason }}
+            </p>
+          </div>
+          <button
+            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand/90"
+            @click="refreshSignals"
+          >
+            Load Signals
+          </button>
         </div>
 
         <!-- Filters -->
@@ -272,6 +304,8 @@ const execResult = ref<{ success: number; failed: number; errors: string[] } | n
 const progressMessage = ref('')
 const progressCurrent = ref(0)
 const progressTotal = ref(0)
+const generationSummary = ref<{ generated: number; skipped: number; reasons: string[] } | null>(null)
+const showSkipReasons = ref(false)
 
 const filteredSignals = computed(() => {
   return signals.value.filter((s) => {
@@ -366,7 +400,10 @@ const generateAll = async () => {
   progressMessage.value = ''
   progressCurrent.value = 0
   progressTotal.value = 0
+  generationSummary.value = null
+  showSkipReasons.value = false
   const allSignals: Signal[] = []
+  const skipReasons: string[] = []
 
   try {
     for await (const progress of generateAllSignalsStream()) {
@@ -382,8 +419,14 @@ const generateAll = async () => {
         signals.value = allSignals
       } else if (progress.eventType === 'SKIPPED') {
         progressMessage.value = `${progress.symbol}: ${progress.message}`
+        skipReasons.push(`${progress.symbol}: ${progress.message}`)
       } else if (progress.eventType === 'COMPLETE') {
         progressMessage.value = progress.message
+        generationSummary.value = {
+          generated: allSignals.length,
+          skipped: skipReasons.length,
+          reasons: skipReasons,
+        }
       }
     }
     console.log(`Signal generation complete: ${allSignals.length} signals`)
@@ -392,7 +435,6 @@ const generateAll = async () => {
     error.value = true
   } finally {
     generating.value = false
-    loading.value = false
   }
 }
 
@@ -427,6 +469,9 @@ const clearSelected = async () => {
 const refreshSignals = doRefresh
 
 onMounted(() => {
+  // Clear any stale error state from a previous failed load
+  error.value = false
+  errorMessage.value = ''
   refreshSignals()
 })
 </script>

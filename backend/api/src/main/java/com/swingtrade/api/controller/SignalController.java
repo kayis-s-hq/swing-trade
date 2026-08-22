@@ -11,6 +11,7 @@ import com.swingtrade.api.dto.TechnicalAnalysisResponse;
 import com.swingtrade.api.dto.SentimentAnalysisResponse;
 import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
@@ -199,8 +200,9 @@ public class SignalController {
     @Transactional
     public ResponseEntity<GenerateAllResponse> generateAllSignals() {
         logger.info("Generating signals for all watchlist symbols");
-        // Clear latest signal per symbol so all stocks regenerate fresh
+        // Ensure stock entries exist for watchlist symbols (prevents FK violations on signal save)
         List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
+        ensureStocksExist(symbols);
         int cleared = 0;
         for (String symbol : symbols) {
             List<Signal> existing = signalStore.findBySymbol(symbol);
@@ -259,6 +261,9 @@ public class SignalController {
         try {
             List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
             int total = symbols.size();
+
+            // Ensure stock entries exist for watchlist symbols (prevents FK violations on signal save)
+            ensureStocksExist(symbols);
 
             // Clear stale signals
             for (String symbol : symbols) {
@@ -346,6 +351,32 @@ public class SignalController {
         emitter.onError(e -> logger.error("Generate-all stream error: {}", e.getMessage()));
 
         return emitter;
+    }
+
+    /**
+     * Ensure stock entries exist in the stocks table for the given symbols.
+     * Prevents FK violations when signal persistence tries to insert signals.
+     */
+    private void ensureStocksExist(List<String> symbols) {
+        for (String symbol : symbols) {
+            if (!stockStore.existsBySymbol(symbol)) {
+                try {
+                    Stock stock = new Stock(
+                        symbol,
+                        Stock.Exchange.NSE,
+                        symbol,
+                        Stock.Sector.OTHERS,
+                        null, null, null, null, null,
+                        java.time.LocalDate.now()
+                    );
+                    stockStore.save(stock);
+                    logger.debug("Auto-created stock entry for {}", symbol);
+                } catch (Exception e) {
+                    // Race condition: another thread may have created it
+                    logger.debug("Stock for {} already exists or failed: {}", symbol, e.getMessage());
+                }
+            }
+        }
     }
 
     /**
