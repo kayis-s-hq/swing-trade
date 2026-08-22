@@ -119,7 +119,7 @@ public class SignalPipeline {
         BigDecimal atr = RiskCalculator.calculateATR(chronologicalCandles);
         String indicators = buildPriceActionIndicators(result);
 
-        String warningFlag = warningFlag(result, latestDate);
+        String warningFlag = warningFlag(result, latestDate, verdict);
         Signal saved = persistenceService.buildAndSaveWithWarning(
                 symbol, latestDate, result.type(), BigDecimal.ONE,
                 indicators, indicators, atr, warningFlag, sentimentScore, sentimentReasoning);
@@ -198,20 +198,14 @@ public class SignalPipeline {
                 result.rsi(), result.ema20(), result.ema50(), result.atr());
     }
 
-    private String warningFlag(SignalResult result, LocalDate date) {
+    private String warningFlag(SignalResult result, LocalDate date, SentimentGate.SentimentVerdict verdict) {
         if (result.type() != Signal.SignalType.BUY) {
             return "NONE";
         }
-        try {
-            SentimentGate.SentimentVerdict verdict = sentimentGate.evaluate(result.symbol(), date);
-            return switch (verdict.action()) {
-                case FLAG_NEUTRAL -> "NEUTRAL_SENTIMENT";
-                case ALLOW_GRACEFUL -> "SENTIMENT_ERROR";
-                default -> "NONE";
-            };
-        } catch (Exception e) {
-            return "NONE";
-        }
+        return switch (verdict.action()) {
+            case FLAG_NEUTRAL -> "NEUTRAL_SENTIMENT";
+            case ALLOW_GRACEFUL -> "SENTIMENT_ERROR";
+            default -> "NONE";
+        };
     }
-
-    }
+}

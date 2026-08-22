@@ -16,8 +16,16 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
+import io.github.resilience4j.bulkhead.Bulkhead;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.timelimiter.TimeLimiter;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
+import io.github.resilience4j.reactor.bulkhead.operator.BulkheadOperator;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import io.netty.channel.ChannelOption;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -25,6 +33,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Yahoo Finance API client for fetching OHLCV market data.
@@ -38,37 +47,40 @@ public class YahooFinanceClient implements MarketDataClient {
     private static final Logger logger = LoggerFactory.getLogger(YahooFinanceClient.class);
     private static final String YAHOO_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
+    static final Duration READ_TIMEOUT = Duration.ofSeconds(15);
+    static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(30);
+    static final String DEFAULT_BASE_URL = "https://query1.finance.yahoo.com";
+
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final java.time.Clock clock;
 
+    // URI format strings — static to avoid repeated allocation
+    private static final String CANDLE_URI_FMT = "/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d&events=history&includePrePost=false";
+    private static final String CHART_META_URI_FMT = "/v8/finance/chart/%s?range=1mo&interval=1d";
+    private static final String QUOTE_URI_FMT = "/v7/finance/quote?symbols=%s";
+    private static final String SEARCH_URI_FMT = "/v1/finance/search?q=%s&quotesCount=6&enableFuzzyQuery=true";
+
     private final AtomicLong lastRequestTime = new AtomicLong(0);
     private static final long RATE_LIMIT_MS = 1000;
 
+    // Resilience4j fields (set by constructor with Resilience4j support)
+    private CircuitBreaker yahooCircuitBreaker;
+    private Bulkhead yahooBulkhead;
+    private TimeLimiter yahooTimeLimiter;
+    private Duration yahooTimeout;
+
     public YahooFinanceClient() {
-        this(new ObjectMapper(), java.time.Clock.systemUTC());
+        this(DEFAULT_BASE_URL, new ObjectMapper(), java.time.Clock.systemUTC());
     }
 
     public YahooFinanceClient(ObjectMapper objectMapper, java.time.Clock clock) {
-        this.objectMapper = objectMapper;
-        this.clock = clock;
-        this.webClient = WebClient.builder()
-                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
-                    HttpClient.create().option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)))
-                .baseUrl("https://query1.finance.yahoo.com")
-                .defaultHeader(HttpHeaders.USER_AGENT, YAHOO_USER_AGENT)
-                .build();
+        this(DEFAULT_BASE_URL, objectMapper, clock);
     }
 
     // Package-private constructor for testing with MockWebServer
     YahooFinanceClient(String baseUrl) {
-        this.objectMapper = new ObjectMapper();
-        this.clock = java.time.Clock.systemUTC();
-        this.webClient = WebClient.builder()
-                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
-                        HttpClient.create().baseUrl(baseUrl)))
-                .defaultHeader(HttpHeaders.USER_AGENT, YAHOO_USER_AGENT)
-                .build();
+        this(baseUrl, new ObjectMapper(), java.time.Clock.systemUTC());
     }
 
     // Package-private constructor for testing with MockWebServer (daemon threads)
@@ -88,6 +100,55 @@ public class YahooFinanceClient implements MarketDataClient {
                 .build();
     }
 
+    // Public constructor with configurable baseUrl (for Spring @Value injection)
+    public YahooFinanceClient(String baseUrl, ObjectMapper objectMapper, java.time.Clock clock) {
+        this(baseUrl, objectMapper, clock, null, null, null);
+    }
+
+    // Public constructor with Resilience4j support (injected by Spring)
+    public YahooFinanceClient(String baseUrl, ObjectMapper objectMapper, java.time.Clock clock,
+                              CircuitBreaker circuitBreaker, Bulkhead bulkhead, TimeLimiter timeLimiter) {
+        this.objectMapper = objectMapper;
+        this.clock = clock;
+        this.webClient = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(
+                    HttpClient.create()
+                        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) CONNECT_TIMEOUT.toMillis())
+                        .responseTimeout(READ_TIMEOUT)))
+                .baseUrl(baseUrl)
+                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build();
+        this.yahooCircuitBreaker = circuitBreaker;
+        this.yahooBulkhead = bulkhead;
+        this.yahooTimeLimiter = timeLimiter;
+        this.yahooTimeout = timeLimiter != null ? Duration.ofSeconds(15) : null;
+    }
+
+    /**
+     * Wraps a WebClient request chain with Resilience4j operators.
+     * Caller builds the full request (get().uri().onStatus().bodyToMono()) and this applies resilience.
+     */
+    private String executeWithResilience(Function<WebClient, Mono<String>> fetchFn) {
+        Mono<String> mono = fetchFn.apply(webClient);
+        if (yahooCircuitBreaker != null) {
+            mono = mono.transformDeferred(CircuitBreakerOperator.of(yahooCircuitBreaker));
+        }
+        if (yahooBulkhead != null) {
+            mono = mono.transformDeferred(BulkheadOperator.of(yahooBulkhead));
+        }
+        if (yahooTimeout != null) {
+            mono = mono.timeout(yahooTimeout);
+        }
+        return mono
+                .onErrorResume(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class,
+                        e -> { logger.warn("Circuit breaker open for yahoo"); return Mono.empty(); })
+                .onErrorResume(java.util.concurrent.TimeoutException.class,
+                        e -> { logger.warn("Time limit exceeded for yahoo"); return Mono.empty(); })
+                .onErrorResume(io.github.resilience4j.bulkhead.BulkheadFullException.class,
+                        e -> { logger.warn("Bulkhead full for yahoo"); return Mono.empty(); })
+                .block();
+    }
+
     /**
      * Fetches a single day's OHLCV data for a stock from Yahoo Finance.
      *
@@ -104,16 +165,14 @@ public class YahooFinanceClient implements MarketDataClient {
             long timestamp = date.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
             long nextDay = date.plusDays(1).atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
 
-            String uri = String.format("/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d&events=history&includePrePost=false",
-                    yfinanceSymbol, timestamp, nextDay);
+            String uri = String.format(CANDLE_URI_FMT, yfinanceSymbol, timestamp, nextDay);
 
-            String response = webClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .onStatus(status -> status.value() == 404, r -> Mono.empty())
-                    .onStatus(status -> status.value() >= 400, r -> Mono.empty())
-                    .bodyToMono(String.class)
-                    .block();
+            String response = executeWithResilience(client ->
+                    client.get().uri(uri)
+                        .retrieve()
+                        .onStatus(s -> s.value() == 404, r -> Mono.empty())
+                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return null;
             JsonNode root = objectMapper.readTree(response);
@@ -165,15 +224,13 @@ public class YahooFinanceClient implements MarketDataClient {
             long period1 = startDate.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
             long period2 = endDate.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC) + 86400;
 
-            String uri = String.format("/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d&events=history&includePrePost=false",
-                    yfinanceSymbol, period1, period2);
+            String uri = String.format(CANDLE_URI_FMT, yfinanceSymbol, period1, period2);
 
-            String response = webClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .onStatus(status -> status.value() >= 400, r -> Mono.empty())
-                    .bodyToMono(String.class)
-                    .block();
+            String response = executeWithResilience(client ->
+                    client.get().uri(uri)
+                        .retrieve()
+                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return candles;
             JsonNode root = objectMapper.readTree(response);
@@ -264,14 +321,13 @@ public class YahooFinanceClient implements MarketDataClient {
         try {
             String yfinanceSymbol = formatSymbolForYahoo(symbol);
 
-            String uri = "/v8/finance/chart/" + yfinanceSymbol + "?range=1mo&interval=1d";
+            String uri = String.format(CHART_META_URI_FMT, yfinanceSymbol);
 
-            String response = webClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .onStatus(status -> status.value() >= 400, r -> Mono.empty())
-                    .bodyToMono(String.class)
-                    .block();
+            String response = executeWithResilience(client ->
+                    client.get().uri(uri)
+                        .retrieve()
+                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return null;
             JsonNode root = objectMapper.readTree(response);
@@ -378,14 +434,13 @@ public class YahooFinanceClient implements MarketDataClient {
 
             enforceRateLimit();
 
-            String uri = String.format("/v7/finance/quote?symbols=%s", yahooSymbols);
+            String uri = String.format(QUOTE_URI_FMT, yahooSymbols);
 
-            String response = webClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .onStatus(status -> status.value() >= 400, r -> Mono.empty())
-                    .bodyToMono(String.class)
-                    .block();
+            String response = executeWithResilience(client ->
+                    client.get().uri(uri)
+                        .retrieve()
+                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return Collections.emptyList();
             JsonNode root = objectMapper.readTree(response);
@@ -445,15 +500,13 @@ public class YahooFinanceClient implements MarketDataClient {
         try {
             enforceRateLimit();
 
-            String uri = String.format("/v1/finance/search?q=%s&quotesCount=6&enableFuzzyQuery=true",
-                    query.trim());
+            String uri = String.format(SEARCH_URI_FMT, query.trim());
 
-            String response = webClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .onStatus(status -> status.value() >= 400, r -> Mono.empty())
-                    .bodyToMono(String.class)
-                    .block();
+            String response = executeWithResilience(client ->
+                    client.get().uri(uri)
+                        .retrieve()
+                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return Collections.emptyList();
             JsonNode root = objectMapper.readTree(response);

@@ -17,8 +17,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.net.URI;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -30,6 +33,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import io.github.resilience4j.bulkhead.Bulkhead;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.reactor.bulkhead.operator.BulkheadOperator;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 
 /**
  * Fyers v3 market data and order management client.
@@ -50,6 +58,10 @@ public class FyersServiceClient implements MarketDataClient {
     private final FyersSymbolMasterService symbolMaster;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    // Resilience4j fields
+    private CircuitBreaker fyersCircuitBreaker;
+    private Bulkhead fyersBulkhead;
+
     // Delegated order management services
     private final FyersOrderService orderService;
     private final FyersPositionService positionService;
@@ -65,12 +77,16 @@ public class FyersServiceClient implements MarketDataClient {
         this(webClientBuilder, authService, symbolMaster, BASE_URL);
     }
 
+    static final Duration FYERS_READ_TIMEOUT = Duration.ofSeconds(15);
+
     // Package-private constructor for testing with a custom base URL (MockWebServer)
     FyersServiceClient(WebClient.Builder webClientBuilder, FyersAuthService authService,
                        FyersSymbolMasterService symbolMaster, String baseUrl) {
         this.webClient = webClientBuilder
             .baseUrl(baseUrl)
             .defaultHeader("Accept", "application/json")
+            .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
+                HttpClient.create().responseTimeout(FYERS_READ_TIMEOUT)))
             .build();
         this.authService = authService;
         this.symbolMaster = symbolMaster;
@@ -82,6 +98,12 @@ public class FyersServiceClient implements MarketDataClient {
         this.marketStatusService = new FyersMarketStatusService(authService);
         this.profileService = new FyersProfileService(authService);
         this.gttService = new FyersGTTService(authService);
+    }
+
+    // Setter for Resilience4j injection (called by FyersResilienceConfig)
+    public void setResilience4j(CircuitBreaker circuitBreaker, Bulkhead bulkhead) {
+        this.fyersCircuitBreaker = circuitBreaker;
+        this.fyersBulkhead = bulkhead;
     }
 
     // -----------------------------------------------------------------------
@@ -321,11 +343,23 @@ public class FyersServiceClient implements MarketDataClient {
     }
 
     private String doGet(URI uri, String appId, String token) {
-        return webClient.get()
+        Mono<String> mono = webClient.get()
             .uri(uriBuilder -> uriBuilder.replacePath(uri.getRawPath())
                 .replaceQuery(uri.getRawQuery()).build())
             .header("Authorization", appId + ":" + token)
-            .retrieve().bodyToMono(String.class).block();
+            .retrieve().bodyToMono(String.class);
+        if (fyersCircuitBreaker != null) {
+            mono = mono.transformDeferred(CircuitBreakerOperator.of(fyersCircuitBreaker));
+        }
+        if (fyersBulkhead != null) {
+            mono = mono.transformDeferred(BulkheadOperator.of(fyersBulkhead));
+        }
+        return mono
+            .onErrorResume(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class,
+                e -> { logger.warn("Circuit breaker open for fyers"); return Mono.empty(); })
+            .onErrorResume(io.github.resilience4j.bulkhead.BulkheadFullException.class,
+                e -> { logger.warn("Bulkhead full for fyers"); return Mono.empty(); })
+            .block();
     }
 
     /**

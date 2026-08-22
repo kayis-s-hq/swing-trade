@@ -11,8 +11,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
+
+import io.github.resilience4j.bulkhead.Bulkhead;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.reactor.bulkhead.operator.BulkheadOperator;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 
 import java.io.File;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -35,13 +43,28 @@ public class FyersAuthService {
     private final AtomicReference<String> accessTokenRef = new AtomicReference<>();
     private final AtomicReference<String> refreshTokenRef = new AtomicReference<>();
 
-    public FyersAuthService(FyersConfig fyersConfig) {
+// Resilience4j fields
+    private CircuitBreaker fyersAuthCircuitBreaker;
+    private Bulkhead fyersAuthBulkhead;
+
+    static final Duration READ_TIMEOUT = Duration.ofSeconds(15);
+
+    @Autowired
+    public FyersAuthService(FyersConfig fyersConfig, WebClient.Builder webClientBuilder) {
         this.fyersConfig = fyersConfig;
         this.webClient = WebClient.builder()
                 .baseUrl(BASE_URL)
                 .defaultHeader("Content-Type", "application/json")
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
+                    HttpClient.create().responseTimeout(READ_TIMEOUT)))
                 .build();
         this.objectMapper = new ObjectMapper();
+    }
+
+    // Setter for Resilience4j injection (called by FyersResilienceConfig)
+    public void setResilience4j(CircuitBreaker circuitBreaker, Bulkhead bulkhead) {
+        this.fyersAuthCircuitBreaker = circuitBreaker;
+        this.fyersAuthBulkhead = bulkhead;
     }
 
     @PostConstruct
@@ -151,13 +174,24 @@ public class FyersAuthService {
     }
 
     private String postTokenRequest(String path, String body) {
-        return webClient.post()
+        Mono<String> mono = webClient.post()
             .uri(path)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .bodyValue(body)
             .retrieve()
-            .bodyToMono(String.class)
+            .bodyToMono(String.class);
+        if (fyersAuthCircuitBreaker != null) {
+            mono = mono.transformDeferred(CircuitBreakerOperator.of(fyersAuthCircuitBreaker));
+        }
+        if (fyersAuthBulkhead != null) {
+            mono = mono.transformDeferred(BulkheadOperator.of(fyersAuthBulkhead));
+        }
+        return mono
+            .onErrorResume(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class,
+                e -> { logger.warn("Circuit breaker open for fyers auth"); return Mono.empty(); })
+            .onErrorResume(io.github.resilience4j.bulkhead.BulkheadFullException.class,
+                e -> { logger.warn("Bulkhead full for fyers auth"); return Mono.empty(); })
             .block();
     }
 

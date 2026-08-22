@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 import java.util.Map;
@@ -30,9 +31,9 @@ public class FyersAuthController {
     private final FyersAuthService authService;
     private final FyersConfig fyersConfig;
 
-    public FyersAuthController(FyersConfig fyersConfig) {
+    public FyersAuthController(FyersConfig fyersConfig, WebClient.Builder webClientBuilder) {
         this.fyersConfig = fyersConfig;
-        this.authService = new FyersAuthService(fyersConfig);
+        this.authService = new FyersAuthService(fyersConfig, webClientBuilder);
     }
 
     /**

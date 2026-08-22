@@ -9,7 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -22,6 +24,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -114,7 +117,10 @@ public class NewsIngestionService {
             @Value("${news.rss.feeds:#{null}}") String rssFeedUrls,
             @Value("${news.rss.max-articles-per-feed:10}") int maxArticlesPerFeed) {
 
-        this.webClient = webClientBuilder.build();
+        this.webClient = webClientBuilder
+                .clientConnector(new ReactorClientHttpConnector(
+                    HttpClient.create().responseTimeout(Duration.ofSeconds(timeoutSeconds))))
+                .build();
         this.objectMapper = objectMapper;
         this.newsFilterService = newsFilterService;
         this.maxArticlesPerFeed = maxArticlesPerFeed;

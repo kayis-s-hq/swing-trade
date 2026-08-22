@@ -30,7 +30,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -54,11 +56,18 @@ public class JobOrchestratorService {
     private static final long TIMEOUT_PAPER_TRADE = 30L;
 
     private final Semaphore semaphore = new Semaphore(MAX_CONCURRENT);
-    private final ExecutorService asyncExecutor = Executors.newCachedThreadPool(r -> {
-        Thread t = new Thread(r, "job-orchestrator-%d".formatted(Thread.activeCount()));
-        t.setDaemon(true);
-        return t;
-    });
+    private final ExecutorService asyncExecutor = new ThreadPoolExecutor(
+        3,  // 3 cores — matches MAX_CONCURRENT
+        3,  // max = 3
+        60L, TimeUnit.SECONDS,
+        new LinkedBlockingQueue<>(10),
+        r -> {
+            Thread t = new Thread(r, "job-orchestrator-%d".formatted(Thread.activeCount()));
+            t.setDaemon(true);
+            return t;
+        },
+        new ThreadPoolExecutor.CallerRunsPolicy()
+    );
 
     private final DataIngestionService dataIngestionService;
     private final NewsIngestionService newsIngestionService;
@@ -520,5 +529,4 @@ public class JobOrchestratorService {
             .map(JobRunEntity::toDomain)
             .toList();
     }
-
-    }
+}

@@ -43,6 +43,14 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-devtools")
 
+// Resilience4j — circuit breaker, retry, bulkhead, time limiter
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-retry:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-bulkhead:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-timelimiter:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-micrometer:2.2.0")
+
     // Jetty 11 — Spring AI 1.1.0's JettyClientHttpRequestFactory expects Jetty 11 API
     implementation("org.eclipse.jetty:jetty-client:11.0.25")
     implementation("org.eclipse.jetty:jetty-http:11.0.25")
