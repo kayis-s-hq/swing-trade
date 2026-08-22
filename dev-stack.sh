@@ -91,6 +91,7 @@ case "${1:-help}" in
         set +a
         echo "✓ Loaded environment from $INFRA_DIR/env/.env"
     fi
+    export LOG_FILE="$BACKEND_DIR/logs/swing-trade-local.log"
     cd "$BACKEND_DIR"
     export JAVA_OPTS="-Duser.timezone=Asia/Kolkata"
     ./gradlew :api:bootRun --args='--spring.profiles.active=local' &

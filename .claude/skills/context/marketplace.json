@@ -1,0 +1,16 @@
+{
+  "name": "Pi Stack Skills",
+  "description": "Claude Code skills for the Pi Stack infrastructure",
+  "author": "kayis-rahman",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kayis-rahman/claude-skills"
+  },
+  "skills": [
+    {
+      "name": "context",
+      "description": "Documentation lookup for 17 installed libraries via the Context MCP server",
+      "path": "context.md"
+    }
+  ]
+}

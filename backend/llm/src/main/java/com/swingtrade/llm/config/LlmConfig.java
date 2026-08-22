@@ -18,6 +18,8 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.concurrent.ExecutorService;
@@ -82,9 +84,15 @@ public class LlmConfig {
         String model = settings.get(modelKey).orElse(defaultModel);
         String key = resolveApiKey(settings, apiKey);
 
+        // Use RestClient with SimpleClientHttpRequestFactory (JDK HttpURLConnection)
+        // to avoid Spring's JettyClientHttpRequestFactory which requires Jetty 11 API
+        RestClient.Builder rcBuilder = RestClient.builder()
+            .requestFactory(new SimpleClientHttpRequestFactory());
+
         OpenAiApi openAiApi = OpenAiApi.builder()
             .baseUrl(baseUrl)
             .apiKey(key)
+            .restClientBuilder(rcBuilder)
             .build();
 
         OpenAiChatOptions options = OpenAiChatOptions.builder()

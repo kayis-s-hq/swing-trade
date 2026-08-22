@@ -383,20 +383,9 @@ Multi-step implementation plans go to `docs/plans/<slug>.md`. Structure:
 
 Keep under 300 lines.
 
-## Context MCP (Library Docs)
+## Library Docs
 
-The `context` MCP server provides version-specific docs. Installed packages (15 total):
-
-| Category | Packages |
-|----------|----------|
-| Java/Spring | `java/spring-boot@3.5.9`, `java/spring-data@4.1.0`, `java/gradle@8.9.0` |
-| DB | `flyway/flyway@12.9.0` |
-| AI/LLM | `js/langchain4j@1.18.1`, `js/langchain@0.1.16`, `js/openai@1.99.9` |
-| Vue Frontend | `vue@latest`, `tailwindcss@latest`, `js/vue-router@4.6.0`, `pinia@2.2.8` |
-| Testing | `vitest@3.2.7`, `playwright@1.8.1` |
-| Infra | `js/docker@18.09-release`, `js/docker-compose@5.4.0` |
-
-Usage: `get_docs(library: "name@version", topic: "...")` — works for any library including Maven packages (e.g., `java/spring-ai@1.1.8`). One concept per call.
+Use the `context` skill to query version-specific docs for 17 installed libraries via the Context MCP server on the Pi. This covers Spring Boot, Spring AI, Spring Data, LangChain4j, Vue, and more. Use `get_docs` before web searching for library APIs.
 
 ## Known Issues
 

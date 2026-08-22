@@ -23,13 +23,32 @@ dependencies {
     // implementation(project(":gpuhub"))
     implementation(project(":broker"))
 
-    implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.springframework.boot:spring-boot-starter-webflux")
+    implementation("org.springframework.boot:spring-boot-starter-web") {
+        exclude(group = "org.eclipse.jetty", module = "jetty-client")
+        exclude(group = "org.eclipse.jetty", module = "jetty-http")
+        exclude(group = "org.eclipse.jetty", module = "jetty-io")
+        exclude(group = "org.eclipse.jetty", module = "jetty-util")
+        exclude(group = "org.eclipse.jetty", module = "jetty-alpn-client")
+    }
+    implementation("org.springframework.boot:spring-boot-starter-webflux") {
+        exclude(group = "org.eclipse.jetty", module = "jetty-client")
+        exclude(group = "org.eclipse.jetty", module = "jetty-http")
+        exclude(group = "org.eclipse.jetty", module = "jetty-io")
+        exclude(group = "org.eclipse.jetty", module = "jetty-util")
+        exclude(group = "org.eclipse.jetty", module = "jetty-alpn-client")
+    }
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-devtools")
+
+    // Jetty 11 — Spring AI 1.1.0's JettyClientHttpRequestFactory expects Jetty 11 API
+    implementation("org.eclipse.jetty:jetty-client:11.0.25")
+    implementation("org.eclipse.jetty:jetty-http:11.0.25")
+    implementation("org.eclipse.jetty:jetty-io:11.0.25")
+    implementation("org.eclipse.jetty:jetty-util:11.0.25")
+    implementation("org.eclipse.jetty:jetty-alpn-client:11.0.25")
 
     implementation("io.micrometer:micrometer-core")
     implementation("io.micrometer:micrometer-registry-prometheus")

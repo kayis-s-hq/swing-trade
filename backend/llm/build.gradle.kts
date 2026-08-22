@@ -23,18 +23,21 @@ dependencies {
         exclude(group = "org.eclipse.jetty", module = "jetty-http")
         exclude(group = "org.eclipse.jetty", module = "jetty-io")
         exclude(group = "org.eclipse.jetty", module = "jetty-util")
+        exclude(group = "org.eclipse.jetty", module = "jetty-alpn-client")
     }
     implementation("org.springframework.ai:spring-ai-openai:1.1.0") {
         exclude(group = "org.eclipse.jetty", module = "jetty-client")
         exclude(group = "org.eclipse.jetty", module = "jetty-http")
         exclude(group = "org.eclipse.jetty", module = "jetty-io")
         exclude(group = "org.eclipse.jetty", module = "jetty-util")
+        exclude(group = "org.eclipse.jetty", module = "jetty-alpn-client")
     }
-    // Add Jetty 12 explicitly — Spring AI 1.1.0 is compiled against Jetty 12
-    implementation("org.eclipse.jetty:jetty-client:12.0.31")
-    implementation("org.eclipse.jetty:jetty-http:12.0.31")
-    implementation("org.eclipse.jetty:jetty-io:12.0.31")
-    implementation("org.eclipse.jetty:jetty-util:12.0.31")
+    // Jetty 11 — Spring AI 1.1.0's JettyClientHttpRequestFactory expects Jetty 11 API
+    implementation("org.eclipse.jetty:jetty-client:11.0.25")
+    implementation("org.eclipse.jetty:jetty-http:11.0.25")
+    implementation("org.eclipse.jetty:jetty-io:11.0.25")
+    implementation("org.eclipse.jetty:jetty-util:11.0.25")
+    implementation("org.eclipse.jetty:jetty-alpn-client:11.0.25")
     implementation("commons-codec:commons-codec:1.16.0")
     implementation("org.apache.commons:commons-lang3:3.14.0")
     implementation("org.jsoup:jsoup:1.18.3")
