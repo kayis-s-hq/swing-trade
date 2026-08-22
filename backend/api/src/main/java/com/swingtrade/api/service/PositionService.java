@@ -6,22 +6,21 @@ import com.swingtrade.api.dto.RiskSummary;
 import com.swingtrade.api.dto.SectorAllocation;
 import com.swingtrade.api.dto.TradeRequest;
 import com.swingtrade.api.dto.TradeResponse;
-import com.swingtrade.broker.engine.PaperTradingEngine;
-import org.springframework.transaction.annotation.Transactional;
-import com.swingtrade.broker.manager.OrderManager;
-import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.service.OrderService;
+import com.swingtrade.domain.service.TradingService;
+import com.swingtrade.domain.store.PositionStore;
+import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.repository.PositionRepository;
-import com.swingtrade.domain.Position;
-import com.swingtrade.domain.PositionStatus;
-import com.swingtrade.domain.store.PositionStore;
-import com.swingtrade.domain.store.StockStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -45,20 +44,17 @@ public class PositionService {
     private final PositionStore positionStore;
     private final StockStore stockStore;
     private final PositionRepository positionRepository;
-    private final PaperTradingEngine paperTradingEngine;
-    private final OrderManager orderManager;
-    private final PositionManager positionManager;
+    private final TradingService tradingService;
+    private final OrderService orderService;
 
     public PositionService(PositionStore positionStore, StockStore stockStore,
                            PositionRepository positionRepository,
-                           PaperTradingEngine paperTradingEngine, OrderManager orderManager,
-                           PositionManager positionManager) {
+                           TradingService tradingService, OrderService orderService) {
         this.positionStore = positionStore;
         this.stockStore = stockStore;
         this.positionRepository = positionRepository;
-        this.paperTradingEngine = paperTradingEngine;
-        this.orderManager = orderManager;
-        this.positionManager = positionManager;
+        this.tradingService = tradingService;
+        this.orderService = orderService;
     }
 
     /**
@@ -66,7 +62,7 @@ public class PositionService {
      * @return List of open paper positions as PositionResponse DTOs
      */
     public List<PositionResponse> getOpenPositions() {
-        return paperTradingEngine.getOpenPositions().stream()
+        return tradingService.getOpenPositions().stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
@@ -86,7 +82,7 @@ public class PositionService {
      * @return PositionResponse details for the symbol, or null if not found
      */
     public PositionResponse getPositionBySymbol(String symbol) {
-        Position pos = paperTradingEngine.findOpenPositionBySymbol(symbol);
+        Position pos = tradingService.findOpenPositionBySymbol(symbol);
         if (pos != null) return convertToResponse(pos);
         // Fall back to closed positions
         List<Position> all = positionStore.findBySymbolOrderByEntryDateDesc(symbol);
@@ -162,8 +158,8 @@ public class PositionService {
         stats.setClosedPositions(closedPositions.size());
         stats.setTotalPositions(openPositions.size() + closedPositions.size());
 
-        BigDecimal unrealizedPnL = paperTradingEngine.getTotalUnrealizedPnL();
-        BigDecimal realizedPnL = paperTradingEngine.getTotalRealizedPnL();
+        BigDecimal unrealizedPnL = tradingService.getTotalUnrealizedPnL();
+        BigDecimal realizedPnL = tradingService.getTotalRealizedPnL();
         BigDecimal totalPnL = realizedPnL.add(unrealizedPnL);
 
         stats.setTotalPnL(totalPnL);
@@ -220,9 +216,9 @@ public class PositionService {
         // Close in engine first (updates portfolio capital, calculates P&L)
         try {
             com.swingtrade.domain.Position enginePos =
-                paperTradingEngine.findOpenPositionBySymbol(symbol);
+                tradingService.findOpenPositionBySymbol(symbol);
             if (enginePos != null) {
-                paperTradingEngine.closePosition(enginePos.positionId(), exitPrice, reason);
+                tradingService.closePosition(enginePos.positionId(), exitPrice, reason);
             } else {
                 logger.warn("Engine position missing for symbol {} — skipping engine close, will only update DB", symbol);
             }
@@ -269,9 +265,9 @@ public class PositionService {
         }
 
         // Prevent duplicate engine positions for the same symbol
-        if (paperTradingEngine.findOpenPositionBySymbol(request.getSymbol()) != null) {
+        if (tradingService.findOpenPositionBySymbol(request.getSymbol()) != null) {
             logger.info("Open position already exists for symbol: {}, reusing", request.getSymbol());
-            return convertToResponse(paperTradingEngine.findOpenPositionBySymbol(request.getSymbol()));
+            return convertToResponse(tradingService.findOpenPositionBySymbol(request.getSymbol()));
         }
 
         // Create position in engine via order pipeline
@@ -279,14 +275,14 @@ public class PositionService {
         // the position to the DB. We must NOT create a second DB entity.
         final String[] positionId = {null};
         Order order = switch (request.getDirection()) {
-            case LONG -> orderManager.createBuyOrder(
+            case LONG -> orderService.createBuyOrder(
                 request.getSymbol(), request.getQuantity(), entryPrice);
-            case SHORT -> orderManager.createSellOrder(
+            case SHORT -> orderService.createSellOrder(
                 request.getSymbol(), request.getQuantity(), entryPrice);
         };
-        order = paperTradingEngine.executePendingOrder(order.getOrderId(), entryPrice);
+        order = tradingService.executePendingOrder(order.getOrderId(), entryPrice);
         if (order.getStatus() == OrderStatus.FILLED) {
-            com.swingtrade.domain.Position pos = paperTradingEngine.createPositionFromOrder(order);
+com.swingtrade.domain.Position pos = tradingService.createPositionFromOrder(order);
             positionId[0] = pos.positionId();
         } else {
             throw new RuntimeException("Order not filled for symbol " + request.getSymbol() + ": status=" + order.getStatus());
@@ -340,7 +336,7 @@ public class PositionService {
      * @return Risk summary
      */
     public RiskSummary getRiskSummary() {
-        List<Position> openPositions = paperTradingEngine.getOpenPositions();
+        List<Position> openPositions = tradingService.getOpenPositions();
         RiskSummary summary = new RiskSummary();
 
         BigDecimal totalExposure = openPositions.stream()
@@ -350,7 +346,7 @@ public class PositionService {
         summary.setTotalExposure(totalExposure);
         summary.setNumberOfPositions(openPositions.size());
 
-        BigDecimal availableCapital = paperTradingEngine.getCurrentCash();
+        BigDecimal availableCapital = tradingService.getCurrentCash();
         summary.setAvailableCapital(availableCapital);
         summary.setUsedCapital(totalExposure);
 
@@ -392,7 +388,4 @@ public class PositionService {
         return response;
     }
 
-    public PositionManager getPositionManager() {
-        return positionManager;
     }
-}

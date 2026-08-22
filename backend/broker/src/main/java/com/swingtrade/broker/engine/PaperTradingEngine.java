@@ -6,6 +6,7 @@ import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.broker.service.PaperTradingStateService;
+import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
@@ -34,7 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Orchestrates trade execution based on signals from the SignalEngine.
  */
 @Component
-public class PaperTradingEngine {
+public class PaperTradingEngine implements TradingService {
 
     private static final Logger logger = LoggerFactory.getLogger(PaperTradingEngine.class);
 
@@ -596,6 +597,10 @@ public class PaperTradingEngine {
      */
     public BigDecimal getCurrentCash() {
         return portfolio.getCurrentCapital();
+    }
+
+    public BigDecimal getTotalValue() {
+        return portfolio.getTotalValue();
     }
 
     /**

@@ -1,10 +1,11 @@
 package com.swingtrade.api.service;
 
-import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.domain.Order;
-import com.swingtrade.broker.service.DiscordNotificationService;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.service.TradingService;
+import com.swingtrade.broker.engine.PaperTradingEngine;
+import com.swingtrade.broker.service.DiscordNotificationService;
 import com.swingtrade.llm.service.SentimentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,14 +26,14 @@ public class SignalFilterService {
     private static final Logger log = LoggerFactory.getLogger(SignalFilterService.class);
 
     private final SentimentService sentimentService;
-    private final PaperTradingEngine paperTradingEngine;
+    private final TradingService tradingService;
     private final DiscordNotificationService discordService;
 
     public SignalFilterService(SentimentService sentimentService,
-                               PaperTradingEngine paperTradingEngine,
+                               TradingService tradingService,
                                DiscordNotificationService discordService) {
         this.sentimentService = sentimentService;
-        this.paperTradingEngine = paperTradingEngine;
+        this.tradingService = tradingService;
         this.discordService = discordService;
     }
 
@@ -46,7 +47,7 @@ public class SignalFilterService {
         return switch (sentiment.score()) {
             case POSITIVE -> {
                 log.info("Signal {} POSITIVE sentiment — proceeding to order", signal.symbol());
-                yield paperTradingEngine.executeSignal(signal, currentPrice);
+                yield tradingService.executeSignal(signal, currentPrice);
             }
             case NEUTRAL -> {
                 log.warn("Signal {} NEUTRAL sentiment — proceeding with warning", signal.symbol());
@@ -54,7 +55,7 @@ public class SignalFilterService {
                         "Neutral Sentiment — " + signal.symbol(),
                         "Sentiment is NEUTRAL. Proceeding with caution.",
                         DiscordNotificationService.COLOR_YELLOW);
-                yield paperTradingEngine.executeSignal(signal, currentPrice);
+                yield tradingService.executeSignal(signal, currentPrice);
             }
             case NEGATIVE -> {
                 log.warn("Signal {} NEGATIVE sentiment — SUPPRESSED. Reason: {}",
@@ -75,7 +76,7 @@ public class SignalFilterService {
     // @Scheduled(cron = "0 0 8 * * *", zone = "Asia/Kolkata")
     public void reanalysePending() {
         ZoneId ist = ZoneId.of("Asia/Kolkata");
-        List<?> openPositions = paperTradingEngine.getOpenPositions();
+        List<?> openPositions = tradingService.getOpenPositions();
         for (var pos : openPositions) {
             if (!(pos instanceof com.swingtrade.domain.Position p)) continue;
             try {
