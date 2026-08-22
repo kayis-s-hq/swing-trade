@@ -1,6 +1,7 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.broker.engine.PaperTradingEngine;
+import com.swingtrade.core.metrics.JobOrchestratorMetrics;
 import com.swingtrade.data.entity.JobRunEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.repository.JobRunRepository;
@@ -71,6 +72,7 @@ public class JobOrchestratorService {
     private final SignalStore signalStore;
     private final WatchlistStore watchlistStore;
     private final CandleStore candleStore;
+    private final JobOrchestratorMetrics jobMetrics;
 
     public JobOrchestratorService(
             DataIngestionService dataIngestionService,
@@ -83,7 +85,8 @@ public class JobOrchestratorService {
             JobRunStageRepository jobRunStageRepository,
             SignalStore signalStore,
             WatchlistStore watchlistStore,
-            CandleStore candleStore) {
+            CandleStore candleStore,
+            JobOrchestratorMetrics jobMetrics) {
         this.dataIngestionService = dataIngestionService;
         this.newsIngestionService = newsIngestionService;
         this.sentimentService = sentimentService;
@@ -95,6 +98,7 @@ public class JobOrchestratorService {
         this.signalStore = signalStore;
         this.watchlistStore = watchlistStore;
         this.candleStore = candleStore;
+        this.jobMetrics = jobMetrics;
     }
 
     // ---- DTOs ----
@@ -146,6 +150,7 @@ public class JobOrchestratorService {
             null, 0, 0, 0, null
         );
         jobRunRepository.save(JobRunEntity.fromDomain(run));
+        jobMetrics.recordRunStarted();
 
         final JobRun finalRun = run;
 
@@ -410,6 +415,12 @@ public class JobOrchestratorService {
 
             jobRunRepository.save(entity);
         });
+        long durationMs = runOpt.map(JobRunEntity::getDurationMs).orElse(0L);
+        if (status == JobRun.Status.COMPLETED) {
+            jobMetrics.recordRunCompleted(durationMs);
+        } else {
+            jobMetrics.recordRunFailed(durationMs);
+        }
         logger.info("Run {} completed with status {}", runId, status);
     }
 

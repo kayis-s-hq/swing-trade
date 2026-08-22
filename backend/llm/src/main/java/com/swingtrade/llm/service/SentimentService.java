@@ -1,5 +1,7 @@
 package com.swingtrade.llm.service;
 
+import com.swingtrade.core.metrics.LlmMetrics;
+import com.swingtrade.core.metrics.SentimentMetrics;
 import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
@@ -61,6 +63,8 @@ public class SentimentService {
     private final SentimentStore sentimentStore;
     private final StockStore stockStore;
     private final AppSettingsStore appSettingsStore;
+    private final LlmMetrics llmMetrics;
+    private final SentimentMetrics sentimentMetrics;
 
     private final double defaultConfidence;
 
@@ -77,6 +81,8 @@ public class SentimentService {
             SentimentStore sentimentStore,
             StockStore stockStore,
             AppSettingsStore appSettingsStore,
+            LlmMetrics llmMetrics,
+            SentimentMetrics sentimentMetrics,
             @Value("${llm.sentiment.default-confidence:0.75}") double defaultConfidence) {
 
         this.clientProvider = clientProvider;
@@ -87,6 +93,8 @@ public class SentimentService {
         this.sentimentStore = sentimentStore;
         this.stockStore = stockStore;
         this.appSettingsStore = appSettingsStore;
+        this.llmMetrics = llmMetrics;
+        this.sentimentMetrics = sentimentMetrics;
         this.defaultConfidence = defaultConfidence;
 
         // Initialize thread pool with bounded capacity
@@ -108,6 +116,7 @@ public class SentimentService {
      */
     public SentimentResult analyzeStockSentiment(String stockSymbol, LocalDate date) {
         logger.info("Starting sentiment analysis for stock: {} on date: {}", stockSymbol, date);
+        long start = System.currentTimeMillis();
 
         try {
             // Fetch news articles
@@ -175,9 +184,15 @@ public class SentimentService {
             logger.info("Sentiment analysis complete for {}: {} (confidence: {})",
                     stockSymbol, analysisResult.getSentiment(), analysisResult.getConfidence());
 
+            long duration = System.currentTimeMillis() - start;
+            sentimentMetrics.recordCompleted();
+            sentimentMetrics.recordDuration(Duration.ofMillis(duration));
             return result;
 
         } catch (Exception e) {
+            long duration = System.currentTimeMillis() - start;
+            sentimentMetrics.recordFailed();
+            sentimentMetrics.recordDuration(Duration.ofMillis(duration));
             logger.error("Error analyzing sentiment for {}: {}", stockSymbol, e.getMessage(), e);
             // Return default neutral result on error
             return createDefaultSentimentResult(stockSymbol, date, SentimentType.NEUTRAL);
@@ -216,6 +231,7 @@ public class SentimentService {
 
         // Call LLM for sentiment analysis
         String llmResponse;
+        long llmStart = System.currentTimeMillis();
         try {
             LlmServerManager manager = serverManagerProvider.getManager();
             if (manager != null) {
@@ -224,7 +240,10 @@ public class SentimentService {
             LlmClient client = clientProvider.getClient();
             llmResponse = client.generateChatCompletion(messages, 512, 0.3)
                     .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+            llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), true);
+            llmMetrics.recordSentimentAnalyzed();
         } catch (Exception e) {
+            llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), false);
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
                 logger.error("Timeout analyzing sentiment for {}: analysis took more than {} seconds",
                         stockSymbol, ANALYSIS_TIMEOUT_SECONDS);
