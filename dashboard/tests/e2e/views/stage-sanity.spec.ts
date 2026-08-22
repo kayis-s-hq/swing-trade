@@ -56,7 +56,6 @@ test.describe('Stage Dashboard — Feature Tests', () => {
     const body = await resp.json()
     expect(body.status).toBe('UP')
     expect(body.components.db.status).toBe('UP')
-    expect(body.components.redis.status).toBe('UP')
   })
 
   test('metrics endpoint returns Prometheus format', async ({ request }) => {

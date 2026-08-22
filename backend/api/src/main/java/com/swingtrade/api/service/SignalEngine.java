@@ -20,8 +20,6 @@ import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.SignalStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -30,11 +28,6 @@ import java.util.List;
 /**
  * Entry point for signal generation. Delegates pipeline logic to
  * {@link DailySignalOrchestrator} and {@link SignalPipeline}.
- *
- * <p>Public query methods are cached via {@code @Cacheable}. Generation methods
- * evict the cache via {@code @CacheEvict}. The manual trigger methods no longer
- * carry {@code @Cacheable} — the old annotation caused stale data to be returned
- * because the actual generation ran inside the same transactional proxy.</p>
  */
 @Component
 public class SignalEngine {
@@ -67,7 +60,6 @@ public class SignalEngine {
      *
      * @param symbol the stock symbol
      */
-    @CacheEvict(value = {"latestSignal", "signals"}, key = "#symbol")
     public void generateSignalForSymbolNow(String symbol) {
         logger.info("Manually generating signal for {}", symbol);
         pipeline.generatePrimarySignal(symbol);
@@ -78,7 +70,6 @@ public class SignalEngine {
      *
      * @param symbol the stock symbol
      */
-    @CacheEvict(value = {"latestSignal", "signals"}, key = "#symbol")
     public void generatePriceActionSignalForSymbolNow(String symbol) {
         logger.info("Manually generating price-action signal for {}", symbol);
         pipeline.generatePriceActionSignal(symbol);
@@ -90,7 +81,6 @@ public class SignalEngine {
      * @param symbol the stock symbol
      * @return latest signal or empty
      */
-    @Cacheable(value = "latestSignal", key = "#symbol")
     public java.util.Optional<Signal> getLatestSignal(String symbol) {
         return signalStore.findLatestBySymbol(symbol);
     }
@@ -101,7 +91,6 @@ public class SignalEngine {
      * @param symbol the stock symbol
      * @return list of signals
      */
-    @Cacheable(value = "signals", key = "#symbol")
     public List<Signal> getSignalsForSymbol(String symbol) {
         return signalStore.findBySymbol(symbol);
     }

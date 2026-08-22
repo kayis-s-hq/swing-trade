@@ -40,7 +40,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-devtools")
 
     // Jetty 11 — Spring AI 1.1.0's JettyClientHttpRequestFactory expects Jetty 11 API

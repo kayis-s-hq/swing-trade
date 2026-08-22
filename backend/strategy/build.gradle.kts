@@ -15,8 +15,6 @@ dependencies {
     implementation(project(":llm"))
 
     implementation("org.springframework.boot:spring-boot-starter")
-    implementation("org.springframework.boot:spring-boot-starter-cache")
-    implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.ta4j:ta4j-core:0.16")
 
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.1")

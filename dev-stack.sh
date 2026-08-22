@@ -9,8 +9,6 @@
 # Ports on pi-node:
 #   5435 - dev PostgreSQL
 #   5436 - stage PostgreSQL
-#   6379 - dev Redis
-#   6380 - stage Redis
 #   8080 - dev API (no monitoring)
 #   8081 - stage API (scraped by pi-prometheus)
 #   9090 - pi-prometheus
@@ -332,16 +330,6 @@ case "${1:-help}" in
         break
       fi
       [ "$i" -eq 30 ] && echo "⚠ PostgreSQL health check timed out, continuing anyway..."
-      sleep 3
-    done
-
-    for i in $(seq 1 20); do
-      REDIS_HEALTH=$(ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml ps --filter health=healthy redis 2>/dev/null | wc -l")
-      if [ "$REDIS_HEALTH" -gt 0 ]; then
-        echo "✓ Redis is healthy"
-        break
-      fi
-      [ "$i" -eq 20 ] && echo "⚠ Redis health check timed out, continuing anyway..."
       sleep 3
     done
     echo ""
