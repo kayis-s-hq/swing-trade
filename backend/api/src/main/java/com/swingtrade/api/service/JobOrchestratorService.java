@@ -1,6 +1,6 @@
 package com.swingtrade.api.service;
 
-import com.swingtrade.broker.engine.PaperTradingEngine;
+import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.data.entity.JobRunEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.repository.JobRunRepository;
@@ -66,6 +66,7 @@ public class JobOrchestratorService {
     private final SignalPipeline signalPipeline;
     private final BacktestEngine backtestEngine;
     private final PaperTradingEngine paperTradingEngine;
+    private final TradingService tradingService;
     private final JobRunRepository jobRunRepository;
     private final JobRunStageRepository jobRunStageRepository;
     private final SignalStore signalStore;
@@ -79,6 +80,7 @@ public class JobOrchestratorService {
             SignalPipeline signalPipeline,
             BacktestEngine backtestEngine,
             PaperTradingEngine paperTradingEngine,
+            TradingService tradingService,
             JobRunRepository jobRunRepository,
             JobRunStageRepository jobRunStageRepository,
             SignalStore signalStore,
@@ -90,6 +92,7 @@ public class JobOrchestratorService {
         this.signalPipeline = signalPipeline;
         this.backtestEngine = backtestEngine;
         this.paperTradingEngine = paperTradingEngine;
+        this.tradingService = tradingService;
         this.jobRunRepository = jobRunRepository;
         this.jobRunStageRepository = jobRunStageRepository;
         this.signalStore = signalStore;
@@ -334,7 +337,7 @@ public class JobOrchestratorService {
             if (latest == null || latest.close() == null) continue;
 
             try {
-                paperTradingEngine.executeSignal(signal, latest.close());
+                tradingService.executeSignal(signal, latest.close());
                 signalStore.markProcessed(signal.id());
                 executed++;
             } catch (Exception e) {

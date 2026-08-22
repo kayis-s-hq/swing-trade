@@ -12,7 +12,6 @@ dependencyManagement {
 
 dependencies {
     implementation(project(":core"))
-    implementation(project(":strategy"))
     implementation(project(":data"))
 
     implementation("org.springframework.boot:spring-boot-starter")

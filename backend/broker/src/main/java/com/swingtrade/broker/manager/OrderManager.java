@@ -4,6 +4,7 @@ import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.OrderType;
 import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.domain.service.OrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -21,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Manages order lifecycle from creation to execution.
  */
 @Component
-public class OrderManager {
+public class OrderManager implements OrderService {
 
     private static final Logger logger = LoggerFactory.getLogger(OrderManager.class);
 

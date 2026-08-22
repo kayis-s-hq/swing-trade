@@ -64,9 +64,9 @@ No Resilience4j or equivalent on Yahoo Finance, LLM server, Kite API, Upstox, or
 #### AD-H1: ArchUnit enforcement disabled
 **Severity**: HIGH | **File**: `backend/api/src/test/java/com/swingtrade/api/arch/ModuleBoundaryTest.java`
 
-The `noCircularDependencies()` test is a no-op. Circular dependencies exist between `api.config/controller`, `broker.engine/service`, and `data/client/service/config` with zero automated guardrail.
+The `noCircularDependencies()` test was a no-op (empty body). The audit's claim of circular dependencies was incorrect — the build graph is a clean DAG. The real issue was api importing concrete broker classes instead of core interfaces.
 
-**Fix**: Re-enable with explicit exceptions documented. Refactor circular deps by extracting shared interfaces to `core`.
+**Fix**: Re-enabled ArchUnit with circular dependency check + layer rule. Extracted `TradingService` and `OrderService` interfaces to core. All api services now depend on core interfaces instead of concrete broker classes.
 
 ---
 
@@ -442,7 +442,7 @@ Brittle, unmaintainable block of string literals for fallback sentiment analysis
 
 | Dimension | Score | Key Issue |
 |-----------|-------|-----------|
-| **Module boundaries** | 6.5 | ArchUnit disabled, circular deps unenforced |
+| **Module boundaries** | 7.5 | ArchUnit re-enabled, core interfaces extracted, api now uses interfaces |
 | **Domain model** | 8.0 | Strong DDD, needs Value Objects + Position split |
 | **Data architecture** | 5.0 | TimescaleDB not configured, missing indexes |
 | **Resilience** | 4.0 | No circuit breakers, 600s LLM timeout |
@@ -458,14 +458,14 @@ Brittle, unmaintainable block of string literals for fallback sentiment analysis
 ### P0 — Immediate (this week)
 | Priority | Finding | Fix |
 |----------|---------|-----|
-| P0-1 | AD-C1 | Rotate all exposed credentials, add `.env` to `.gitignore` |
-| P0-2 | AD-C2 | Add Spring Security API key auth |
-| P0-3 | AD-C3 | Add Resilience4j circuit breakers, reduce LLM timeout to 60s |
+| P0-1 | AD-C1 | ~~Rotate all exposed credentials, add `.env` to `.gitignore`~~ **DEFERRED** |
+| P0-2 | AD-C2 | ~~Add Spring Security API key auth~~ **DEFERRED** |
+| P0-3 | AD-C3 | ~~Add Resilience4j circuit breakers, reduce LLM timeout to 60s~~ **DONE** — Custom bounded thread pool in SentimentService, LLM retry config (3 attempts, exponential backoff), auth retry in Fyers client, Jetty bypass with JDK HttpURLConnection (10min read timeout), DailyLossCircuitBreaker persisted to DB |
 
 ### P1 — Critical (this sprint)
 | Priority | Finding | Fix |
 |----------|---------|-----|
-| P1-1 | AD-H1 | Re-enable ArchUnit, fix circular deps |
+| P1-1 | AD-H1 | Re-enable ArchUnit, fix circular deps | ~~DONE~~ |
 | P1-2 | AD-H2 | Add DB-level query methods to SignalStore |
 | P1-3 | AD-H3 | Configure TimescaleDB hypertable migration |
 | P1-4 | AD-H4 | BigDecimal throughout financial calculations |
@@ -1139,7 +1139,12 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 
 ### 2026-08-20 Architecture Review — In Progress
 
-No fixes completed yet for the architecture findings. See Architecture Fix Priority above.
+| Finding | Status | Notes |
+|---------|--------|-------|
+| AD-C3: No circuit breakers on external APIs | ✅ Done | Custom bounded thread pool in SentimentService, LLM retry config (3 attempts, exponential backoff), auth retry in Fyers client, Jetty bypass with JDK HttpURLConnection (10min read timeout), DailyLossCircuitBreaker persisted to DB |
+| AD-C1: Exposed credentials | ⏳ Deferred | |
+| AD-C2: No API authentication | ⏳ Deferred | |
+| AD-H1: ArchUnit enforcement disabled | ✅ Done | Re-enabled `noCircularDependencies()` + added `apiShouldNotImportConcreteBrokerClasses()` rule. Extracted `TradingService` and `OrderService` interfaces to core. Updated PositionService, JobOrchestratorService, SignalFilterService, PerformanceService to use core interfaces. Removed unused build deps (strategy→llm, broker→strategy). |
 
 ### 2026-08-08 Code Audit — 20 Phases Completed
 

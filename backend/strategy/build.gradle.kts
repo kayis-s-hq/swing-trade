@@ -12,7 +12,6 @@ dependencyManagement {
 
 dependencies {
     implementation(project(":core"))
-    implementation(project(":llm"))
 
     implementation("org.springframework.boot:spring-boot-starter")
     implementation("org.springframework.boot:spring-boot-starter-cache")

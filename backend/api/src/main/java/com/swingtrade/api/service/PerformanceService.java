@@ -1,7 +1,7 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.api.dto.PerformanceResponse;
-import com.swingtrade.broker.engine.PaperTradingEngine;
+import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.repository.PositionRepository;
 import org.springframework.stereotype.Service;
@@ -22,12 +22,12 @@ public class PerformanceService {
 
     private static final String BROKER_TYPE_PAPER = "PAPER";
 
-    private final PaperTradingEngine paperTradingEngine;
+    private final TradingService tradingService;
     private final PositionRepository positionRepo;
 
-    public PerformanceService(PaperTradingEngine paperTradingEngine,
+    public PerformanceService(TradingService tradingService,
                               PositionRepository positionRepo) {
-        this.paperTradingEngine = paperTradingEngine;
+        this.tradingService = tradingService;
         this.positionRepo = positionRepo;
     }
 
@@ -94,11 +94,11 @@ public class PerformanceService {
     }
 
     private BigDecimal calculateTotalPnL() {
-        return paperTradingEngine.getTotalPnL();
+        return tradingService.getTotalPnL();
     }
 
     private BigDecimal calculateTotalReturn(BigDecimal totalPnL) {
-        BigDecimal initialCapital = paperTradingEngine.getInitialCapital();
+        BigDecimal initialCapital = tradingService.getInitialCapital();
         if (initialCapital.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
         return totalPnL.divide(initialCapital, 4, RoundingMode.HALF_UP)
             .multiply(BigDecimal.valueOf(100));
@@ -112,7 +112,7 @@ public class PerformanceService {
         if (closed.size() < 2) return BigDecimal.ZERO;
 
         BigDecimal riskFreeDaily = BigDecimal.valueOf(0.0004);
-        BigDecimal initialCapital = paperTradingEngine.getInitialCapital();
+        BigDecimal initialCapital = tradingService.getInitialCapital();
         List<BigDecimal> returns = new ArrayList<>();
 
         for (PositionEntity e : closed) {
@@ -138,7 +138,7 @@ public class PerformanceService {
     private BigDecimal calculateMaxDrawdown(List<PositionEntity> closed) {
         if (closed.isEmpty()) return BigDecimal.ZERO;
 
-        BigDecimal initialCapital = paperTradingEngine.getInitialCapital();
+        BigDecimal initialCapital = tradingService.getInitialCapital();
         double peak = initialCapital.doubleValue();
         double maxDD = 0.0;
         double equity = initialCapital.doubleValue();
@@ -187,7 +187,7 @@ public class PerformanceService {
     }
 
     private BigDecimal calculateTotalValue() {
-        var portfolio = paperTradingEngine.getPortfolio();
+        var portfolio = tradingService.getPortfolio();
         if (portfolio == null) return null;
         return portfolio.getTotalValue();
     }
