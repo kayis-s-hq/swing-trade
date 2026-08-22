@@ -20,9 +20,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
 /**
  * Comprehensive unit tests for SignalService
@@ -176,5 +178,102 @@ class SignalServiceTest {
         assertFalse(signals.contains(null), "List should not contain null elements");
         assertEquals(signals.size(), signals.stream().filter(Objects::nonNull).count(),
                 "All elements should be non-null");
+    }
+
+    @Test
+    void testGetSignalsByDateRange_ReturnsFilteredSignals() {
+        // Arrange
+        LocalDate start = LocalDate.now().minusDays(10);
+        LocalDate end = LocalDate.now().minusDays(5);
+        List<Signal> dateRangeSignals = List.of(
+                createSignal("AAPL", "BUY", 0.85, start, "Test signal"),
+                createSignal("TSLA", "SELL", 0.72, end, "Test signal 2")
+        );
+        when(signalStore.findByDateRange(start, end)).thenReturn(dateRangeSignals);
+
+        // Act
+        List<SignalResponse> signals = signalService.getSignalsByDateRange(start, end);
+
+        // Assert
+        assertEquals(2, signals.size());
+        assertTrue(signals.stream().anyMatch(s -> "AAPL".equals(s.getSymbol())));
+        assertTrue(signals.stream().anyMatch(s -> "TSLA".equals(s.getSymbol())));
+    }
+
+    @Test
+    void testGetSignalsByDateRangeAndType_ReturnsFilteredSignals() {
+        // Arrange
+        LocalDate start = LocalDate.now().minusDays(10);
+        LocalDate end = LocalDate.now();
+        List<Signal> buySignals = List.of(
+                createSignal("AAPL", "BUY", 0.85, start, "Buy signal"),
+                createSignal("MSFT", "BUY", 0.78, end, "Buy signal 2")
+        );
+        when(signalStore.findByDateRangeAndType(start, end, Signal.SignalType.BUY)).thenReturn(buySignals);
+
+        // Act
+        List<SignalResponse> signals = signalService.getSignalsByDateRange(start, end, "BUY");
+
+        // Assert
+        assertEquals(2, signals.size());
+        assertTrue(signals.stream().allMatch(s -> "BUY".equals(s.getSignalType().name())));
+    }
+
+    @Test
+    void testGetSignalsByType_ReturnsCorrectType() {
+        // Arrange
+        List<Signal> sellSignals = List.of(
+                createSignal("TSLA", "SELL", 0.72, LocalDate.now(), "Sell signal"),
+                createSignal("AMZN", "SELL", 0.68, LocalDate.now(), "Sell signal 2")
+        );
+        when(signalStore.findByType(Signal.SignalType.SELL)).thenReturn(sellSignals);
+
+        // Act
+        List<SignalResponse> signals = signalService.getSignalsByType("SELL");
+
+        // Assert
+        assertEquals(2, signals.size());
+        assertTrue(signals.stream().allMatch(s -> "SELL".equals(s.getSignalType().name())));
+    }
+
+    @Test
+    void testGetHighConfidenceSignals_ReturnsAboveThreshold() {
+        // Arrange
+        List<Signal> highConfSignals = List.of(
+                createSignal("AAPL", "BUY", 0.92, LocalDate.now(), "High confidence"),
+                createSignal("MSFT", "BUY", 0.88, LocalDate.now(), "High confidence 2")
+        );
+        when(signalStore.findByMinConfidence(0.90)).thenReturn(highConfSignals);
+
+        // Act
+        List<SignalResponse> signals = signalService.getHighConfidenceSignals(0.90);
+
+        // Assert
+        assertEquals(2, signals.size());
+        assertTrue(signals.stream().allMatch(s -> s.getConfidence() != null && s.getConfidence().compareTo(BigDecimal.valueOf(0.90)) >= 0));
+    }
+
+    @Test
+    void testGetHighConfidenceSignals_ReturnsEmptyWhenNoneMatch() {
+        // Arrange
+        when(signalStore.findByMinConfidence(0.99)).thenReturn(List.of());
+
+        // Act
+        List<SignalResponse> signals = signalService.getHighConfidenceSignals(0.99);
+
+        // Assert
+        assertTrue(signals.isEmpty());
+    }
+
+    @Test
+    void testGetSignalsByDateRange_ReturnsEmptyWhenNoSignals() {
+        // Arrange
+        when(signalStore.findByDateRange(LocalDate.now(), LocalDate.now())).thenReturn(List.of());
+
+        // Act
+        List<SignalResponse> signals = signalService.getSignalsByDateRange(LocalDate.now(), LocalDate.now());
+
+        // Assert
+        assertTrue(signals.isEmpty());
     }
 }

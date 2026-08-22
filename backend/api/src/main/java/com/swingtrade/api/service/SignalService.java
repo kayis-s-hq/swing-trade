@@ -74,9 +74,7 @@ public class SignalService {
      * @return List of signals in the date range
      */
     public List<SignalResponse> getSignalsByDateRange(LocalDate startDate, LocalDate endDate, String signalType) {
-        return signalStore.findAll().stream()
-                .filter(s -> s.date() != null && !s.date().isBefore(startDate) && !s.date().isAfter(endDate))
-                .filter(s -> s.type().name().equals(signalType))
+        return signalStore.findByDateRangeAndType(startDate, endDate, Signal.SignalType.valueOf(signalType)).stream()
                 .map(SignalResponse::new)
                 .toList();
     }
@@ -88,8 +86,7 @@ public class SignalService {
      * @return List of signals in the date range
      */
     public List<SignalResponse> getSignalsByDateRange(LocalDate startDate, LocalDate endDate) {
-        return signalStore.findAll().stream()
-                .filter(s -> s.date() != null && !s.date().isBefore(startDate) && !s.date().isAfter(endDate))
+        return signalStore.findByDateRange(startDate, endDate).stream()
                 .map(SignalResponse::new)
                 .toList();
     }
@@ -100,8 +97,7 @@ public class SignalService {
      * @return List of signals of the specified type
      */
     public List<SignalResponse> getSignalsByType(String signalType) {
-        return signalStore.findAll().stream()
-                .filter(s -> s.type().name().equals(signalType))
+        return signalStore.findByType(Signal.SignalType.valueOf(signalType)).stream()
                 .map(SignalResponse::new)
                 .toList();
     }
@@ -112,9 +108,8 @@ public class SignalService {
      * @return List of high confidence signals
      */
     public List<SignalResponse> getHighConfidenceSignals(double minConfidence) {
-        return signalStore.findAll().stream()
+        return signalStore.findByMinConfidence(minConfidence).stream()
                 .map(SignalResponse::new)
-                .filter(signal -> signal.getConfidence() != null && signal.getConfidence().compareTo(BigDecimal.valueOf(minConfidence)) >= 0)
                 .toList();
     }
 
