@@ -6,6 +6,24 @@ plugins {
     pmd
 }
 
+// Install Fyers SDK JAR into local Maven repo so it can be used as a proper dependency.
+// Run: ./gradlew installFyersSdk
+// Then use: implementation("com.fyers:sdk:1.9.0")
+tasks.register<Exec>("installFyersSdk") {
+    group = "build"
+    description = "Installs fyersjavasdk JAR into local Maven repository"
+    executable = "mvn"
+    args = listOf(
+        "install:install-file",
+        "-Dfile=libs/fyersjavasdk-1.9.0.jar",
+        "-DgroupId=com.fyers",
+        "-DartifactId=sdk",
+        "-Dversion=1.9.0",
+        "-Dpackaging=jar"
+    )
+    workingDir = layout.projectDirectory.asFile
+}
+
 group = "com.swingtrade"
 version = "1.0.0"
 

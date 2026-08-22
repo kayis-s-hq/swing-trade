@@ -30,7 +30,7 @@ public class KillSwitchService {
     private final KillSwitchMetrics killSwitchMetrics;
 
     public KillSwitchService(BrokerProperties props) {
-        this(null, props);
+        this(null, props, null);
     }
 
     /**
@@ -55,7 +55,9 @@ public class KillSwitchService {
         }
 
         // Initialize metrics state
-        killSwitchMetrics.setActive(this.active);
+        if (killSwitchMetrics != null) {
+            killSwitchMetrics.setActive(this.active);
+        }
 
         logger.info("KillSwitchService initialized (active: {})", active);
     }
@@ -127,7 +129,9 @@ public class KillSwitchService {
         logger.warn("KILL SWITCH ENABLED! Reason: {}", reason != null ? reason : "No reason provided");
 
         persistToDatabase();
-        killSwitchMetrics.setActive(true);
+        if (killSwitchMetrics != null) {
+            killSwitchMetrics.setActive(true);
+        }
     }
 
     /**
@@ -149,7 +153,9 @@ public class KillSwitchService {
         this.reason = null;
 
         persistToDatabase();
-        killSwitchMetrics.setActive(false);
+        if (killSwitchMetrics != null) {
+            killSwitchMetrics.setActive(false);
+        }
     }
 
     /**

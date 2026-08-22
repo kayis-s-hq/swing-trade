@@ -415,7 +415,9 @@ public class JobOrchestratorService {
 
             jobRunRepository.save(entity);
         });
-        long durationMs = runOpt.map(JobRunEntity::getDurationMs).orElse(0L);
+        long durationMs = runOpt.filter(e -> e.getStartedAt() != null)
+            .map(e -> java.time.Duration.between(e.getStartedAt(), e.getCompletedAt()).toMillis())
+            .orElse(0L);
         if (status == JobRun.Status.COMPLETED) {
             jobMetrics.recordRunCompleted(durationMs);
         } else {
