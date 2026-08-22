@@ -1,30 +1,502 @@
-# Architecture & Code Audit — 2026-08-07
+# Architecture & Code Audit — 2026-08-20
 
-Comprehensive analysis of the SwingTrade codebase from three perspectives:
-1. **Senior Staff Engineer** — code correctness, bugs, test coverage, security
-2. **Backend Code Review** — Java/Spring Boot module-level defects
-3. **Frontend Code Review** — Vue 3/TypeScript issues, type safety, UX
+Comprehensive analysis of the SwingTrade codebase from multiple perspectives:
+1. **Architecture & Design Review** (2026-08-20) — System design, module boundaries, resilience, scalability, data architecture, domain model quality
+2. **Code-Level Audit** (2026-08-07) — Code correctness, bugs, test coverage, security (20+ phases already fixed)
+
+This file combines both audits. The architecture findings below are fresh; the code-level findings below that have been partially remediated (see fix progress at end).
 
 ---
 
 ## Executive Summary
 
-This audit found **8 critical, 15 high, 30 medium, 11 low** (64 total findings) across backend, frontend, and architecture. The most urgent concerns are:
+### Architecture & Design Review (2026-08-20)
 
-- **Position.createWithRisk() parameter order is wrong** — all open positions at risk of corrupted state
-- **Trade.close() PnL incorrect for SHORT + fees** — all trade metrics wrong for short positions
-- **Credentials tracked in git** (.env file committed) — security exposure
-- **Missing @Transactional on closePosition** — engine state and DB save not atomic
-- **Backtest engine converts TA4j Num to double** — precision loss across thousands of bars
-- **Two strategy implementations with different indicator logic** — live signals won't match backtest results
-- **DailyLossCircuitBreaker is in-memory only** — resets on restart, daily loss limit effectively disabled
-- **Frontend appState uses reactive() instead of Pinia** — not DevTools-compatible, harder to test
+This review found **3 critical, 14 high, 18 medium, 8 low** (43 total findings) across 3 parallel architecture agents. The architecture is **solid for current scale** with clean module boundaries, good DDD fundamentals, and immutable domain models. The main production-blocking gaps are:
+
+- **Exposed credentials** — Finnhub API key hardcoded in `application.properties`, Fyers credentials + DB password in committed `.env`
+- **No API authentication** — any endpoint callable by anyone, including trade execution and LLM-triggering endpoints
+- **No circuit breakers** — no Resilience4j on any external client; 600-second LLM timeout blocks entire pipeline per stock
+- **Duplicate signal execution** — `SignalExecutionJob` still has `@Scheduled` annotation, runs trades twice
+- **Race conditions** — `KillSwitchService.active` is not volatile, `JobRunEntity` has no optimistic locking
+- **TimescaleDB declared but not configured** — hypertable creation missing from migrations
+- **O(n) in-memory signal filtering** — `findAll()` + stream on every query, will degrade as signals table grows
+
+### Code-Level Audit (2026-08-07) — 20 Phases Fixed
+
+The original audit found 64 findings (8 critical, 15 high, 30 medium, 11 low). 20+ phases of fixes have been completed. See fix progress at end of this file.
 
 ---
 
-## CRITICAL Findings
+## Architecture & Design Findings (2026-08-20)
 
-### C1: Position.createWithRisk() parameter order wrong
+### CRITICAL
+
+#### AD-C1: Exposed credentials in repository
+**Severity**: CRITICAL | **Files**: `backend/api/src/main/resources/application.properties:138`, `infra/env/.env`
+
+Finnhub API key hardcoded in `application.properties`. Fyers client ID/secret + DB password committed in `infra/env/.env`. All exposed in git history.
+
+**Fix**: Rotate all credentials immediately. Move `.env` to `.gitignore`. Use `infra/env/.env.example` as template with placeholder values. Move SSH credentials (`llamacpp.ssh.user`, `llamacpp.ssh.host`) to environment variables.
+
+---
+
+#### AD-C2: No API authentication
+**Severity**: CRITICAL | **Files**: All controllers under `backend/api/src/main/java/com/swingtrade/api/controller/`
+
+Zero auth on any endpoint. `POST /api/trade`, `POST /api/positions/{symbol}/close`, `POST /api/signals/generate-all` (triggers LLM calls) are all publicly accessible.
+
+**Fix**: Add Spring Security with API key auth at minimum. Role-based: admin for kill switch, trader for execution, viewer for read-only.
+
+---
+
+#### AD-C3: No circuit breakers on external APIs
+**Severity**: CRITICAL | **Files**: `backend/data/src/main/java/com/swingtrade/data/service/DataIngestionService.java`, `backend/llm/src/main/java/com/swingtrade/llm/service/SentimentService.java`
+
+No Resilience4j or equivalent on Yahoo Finance, LLM server, Kite API, Upstox, or Fyers. The 600-second LLM timeout blocks the entire pipeline per stock. No fallback chain exists (Yahoo → Upstox → Fyers).
+
+**Fix**: Add Resilience4j `@CircuitBreaker` to all external client calls. Configure appropriate timeouts (LLM: 60s, not 600s). Implement fallback chain. Add bulkhead pattern so slow LLM calls for one stock don't block analysis for all stocks.
+
+---
+
+### HIGH
+
+#### AD-H1: ArchUnit enforcement disabled
+**Severity**: HIGH | **File**: `backend/api/src/test/java/com/swingtrade/api/arch/ModuleBoundaryTest.java`
+
+The `noCircularDependencies()` test is a no-op. Circular dependencies exist between `api.config/controller`, `broker.engine/service`, and `data/client/service/config` with zero automated guardrail.
+
+**Fix**: Re-enable with explicit exceptions documented. Refactor circular deps by extracting shared interfaces to `core`.
+
+---
+
+#### AD-H2: O(n) in-memory signal filtering
+**Severity**: HIGH | **File**: `backend/api/src/main/java/com/swingtrade/api/service/SignalService.java:45-119`
+
+`findAll()` + Java stream filtering on every call. Will degrade as signals table grows.
+
+**Fix**: Add query methods to `SignalStore` (`findByDateRange`, `findByType`, `findByHighConfidence`).
+
+---
+
+#### AD-H3: TimescaleDB declared but not configured
+**Severity**: HIGH | **File**: `backend/data/src/main/resources/db/migration/V1__swing_trade_schema.sql`
+
+Schema says "PostgreSQL + TimescaleDB" but no `CREATE EXTENSION` or `create_hypertable()` in any migration. Plain PostgreSQL tables used instead.
+
+**Fix**: Add migration: `CREATE EXTENSION IF NOT EXISTS timescaledb` + `SELECT create_hypertable('ohlcv_candles', 'date')`.
+
+---
+
+#### AD-H4: BigDecimal precision loss in financial calculations
+**Severity**: HIGH | **Files**: `backend/strategy/src/main/java/com/swingtrade/strategy/PriceActionSignalEngine.java:165`, `backend/strategy/src/main/java/com/swingtrade/strategy/BacktestEngine.java:308-311`
+
+`doubleValue()` used for P&L calculations and signal return values.
+
+**Fix**: Change `SignalResult` to use `BigDecimal`. Use `BigDecimal` arithmetic throughout.
+
+---
+
+#### AD-H5: Circular dependency between broker and data
+**Severity**: HIGH | **File**: `backend/broker/src/main/java/com/swingtrade/broker/engine/PaperTradingEngine.java:58-63`
+
+Setter injection with `@Autowired` to avoid circular dependency. Comment acknowledges known debt.
+
+**Fix**: Extract state persistence interface to `core` that both `broker` and `data` depend on.
+
+---
+
+#### AD-H6: Position is a 23-field God Object
+**Severity**: HIGH | **File**: `backend/core/src/main/java/com/swingtrade/domain/Position.java`
+
+Mixes entry data, current state, PnL, broker metadata, and execution history.
+
+**Fix**: Decompose into `PositionSummary`, `PositionDetails`, `PositionTradeHistory` via composition.
+
+---
+
+#### AD-H7: SignalExecutionJob has duplicate @Scheduled annotation
+**Severity**: HIGH | **File**: `backend/api/src/main/java/com/swingtrade/api/scheduler/SignalExecutionJob.java:38`
+
+`SignalExecutionJob` still has `@Scheduled(fixedDelay = 30000)` despite comment saying "@Scheduled removed — replaced by JobOrchestratorService." This causes duplicate trade execution for the same signal.
+
+**Fix**: Remove `@Scheduled` annotation from `SignalExecutionJob`.
+
+---
+
+#### AD-H8: KillSwitchService.active is not volatile
+**Severity**: HIGH | **File**: `backend/broker/src/main/java/com/swingtrade/broker/risk/KillSwitchService.java:23`
+
+`KillSwitchService.active` is a plain `boolean`, not `volatile`. A thread could cache a stale `false` value and allow a trade through after the kill switch was activated. `DailyLossCircuitBreaker.isCircuitOpen` is `volatile` but this one is not.
+
+**Fix**: Change `active` to `volatile boolean`.
+
+---
+
+#### AD-H9: No optimistic locking on any JPA entity
+**Severity**: HIGH | **File**: Multiple entity files
+
+No `@Version` optimistic locking on any entity. `JobOrchestratorService.recordCompletion()` increments `completedCount` via read-modify-write without `@Transactional` or `@Version`. Two threads can read the same count and both save `count + 1`, losing an increment. `DailyLossCircuitBreaker.persistState()` has the same race condition.
+
+**Fix**: Add `@Version` to `JobRunEntity`, `DailyLossCircuitBreakerStateEntity`, `PositionEntity`.
+
+---
+
+#### AD-H10: Trade.close() misclassifies all losing trades as STOPPED
+**Severity**: HIGH | **File**: `backend/core/src/main/java/com/swingtrade/domain/Trade.java:155-156`
+
+`isProfit(totalPnL) ? TradeStatus.CLOSED : TradeStatus.STOPPED` — any trade with non-positive P&L is classified as "stopped" regardless of actual exit reason. The `exitReason` parameter is ignored for status determination.
+
+**Fix**: Use `exitReason` for status determination instead of P&L sign.
+
+---
+
+#### AD-H11: No read timeouts on any WebClient
+**Severity**: HIGH | **File**: `backend/data/src/main/java/com/swingtrade/data/client/YahooFinanceClient.java:56`, `UpstoxServiceClient`, `FyersServiceClient`
+
+Only connect timeout (30s) set. No read timeout. A slow Yahoo response could block threads indefinitely. Same issue in all three market data clients.
+
+**Fix**: Add 30-second read timeout to all WebClients.
+
+---
+
+#### AD-H12: Entity-to-table mapping precision mismatches
+**Severity**: HIGH | **File**: `backend/data/src/main/resources/db/migration/V1__swing_trade_schema.sql`
+
+`OhlcvCandleEntity.adj_close_price` has `precision = 15` but DB column is `NUMERIC(15,4)`. `SignalEntity.confidence_score` has `precision = 5` but DB is `NUMERIC(5,2)`. Potential truncation errors.
+
+**Fix**: Align `@Column` precision/scale with DB schema.
+
+---
+
+#### AD-H13: No Strategy interface or registry
+**Severity**: HIGH | **File**: `backend/strategy/src/main/java/com/swingtrade/strategy/PriceActionSignalEngine.java`
+
+No `Strategy` interface or strategy registry. Adding a new strategy requires modifying `SignalPipeline` and `JobOrchestratorService` directly. Not open for extension without modification.
+
+**Fix**: Introduce a `Strategy` interface with a registry pattern.
+
+---
+
+#### AD-H14: Missing @ManyToOne for job_run_stages FK
+**Severity**: HIGH | **File**: `backend/data/src/main/java/com/swingtrade/data/entity/JobRunStageEntity.java`
+
+The DB has `REFERENCES job_runs(run_id) ON DELETE CASCADE` but `JobRunStageEntity` has no JPA relationship to `JobRunEntity`.
+
+**Fix**: Add `@ManyToOne` mapping to `JobRunStageEntity`.
+
+---
+
+### MEDIUM
+
+#### AD-M1: core module has Spring annotations
+**Severity**: MEDIUM | **File**: `backend/core/src/main/java/com/swingtrade/domain/TradeMetrics`
+
+`core` module includes `@Service` annotations and Spring dependencies (micrometer, logback, Jackson). Violates "pure domain" convention.
+
+**Fix**: Move `TradeMetrics` to `api` or `broker` module. `core` should be Spring-free.
+
+---
+
+#### AD-M2: No event-driven pattern (synchronous 9-stage pipeline)
+**Severity**: MEDIUM | **File**: `backend/api/src/main/java/com/swingtrade/api/service/AnalysisOrchestratorService.java`
+
+96-line imperative pipeline. Each stage blocks the next. Stage 4 (LLM sentiment) can take 60+ seconds per stock. For the scheduled pipeline across all watchlist symbols, this is effectively single-threaded.
+
+**Fix**: Introduce Spring `ApplicationEventPublisher`-driven stages: `CandleIngestedEvent`, `SignalGeneratedEvent`, `PositionClosedEvent`. Enables async execution, stage-level timeouts, graceful degradation.
+
+---
+
+#### AD-M3: No distributed tracing
+**Severity**: MEDIUM | **File**: `backend/api/src/main/java/com/swingtrade/api/filter/TraceIdFilter.java`
+
+`TraceIdFilter` generates a trace ID but it is not propagated to external API calls or logged in structured format. No Micrometer Tracing with Zipkin/Jaeger/OpenTelemetry.
+
+**Fix**: Add Micrometer Tracing. Propagate trace ID to external API calls. Log in structured JSON format.
+
+---
+
+#### AD-M4: No production monitoring/alerting rules
+**Severity**: MEDIUM | **File**: `infra/monitoring/`
+
+Prometheus metrics exported but no alerting rules defined. No log aggregation (JSON logs go to file with no Fluentd/Logstash/Vector). No SLI/SLO tracking (no measurement of "time to generate signal" or "data freshness").
+
+**Fix**: Define alerting rules for signal generation failures, data ingestion freshness, LLM fallback rate. Add log aggregation.
+
+---
+
+#### AD-M5: DTO Position shadows domain Position
+**Severity**: MEDIUM | **File**: `backend/api/src/main/java/com/swingtrade/api/dto/Position.java` vs `backend/core/src/main/java/com/swingtrade/domain/Position.java`
+
+Name collision between API DTO and domain model. Forces fully-qualified imports throughout.
+
+**Fix**: Rename DTO to `PaperPositionDto.java` or `TradingPositionDto.java`.
+
+---
+
+#### AD-M6: No API versioning
+**Severity**: MEDIUM | **File**: All controllers
+
+All endpoints use `/api/` prefix with no version segment. When DTOs or response shapes change, no backward compatibility guarantee.
+
+**Fix**: Add versioning (`/api/v1/`) when API reaches stable state.
+
+---
+
+#### AD-M7: No blue/green or rolling deployment
+**Severity**: MEDIUM | **File**: `.github/workflows/deploy-main.yml`
+
+`deploy-main.yml` kills existing process (`pkill`) and starts new one — causes downtime. No database migration rollback strategy (Flyway forward-only, no rollback scripts). No canary deployment.
+
+**Fix**: Implement rolling deployment or blue/green. Add Flyway rollback scripts.
+
+---
+
+#### AD-M8: AnalysisOrchestratorService is 96-line imperative facade
+**Severity**: MEDIUM | **File**: `backend/api/src/main/java/com/swingtrade/api/service/AnalysisOrchestratorService.java`
+
+9 injected dependencies. Service Locator / Facade anti-pattern masquerading as orchestration.
+
+**Fix**: Introduce `Pipeline` abstraction with composable `Stage` interfaces.
+
+---
+
+#### AD-M9: Hardcoded SSH credentials for llama.cpp server
+**Severity**: MEDIUM | **File**: `backend/api/src/main/resources/application.properties:104-109`
+
+SSH username (`dietpi`) and host (`192.168.0.100`) hardcoded. Port (`8090`) also hardcoded.
+
+**Fix**: Move to environment variables: `llamacpp.ssh.user=${LLAMACPP_SSH_USER:dietpi}`, etc.
+
+---
+
+#### AD-M10: No pipeline integration test for JobOrchestratorService
+**Severity**: MEDIUM | **File**: `backend/api/src/test/java/com/swingtrade/api/`
+
+No integration test that exercises the full 6-stage job orchestrator pipeline. The `JobOrchestratorService` has no dedicated integration test.
+
+**Fix**: Add integration test with TestContainers for PostgreSQL and WireMock for external APIs.
+
+---
+
+#### AD-M11: No @PreDestroy shutdown hooks on ExecutorServices
+**Severity**: MEDIUM | **Files**: `JobOrchestratorService`, `SentimentService`, `NewsIngestionService`
+
+Three separate `ExecutorService` instances with no `@PreDestroy` shutdown hooks. Threads will leak on application stop.
+
+**Fix**: Add `@PreDestroy` shutdown hooks to all three services.
+
+---
+
+#### AD-M12: Nested CompletableFuture pattern in JobOrchestratorService
+**Severity**: MEDIUM | **File**: `backend/api/src/main/java/com/swingtrade/api/service/JobOrchestratorService.java:259`
+
+`executeStage()` wraps a sequential stage in `CompletableFuture.supplyAsync()` using the same executor that the outer `startRun()` already uses. Double async nesting with unnecessary queueing overhead.
+
+**Fix**: Replace nested `CompletableFuture` with `Future.get(timeout, unit)`.
+
+---
+
+#### AD-M13: PositionManager.getPositions() exposes internal ConcurrentHashMap
+**Severity**: MEDIUM | **File**: `backend/broker/engine/PaperTradingEngine.java`
+
+`PaperTradingStateService.loadOpenPositions()` calls `positionManager.getPositions().put(...)`, directly mutating the internal map. No encapsulation.
+
+**Fix**: Return an unmodifiable view or provide a dedicated `addPosition()` method.
+
+---
+
+#### AD-M14: No data retention on 8+ tables
+**Severity**: MEDIUM | **File**: `backend/data/src/main/resources/db/migration/`
+
+Only `sentiment_accuracy` has a retention policy (1 year). `ohlcv_candles`, `signals`, `sentiment_results`, `news_articles`, `job_runs`, `trade_labels`, `paper_trading_portfolio_snapshots` all grow unbounded.
+
+**Fix**: Add retention policies for all growing tables. Use TimescaleDB continuous aggregates + retention.
+
+---
+
+#### AD-M15: Duplicate Exchange enum
+**Severity**: MEDIUM | **File**: `backend/core/src/main/java/com/swingtrade/domain/Stock.java` (inner enum) vs `backend/core/src/main/java/com/swingtrade/domain/Exchange.java` (top-level)
+
+`Stock.Exchange` (NSE, BSE) and top-level `Exchange` (NSE, BSE, NSE_FO, NCEI). `Position.java` uses the top-level; `Stock.java` uses the inner.
+
+**Fix**: Consolidate to a single `Exchange` enum.
+
+---
+
+#### AD-M16: No Symbol value object
+**Severity**: MEDIUM | **File**: 9+ domain models
+
+Raw `String symbol` with zero validation. Any code can pass an empty string or invalid ticker.
+
+**Fix**: Create a `Symbol` value object with validation.
+
+---
+
+#### AD-M17: No BrokerClient interface for pluggable brokers
+**Severity**: MEDIUM | **File**: `backend/broker/`
+
+No `BrokerClient` interface. The KiteConnect client is hardcoded. Adding a new broker requires modifying existing broker code.
+
+**Fix**: Introduce a `BrokerClient` interface for pluggable broker implementations.
+
+---
+
+#### AD-M18: CI stage workflow references Maven/pom.xml
+**Severity**: MEDIUM | **File**: `.github/workflows/deploy-stage.yml:33-52`
+
+`deploy-stage.yml` references `pom.xml` and `mvn` even though the project migrated from Maven to Gradle. This workflow would fail.
+
+**Fix**: Update to use Gradle wrapper.
+
+---
+
+### LOW
+
+#### AD-L1: Field injection in controllers
+**Severity**: LOW | **File**: `backend/api/src/main/java/com/swingtrade/api/controller/SignalController.java:55-77`
+
+Controllers use `@Autowired` field injection. Makes tests harder (requires Spring context), hides dependencies.
+
+**Fix**: Convert to constructor injection in controllers and services.
+
+---
+
+#### AD-L2: Missing DB indexes
+**Severity**: LOW | **File**: `backend/data/src/main/resources/db/migration/V1__swing_trade_schema.sql`
+
+No index on `trades(exit_date)` for date-range performance queries. No index on `positions(updated_at)` for monitoring queries.
+
+**Fix**: Add migration with indexes on `trades.exit_date` and `positions.updated_at`.
+
+---
+
+#### AD-L3: No Money/Price/Percentage value objects
+**Severity**: LOW | **File**: `backend/core/src/main/java/com/swingtrade/domain/`
+
+Using raw `BigDecimal` everywhere (no `Money` VO), raw `double`/`BigDecimal` without range validation (no `Percentage` VO, no `Price` VO with validation that price > 0).
+
+**Fix**: Create `Money`, `Price`, `Percentage` value objects with validation.
+
+---
+
+#### AD-L4: OhlcvCandle has no validation
+**Severity**: LOW | **File**: `backend/core/src/main/java/com/swingtrade/domain/OhlcvCandle.java`
+
+No validation prevents a candle with `low > high` or `close < 0`.
+
+**Fix**: Add validation in factory method or constructor.
+
+---
+
+#### AD-L5: StrategyParams.HIGH_PROXIMITY = 0.97 undocumented
+**Severity**: LOW | **File**: `backend/core/src/main/java/com/swingtrade/domain/StrategyParams.java:29`
+
+`0.97` means "price within 3% of 52-week high" but rationale not documented.
+
+**Fix**: Add Javadoc: "Price must be within 3% of 52-week high to confirm breakout strength."
+
+---
+
+#### AD-L6: gpuhub dependency commented out in build
+**Severity**: LOW | **File**: `backend/api/build.gradle.kts:23`, `backend/api/src/main/java/com/swingtrade/api/controller/GpuHubController.java`
+
+`GpuHubController.java` imports from `com.swingtrade.gpuhub` but build dependency is commented out. Dead code or implicit dependency.
+
+**Fix**: Uncomment gpuhub dependency or remove `GpuHubController.java`.
+
+---
+
+#### AD-L7: Unbounded cached thread pool in JobOrchestratorService
+**Severity**: LOW | **File**: `backend/api/src/main/java/com/swingtrade/api/service/JobOrchestratorService.java:57-61`
+
+`Executors.newCachedThreadPool()` creates threads without bound. Under load, excessive threads and memory pressure.
+
+**Fix**: Replace with `Executors.newFixedThreadPool()` or bounded `ThreadPoolExecutor`.
+
+---
+
+#### AD-L8: Keyword sentiment fallback is 50+ hardcoded patterns
+**Severity**: LOW | **File**: `backend/llm/src/main/java/com/swingtrade/llm/service/SentimentService.java:420-613`
+
+Brittle, unmaintainable block of string literals for fallback sentiment analysis.
+
+**Fix**: Extract to YAML/properties config. Consider lightweight NLP library (Stanford CoreNLP) for fallback.
+
+---
+
+## Architecture Strengths (What's Working Well)
+
+- **Domain models**: Immutable records with factory methods (`Signal.create()`, `Trade.open()`, `Position.createWithRisk()`), proper enums, clean `RiskCalculator`
+- **Module dependency graph**: `core` ← `data/llm/broker/strategy` ← `api` is clean
+- **Store interfaces**: Hexagonal pattern with interfaces in `core`, implementations in `data`
+- **SSE streaming**: Right choice for long-running analysis pipeline
+- **LLM fallback**: Keyword-based sentiment when LLM unavailable — excellent resilience pattern
+- **Kill switch + circuit breaker**: Emergency halt + daily loss limit implemented
+- **Sentiment accuracy tracking**: `sentiment_accuracy` table for model improvement
+- **CI/CD**: Per-module parallel static analysis, OWASP SBOM, TruffleHog security scan
+
+---
+
+## Architecture Scores
+
+| Dimension | Score | Key Issue |
+|-----------|-------|-----------|
+| **Module boundaries** | 6.5 | ArchUnit disabled, circular deps unenforced |
+| **Domain model** | 8.0 | Strong DDD, needs Value Objects + Position split |
+| **Data architecture** | 5.0 | TimescaleDB not configured, missing indexes |
+| **Resilience** | 4.0 | No circuit breakers, 600s LLM timeout |
+| **Observability** | 6.0 | Metrics present, no tracing/alerting |
+| **Scalability** | 5.5 | O(n) filtering, synchronous pipeline |
+| **Security** | 3.0 | No auth, exposed credentials |
+| **Future-proofing** | 7.0 | Easy to add data sources, harder for new brokers |
+
+---
+
+## Architecture Fix Priority
+
+### P0 — Immediate (this week)
+| Priority | Finding | Fix |
+|----------|---------|-----|
+| P0-1 | AD-C1 | Rotate all exposed credentials, add `.env` to `.gitignore` |
+| P0-2 | AD-C2 | Add Spring Security API key auth |
+| P0-3 | AD-C3 | Add Resilience4j circuit breakers, reduce LLM timeout to 60s |
+
+### P1 — Critical (this sprint)
+| Priority | Finding | Fix |
+|----------|---------|-----|
+| P1-1 | AD-H1 | Re-enable ArchUnit, fix circular deps |
+| P1-2 | AD-H2 | Add DB-level query methods to SignalStore |
+| P1-3 | AD-H3 | Configure TimescaleDB hypertable migration |
+| P1-4 | AD-H4 | BigDecimal throughout financial calculations |
+| P1-5 | AD-H5 | Extract state persistence interface to core |
+| P1-6 | AD-H6 | Split Position into Summary/Details |
+
+### P2 — Planned (next sprint)
+| Priority | Finding | Fix |
+|----------|---------|-----|
+| P2-1 | AD-M1 | Move TradeMetrics out of core |
+| P2-2 | AD-M2 | Event-driven pipeline stages |
+| P2-3 | AD-M3 | Add Micrometer Tracing |
+| P2-4 | AD-M4 | Define alerting rules, add log aggregation |
+| P2-5 | AD-M5 | Rename DTO Position |
+| P2-6 | AD-M7 | Rolling deployment, Flyway rollback scripts |
+
+### P3 — Backlog
+| Priority | Finding | Fix |
+|----------|---------|-----|
+| P3-1 | AD-M6 | Add /api/v1/ versioning |
+| P3-2 | AD-M8 | Pipeline abstraction |
+| P3-3 | AD-M10 | Pipeline integration test |
+| P3-4 | AD-L1-L8 | Field injection, DB indexes, VOs, validation, docs |
+
+---
+
+## Code-Level Findings (2026-08-07 Audit)
+
+### CRITICAL
+
+#### C1: Position.createWithRisk() parameter order wrong
 **Severity**: CRITICAL | **Module**: core | **Impact**: All open positions
 
 The factory method `Position.createWithRisk()` has swapped parameters — risk allocation and initial capital are passed in wrong order. Since this is used by `PaperTradingEngine` to create positions on order fill, every open position has corrupted risk state.
@@ -33,7 +505,7 @@ The factory method `Position.createWithRisk()` has swapped parameters — risk a
 
 ---
 
-### C2: Trade.close() PnL incorrect for SHORT + fees
+#### C2: Trade.close() PnL incorrect for SHORT + fees
 **Severity**: CRITICAL | **Module**: core | **Impact**: All short trade P&L
 
 `Trade.close()` calculates PnL as `(closePrice - entryPrice) * quantity` which is correct for LONG but inverted for SHORT. Additionally, fees are not included in the realized PnL calculation. All short trade metrics and overall performance stats are wrong.
@@ -42,7 +514,7 @@ The factory method `Position.createWithRisk()` has swapped parameters — risk a
 
 ---
 
-### C3: Credentials committed to git
+#### C3: Credentials committed to git
 **Severity**: CRITICAL | **Module**: infra/env | **Impact**: Security exposure
 
 The `.env` file containing real database passwords, Redis credentials, and API keys is tracked in git. This exposes the entire infrastructure to anyone with repo access.
@@ -51,7 +523,7 @@ The `.env` file containing real database passwords, Redis credentials, and API k
 
 ---
 
-### C4: Missing @Transactional on closePosition
+#### C4: Missing @Transactional on closePosition
 **Severity**: CRITICAL | **Module**: broker/api | **Impact**: Data inconsistency
 
 `PositionService.closePosition()` and `PaperTradingServiceImpl.closePosition()` lack `@Transactional`. The engine state update (removing from in-memory portfolio) and DB save (`PositionRepository.save()`) are not atomic. A failure between the two leaves the engine and DB out of sync.
@@ -60,7 +532,7 @@ The `.env` file containing real database passwords, Redis credentials, and API k
 
 ---
 
-### C5: Backtest engine converts TA4j Num to double
+#### C5: Backtest engine converts TA4j Num to double
 **Severity**: CRITICAL | **Module**: strategy | **Impact**: Backtest accuracy
 
 `BacktestEngine` converts TA4j `Num` values to `double` at intermediate calculation points. TA4j's `DecimalNum` provides arbitrary precision; converting to `double` introduces rounding errors that compound across thousands of bars, making backtest results unreliable.
@@ -69,7 +541,7 @@ The `.env` file containing real database passwords, Redis credentials, and API k
 
 ---
 
-### C6: Two strategy implementations with different logic
+#### C6: Two strategy implementations with different logic
 **Severity**: CRITICAL | **Module**: strategy | **Impact**: Signal parity
 
 Live trading uses `SwingTradingStrategy` while backtesting uses `PriceActionSignalEngine`. These two implementations compute indicators differently (different lookback periods, different crossover logic), meaning backtest results will not match live signal output.
@@ -78,7 +550,7 @@ Live trading uses `SwingTradingStrategy` while backtesting uses `PriceActionSign
 
 ---
 
-### C7: Frontend appState uses reactive() instead of Pinia
+#### C7: Frontend appState uses reactive() instead of Pinia
 **Severity**: CRITICAL | **Module**: frontend | **Impact**: Maintainability, testability
 
 `dashboard/src/stores/appState.ts` uses Vue `reactive()` instead of Pinia. This means:
@@ -91,7 +563,7 @@ Live trading uses `SwingTradingStrategy` while backtesting uses `PriceActionSign
 
 ---
 
-### C8: Frontend no <ErrorBoundary> — any component crash kills the whole app
+#### C8: Frontend no <ErrorBoundary> — any component crash kills the whole app
 **Severity**: CRITICAL | **Module**: frontend | **Impact**: App reliability
 
 No `<ErrorBoundary>` component exists. A single unhandled error in any view (e.g., Network error in DashboardView, parsing error in SignalsView) crashes the entire Vue app, showing a blank screen with no recovery path.
@@ -100,7 +572,7 @@ No `<ErrorBoundary>` component exists. A single unhandled error in any view (e.g
 
 ---
 
-## HIGH Findings
+## HIGH Findings (2026-08-07)
 
 ### H1: DailyLossCircuitBreaker state is in-memory only
 **Severity**: HIGH | **Module**: broker | **Impact**: Risk control bypassed
@@ -237,7 +709,7 @@ The portfolio summary endpoint returns `totalValue: 0`. A comment in the code ac
 
 ---
 
-## MEDIUM Findings
+## MEDIUM Findings (2026-08-07)
 
 ### M1: DailyLossCircuitBreaker uses LocalDate.now() without timezone
 **Severity**: MEDIUM | **Module**: broker | **Impact**: Daily reset at wrong time
@@ -503,7 +975,7 @@ Scanning re-computes indicators for the same symbol on every scan, even if the r
 
 ---
 
-## LOW Findings
+## LOW Findings (2026-08-07)
 
 ### L1: Only 4 unit tests for 23 components
 **Severity**: LOW | **Module**: frontend | **Impact**: Low frontend test coverage
@@ -578,7 +1050,7 @@ User initials are hardcoded in `Sidebar.vue` instead of being loaded from a user
 
 ---
 
-## Code Quality Scores
+## Code Quality Scores (2026-08-07 Audit)
 
 | Module | Score | Key Issue |
 |--------|-------|-----------|
@@ -592,7 +1064,7 @@ User initials are hardcoded in `Sidebar.vue` instead of being loaded from a user
 
 ---
 
-## Recommended Fix Order
+## Recommended Fix Order (2026-08-07 Code Audit)
 
 ### P0 — Immediate (data integrity / security)
 | Priority | Finding | Fix |
@@ -648,7 +1120,13 @@ User initials are hardcoded in `Sidebar.vue` instead of being loaded from a user
 
 ## Analysis Methodology
 
-This audit was produced by three parallel analysis agents:
+### 2026-08-20 Architecture Review
+Two parallel architecture audit agents:
+1. **SwingTrade-specific auditor** — domain-aware review of modules, data flow, API design, security, scalability
+2. **General arch-auditor** — principal-level review of system design, resilience, observability, domain model quality, future-proofing
+
+### 2026-08-07 Code-Level Audit
+Three parallel analysis agents:
 1. **Architecture Agent** — System-level design review (module boundaries, data flow, scalability)
 2. **Backend Code Review Agent** — Java/Spring Boot module-level defect scan
 3. **Frontend Code Review Agent** — Vue 3/TypeScript type safety and UX review
@@ -657,9 +1135,13 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 
 ---
 
-## Audit Fix Progress (2026-08-08)
+## Audit Fix Progress
 
-### Completed (20 phases)
+### 2026-08-20 Architecture Review — In Progress
+
+No fixes completed yet for the architecture findings. See Architecture Fix Priority above.
+
+### 2026-08-08 Code Audit — 20 Phases Completed
 
 | Phase | Finding(s) | Status | Commit |
 |-------|-----------|--------|--------|
@@ -692,7 +1174,7 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 | C3: Credentials in git | infra/env/.env is NOT tracked (.gitignore matches it) |
 | C5: Backtest precision | Uses safe numToBigDecimal() helper; one doubleValue() is on BigDecimal not Num |
 
-### Remaining — Backend
+### Remaining — Backend (2026-08-07)
 
 | Finding | Priority | What's needed |
 |---------|----------|---------------|
@@ -702,7 +1184,7 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 | M13: No rate limiting | P3 | Add @RateLimiter on analysis/scan endpoints |
 | M28: No pagination on performance | P3 | Add pagination to /api/performance |
 
-### Remaining — Frontend
+### Remaining — Frontend (2026-08-07)
 
 | Finding | Priority | What's needed |
 |---------|----------|---------------|
@@ -712,7 +1194,7 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 | M20: Flaky E2E waits | P3 | Replace 10+ `waitForTimeout` with waitForSelector |
 | L1: Only 2 component unit tests | P4 | Down from 4 — need Vitest for key components |
 
-### Next Recommended Sprint
+### Next Recommended Sprint (2026-08-07)
 
 1. **C7: appState → Pinia** — frontend migration, low risk, 54-line file
 2. **M3: NaN validation** — isFinite() checks on numeric API responses
