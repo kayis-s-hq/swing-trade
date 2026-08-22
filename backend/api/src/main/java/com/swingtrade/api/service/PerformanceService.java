@@ -187,9 +187,7 @@ public class PerformanceService {
     }
 
     private BigDecimal calculateTotalValue() {
-        var portfolio = tradingService.getPortfolio();
-        if (portfolio == null) return null;
-        return portfolio.getTotalValue();
+        return tradingService.getTotalValue();
     }
 
     private BigDecimal calculateProfitFactor(List<PositionEntity> closed) {

@@ -455,6 +455,33 @@ public class PaperTradingEngine implements TradingService {
     }
 
     /**
+     * Closes a position by its database ID with explicit exit price and reason.
+     * Implements TradingService interface method.
+     *
+     * @param positionId the database position ID
+     * @param exitPrice the exit price
+     * @param reason the reason for closing
+     * @return the closed position
+     * @throws IllegalArgumentException if position not found
+     */
+    @Override
+    @Transactional
+    public Position closePosition(Long positionId, BigDecimal exitPrice, String reason) {
+        PositionEntity entity = stateService.getPositionById(positionId);
+        if (entity == null) {
+            throw new IllegalArgumentException("Position not found: " + positionId);
+        }
+        String posId = entity.getPositionId();
+        Position position = positionManager.getPosition(posId);
+        if (position == null) {
+            throw new IllegalArgumentException("Position not found in memory: " + posId);
+        }
+
+        closePosition(posId, exitPrice, reason);
+        return position;
+    }
+
+    /**
      * Closes a position completely.
      *
      * @param positionId the position to close

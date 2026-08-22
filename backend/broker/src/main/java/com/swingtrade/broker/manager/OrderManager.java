@@ -130,7 +130,7 @@ public class OrderManager implements OrderService {
      * @param price the price
      * @return the created order
      */
-    public Order createBuyOrder(String symbol, Integer quantity, BigDecimal price) {
+    public Order createBuyOrder(String symbol, int quantity, BigDecimal price) {
         return createMarketOrder(symbol, TradeDirection.LONG, quantity, price);
     }
 
@@ -142,7 +142,7 @@ public class OrderManager implements OrderService {
      * @param price the price
      * @return the created order
      */
-    public Order createSellOrder(String symbol, Integer quantity, BigDecimal price) {
+    public Order createSellOrder(String symbol, int quantity, BigDecimal price) {
         return createMarketOrder(symbol, TradeDirection.SHORT, quantity, price);
     }
 

@@ -74,7 +74,6 @@ public class JobOrchestratorService {
     private final SentimentService sentimentService;
     private final SignalPipeline signalPipeline;
     private final BacktestEngine backtestEngine;
-    private final PaperTradingEngine paperTradingEngine;
     private final TradingService tradingService;
     private final JobRunRepository jobRunRepository;
     private final JobRunStageRepository jobRunStageRepository;
@@ -88,7 +87,6 @@ public class JobOrchestratorService {
             SentimentService sentimentService,
             SignalPipeline signalPipeline,
             BacktestEngine backtestEngine,
-            PaperTradingEngine paperTradingEngine,
             TradingService tradingService,
             JobRunRepository jobRunRepository,
             JobRunStageRepository jobRunStageRepository,
@@ -100,7 +98,6 @@ public class JobOrchestratorService {
         this.sentimentService = sentimentService;
         this.signalPipeline = signalPipeline;
         this.backtestEngine = backtestEngine;
-        this.paperTradingEngine = paperTradingEngine;
         this.tradingService = tradingService;
         this.jobRunRepository = jobRunRepository;
         this.jobRunStageRepository = jobRunStageRepository;

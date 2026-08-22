@@ -218,7 +218,7 @@ public class PositionService {
             com.swingtrade.domain.Position enginePos =
                 tradingService.findOpenPositionBySymbol(symbol);
             if (enginePos != null) {
-                tradingService.closePosition(enginePos.positionId(), exitPrice, reason);
+                tradingService.closePosition(entity.getId(), exitPrice, reason);
             } else {
                 logger.warn("Engine position missing for symbol {} — skipping engine close, will only update DB", symbol);
             }
