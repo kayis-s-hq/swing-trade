@@ -1,41 +1,64 @@
 package com.swingtrade.data.config;
 
+import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.FyersAuthService;
 import com.swingtrade.data.service.FyersServiceClient;
+import com.swingtrade.data.service.FyersSymbolMasterService;
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Configuration;
-
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClient.Builder;
 
 @Configuration
 public class FyersResilienceConfig {
 
-    private final FyersAuthService fyersAuthService;
-    private final FyersServiceClient fyersServiceClient;
     private final CircuitBreaker fyersAuthCircuitBreaker;
     private final Bulkhead fyersAuthBulkhead;
     private final CircuitBreaker fyersCircuitBreaker;
     private final Bulkhead fyersBulkhead;
+    private FyersAuthService fyersAuthService;
+    private FyersServiceClient fyersServiceClient;
 
-    public FyersResilienceConfig(FyersAuthService fyersAuthService,
-                                 FyersServiceClient fyersServiceClient,
-                                 @Qualifier("fyersAuth") CircuitBreaker fyersAuthCircuitBreaker,
+    public FyersResilienceConfig(@Qualifier("fyersAuth") CircuitBreaker fyersAuthCircuitBreaker,
                                  @Qualifier("fyersAuth") Bulkhead fyersAuthBulkhead,
                                  @Qualifier("fyers") CircuitBreaker fyersCircuitBreaker,
                                  @Qualifier("fyers") Bulkhead fyersBulkhead) {
-        this.fyersAuthService = fyersAuthService;
-        this.fyersServiceClient = fyersServiceClient;
         this.fyersAuthCircuitBreaker = fyersAuthCircuitBreaker;
         this.fyersAuthBulkhead = fyersAuthBulkhead;
         this.fyersCircuitBreaker = fyersCircuitBreaker;
         this.fyersBulkhead = fyersBulkhead;
     }
 
+    @Bean
+    public FyersSymbolMasterService fyersSymbolMasterService(WebClient.Builder webClientBuilder,
+                                                             FyersSymbolRepository symbolRepository) {
+        return new FyersSymbolMasterService(webClientBuilder, symbolRepository);
+    }
+
+    @Bean
+    public FyersAuthService fyersAuthService(FyersConfig fyersConfig, Builder webClientBuilder) {
+        FyersAuthService service = new FyersAuthService(fyersConfig, webClientBuilder);
+        service.setResilience4j(fyersAuthCircuitBreaker, fyersAuthBulkhead);
+        this.fyersAuthService = service;
+        return service;
+    }
+
+    @Bean
+    public FyersServiceClient fyersServiceClient(Builder webClientBuilder,
+                                                  FyersAuthService fyersAuthService,
+                                                  FyersSymbolMasterService symbolMaster) {
+        FyersServiceClient client = new FyersServiceClient(webClientBuilder, fyersAuthService, symbolMaster);
+        client.setResilience4j(fyersCircuitBreaker, fyersBulkhead);
+        this.fyersServiceClient = client;
+        return client;
+    }
+
     @PostConstruct
     public void inject() {
-        fyersAuthService.setResilience4j(fyersAuthCircuitBreaker, fyersAuthBulkhead);
-        fyersServiceClient.setResilience4j(fyersCircuitBreaker, fyersBulkhead);
+        // Beans created above; this is kept for any additional init logic.
     }
 }
