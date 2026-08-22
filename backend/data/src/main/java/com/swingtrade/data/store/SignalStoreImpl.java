@@ -7,6 +7,7 @@ import com.swingtrade.domain.store.SignalStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -100,6 +101,33 @@ public class SignalStoreImpl implements SignalStore {
     @Override
     public List<Signal> findBuySignalsSince(LocalDate sinceDate) {
         return repository.findBuySignalsSince(sinceDate,
+                org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).stream()
+            .map(SignalEntity::toDomain)
+            .toList();
+    }
+
+    @Override
+    public List<Signal> findByDateRange(LocalDate startDate, LocalDate endDate) {
+        return repository.findByDateRange(
+                startDate, endDate,
+                org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).stream()
+            .map(SignalEntity::toDomain)
+            .toList();
+    }
+
+    @Override
+    public List<Signal> findByDateRangeAndType(LocalDate startDate, LocalDate endDate, Signal.SignalType type) {
+        return repository.findByDateRangeAndSignalType(
+                startDate, endDate, type.name(),
+                org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).stream()
+            .map(SignalEntity::toDomain)
+            .toList();
+    }
+
+    @Override
+    public List<Signal> findByMinConfidence(double minConfidence) {
+        return repository.findByMinConfidence(
+                BigDecimal.valueOf(minConfidence),
                 org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).stream()
             .map(SignalEntity::toDomain)
             .toList();

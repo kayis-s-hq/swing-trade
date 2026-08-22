@@ -44,6 +44,33 @@ public interface SignalStore {
     List<Signal> findBuySignalsSince(LocalDate sinceDate);
 
     /**
+     * Finds all signals within a date range (DB-level filtering).
+     *
+     * @param startDate start date (inclusive)
+     * @param endDate end date (inclusive)
+     * @return list of signals in the date range
+     */
+    List<Signal> findByDateRange(LocalDate startDate, LocalDate endDate);
+
+    /**
+     * Finds signals within a date range filtered by type (DB-level filtering).
+     *
+     * @param startDate start date (inclusive)
+     * @param endDate end date (inclusive)
+     * @param type signal type (BUY, SELL, HOLD)
+     * @return list of signals in the date range with the specified type
+     */
+    List<Signal> findByDateRangeAndType(LocalDate startDate, LocalDate endDate, Signal.SignalType type);
+
+    /**
+     * Finds signals with confidence at or above a threshold (DB-level filtering).
+     *
+     * @param minConfidence minimum confidence value (0.0 to 1.0)
+     * @return list of signals meeting the confidence threshold
+     */
+    List<Signal> findByMinConfidence(double minConfidence);
+
+    /**
      * Deletes all signals for a given symbol and date. Used to clear stale processed signals before regeneration.
      *
      * @param symbol the stock symbol

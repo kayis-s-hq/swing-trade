@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -85,6 +86,19 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
     List<SignalEntity> findByDateRange(
         @Param("startDate") LocalDate startDate,
         @Param("endDate") LocalDate endDate,
+        Pageable pageable
+    );
+
+    /**
+     * Finds signals with confidence score at or above the threshold.
+     *
+     * @param minConfidence minimum confidence score
+     * @param pageable pagination
+     * @return list of signals meeting the confidence threshold
+     */
+    @Query("SELECT s FROM SignalEntity s WHERE s.confidenceScore >= :minConfidence ORDER BY s.confidenceScore DESC, s.date DESC")
+    List<SignalEntity> findByMinConfidence(
+        @Param("minConfidence") BigDecimal minConfidence,
         Pageable pageable
     );
 
