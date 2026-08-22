@@ -16,6 +16,7 @@
 
 package com.swingtrade.strategy;
 
+import com.swingtrade.core.metrics.SignalMetrics;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.Signal.SignalType;
@@ -75,9 +76,11 @@ public class PriceActionSignalEngine {
     static final int MIN_REQUIRED_CANDLES = StrategyParams.MIN_CANDLES;
 
     private final CandleStore candleStore;
+    private final SignalMetrics signalMetrics;
 
-    public PriceActionSignalEngine(CandleStore candleStore) {
+    public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics) {
         this.candleStore = candleStore;
+        this.signalMetrics = signalMetrics;
     }
 
     /**
@@ -161,6 +164,9 @@ public class PriceActionSignalEngine {
             : rulesPassed + " of 4 entry rules passed: " + String.join("; ", failed);
 
         logger.debug("Signal for {} on {}: {} ({})", symbol, date, type, reasoning);
+
+        signalMetrics.recordSignalGenerated();
+        signalMetrics.recordSignalType(type.name().toLowerCase());
 
         return new SignalResult(symbol, date, type, rsi.doubleValue(), ema20.doubleValue(),
             ema50.doubleValue(), atr.doubleValue(), reasoning);

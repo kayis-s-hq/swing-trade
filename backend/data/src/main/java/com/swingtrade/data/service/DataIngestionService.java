@@ -1,5 +1,6 @@
 package com.swingtrade.data.service;
 
+import com.swingtrade.core.metrics.DataIngestionMetrics;
 import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.repository.StockRepository;
@@ -30,19 +31,22 @@ public class DataIngestionService {
     private final WatchlistRepository watchlistRepository;
     private final MarketDataClientProvider marketDataClientProvider;
     private final TransactionTemplate txTemplate;
+    private final DataIngestionMetrics ingestionMetrics;
 
     public DataIngestionService(
         OhlcvCandleRepository candleRepository,
         StockRepository stockRepository,
         WatchlistRepository watchlistRepository,
         MarketDataClientProvider marketDataClientProvider,
-        TransactionTemplate txTemplate
+        TransactionTemplate txTemplate,
+        DataIngestionMetrics ingestionMetrics
     ) {
         this.candleRepository = candleRepository;
         this.stockRepository = stockRepository;
         this.watchlistRepository = watchlistRepository;
         this.marketDataClientProvider = marketDataClientProvider;
         this.txTemplate = txTemplate;
+        this.ingestionMetrics = ingestionMetrics;
     }
 
     /**
@@ -112,11 +116,13 @@ public class DataIngestionService {
         if (candle != null && CandleValidator.isValid(candle)) {
             txTemplate.execute(status -> {
                 saveCandle(symbol, candle);
+                ingestionMetrics.recordCandleIngested();
                 return null;
             });
             logger.trace("Saved candle for {}: {}", symbol, date);
         } else if (candle != null) {
             logger.debug("Rejected invalid candle for {} on {}: {}", symbol, date, candle);
+            ingestionMetrics.recordFetchFailure("unknown");
         }
     }
 
@@ -147,11 +153,14 @@ public class DataIngestionService {
             if (candle != null && CandleValidator.isValid(candle)) {
                 saveCandle(symbol, candle);
                 count++;
+                ingestionMetrics.recordCandleIngested();
                 logger.trace("Ingested candle for {}: {}", symbol, current);
             } else if (candle != null) {
                 logger.debug("Rejected invalid candle for {} on {}: {}", symbol, current, candle);
+                ingestionMetrics.recordFetchFailure("upstox");
             } else {
                 logger.warn("Failed to fetch candle for {}: {}", symbol, current);
+                ingestionMetrics.recordFetchFailure("upstox");
             }
 
             current = current.plusDays(1);

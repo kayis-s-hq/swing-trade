@@ -1,5 +1,6 @@
 package com.swingtrade.api.service;
 
+import com.swingtrade.core.metrics.JobOrchestratorMetrics;
 import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.data.entity.JobRunEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
@@ -80,6 +81,7 @@ public class JobOrchestratorService {
     private final SignalStore signalStore;
     private final WatchlistStore watchlistStore;
     private final CandleStore candleStore;
+    private final JobOrchestratorMetrics jobMetrics;
 
     public JobOrchestratorService(
             DataIngestionService dataIngestionService,
@@ -92,7 +94,8 @@ public class JobOrchestratorService {
             JobRunStageRepository jobRunStageRepository,
             SignalStore signalStore,
             WatchlistStore watchlistStore,
-            CandleStore candleStore) {
+            CandleStore candleStore,
+            JobOrchestratorMetrics jobMetrics) {
         this.dataIngestionService = dataIngestionService;
         this.newsIngestionService = newsIngestionService;
         this.sentimentService = sentimentService;
@@ -104,6 +107,7 @@ public class JobOrchestratorService {
         this.signalStore = signalStore;
         this.watchlistStore = watchlistStore;
         this.candleStore = candleStore;
+        this.jobMetrics = jobMetrics;
     }
 
     // ---- DTOs ----
@@ -155,6 +159,7 @@ public class JobOrchestratorService {
             null, 0, 0, 0, null
         );
         jobRunRepository.save(JobRunEntity.fromDomain(run));
+        jobMetrics.recordRunStarted();
 
         final JobRun finalRun = run;
 
@@ -419,6 +424,14 @@ public class JobOrchestratorService {
 
             jobRunRepository.save(entity);
         });
+        long durationMs = runOpt.filter(e -> e.getStartedAt() != null)
+            .map(e -> java.time.Duration.between(e.getStartedAt(), e.getCompletedAt()).toMillis())
+            .orElse(0L);
+        if (status == JobRun.Status.COMPLETED) {
+            jobMetrics.recordRunCompleted(durationMs);
+        } else {
+            jobMetrics.recordRunFailed(durationMs);
+        }
         logger.info("Run {} completed with status {}", runId, status);
     }
 

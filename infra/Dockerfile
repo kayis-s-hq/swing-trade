@@ -23,6 +23,7 @@ COPY backend/strategy/ ./strategy/
 COPY backend/llm/ ./llm/
 COPY backend/broker/ ./broker/
 COPY backend/api/ ./api/
+COPY backend/gpuhub/ ./gpuhub/
 COPY libs/ ./libs/
 
 # Set timezone to Asia/Kolkata for correct scheduling

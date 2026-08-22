@@ -1,6 +1,7 @@
 package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.config.BrokerProperties;
+import com.swingtrade.core.metrics.KillSwitchMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,18 +27,20 @@ public class KillSwitchService {
 
     private final JdbcTemplate jdbcTemplate;
     private final BrokerProperties props;
+    private final KillSwitchMetrics killSwitchMetrics;
 
     public KillSwitchService(BrokerProperties props) {
-        this(null, props);
+        this(null, props, null);
     }
 
     /**
      * Constructor with JdbcTemplate for persistence.
      */
     @Autowired
-    public KillSwitchService(JdbcTemplate jdbcTemplate, BrokerProperties props) {
+    public KillSwitchService(JdbcTemplate jdbcTemplate, BrokerProperties props, KillSwitchMetrics killSwitchMetrics) {
         this.jdbcTemplate = jdbcTemplate;
         this.props = props;
+        this.killSwitchMetrics = killSwitchMetrics;
         this.active = props.isKillSwitchActive();
         this.enabledAt = null;
         this.reason = null;
@@ -49,6 +52,11 @@ public class KillSwitchService {
             } catch (Exception e) {
                 logger.warn("Failed to load kill switch from database: {}", e.getMessage());
             }
+        }
+
+        // Initialize metrics state
+        if (killSwitchMetrics != null) {
+            killSwitchMetrics.setActive(this.active);
         }
 
         logger.info("KillSwitchService initialized (active: {})", active);
@@ -121,6 +129,9 @@ public class KillSwitchService {
         logger.warn("KILL SWITCH ENABLED! Reason: {}", reason != null ? reason : "No reason provided");
 
         persistToDatabase();
+        if (killSwitchMetrics != null) {
+            killSwitchMetrics.setActive(true);
+        }
     }
 
     /**
@@ -142,6 +153,9 @@ public class KillSwitchService {
         this.reason = null;
 
         persistToDatabase();
+        if (killSwitchMetrics != null) {
+            killSwitchMetrics.setActive(false);
+        }
     }
 
     /**

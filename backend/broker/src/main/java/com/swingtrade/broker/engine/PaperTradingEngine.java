@@ -3,6 +3,7 @@ package com.swingtrade.broker.engine;
 import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
+import com.swingtrade.core.metrics.TradeMetrics;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.broker.service.PaperTradingStateService;
@@ -55,6 +56,9 @@ public class PaperTradingEngine implements TradingService {
     private final AtomicLong positionCounter;
     private final AtomicLong orderCounter;
 
+    // Metrics
+    private final TradeMetrics tradeMetrics;
+
     // DB persistence bridge (setter-injected to avoid circular dependency)
     private PaperTradingStateService stateService;
 
@@ -80,7 +84,8 @@ public class PaperTradingEngine implements TradingService {
     @Autowired
     public PaperTradingEngine(OrderManager orderManager,
                               PositionManager positionManager,
-                              PaperTradingProperties properties) {
+                              PaperTradingProperties properties,
+                              TradeMetrics tradeMetrics) {
         this.orderManager = orderManager;
         this.positionManager = positionManager;
         this.properties = properties;
@@ -89,6 +94,7 @@ public class PaperTradingEngine implements TradingService {
         this.commissionRate = BigDecimal.valueOf(0.05); // 5 paise per share
         this.positionCounter = new AtomicLong(0);
         this.orderCounter = new AtomicLong(0);
+        this.tradeMetrics = tradeMetrics;
     }
 
     /**
@@ -115,6 +121,8 @@ public class PaperTradingEngine implements TradingService {
 
         // Calculate position size based on risk
         BigDecimal quantity = calculatePositionSize(signal.symbol(), currentPrice, signal.stopLoss());
+        tradeMetrics.recordTradeOpen();
+        tradeMetrics.recordSymbolTrade(signal.symbol());
 
         // Create order
         Order order = orderManager.createBuyOrder(signal.symbol(), quantity.intValue(), currentPrice);
@@ -491,6 +499,7 @@ public class PaperTradingEngine implements TradingService {
     @Transactional
     public void closePosition(String positionId, BigDecimal exitPrice, String reason) {
         Position position = positionManager.closePosition(positionId, exitPrice, reason);
+        tradeMetrics.recordTradeClose(reason);
 
         // Update portfolio
         BigDecimal exitValue = exitPrice.multiply(BigDecimal.valueOf(position.quantity()));
@@ -707,6 +716,7 @@ public class PaperTradingEngine implements TradingService {
                 stateService.closePosition(position.positionId(), position);
                 stateService.savePortfolio();
             }
+            tradeMetrics.recordTradeClose(position.status().name().toLowerCase());
         }
     }
 
