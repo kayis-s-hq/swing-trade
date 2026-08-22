@@ -171,7 +171,6 @@ core -> (none — leaf module)
 - Gradle 9.6.1 (Kotlin DSL, multi-module build)
 - LangChain4j 1.18.1 (LLM integration)
 - PostgreSQL 16 + TimescaleDB (time-series)
-- Redis 7 (caching)
 - TA4j 0.16 (technical analysis)
 - Flyway 12.9.0 (22 migrations)
 - Lombok 1.18.34
@@ -231,9 +230,7 @@ Infrastructure runs on `piworm.local` via `docker context pi-node`:
 | Service | Image | Local Port | Container | Notes |
 |---------|-------|------------|-----------|-------|
 | PostgreSQL 16 | `postgres:16` | `5435` | `swing_trade_postgres` | TimescaleDB, trust auth |
-| Redis | `redis:alpine` | `6379` | `swing_trade_redis` | AOF enabled |
-
-Network: `swingtrade-network` (bridge). Volumes: `postgres_data`, `redis_data`.
+Network: `swingtrade-network` (bridge). Volumes: `postgres_data`.
 
 Local services: Spring Boot API on `8080` (profile `local,fyers`), Vue Dashboard on `3003`.
 
@@ -272,7 +269,7 @@ Local services: Spring Boot API on `8080` (profile `local,fyers`), Vue Dashboard
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/health` | GET | System health (DB/Redis/Upstox connection states) |
+| `/api/health` | GET | System health (DB/Upstox connection states) |
 | `/api/signals[/symbol]` | GET | Latest signals or for a specific stock |
 | `/api/scan` | GET | Scan multiple stocks (`?days=30&marketCap=min`) |
 | `/api/trade` | POST | Execute market order (paper mode) |
@@ -352,7 +349,7 @@ Three GitHub Actions workflows on self-hosted runners:
 
 ## Environment
 
-- `infra/env/.env` — loaded by `dev-stack.sh start`; contains DB, Redis, Upstox, LLM, broker credentials
+- `infra/env/.env` — loaded by `dev-stack.sh start`; contains DB, Upstox, LLM, broker credentials
 - Spring Boot does NOT auto-load `.env`; the script sources it explicitly
 
 ## Documentation
@@ -412,6 +409,5 @@ implementation("com.fyers:sdk:1.9.0")
 - `LocalDateTime` needs custom Jackson serializer (not serializable by default)
 - Remove explicit `hibernate.dialect` — auto-detected in Hibernate 6.6+
 - Set `spring.jpa.open-in-view: false` to avoid lazy-loading warnings
-- Set `spring.data.redis.host=piworm.local` for remote Redis
 - Broker module tests have pre-existing compilation errors (Position record constructor mismatch, missing RiskControlsService class)
 - Native image build (GraalVM) not implemented

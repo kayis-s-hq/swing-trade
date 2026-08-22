@@ -116,15 +116,6 @@ jobs:
             echo "Waiting... ($i/30)"
             sleep 4
           done
-          echo "Waiting for Redis..."
-          for i in $(seq 1 15); do
-            if docker exec swing_trade_stage_redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
-              echo "Redis is healthy"
-              break
-            fi
-            echo "Waiting... ($i/15)"
-            sleep 4
-          done
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
@@ -160,8 +151,6 @@ jobs:
           DB_NAME=${{ secrets.DB_NAME }}
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-          REDIS_HOST=swing_trade_stage_redis
-          REDIS_PORT=6379
           LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}
           LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
           LLM_TIMEOUT=${{ secrets.LLM_TIMEOUT }}

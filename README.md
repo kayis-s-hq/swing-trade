@@ -39,7 +39,6 @@ core → (none)
 | Framework | Spring Boot 3.3.1 |
 | Build | Gradle 9.6.1 (Kotlin DSL, multi-module) |
 | Database | PostgreSQL 16 + TimescaleDB |
-| Cache | Redis 7 |
 | TA | TA4j 0.16 |
 | LLM | LangChain4j 0.34.0 + vLLM |
 | Frontend | Vue 3.5 + TypeScript + Tailwind CSS |
@@ -53,7 +52,7 @@ core → (none)
 ./dev-stack.sh start
 ```
 
-This runs PostgreSQL and Redis on pi-node via SSH, with the app locally on your Mac.
+This runs PostgreSQL on pi-node via SSH, with the app locally on your Mac.
 
 ### 2. Build Backend
 
@@ -84,7 +83,7 @@ API: http://localhost:8080
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/health` | GET | System health (DB/Redis/Upstox states) |
+| `/api/health` | GET | System health (DB/Upstox states) |
 | `/api/signals` | GET | Latest signals |
 | `/api/signals/{symbol}` | GET | Signal for specific stock |
 | `/api/scan` | GET | Scan stocks (`?days=30&marketCap=min`) |

@@ -26,8 +26,6 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.3")
     implementation("org.flywaydb:flyway-core:10.13.0")
     implementation("org.flywaydb:flyway-database-postgresql:10.13.0")
-    implementation("org.springframework.boot:spring-boot-starter-data-redis")
-
 // Resilience4j — circuit breaker, retry, bulkhead, time limiter
     implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
     implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
@@ -36,7 +34,6 @@ dependencies {
     implementation("io.github.resilience4j:resilience4j-timelimiter:2.2.0")
     implementation("io.github.resilience4j:resilience4j-micrometer:2.2.0")
     implementation("io.github.resilience4j:resilience4j-reactor:2.2.0")
-
     implementation("com.fyers:sdk:1.9.0")
     implementation("org.json:json:20231013")
     implementation("org.apache.commons:commons-csv:1.11.0")
