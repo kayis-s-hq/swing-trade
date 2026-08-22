@@ -6,10 +6,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
-
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +24,8 @@ public class GpuHubClient {
 
     private static final Logger logger = LoggerFactory.getLogger(GpuHubClient.class);
 
+    static final Duration LLM_READ_TIMEOUT = Duration.ofSeconds(60);
+
     private final WebClient webClient;
     private final String baseUrl;
     private final String modelName;
@@ -33,6 +37,8 @@ public class GpuHubClient {
         this.webClient = webClientBuilder
                 .defaultHeader("Content-Type", "application/json")
                 .baseUrl(baseUrl)
+                .clientConnector(new ReactorClientHttpConnector(
+                    HttpClient.create().responseTimeout(LLM_READ_TIMEOUT)))
                 .build();
         this.baseUrl = baseUrl;
         this.modelName = modelName;

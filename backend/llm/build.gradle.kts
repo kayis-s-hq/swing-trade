@@ -18,6 +18,14 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 
+    // Resilience4j — circuit breaker, retry, bulkhead, time limiter
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-retry:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-bulkhead:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-timelimiter:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-micrometer:2.2.0")
+
     implementation("commons-codec:commons-codec:1.16.0")
     implementation("org.apache.commons:commons-lang3:3.14.0")
     implementation("org.jsoup:jsoup:1.18.3")

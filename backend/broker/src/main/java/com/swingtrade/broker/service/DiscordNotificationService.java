@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
 import java.util.List;
@@ -18,6 +19,8 @@ import java.util.Map;
 public class DiscordNotificationService implements NotificationService {
 
     private static final Logger log = LoggerFactory.getLogger(DiscordNotificationService.class);
+
+    static final Duration DISCORD_TIMEOUT = Duration.ofSeconds(5);
 
     private final WebClient webClient;
     private final String webhookUrl;
@@ -33,7 +36,10 @@ public class DiscordNotificationService implements NotificationService {
         BrokerProperties.Discord discord = props.getDiscord();
         this.webhookUrl = discord.getWebhookUrl();
         this.enabled = discord.isWebhookEnabled();
-        this.webClient = WebClient.create();
+        this.webClient = WebClient.builder()
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
+                    HttpClient.create().responseTimeout(DISCORD_TIMEOUT)))
+                .build();
     }
 
     @Override

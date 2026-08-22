@@ -6,10 +6,12 @@ import com.swingtrade.domain.store.AppSettingsStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
-
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +25,8 @@ public class LlamaCppClient {
 
     private static final Logger logger = LoggerFactory.getLogger(LlamaCppClient.class);
 
+    static final Duration LLAMA_READ_TIMEOUT = Duration.ofSeconds(60);
+
     private static final String DEFAULT_BASE_URL = "http://localhost:8080/v1";
     private static final String DEFAULT_MODEL = "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf";
 
@@ -33,6 +37,8 @@ public class LlamaCppClient {
                           AppSettingsStore appSettingsStore) {
         this.webClient = webClientBuilder
                 .defaultHeader("Content-Type", "application/json")
+                .clientConnector(new ReactorClientHttpConnector(
+                    HttpClient.create().responseTimeout(LLAMA_READ_TIMEOUT)))
                 .build();
         this.appSettingsStore = appSettingsStore;
     }
