@@ -18,12 +18,13 @@ interface TradingConfig {
 }
 
 interface LlmSettings {
-  llmBackend: 'local' | 'pi_ssh' | 'gpuhub'
+  llmBackend: 'local' | 'pi_ssh' | 'openai' | 'mlx'
   llmBaseUrl: string
   openaiBaseUrl: string
   openaiModel: string
   openaiApiKey: string
   llamacppModel: string
+  mlxModel: string
   pdfBaseUrl: string
   pdfModel: string
 }
@@ -56,6 +57,7 @@ const defaults: SettingsState = {
     openaiModel: 'gpt-4o',
     openaiApiKey: '',
     llamacppModel: '/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf',
+    mlxModel: 'Qwen/Qwen2.5-3B-Instruct',
     pdfBaseUrl: '',
     pdfModel: 'gemma-4-E2B',
   },
@@ -84,12 +86,13 @@ async function loadAll(): Promise<SettingsState> {
     if (llmRes.success && llmRes.data) {
       Object.assign(state.llmSettings, {
         llmBackend:
-          (llmRes.data['llm.backend'] as 'local' | 'pi_ssh' | 'gpuhub') ||
+          (llmRes.data['llm.backend'] as 'local' | 'pi_ssh' | 'openai' | 'mlx') ||
           state.llmSettings.llmBackend,
         llmBaseUrl: llmRes.data['llm.base_url'] || state.llmSettings.llmBaseUrl,
         openaiBaseUrl: llmRes.data['openai.base_url'] || state.llmSettings.openaiBaseUrl,
         openaiModel: llmRes.data['openai.model'] || state.llmSettings.openaiModel,
         llamacppModel: llmRes.data['llamacpp.model'] || state.llmSettings.llamacppModel,
+        mlxModel: llmRes.data['mlx.model'] || state.llmSettings.mlxModel,
         pdfBaseUrl: llmRes.data['llm.pdf.base_url'] || state.llmSettings.pdfBaseUrl,
         pdfModel: llmRes.data['llm.pdf.model'] || state.llmSettings.pdfModel,
       })
@@ -143,6 +146,7 @@ export async function saveSettings(): Promise<boolean> {
       'openai.model': state.llmSettings.openaiModel,
       'openai.api_key': state.llmSettings.openaiApiKey,
       'llamacpp.model': state.llmSettings.llamacppModel,
+      'mlx.model': state.llmSettings.mlxModel,
       'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
       'llm.pdf.model': state.llmSettings.pdfModel,
     },
@@ -176,6 +180,7 @@ export async function saveLlmSettings(): Promise<boolean> {
     'openai.model': state.llmSettings.openaiModel,
     'openai.api_key': state.llmSettings.openaiApiKey,
     'llamacpp.model': state.llmSettings.llamacppModel,
+    'mlx.model': state.llmSettings.mlxModel,
     'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
     'llm.pdf.model': state.llmSettings.pdfModel,
   }

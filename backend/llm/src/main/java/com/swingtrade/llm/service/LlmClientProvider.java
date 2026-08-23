@@ -19,15 +19,18 @@ public class LlmClientProvider {
     private final OpenAiChatModel localModel;
     private final OpenAiChatModel piSshModel;
     private final OpenAiChatModel openAiModel;
+    private final OpenAiChatModel mlxModel;
 
     public LlmClientProvider(LlmBackendSelector selector,
                              @Qualifier("localChatModel") OpenAiChatModel localModel,
                              @Qualifier("piSshChatModel") OpenAiChatModel piSshModel,
-                             @Qualifier("openAiChatModel") OpenAiChatModel openAiModel) {
+                             @Qualifier("openAiChatModel") OpenAiChatModel openAiModel,
+                             @Qualifier("mlxChatModel") OpenAiChatModel mlxModel) {
         this.selector = selector;
         this.localModel = localModel;
         this.piSshModel = piSshModel;
         this.openAiModel = openAiModel;
+        this.mlxModel = mlxModel;
     }
 
     /**
@@ -39,6 +42,7 @@ public class LlmClientProvider {
             case LOCAL -> localModel;
             case PI_SSH -> piSshModel;
             case OPENAI -> openAiModel;
+            case MLX -> mlxModel;
         };
         ChatClient chatClient = ChatClient.create(model);
         return new SpringAiLlmClient(chatClient, false);

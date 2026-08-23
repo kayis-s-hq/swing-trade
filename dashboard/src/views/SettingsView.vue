@@ -233,10 +233,17 @@
                 <span class="text-text-secondary">Port:</span> 8089
               </div>
               <div
-                v-else-if="llmSettings.llmBackend === 'gpuhub'"
+                v-else-if="llmSettings.llmBackend === 'openai'"
                 class="rounded-md bg-bg-primary p-3"
               >
                 External OpenAI-compatible LLM endpoint. No server management needed.
+              </div>
+              <div
+                v-else-if="llmSettings.llmBackend === 'mlx'"
+                class="rounded-md bg-bg-primary p-3"
+              >
+                Apple MLX server on local Mac (192.168.1.50). Java starts/stops via Python.
+                <span class="text-text-secondary">Port:</span> 8081
               </div>
             </div>
           </div>
@@ -356,7 +363,7 @@
           </div>
 
           <!-- OpenAI-compatible LLM (Super Analysis) -->
-          <div v-show="llmSettings.llmBackend === 'gpuhub'" class="space-y-4 mb-6">
+          <div v-show="llmSettings.llmBackend === 'openai'" class="space-y-4 mb-6">
             <h3 class="text-sm font-medium text-text-secondary">OpenAI-compatible LLM</h3>
             <div class="flex gap-2">
               <input
@@ -404,6 +411,85 @@
               :class="openaiTestSuccess ? 'text-success' : 'text-danger'"
             >
               {{ openaiTestResult }}
+            </div>
+          </div>
+
+          <!-- MLX LLM -->
+          <div v-show="llmSettings.llmBackend === 'mlx'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">MLX Server (Apple Silicon)</h3>
+            <p class="text-xs text-text-muted">
+              mlx_lm.server on Mac (192.168.1.50). Java starts/stops it via Python on port 8081.
+            </p>
+            <div class="flex gap-2">
+              <select
+                v-model="llmSettings.mlxModel"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
+              >
+                <option value="Qwen/Qwen2.5-3B-Instruct">Qwen2.5-3B-Instruct (fast, default)</option>
+                <option value="Qwen/Qwen2.5-7B-Instruct">Qwen2.5-7B-Instruct (larger, slower)</option>
+                <option value="meta-llama/Llama-3.2-3B-Instruct">Llama-3.2-3B-Instruct</option>
+                <option value="mistralai/Mistral-7B-Instruct-v0.3">Mistral-7B-Instruct-v0.3</option>
+              </select>
+              <span class="self-center text-xs text-text-muted">Model</span>
+            </div>
+            <p class="text-xs text-text-muted">
+              Model name on the MLX server. Switching models requires restarting the server.
+            </p>
+            <!-- Server lifecycle -->
+            <div class="flex items-center gap-3 pt-2">
+              <div class="flex items-center gap-2">
+                <span
+                  class="h-2.5 w-2.5 rounded-full"
+                  :class="mlxServerRunning ? 'bg-success' : 'bg-danger'"
+                />
+                <span class="text-xs" :class="mlxServerRunning ? 'text-success' : 'text-text-muted'">
+                  {{ mlxServerRunning ? 'Running' : 'Stopped' }}
+                </span>
+              </div>
+              <span v-if="mlxServerStatusMsg" class="text-xs text-text-muted">{{
+                mlxServerStatusMsg
+              }}</span>
+            </div>
+            <div class="flex gap-2 pt-1">
+              <button
+                v-if="!mlxServerRunning"
+                :disabled="mlxLoading"
+                class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
+                @click="handleMlxStart"
+              >
+                {{ mlxLoading ? 'Starting...' : 'Start Server' }}
+              </button>
+              <button
+                v-else
+                :disabled="mlxLoading"
+                class="rounded-md border border-danger/30 bg-danger-bg px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
+                @click="handleMlxStop"
+              >
+                {{ mlxLoading ? 'Stopping...' : 'Stop Server' }}
+              </button>
+              <button
+                :disabled="mlxLoading"
+                class="rounded-md border border-border-subtle px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary disabled:opacity-50"
+                @click="refreshMlxStatus"
+              >
+                Refresh
+              </button>
+            </div>
+            <div class="flex gap-2 pt-1">
+              <button
+                :disabled="mlxTesting"
+                class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
+                @click="testMlxConnection"
+              >
+                {{ mlxTesting ? 'Testing...' : 'Test Inference' }}
+              </button>
+              <span
+                v-if="mlxTestResult"
+                class="text-xs"
+                :class="mlxTestSuccess ? 'text-success' : 'text-danger'"
+              >
+                {{ mlxTestResult }}
+              </span>
             </div>
           </div>
 
@@ -590,6 +676,10 @@ import {
   startPiServer as apiStartPiServer,
   stopPiServer as apiStopPiServer,
   getPiServerStatus as apiGetPiServerStatus,
+  startMlxServer as apiStartMlxServer,
+  stopMlxServer as apiStopMlxServer,
+  getMlxServerStatus as apiGetMlxServerStatus,
+  testMlxConnection as apiTestMlxConnection,
 } from '../api/client'
 import type { FyersStatus, HealthStatus } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -618,6 +708,12 @@ const testingPdf = ref(false)
 const testingDiscord = ref(false)
 const testingPi = ref(false)
 const testingOpenai = ref(false)
+const mlxTesting = ref(false)
+const mlxLoading = ref(false)
+const mlxServerRunning = ref(false)
+const mlxServerStatusMsg = ref('')
+const mlxTestResult = ref('')
+const mlxTestSuccess = ref(false)
 const piTestResult = ref('')
 const piTestSuccess = ref(false)
 const piServerRunning = ref(false)
@@ -642,7 +738,8 @@ const brokers = [
 const llmBackends = [
   { value: 'local' as const, label: 'Local' },
   { value: 'pi_ssh' as const, label: 'Pi SSH' },
-  { value: 'gpuhub' as const, label: 'OpenAI' },
+  { value: 'openai' as const, label: 'OpenAI' },
+  { value: 'mlx' as const, label: 'MLX' },
 ]
 
 const healthColor = (status: string) => {
@@ -1011,6 +1108,119 @@ const testOpenAiConnection = async () => {
   }
 }
 
+const refreshMlxStatus = async () => {
+  try {
+    const res = await apiGetMlxServerStatus()
+    if (res.success && res.data) {
+      mlxServerRunning.value = res.data.running ?? false
+      mlxServerStatusMsg.value = res.data.message ?? ''
+    }
+  } catch {
+    // ignore
+  }
+}
+
+const handleMlxStart = async () => {
+  mlxLoading.value = true
+  try {
+    const res = await apiStartMlxServer()
+    if (res.success && res.data) {
+      mlxServerRunning.value = res.data.running ?? false
+      mlxServerStatusMsg.value = res.data.message ?? ''
+      toastMessage.value = res.data.message ?? ''
+      toastType.value = res.data.success ? 'success' : 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    }
+  } catch (err: unknown) {
+    toastMessage.value = err instanceof Error ? err.message : 'Failed to start MLX server'
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
+  } finally {
+    mlxLoading.value = false
+  }
+}
+
+const handleMlxStop = async () => {
+  mlxLoading.value = true
+  try {
+    const res = await apiStopMlxServer()
+    if (res.success && res.data) {
+      mlxServerRunning.value = res.data.running ?? false
+      mlxServerStatusMsg.value = res.data.message ?? ''
+      toastMessage.value = res.data.message ?? ''
+      toastType.value = res.data.success ? 'success' : 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    }
+  } catch (err: unknown) {
+    toastMessage.value = err instanceof Error ? err.message : 'Failed to stop MLX server'
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
+  } finally {
+    mlxLoading.value = false
+  }
+}
+
+const testMlxConnection = async () => {
+  mlxTesting.value = true
+  mlxTestResult.value = ''
+  mlxTestSuccess.value = false
+  try {
+    const res = await apiTestMlxConnection()
+    if (res.success && res.data) {
+      mlxTestResult.value = res.data.message ?? (res.data.success ? 'Connected!' : 'Failed to start')
+      mlxTestSuccess.value = res.data.success
+      if (res.data.success) {
+        toastMessage.value = 'MLX connection successful — server started and responded to inference'
+        toastType.value = 'success'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+        refreshMlxStatus()
+      } else {
+        toastMessage.value = 'MLX connected but server failed to start'
+        toastType.value = 'warning'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+      }
+    } else {
+      mlxTestResult.value = res.error ?? 'Test failed'
+      mlxTestSuccess.value = false
+      toastMessage.value = mlxTestResult.value
+      toastType.value = 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    }
+  } catch (err: unknown) {
+    mlxTestResult.value = err instanceof Error ? err.message : 'Network error'
+    mlxTestSuccess.value = false
+    toastMessage.value = mlxTestResult.value
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
+  } finally {
+    mlxTesting.value = false
+  }
+}
+
 const handleMessage = (event: MessageEvent) => {
   if (event.data?.type === 'fyers_auth_success') {
     authResultBanner.value = 'success'
@@ -1042,6 +1252,7 @@ onMounted(async () => {
   refreshFyersStatus()
   refreshHealth()
   refreshPiStatus()
+  refreshMlxStatus()
   await loadSettings()
   window.addEventListener('message', handleMessage)
 })

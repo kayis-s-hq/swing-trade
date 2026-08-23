@@ -27,7 +27,7 @@ import java.util.concurrent.Executors;
 
 /**
  * Configuration class for LLM module.
- * Provides three OpenAiChatModel beans (local, pi_ssh, openai),
+ * Provides four OpenAiChatModel beans (local, pi_ssh, openai, mlx),
  * a default ChatClient/SpringAiLlmClient, and a news executor.
  * Reads base URLs from AppSettingsStore (DB) so the settings UI controls endpoints.
  */
@@ -75,6 +75,14 @@ public class LlmConfig {
                 "https://api.openai.com", "openai.model", "gpt-4o", apiKey);
     }
 
+    @Bean
+    public OpenAiChatModel mlxChatModel(
+            AppSettingsStore appSettingsStore,
+            @Value("${spring.ai.openai.api-key:none}") String apiKey) {
+        return createChatModel(appSettingsStore, "mlx.server.url",
+                "http://192.168.1.50:8081", "mlx.model", "Qwen/Qwen2.5-3B-Instruct", apiKey);
+    }
+
     private OpenAiChatModel createChatModel(AppSettingsStore settings, String urlKey,
                                             String defaultUrl, String modelKey,
                                             String defaultModel, String apiKey) {
@@ -108,9 +116,6 @@ public class LlmConfig {
 
     private String resolveApiKey(AppSettingsStore settings, String springDefault) {
         String key = settings.get("openai.api_key").orElse(springDefault);
-        if ("none".equals(key) || key.isBlank()) {
-            key = settings.get("gpuhub.api_key").orElse(key);
-        }
         if ("none".equals(key) || key.isBlank()) {
             return "";
         }

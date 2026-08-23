@@ -75,16 +75,16 @@ export async function testOpenAiConnection(): Promise<
   return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
 }
 
-export async function getGpuHubSettings(): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/gpuhub')
+export async function getOpenAiSettings(): Promise<ApiResponse<Record<string, string>>> {
+  const raw = await rawFetch('/settings/openai')
   if (!raw.ok) return errResponse(raw.error!)
   return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
-export async function setGpuHubSettings(
+export async function setOpenAiSettings(
   settings: Record<string, string>
 ): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/gpuhub', {
+  const raw = await rawFetch('/settings/openai', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
@@ -124,6 +124,47 @@ export async function getPiServerStatus(): Promise<
     success: true,
     data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
   }
+}
+
+export async function startMlxServer(): Promise<
+  ApiResponse<{ success: boolean; running: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/mlx/start', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return {
+    success: true,
+    data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
+  }
+}
+
+export async function stopMlxServer(): Promise<
+  ApiResponse<{ success: boolean; running: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/mlx/stop', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return {
+    success: true,
+    data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
+  }
+}
+
+export async function getMlxServerStatus(): Promise<
+  ApiResponse<{ success: boolean; running: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/mlx/status')
+  if (!raw.ok) return errResponse(raw.error!)
+  return {
+    success: true,
+    data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
+  }
+}
+
+export async function testMlxConnection(): Promise<
+  ApiResponse<{ success: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/test/mlx', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
 }
 
 export async function getTradingSettings(): Promise<ApiResponse<Record<string, string>>> {
