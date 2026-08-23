@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
+import jakarta.persistence.Version;
 
 import java.time.LocalDateTime;
 
@@ -20,6 +21,9 @@ public class WatchlistEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    protected Integer version = 0;
 
     @Column(nullable = false, length = 10)
     private String symbol;

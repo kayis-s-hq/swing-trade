@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -28,6 +29,9 @@ public class TradeEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    protected Integer version = 0;
 
     @Column(name = "position_id", nullable = false)
     private Long positionId;

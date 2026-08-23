@@ -2,6 +2,7 @@ package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.PositionManager;
+import com.swingtrade.broker.util.OptimisticLockRetryHelper;
 import com.swingtrade.data.entity.DailyLossCircuitBreakerStateEntity;
 import com.swingtrade.data.repository.DailyLossCircuitBreakerStateRepository;
 import com.swingtrade.domain.Position;
@@ -227,21 +228,27 @@ public class DailyLossCircuitBreaker {
 
     private void persistState() {
         if (stateRepository == null) return;
-        stateRepository.findFirstByOrderByUpdatedAtDesc().ifPresentOrElse(entity -> {
-            entity.setCircuitOpen(isCircuitOpen);
-            entity.setCircuitOpenedAt(circuitOpenTime);
-            entity.setLossAtOpen(lossAtCircuitOpen);
-            entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now() : dailyPnLTracker.keySet().iterator().next());
-            entity.setUpdatedAt(LocalDateTime.now());
-            stateRepository.save(entity);
-        }, () -> {
-            DailyLossCircuitBreakerStateEntity entity = new DailyLossCircuitBreakerStateEntity();
-            entity.setCircuitOpen(isCircuitOpen);
-            entity.setCircuitOpenedAt(circuitOpenTime);
-            entity.setLossAtOpen(lossAtCircuitOpen);
-            entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now() : dailyPnLTracker.keySet().iterator().next());
-            stateRepository.save(entity);
-        });
+        try {
+            OptimisticLockRetryHelper.execute(() -> {
+                stateRepository.findFirstByOrderByUpdatedAtDesc().ifPresentOrElse(entity -> {
+                    entity.setCircuitOpen(isCircuitOpen);
+                    entity.setCircuitOpenedAt(circuitOpenTime);
+                    entity.setLossAtOpen(lossAtCircuitOpen);
+                    entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now() : dailyPnLTracker.keySet().iterator().next());
+                    entity.setUpdatedAt(LocalDateTime.now());
+                    stateRepository.save(entity);
+                }, () -> {
+                    DailyLossCircuitBreakerStateEntity entity = new DailyLossCircuitBreakerStateEntity();
+                    entity.setCircuitOpen(isCircuitOpen);
+                    entity.setCircuitOpenedAt(circuitOpenTime);
+                    entity.setLossAtOpen(lossAtCircuitOpen);
+                    entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now() : dailyPnLTracker.keySet().iterator().next());
+                    stateRepository.save(entity);
+                });
+            }, "DailyLossCircuitBreakerStateEntity");
+        } catch (Exception e) {
+            logger.error("Failed to persist circuit breaker state: {}", e.getMessage());
+        }
     }
 
     private void resetDailyTracker() {
