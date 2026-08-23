@@ -43,7 +43,7 @@ import java.util.Properties;
     },
     excludeName = "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration"
 )
-@ComponentScan(basePackages = {"com.swingtrade.llm", "com.swingtrade.data"})
+@ComponentScan(basePackages = {"com.swingtrade.llm", "com.swingtrade.data", "com.swingtrade.core.metrics"})
 @EnableJpaRepositories(basePackages = "com.swingtrade.data.repository")
 public class TestLlmConfig {
 
@@ -181,7 +181,9 @@ public class TestLlmConfig {
             NewsIngestionService newsIngestionService,
             SentimentStore sentimentStore,
             StockStore stockStore,
-            AppSettingsStore appSettingsStore) {
+            AppSettingsStore appSettingsStore,
+            com.swingtrade.core.metrics.LlmMetrics llmMetrics,
+            com.swingtrade.core.metrics.SentimentMetrics sentimentMetrics) {
         return new SentimentService(
                 clientProvider,
                 serverManagerProvider,
@@ -191,6 +193,8 @@ public class TestLlmConfig {
                 sentimentStore,
                 stockStore,
                 appSettingsStore,
+                llmMetrics,
+                sentimentMetrics,
                 0.75
         );
     }

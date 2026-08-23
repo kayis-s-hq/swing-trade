@@ -48,7 +48,7 @@ class PriceActionSignalEngineTest {
 
     @BeforeEach
     void setUp() {
-        engine = new PriceActionSignalEngine(candleStore);
+        engine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class));
     }
 
     @Nested

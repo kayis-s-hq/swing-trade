@@ -24,7 +24,7 @@ public class MarketDataClientConfig {
             @Qualifier("yahoo") CircuitBreaker circuitBreaker,
             @Qualifier("yahoo") Bulkhead bulkhead,
             @Qualifier("yahoo") TimeLimiter timeLimiter) {
-        return new YahooFinanceClient(baseUrl, new com.fasterxml.jackson.databind.ObjectMapper(),
+        return new YahooFinanceClient(baseUrl, new tools.jackson.databind.ObjectMapper(),
             java.time.Clock.systemUTC(), circuitBreaker, bulkhead, timeLimiter);
     }
 

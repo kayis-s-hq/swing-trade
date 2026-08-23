@@ -34,7 +34,8 @@ class PaperTradingServiceImplTest {
         props.setInitialBalance(initialCapital);
         props.setMaxCapitalPerPosition(new BigDecimal("20"));
         OrderManager om = new OrderManager();
-        PaperTradingEngine pe = new PaperTradingEngine(om, new PositionManager(props), props);
+        PaperTradingEngine pe = new PaperTradingEngine(om, new PositionManager(props), props,
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class));
         return new EnginePair(pe, om);
     }
 

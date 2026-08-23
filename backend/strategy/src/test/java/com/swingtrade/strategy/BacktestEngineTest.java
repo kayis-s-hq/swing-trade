@@ -40,7 +40,7 @@ class BacktestEngineTest {
 
     @BeforeEach
     void setUp() {
-        PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
+        PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class));
         engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
             new ObjectMapper(), "target/test-reports");
     }

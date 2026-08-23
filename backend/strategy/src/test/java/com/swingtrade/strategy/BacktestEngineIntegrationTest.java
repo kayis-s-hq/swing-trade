@@ -38,7 +38,7 @@ class BacktestEngineIntegration {
         void setUp() {
             candleStore = new InMemoryCandleStore();
             watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
-            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
+            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class));
             engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
                 new tools.jackson.databind.ObjectMapper(), tempDir.toString());
         }
@@ -71,7 +71,7 @@ class BacktestEngineIntegration {
         void setUp() {
             candleStore = new InMemoryCandleStore();
             watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
-            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
+            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class));
             engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
                 new tools.jackson.databind.ObjectMapper(), tempDir.toString());
         }
@@ -99,7 +99,7 @@ class BacktestEngineIntegration {
         void setUp() {
             candleStore = new InMemoryCandleStore();
             watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
-            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
+            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class));
             engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
                 new tools.jackson.databind.ObjectMapper(), tempDir.toString());
         }

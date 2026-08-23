@@ -51,9 +51,14 @@ public class FyersAuthService {
 
     @Autowired
     public FyersAuthService(FyersConfig fyersConfig, WebClient.Builder webClientBuilder) {
+        this(fyersConfig, webClientBuilder, BASE_URL);
+    }
+
+    // Package-private constructor for testing with a custom base URL (MockWebServer)
+    FyersAuthService(FyersConfig fyersConfig, WebClient.Builder webClientBuilder, String baseUrl) {
         this.fyersConfig = fyersConfig;
-        this.webClient = WebClient.builder()
-                .baseUrl(BASE_URL)
+        this.webClient = webClientBuilder
+                .baseUrl(baseUrl)
                 .defaultHeader("Content-Type", "application/json")
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
                     HttpClient.create().responseTimeout(READ_TIMEOUT)))

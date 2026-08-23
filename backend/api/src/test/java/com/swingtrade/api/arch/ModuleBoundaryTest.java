@@ -5,9 +5,9 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.ArchRule;
 import org.junit.jupiter.api.Test;
 
-import static com.tngtech.archunit.core.domain.JavaClasses.ofClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
  * ArchUnit tests enforcing module boundary rules.
@@ -24,12 +24,13 @@ class ModuleBoundaryTest {
     @Test
     void noCircularDependencies() {
         slices().matching("com.swingtrade.[[fin*]]")
-            .check(ofClasses(CLASSES), slice -> slice.shouldNotCircularlyDependOn(slice));
+            .should().beFreeOfCycles()
+            .check(CLASSES);
     }
 
     @Test
     void apiShouldNotImportConcreteBrokerClasses() {
-        ArchRule rule = classes()
+        ArchRule onlyAllowedPackages = classes()
             .that().resideInAnyPackage("..api..")
             .should().onlyDependOnClassesThat().resideInAnyPackage(
                 "..core..",
@@ -39,8 +40,12 @@ class ModuleBoundaryTest {
                 "..broker.risk..",
                 "..data..",
                 "..strategy..",
-                "..llm..")
-            .andShould().not().dependOnClassesThat().haveSimpleNameStartingWith("PaperTrading");
-        rule.check(CLASSES);
+                "..llm..");
+        onlyAllowedPackages.check(CLASSES);
+
+        ArchRule noPaperTradingDependency = noClasses()
+            .that().resideInAnyPackage("..api..")
+            .should().dependOnClassesThat().haveSimpleNameStartingWith("PaperTrading");
+        noPaperTradingDependency.check(CLASSES);
     }
 }
