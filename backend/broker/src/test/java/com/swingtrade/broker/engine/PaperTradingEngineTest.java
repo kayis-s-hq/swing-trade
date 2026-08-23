@@ -261,12 +261,8 @@ class PaperTradingEngineTest {
         void validatePositionCapacity_zeroCapital() {
             // Given: Zero portfolio capital
             testProperties.setInitialBalance(BigDecimal.ZERO);
-<<<<<<< HEAD
-            engine = new PaperTradingEngine(orderManager, positionManager, testProperties, null, null);
-=======
             engine = new PaperTradingEngine(orderManager, positionManager, testProperties,
                 org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class));
->>>>>>> pr-93
             when(positionManager.hasReachedPositionLimit()).thenReturn(false);
 
             // When
@@ -281,12 +277,8 @@ class PaperTradingEngineTest {
             // Given: Small capital, large position, tight max capital per position
             when(positionManager.hasReachedPositionLimit()).thenReturn(false);
             testProperties.setMaxCapitalPerPosition(new BigDecimal("100"));
-<<<<<<< HEAD
-            engine = new PaperTradingEngine(orderManager, positionManager, testProperties, null, null);
-=======
             engine = new PaperTradingEngine(orderManager, positionManager, testProperties,
                 org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class));
->>>>>>> pr-93
 
             // When: 100 * 100 = 10000, ratio = 0.0133
             // maxCapitalPerPositionDiv100 = 100/100 = 1, 0.0133 > 1 => false, passes
@@ -788,12 +780,8 @@ class PaperTradingEngineTest {
         void returnPercentage_zeroCapital() {
             // Given: Zero initial capital (override properties)
             testProperties.setInitialBalance(BigDecimal.ZERO);
-<<<<<<< HEAD
-            engine = new PaperTradingEngine(orderManager, positionManager, testProperties, null, null);
-=======
             engine = new PaperTradingEngine(orderManager, positionManager, testProperties,
                 org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class));
->>>>>>> pr-93
 
             // When
             BigDecimal pct = engine.getReturnPercentage();
