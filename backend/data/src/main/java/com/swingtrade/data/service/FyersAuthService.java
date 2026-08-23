@@ -1,8 +1,8 @@
 package com.swingtrade.data.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.data.config.FyersConfig;
 import com.tts.in.utilities.Utility;
 import jakarta.annotation.PostConstruct;
@@ -264,7 +264,7 @@ public class FyersAuthService {
                 "stored_at", java.time.Instant.now().toString()
             ));
             logger.debug("Persisted Fyers tokens to {}", path);
-        } catch (java.io.IOException e) {
+        } catch (Exception e) {
             logger.warn("Failed to persist Fyers tokens to {}: {}", path, e.getMessage());
         }
     }
@@ -291,7 +291,7 @@ public class FyersAuthService {
                 fyersConfig.setRefreshToken(refresh);
             }
             if (access != null) logger.info("Loaded Fyers tokens from file {}", path);
-        } catch (java.io.IOException e) {
+        } catch (Exception e) {
             logger.warn("Failed to load Fyers tokens from {}: {}", path, e.getMessage());
         }
     }

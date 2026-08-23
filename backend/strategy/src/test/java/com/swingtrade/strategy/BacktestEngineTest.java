@@ -1,6 +1,6 @@
 package com.swingtrade.strategy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.WatchlistStore;

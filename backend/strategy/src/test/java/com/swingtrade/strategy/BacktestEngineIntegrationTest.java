@@ -40,7 +40,7 @@ class BacktestEngineIntegration {
             watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
             PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
             engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
-                new com.fasterxml.jackson.databind.ObjectMapper(), tempDir.toString());
+                new tools.jackson.databind.ObjectMapper(), tempDir.toString());
         }
 
         @Test
@@ -73,7 +73,7 @@ class BacktestEngineIntegration {
             watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
             PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
             engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
-                new com.fasterxml.jackson.databind.ObjectMapper(), tempDir.toString());
+                new tools.jackson.databind.ObjectMapper(), tempDir.toString());
         }
 
         @Test
@@ -101,7 +101,7 @@ class BacktestEngineIntegration {
             watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
             PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
             engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
-                new com.fasterxml.jackson.databind.ObjectMapper(), tempDir.toString());
+                new tools.jackson.databind.ObjectMapper(), tempDir.toString());
         }
 
         @Test

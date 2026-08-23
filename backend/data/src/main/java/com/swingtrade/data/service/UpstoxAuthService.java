@@ -1,6 +1,6 @@
 package com.swingtrade.data.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.data.config.UpstoxConfig;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -17,7 +17,6 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -153,7 +152,7 @@ public class UpstoxAuthService {
                 "stored_at", java.time.Instant.now().toString()
             ));
             logger.debug("Persisted access token to {}", path);
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.warn("Failed to persist token to {}: {}", path, e.getMessage());
         }
     }
@@ -165,13 +164,13 @@ public class UpstoxAuthService {
         if (!file.exists()) return;
         try {
             Map<String, Object> data = objectMapper.readValue(file,
-                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                new tools.jackson.core.type.TypeReference<Map<String, Object>>() {});
             String token = (String) data.get("access_token");
             if (token != null && !token.isEmpty()) {
                 this.cachedAccessToken.set(token);
                 logger.info("Loaded access token from file {}", path);
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.warn("Failed to load token from {}: {}", path, e.getMessage());
         }
     }

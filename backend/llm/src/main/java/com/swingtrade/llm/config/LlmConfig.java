@@ -3,24 +3,13 @@ package com.swingtrade.llm.config;
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.llm.client.SpringAiLlmClient;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration;
-import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration;
-import org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration;
-import org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration;
-import org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration;
-import org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,16 +19,10 @@ import java.util.concurrent.Executors;
  * Provides three OpenAiChatModel beans (local, pi_ssh, openai),
  * a default ChatClient/SpringAiLlmClient, and a news executor.
  * Reads base URLs from AppSettingsStore (DB) so the settings UI controls endpoints.
+ *
+ * Spring AI 2.0.1 — uses official openai-java SDK with OkHttp transport.
  */
 @Configuration
-@EnableAutoConfiguration(exclude = {
-    OpenAiAudioSpeechAutoConfiguration.class,
-    OpenAiAudioTranscriptionAutoConfiguration.class,
-    OpenAiChatAutoConfiguration.class,
-    OpenAiEmbeddingAutoConfiguration.class,
-    OpenAiImageAutoConfiguration.class,
-    OpenAiModerationAutoConfiguration.class
-})
 public class LlmConfig {
 
     @Bean
@@ -84,25 +67,15 @@ public class LlmConfig {
         String model = settings.get(modelKey).orElse(defaultModel);
         String key = resolveApiKey(settings, apiKey);
 
-        // Use RestClient with SimpleClientHttpRequestFactory (JDK HttpURLConnection)
-        // to avoid Spring's JettyClientHttpRequestFactory which requires Jetty 11 API
-        RestClient.Builder rcBuilder = RestClient.builder()
-            .requestFactory(new SimpleClientHttpRequestFactory());
-
-        OpenAiApi openAiApi = OpenAiApi.builder()
-            .baseUrl(baseUrl)
-            .apiKey(key)
-            .restClientBuilder(rcBuilder)
-            .build();
-
         OpenAiChatOptions options = OpenAiChatOptions.builder()
             .model(model)
+            .baseUrl(baseUrl)
+            .apiKey(key)
             .temperature(0.2)
             .build();
 
         return OpenAiChatModel.builder()
-            .openAiApi(openAiApi)
-            .defaultOptions(options)
+            .options(options)
             .build();
     }
 

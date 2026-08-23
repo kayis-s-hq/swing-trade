@@ -127,7 +127,7 @@ public class SynthesisService {
         }
 
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();
             LlmResponseDTO dto = mapper.readValue(json, LlmResponseDTO.class);
             return new SynthesisResult(
                 dto.getNarrative(), dto.getRecommendation(), dto.getConfidence(),

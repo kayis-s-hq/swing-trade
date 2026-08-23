@@ -1,6 +1,6 @@
 package com.swingtrade.api.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.api.app.SwingTradeApiApplication;
 import com.swingtrade.api.dto.PositionResponse;
 import com.swingtrade.api.dto.TradeRequest;
@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @Disabled("Fails to boot: no Postgres reachable at localhost:5432 in this environment and this "
     + "class never starts a Testcontainer (only ApiIntegrationTest subclasses do). Needs "
-    + "conversion to @WebMvcTest + @MockBean services - see plan at "
+    + "conversion to @WebMvcTest + @MockitoBean services - see plan at "
     + "~/.claude/plans/task-notification-task-id-b53i523h8-tas-snoopy-quail.md. Revisit later.")
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)

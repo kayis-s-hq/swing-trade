@@ -204,7 +204,7 @@ public class SpringAiLlmClient implements LlmClient {
 
     private boolean isValidJson(String text) {
         try {
-            new com.fasterxml.jackson.databind.ObjectMapper().readTree(text);
+            new tools.jackson.databind.ObjectMapper().readTree(text);
             return true;
         } catch (Exception e) {
             return false;

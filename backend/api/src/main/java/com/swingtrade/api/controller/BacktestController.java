@@ -1,7 +1,7 @@
 package com.swingtrade.api.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestReportSummary;
@@ -159,7 +159,7 @@ public class BacktestController {
         try {
             JsonNode report = objectMapper.readTree(filePath.toFile());
             return ResponseEntity.ok(report);
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.error("Failed to read backtest report {}: {}", filename, e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }

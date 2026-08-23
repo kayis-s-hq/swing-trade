@@ -1,9 +1,9 @@
 package com.swingtrade.gpuhub.client;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.gpuhub.dto.ContainerInfo;
 import com.swingtrade.gpuhub.dto.CreateDeploymentRequest;
 import com.swingtrade.gpuhub.dto.CreateDeploymentResponse;
@@ -55,7 +55,7 @@ public class GpuHubDeploymentClient {
     private <T> T toValue(JsonNode node, Class<T> type) {
         try {
             return mapper.treeToValue(node, type);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new GpuHubApiException("deserialization failed: " + e.getMessage());
         }
     }

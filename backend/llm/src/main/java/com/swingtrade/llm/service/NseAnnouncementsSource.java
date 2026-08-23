@@ -147,12 +147,12 @@ public class NseAnnouncementsSource implements NewsSource {
         if (body == null || body.isBlank()) return filings;
 
         try {
-            com.fasterxml.jackson.databind.JsonNode root =
-                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(body);
-            com.fasterxml.jackson.databind.JsonNode data = root.path("data");
+            tools.jackson.databind.JsonNode root =
+                    new tools.jackson.databind.ObjectMapper().readTree(body);
+            tools.jackson.databind.JsonNode data = root.path("data");
             if (!data.isArray()) return filings;
 
-            for (com.fasterxml.jackson.databind.JsonNode item : data) {
+            for (tools.jackson.databind.JsonNode item : data) {
                 String title = item.path("scrip_name").asText(
                         item.path("company").asText(
                                 item.path("title").asText("")));

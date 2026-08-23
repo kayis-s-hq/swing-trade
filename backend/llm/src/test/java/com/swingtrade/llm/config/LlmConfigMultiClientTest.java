@@ -4,11 +4,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+import org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration;
+import org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.TestPropertySource;
@@ -25,11 +24,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * - Each reads its own base URL from settings with fallback defaults
  */
 @SpringBootTest(classes = LlmConfig.class)
-@EnableAutoConfiguration(exclude = {
-    FlywayAutoConfiguration.class,
-    HibernateJpaAutoConfiguration.class,
-    JpaRepositoriesAutoConfiguration.class
-})
+@EnableAutoConfiguration(
+    exclude = {
+        HibernateJpaAutoConfiguration.class,
+        DataJpaRepositoriesAutoConfiguration.class
+    },
+    excludeName = "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration"
+)
 @TestPropertySource(properties = {
     "llm.backend=local",
     "spring.ai.openai.base-url=",
@@ -41,7 +42,7 @@ class LlmConfigMultiClientTest {
     @Autowired
     private ApplicationContext context;
 
-    @MockBean
+    @MockitoBean
     private com.swingtrade.domain.store.AppSettingsStore appSettingsStore;
 
     @Test

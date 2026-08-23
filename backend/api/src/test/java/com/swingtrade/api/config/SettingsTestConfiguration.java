@@ -1,19 +1,52 @@
 package com.swingtrade.api.config;
 
 import com.swingtrade.api.controller.SettingsController;
+import com.swingtrade.broker.service.DiscordNotificationService;
+import com.swingtrade.data.service.AppSettingsService;
+import com.swingtrade.data.service.MarketDataClientProvider;
+import com.swingtrade.llm.service.LlamaCppServerManager;
+import com.swingtrade.llm.service.LlmBackendSelector;
+import com.swingtrade.llm.service.LlmClientProvider;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.data.jdbc.JdbcRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
-@SpringBootApplication(exclude = {
-    DataSourceAutoConfiguration.class,
-    HibernateJpaAutoConfiguration.class,
-    JpaRepositoriesAutoConfiguration.class,
-    JdbcRepositoriesAutoConfiguration.class
-})
+@SpringBootApplication
 @Import(SettingsController.class)
 public class SettingsTestConfiguration {
+
+    @Bean
+    public MarketDataClientProvider marketDataClientProvider() {
+        return org.mockito.Mockito.mock(MarketDataClientProvider.class);
+    }
+
+    @Bean
+    public AppSettingsService appSettingsService() {
+        return org.mockito.Mockito.mock(AppSettingsService.class);
+    }
+
+    @Bean
+    public DiscordNotificationService discordNotificationService() {
+        return org.mockito.Mockito.mock(DiscordNotificationService.class);
+    }
+
+    @Bean
+    public LlmBackendSelector llmBackendSelector() {
+        return org.mockito.Mockito.mock(LlmBackendSelector.class);
+    }
+
+    @Bean
+    public LlmClientProvider llmClientProvider() {
+        return org.mockito.Mockito.mock(LlmClientProvider.class);
+    }
+
+    @Bean
+    public LlamaCppServerManager localServerManager() {
+        return org.mockito.Mockito.mock(LlamaCppServerManager.class);
+    }
+
+    @Bean
+    public com.swingtrade.llm.service.PiLlamaServerManager piServerManager() {
+        return org.mockito.Mockito.mock(com.swingtrade.llm.service.PiLlamaServerManager.class);
+    }
 }

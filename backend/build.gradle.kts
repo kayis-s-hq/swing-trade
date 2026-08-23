@@ -33,29 +33,26 @@ repositories {
 }
 
 dependencyManagement {
-    imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")
-        mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
-    }
+    // Managed in subprojects — root project has no dependencies
 }
 
-// Force Jetty 11 — Spring AI 1.1.0 uses JettyClientHttpRequestFactory which expects Jetty 11 API
-// Spring Boot 3.5.9 BOM manages Jetty 12 which has breaking API changes (newRequest(URI) removed)
 subprojects {
-    configurations.all {
-        resolutionStrategy {
-            eachDependency {
-                if (requested.group == "org.eclipse.jetty") {
-                    useVersion("11.0.25")
-                    because("Spring AI 1.1.0 requires Jetty 11 API; Boot 3.5.9 BOM pulls Jetty 12")
-                }
-            }
-        }
-    }
     apply(plugin = "java")
     apply(plugin = "jacoco")
     apply(plugin = "checkstyle")
     apply(plugin = "pmd")
+    apply(plugin = "io.spring.dependency-management")
+
+    dependencyManagement {
+        imports {
+            mavenBom("org.springframework.boot:spring-boot-dependencies:4.1.1")
+            mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
+            mavenBom("tools.jackson:jackson-bom:3.1.5")
+        }
+        dependencies {
+            dependency("org.projectlombok:lombok:1.18.34")
+        }
+    }
 
     java {
         toolchain {

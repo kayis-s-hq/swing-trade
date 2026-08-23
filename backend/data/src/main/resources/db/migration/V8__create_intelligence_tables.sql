@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS sentiment_accuracy (
     sentiment_score VARCHAR(20) NOT NULL,
     actual_outcome VARCHAR(20) NOT NULL,
     was_correct BOOLEAN,
-    pnl_pct DECIMAL(10,2),
+    pnl_pct NUMERIC(10,2),
     recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
