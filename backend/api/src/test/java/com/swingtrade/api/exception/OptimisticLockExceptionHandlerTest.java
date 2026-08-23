@@ -9,9 +9,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.context.request.WebRequest;
 
-import java.time.LocalDateTime;
-
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -24,7 +23,7 @@ class OptimisticLockExceptionHandlerTest {
 
     private WebRequest mockRequest(String uri) {
         WebRequest request = mock(WebRequest.class);
-        when(request.getDescription(true)).thenReturn("uri=" + uri);
+        when(request.getDescription(anyBoolean())).thenReturn("uri=" + uri);
         return request;
     }
 
@@ -52,12 +51,9 @@ class OptimisticLockExceptionHandlerTest {
         }
 
         @Test
-        void handlesStaleObjectStateException_returns409() {
-            // Given
-            StaleObjectStateException ex = new StaleObjectStateException(
-                    "com.swingtrade.data.entity.PositionEntity",
-                    "Stale object: 'com.swingtrade.data.entity.PositionEntity'"
-            );
+        void multipleExceptionTypes_returnsConflict() {
+            // Given different optimistic lock exception message
+            OptimisticLockingFailureException ex = new OptimisticLockingFailureException("Optimistic lock failure on entity");
             WebRequest request = mockRequest("/api/trade");
 
             // When
@@ -71,12 +67,9 @@ class OptimisticLockExceptionHandlerTest {
         }
 
         @Test
-        void extractsEntityNameFromExceptionMessage() {
-            // Given
-            StaleObjectStateException ex = new StaleObjectStateException(
-                    "com.swingtrade.data.entity.PaperTradingPortfolioEntity",
-                    "Stale object: 'com.swingtrade.data.entity.PaperTradingPortfolioEntity'"
-            );
+        void handlesExceptionWithNullMessage() {
+            // Given OptimisticLockingFailureException with null message
+            OptimisticLockingFailureException ex = new OptimisticLockingFailureException(null);
             WebRequest request = mockRequest("/api/portfolio");
 
             // When

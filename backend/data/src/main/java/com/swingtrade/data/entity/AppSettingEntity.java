@@ -22,14 +22,10 @@ public class AppSettingEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-<<<<<<< HEAD
-    @Column(name = "key", nullable = false, length = 64, unique = true)
-=======
     @Version
     protected Integer version = 0;
 
     @Column(nullable = false, length = 64, unique = true)
->>>>>>> pr-92-fix
     private String key;
 
     @Column(columnDefinition = "TEXT")

@@ -27,7 +27,7 @@ class OptimisticLockRetryHelperTest {
             when(supplier.get()).thenReturn("success");
 
             // When
-            String result = OptimisticLockRetryHelper.execute(supplier, "TestEntity");
+            String result = (String) OptimisticLockRetryHelper.execute(supplier, "TestEntity");
 
             // Then
             assertThat(result).isEqualTo("success");
@@ -44,7 +44,7 @@ class OptimisticLockRetryHelperTest {
                     .thenReturn("success");
 
             // When
-            String result = OptimisticLockRetryHelper.execute(supplier, "TestEntity");
+            String result = (String) OptimisticLockRetryHelper.execute(supplier, "TestEntity");
 
             // Then
             assertThat(result).isEqualTo("success");
@@ -89,7 +89,7 @@ class OptimisticLockRetryHelperTest {
             when(supplier.get()).thenReturn(42);
 
             // When
-            Integer result = OptimisticLockRetryHelper.execute(supplier, "TestEntity");
+            Integer result = (Integer) OptimisticLockRetryHelper.execute(supplier, "TestEntity");
 
             // Then
             assertThat(result).isEqualTo(42);
@@ -117,9 +117,9 @@ class OptimisticLockRetryHelperTest {
         void succeedsOnRetry() {
             // Given
             var runnable = mock(Runnable.class);
-            when(runnable.run())
-                    .thenThrow(new OptimisticLockingFailureException("Row updated"))
-                    .thenReturn(null);
+            doThrow(new OptimisticLockingFailureException("Row updated"))
+                    .doNothing()
+                    .when(runnable).run();
 
             // When
             OptimisticLockRetryHelper.execute(runnable, "TestEntity");
@@ -132,10 +132,10 @@ class OptimisticLockRetryHelperTest {
         void exhaustsRetries_throwsRuntimeException() {
             // Given
             var runnable = mock(Runnable.class);
-            when(runnable.run())
-                    .thenThrow(new OptimisticLockingFailureException("Row updated"))
-                    .thenThrow(new OptimisticLockingFailureException("Row updated"))
-                    .thenThrow(new OptimisticLockingFailureException("Row updated"));
+            doThrow(new OptimisticLockingFailureException("Row updated"))
+                    .doThrow(new OptimisticLockingFailureException("Row updated"))
+                    .doThrow(new OptimisticLockingFailureException("Row updated"))
+                    .when(runnable).run();
 
             // When / Then
             assertThatThrownBy(() -> OptimisticLockRetryHelper.execute(runnable, "TestEntity"))
@@ -154,11 +154,11 @@ class OptimisticLockRetryHelperTest {
             // Given
             var supplier = mock(java.util.function.Supplier.class);
             when(supplier.get())
-                    .thenThrow(new org.hibernate.StaleObjectStateException("Stale object"))
+                    .thenThrow(new org.springframework.dao.OptimisticLockingFailureException("Stale object"))
                     .thenReturn("success");
 
             // When
-            String result = OptimisticLockRetryHelper.execute(supplier, "TestEntity");
+            String result = (String) OptimisticLockRetryHelper.execute(supplier, "TestEntity");
 
             // Then
             assertThat(result).isEqualTo("success");
@@ -170,9 +170,9 @@ class OptimisticLockRetryHelperTest {
             // Given
             var supplier = mock(java.util.function.Supplier.class);
             when(supplier.get())
-                    .thenThrow(new org.hibernate.StaleObjectStateException("Stale object"))
-                    .thenThrow(new org.hibernate.StaleObjectStateException("Stale object"))
-                    .thenThrow(new org.hibernate.StaleObjectStateException("Stale object"));
+                    .thenThrow(new org.springframework.dao.OptimisticLockingFailureException("Stale object"))
+                    .thenThrow(new org.springframework.dao.OptimisticLockingFailureException("Stale object"))
+                    .thenThrow(new org.springframework.dao.OptimisticLockingFailureException("Stale object"));
 
             // When / Then
             assertThatThrownBy(() -> OptimisticLockRetryHelper.execute(supplier, "TestEntity"))

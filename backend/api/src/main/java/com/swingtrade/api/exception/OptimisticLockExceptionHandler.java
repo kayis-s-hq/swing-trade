@@ -1,7 +1,6 @@
 package com.swingtrade.api.exception;
 
 import com.swingtrade.api.dto.ErrorResponse;
-import org.hibernate.StaleObjectStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -38,12 +37,9 @@ public class OptimisticLockExceptionHandler {
      * @param request the current web request
      * @return HTTP 409 Conflict with structured error response
      */
-    @ExceptionHandler({
-            OptimisticLockingFailureException.class,
-            StaleObjectStateException.class
-    })
+    @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<ErrorResponse> handleOptimisticLock(
-            Exception ex, WebRequest request) {
+            OptimisticLockingFailureException ex, WebRequest request) {
 
         String entityType = extractEntityType(ex);
 
