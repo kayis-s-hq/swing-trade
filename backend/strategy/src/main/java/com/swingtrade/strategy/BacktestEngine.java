@@ -277,7 +277,9 @@ public class BacktestEngine {
                 + (rsiInRange ? 1 : 0)
                 + (volumeSurge ? 1 : 0)
                 + (nearWeeklyHigh ? 1 : 0);
-        if (rulesPassed < 3) {
+        // All 4 entry rules must hold — mirrors PriceActionSignalEngine.analyze() so the
+        // backtest can never drift from the live signal engine's rules (docs/backtesting.md).
+        if (rulesPassed < 4) {
             return null;
         }
 

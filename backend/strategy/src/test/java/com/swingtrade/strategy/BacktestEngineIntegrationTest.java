@@ -44,9 +44,18 @@ class BacktestEngineIntegration {
         }
 
         @Test
-        @DisplayName("backtestWithRealData — produces valid trade results")
+        @DisplayName("backtestWithRealData — produces a trade when all 4 entry rules align")
         void backtestWithRealData() {
-            // Load fixture data
+            // Fixture: a 2-up/1-down zigzag uptrend (keeps RSI in the 50-65 band and price
+            // above EMA20 above EMA50 throughout) followed by a single volume+high-proximity
+            // bump day that is the only bar meeting all 4 entry rules simultaneously —
+            // close > EMA20 > EMA50, RSI(14) in [50,65], volume surge (>1.5x 20-day avg),
+            // and price within 3% of the 52-week high — per docs/backtesting.md. This is the
+            // same construction proven in BacktestEngineTest#buildEntrySetupCandles, loaded
+            // here through the real CSV-fixture path (loadFixture -> CandleStore -> engine)
+            // to exercise the full backtest pipeline end-to-end. The flat run afterward lets
+            // the resulting position exit via TIME_STOP within BacktestConfig.defaults()'s
+            // 20-day maxHoldingDays.
             List<OhlcvCandle> candles = loadFixture("real-ohlcv-single.csv");
             candles.forEach(candleStore::save);
 
@@ -56,6 +65,9 @@ class BacktestEngineIntegration {
             assertThat(result).isNotNull();
             assertThat(result.trades()).isNotEmpty();
             assertThat(result.totalTrades()).isGreaterThan(0);
+            BacktestTrade trade = result.trades().get(0);
+            assertThat(trade.exitReason()).isEqualTo(ExitReason.TIME_STOP);
+            assertThat(trade.quantity()).isPositive();
             assertThat(result.winRate()).isBetween(0.0, 100.0);
             assertThat(result.sharpeRatio()).isNotNull();
             assertThat(result.maxDrawdownPct()).isGreaterThanOrEqualTo(0.0);

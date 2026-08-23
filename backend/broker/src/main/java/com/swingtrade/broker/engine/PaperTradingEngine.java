@@ -636,7 +636,8 @@ public class PaperTradingEngine implements TradingService {
     }
 
     public BigDecimal getTotalValue() {
-        return portfolio.getTotalValue();
+        Portfolio p = getPortfolio();
+        return p != null ? p.getTotalValue() : null;
     }
 
     /**

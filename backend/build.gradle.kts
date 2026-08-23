@@ -91,7 +91,12 @@ subprojects {
         configDirectory.set(file("../config/checkstyle"))
     }
 
-    // PMD configuration (uses default rule sets; custom rules via config/pmd/)
+    // PMD configuration
+    pmd {
+        isConsoleOutput = false
+        ruleSetConfig = resources.text.fromFile(file("../config/pmd/pmd-ruleset.xml"))
+        ruleSets = listOf()
+    }
 
     // ArchUnit: enforce module boundary rules (runs as unit test)
     dependencies {
