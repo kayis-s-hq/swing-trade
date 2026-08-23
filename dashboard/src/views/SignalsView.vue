@@ -155,12 +155,6 @@
               {{ reason }}
             </p>
           </div>
-          <button
-            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand/90"
-            @click="refreshSignals"
-          >
-            Load Signals
-          </button>
         </div>
 
         <!-- Filters -->
@@ -402,6 +396,7 @@ const generateAll = async () => {
   progressTotal.value = 0
   generationSummary.value = null
   showSkipReasons.value = false
+  signals.value = []
   const allSignals: Signal[] = []
   const skipReasons: string[] = []
 
@@ -435,6 +430,7 @@ const generateAll = async () => {
     error.value = true
   } finally {
     generating.value = false
+    doRefresh()
   }
 }
 

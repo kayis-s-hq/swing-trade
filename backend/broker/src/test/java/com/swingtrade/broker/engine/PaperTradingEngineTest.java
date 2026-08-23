@@ -55,8 +55,8 @@ class PaperTradingEngineTest {
         testProperties.setMaxConcurrentPositions(5);
         testProperties.setMaxCapitalPerPosition(new BigDecimal("500000"));
 
-        engine = new PaperTradingEngine(orderManager, positionManager, testProperties);
-        engine.setStateService(stateService);
+        engine = new PaperTradingEngine(orderManager, positionManager, testProperties, null, null);
+        
     }
 
     // ==================== Signal Execution ====================
@@ -260,7 +260,7 @@ class PaperTradingEngineTest {
         void validatePositionCapacity_zeroCapital() {
             // Given: Zero portfolio capital
             testProperties.setInitialBalance(BigDecimal.ZERO);
-            engine = new PaperTradingEngine(orderManager, positionManager, testProperties);
+            engine = new PaperTradingEngine(orderManager, positionManager, testProperties, null, null);
             when(positionManager.hasReachedPositionLimit()).thenReturn(false);
 
             // When
@@ -275,7 +275,7 @@ class PaperTradingEngineTest {
             // Given: Small capital, large position, tight max capital per position
             when(positionManager.hasReachedPositionLimit()).thenReturn(false);
             testProperties.setMaxCapitalPerPosition(new BigDecimal("100"));
-            engine = new PaperTradingEngine(orderManager, positionManager, testProperties);
+            engine = new PaperTradingEngine(orderManager, positionManager, testProperties, null, null);
 
             // When: 100 * 100 = 10000, ratio = 0.0133
             // maxCapitalPerPositionDiv100 = 100/100 = 1, 0.0133 > 1 => false, passes
@@ -777,7 +777,7 @@ class PaperTradingEngineTest {
         void returnPercentage_zeroCapital() {
             // Given: Zero initial capital (override properties)
             testProperties.setInitialBalance(BigDecimal.ZERO);
-            engine = new PaperTradingEngine(orderManager, positionManager, testProperties);
+            engine = new PaperTradingEngine(orderManager, positionManager, testProperties, null, null);
 
             // When
             BigDecimal pct = engine.getReturnPercentage();

@@ -37,7 +37,7 @@ public class BrokerModuleIntegrationTest {
         props.setInitialBalance(INITIAL_CAPITAL);
         OrderManager orderManager = new OrderManager();
         PositionManager positionManager = new PositionManager(props);
-        paperTradingEngine = new PaperTradingEngine(orderManager, positionManager, props);
+        paperTradingEngine = new PaperTradingEngine(orderManager, positionManager, props, null, null);
         brokerService = new PaperTradingServiceImpl(paperTradingEngine, orderManager, null);
     }
 

@@ -29,14 +29,9 @@ public class KillSwitchService {
     private final BrokerProperties props;
     private final KillSwitchMetrics killSwitchMetrics;
 
-    public KillSwitchService(BrokerProperties props) {
-        this(null, props, null);
-    }
-
     /**
      * Constructor with JdbcTemplate for persistence.
      */
-    @Autowired
     public KillSwitchService(JdbcTemplate jdbcTemplate, BrokerProperties props, KillSwitchMetrics killSwitchMetrics) {
         this.jdbcTemplate = jdbcTemplate;
         this.props = props;

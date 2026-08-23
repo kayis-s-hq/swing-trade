@@ -111,7 +111,11 @@ export async function* generateAllSignalsStream(): AsyncIterable<SignalGeneratio
         if (trimmed.startsWith(dataPrefix)) {
           try {
             const data = JSON.parse(trimmed.slice(dataPrefix.length).trim())
-            yield { ...data, _eventType: currentEvent }
+            const progress = { ...data, _eventType: currentEvent }
+            if (progress.signal) {
+              progress.signal = mapSignal(progress.signal as BackendSignal)
+            }
+            yield progress as SignalGenerationProgress
           } catch {
             // Skip malformed JSON
           }

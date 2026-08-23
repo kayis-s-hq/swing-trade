@@ -19,7 +19,7 @@ import java.util.Locale;
  * repositories/entities under com.swingtrade.data were never being registered as beans.
  */
 @ComponentScan(
-    basePackages = {"com.swingtrade.api", "com.swingtrade.broker", "com.swingtrade.data", "com.swingtrade.strategy", "com.swingtrade.llm"}
+    basePackages = {"com.swingtrade.api", "com.swingtrade.broker", "com.swingtrade.data", "com.swingtrade.strategy", "com.swingtrade.llm", "com.swingtrade.core"}
 )
 @EnableJpaRepositories(basePackages = {
         "com.swingtrade.data.repository",
