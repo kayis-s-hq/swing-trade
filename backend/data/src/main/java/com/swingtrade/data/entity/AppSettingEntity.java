@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /**
  * JPA entity for the app_settings key/value table.
@@ -21,7 +22,14 @@ public class AppSettingEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+<<<<<<< HEAD
     @Column(name = "key", nullable = false, length = 64, unique = true)
+=======
+    @Version
+    protected Integer version = 0;
+
+    @Column(nullable = false, length = 64, unique = true)
+>>>>>>> pr-92-fix
     private String key;
 
     @Column(columnDefinition = "TEXT")

@@ -391,13 +391,11 @@ public class JobOrchestratorService {
     }
 
     private void recordCompletion(UUID runId, String symbol) {
-        // Increment completed count
-        var runOpt = jobRunRepository.findByRunId(runId);
-        runOpt.ifPresent(entity -> {
-            int completed = entity.getCompletedCount() + 1;
-            entity.setCompletedCount(completed);
-            jobRunRepository.save(entity);
-        });
+        // Atomic SQL UPDATE — avoids read-modify-write race between parallel symbols
+        int updated = jobRunRepository.incrementCompletedCount(runId);
+        if (updated == 0) {
+            logger.warn("recordCompletion: no JobRun found for runId {}", runId);
+        }
     }
 
     private void logError(UUID runId, String symbol, String prefix, Throwable ex) {

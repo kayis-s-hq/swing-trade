@@ -5,6 +5,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.hibernate.StaleObjectStateException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -92,6 +94,27 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
+     * Handle optimistic locking conflicts.
+     * Returns 409 CONFLICT when two transactions modify the same entity concurrently.
+     */
+    @ExceptionHandler({StaleObjectStateException.class, ObjectOptimisticLockingFailureException.class})
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(
+            StaleObjectStateException ex, WebRequest request) {
+
+        logger.warn("Optimistic lock conflict: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                "CONFLICT",
+                "Record was modified by another transaction. Please retry.",
+                LocalDateTime.now(),
+                request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
     /**

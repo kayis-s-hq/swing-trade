@@ -8,6 +8,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -26,6 +27,9 @@ public class JobRunStageEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    protected Integer version = 0;
 
     @Column(name = "run_id", nullable = false)
     private UUID runId;
