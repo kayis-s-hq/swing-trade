@@ -52,6 +52,8 @@ class SectorDigestTest {
                 sentimentStore,
                 stockStore,
                 null,  // appSettingsStore not needed
+                null,  // llmMetrics not needed
+                null,  // sentimentMetrics not needed
                 0.75   // defaultConfidence
         );
     }

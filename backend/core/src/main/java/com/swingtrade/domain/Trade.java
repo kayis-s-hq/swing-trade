@@ -129,15 +129,17 @@ public record Trade(
         BigDecimal exitPrice,
         String exitReason
     ) {
-        BigDecimal grossPnL;
+        // totalPnL is the gross P&L on the position move; fees are tracked separately via the
+        // `fees` field (persisted alongside totalPnL, see TradeEntity) rather than netted in
+        // here — callers that need net P&L compute totalPnL.subtract(fees) themselves.
+        BigDecimal totalPnL;
         if (trade.direction() == TradeDirection.SHORT) {
-            grossPnL = trade.entryPrice().subtract(exitPrice)
+            totalPnL = trade.entryPrice().subtract(exitPrice)
                 .multiply(BigDecimal.valueOf(trade.quantity()));
         } else {
-            grossPnL = exitPrice.subtract(trade.entryPrice())
+            totalPnL = exitPrice.subtract(trade.entryPrice())
                 .multiply(BigDecimal.valueOf(trade.quantity()));
         }
-        BigDecimal totalPnL = grossPnL.subtract(trade.fees());
 
         int durationDays = (int) java.time.temporal.ChronoUnit.DAYS.between(trade.entryDate(), exitDate);
 

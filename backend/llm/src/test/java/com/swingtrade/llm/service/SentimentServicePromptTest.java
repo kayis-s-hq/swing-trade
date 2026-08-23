@@ -42,7 +42,9 @@ class SentimentServicePromptTest {
     void setUp() {
         service = new SentimentService(
                 clientProvider, serverManagerProvider, promptLoader, null,
-                newsIngestionService, sentimentStore, stockStore, appSettingsStore, 0.75);
+                newsIngestionService, sentimentStore, stockStore, appSettingsStore,
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.LlmMetrics.class),
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.SentimentMetrics.class), 0.75);
         when(serverManagerProvider.getManager()).thenReturn(serverManager);
         doNothing().when(serverManager).ensureRunning();
         when(clientProvider.getClient()).thenReturn(llmClient);

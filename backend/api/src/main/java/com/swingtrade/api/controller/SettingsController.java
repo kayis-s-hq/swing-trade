@@ -208,7 +208,7 @@ public class SettingsController {
                 java.net.http.HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) return false;
             // Parse "choices[0].message.content" from the JSON response
-            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var mapper = new tools.jackson.databind.ObjectMapper();
             var node = mapper.readTree(response.body());
             var content = node.path("choices").path(0).path("message").path("content").asText(null);
             return content != null && content.trim().equalsIgnoreCase("OK");

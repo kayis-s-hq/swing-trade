@@ -108,7 +108,9 @@ public class SignalService {
      * @return List of high confidence signals
      */
     public List<SignalResponse> getHighConfidenceSignals(double minConfidence) {
+        BigDecimal threshold = BigDecimal.valueOf(minConfidence);
         return signalStore.findByMinConfidence(minConfidence).stream()
+                .filter(signal -> signal.confidence() != null && signal.confidence().compareTo(threshold) >= 0)
                 .map(SignalResponse::new)
                 .toList();
     }

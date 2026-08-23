@@ -37,7 +37,7 @@ describe('SettingsView — Tabs', () => {
     const wrapper = mountSettings(SettingsView)
     const llmTab = wrapper.find('[aria-label="AI/LLM"]')
     await llmTab.trigger('click')
-    expect(wrapper.text()).toContain('vLLM Endpoint')
+    expect(wrapper.text()).toContain('OpenAI-compatible LLM')
     wrapper.unmount()
   })
 
@@ -97,11 +97,11 @@ describe('SettingsView — Broker Section', () => {
 })
 
 describe('SettingsView — LLM Section', () => {
-  it('renders vLLM endpoint input with test button', async () => {
+  it('renders OpenAI-compatible LLM section with test button', async () => {
     const SettingsView = (await import('./SettingsView.vue')).default
     const wrapper = mountSettings(SettingsView)
     await wrapper.find('[aria-label="AI/LLM"]').trigger('click')
-    expect(wrapper.text()).toContain('vLLM Endpoint')
+    expect(wrapper.text()).toContain('OpenAI-compatible LLM')
     expect(wrapper.text()).toContain('Test')
     wrapper.unmount()
   })

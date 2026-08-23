@@ -39,7 +39,7 @@ class DataIngestionServiceTest {
         marketDataClientProvider = Mockito.mock(MarketDataClientProvider.class);
         when(marketDataClientProvider.getClient()).thenReturn(mockClient);
 
-        dataIngestionService = new DataIngestionService(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider, Mockito.mock(TransactionTemplate.class));
+        dataIngestionService = new DataIngestionService(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider, Mockito.mock(TransactionTemplate.class), Mockito.mock(com.swingtrade.core.metrics.DataIngestionMetrics.class));
     }
 
     @Test

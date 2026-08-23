@@ -156,12 +156,15 @@ public class PriceActionSignalEngine {
             "Price within 3% of 52-week high (price=" + fmt(price) + ", 52wHigh=" + fmt(weeklyHigh) + ")");
 
         int rulesPassed = (trendAligned ? 1 : 0) + (rsiInRange ? 1 : 0) + (volumeSurge ? 1 : 0) + (nearWeeklyHigh ? 1 : 0);
-        boolean enoughRulesPassed = rulesPassed >= 3;
+        // All 4 entry rules must hold — see docs/backtesting.md "Entry rules (same as the live
+        // signal engine)". BacktestEngine.tryEnter mirrors this threshold so the backtest never
+        // drifts from the live signal engine's rules.
+        boolean enoughRulesPassed = rulesPassed == 4;
         SignalType type = enoughRulesPassed ? SignalType.BUY : SignalType.HOLD;
 
         String reasoning = enoughRulesPassed
-            ? rulesPassed + " of 4 entry rules passed: " + String.join("; ", passed)
-            : rulesPassed + " of 4 entry rules passed: " + String.join("; ", failed);
+            ? "All entry rules passed: " + String.join("; ", passed)
+            : "Entry rules failed (" + rulesPassed + " of 4 passed): " + String.join("; ", failed);
 
         logger.debug("Signal for {} on {}: {} ({})", symbol, date, type, reasoning);
 

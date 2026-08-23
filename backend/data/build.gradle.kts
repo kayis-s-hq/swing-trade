@@ -8,13 +8,6 @@ repositories {
     mavenCentral()
 }
 
-dependencyManagement {
-    imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")
-        mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
-    }
-}
-
 dependencies {
     implementation(project(":core"))
 
@@ -23,17 +16,22 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
 
-    implementation("org.postgresql:postgresql:42.7.3")
-    implementation("org.flywaydb:flyway-core:10.13.0")
-    implementation("org.flywaydb:flyway-database-postgresql:10.13.0")
-// Resilience4j — circuit breaker, retry, bulkhead, time limiter
-    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-retry:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-bulkhead:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-timelimiter:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-micrometer:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-reactor:2.2.0")
+    implementation("com.fasterxml.jackson.core:jackson-annotations")
+
+    implementation("org.postgresql:postgresql")
+    implementation("org.flywaydb:flyway-core:12.4.0")
+    implementation("org.flywaydb:flyway-database-postgresql:12.4.0")
+
+    // Resilience4j — circuit breaker, retry, bulkhead, time limiter.
+    // 2.4.0+ is required for the resilience4j-spring-boot4 autoconfiguration module.
+    implementation("io.github.resilience4j:resilience4j-spring-boot4:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-retry:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-bulkhead:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-timelimiter:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-micrometer:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-reactor:2.4.0")
+
     implementation("com.fyers:sdk:1.9.0")
     implementation("org.json:json:20231013")
     implementation("org.apache.commons:commons-csv:1.11.0")
@@ -44,8 +42,9 @@ dependencies {
     testImplementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.junit.jupiter:junit-jupiter")
-    testImplementation("org.mockito:mockito-core:5.12.0")
-    testImplementation("org.assertj:assertj-core:3.26.3")
+    testImplementation("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-core")
+    testImplementation("org.assertj:assertj-core")
     testImplementation("org.wiremock:wiremock:3.8.0")
 }
 

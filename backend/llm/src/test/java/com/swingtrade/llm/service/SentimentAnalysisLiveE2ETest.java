@@ -16,7 +16,7 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,7 +46,7 @@ import static org.mockito.Mockito.when;
 @EnabledIfEnvironmentVariable(named = "LLM_BASE_URL", matches = ".*")
 class SentimentAnalysisLiveE2ETest {
 
-    @MockBean
+    @MockitoBean
     private NewsIngestionService newsIngestionService;
 
     @Autowired

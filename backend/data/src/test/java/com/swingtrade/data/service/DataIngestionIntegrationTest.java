@@ -7,7 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,8 +45,8 @@ class DataIngestionIntegrationTest {
 
     // Named to match MarketDataClientConfig's "yahoo" bean, the provider's default active broker
     // (MarketDataClientProvider). Both "yahoo" and "fyers" implement MarketDataClient, so an
-    // unqualified @MockBean can no longer resolve to a single candidate.
-    @MockBean(name = "yahoo")
+    // unqualified @MockitoBean can no longer resolve to a single candidate.
+    @MockitoBean(name = "yahoo")
     private MarketDataClient marketDataClient;
 
     @BeforeEach

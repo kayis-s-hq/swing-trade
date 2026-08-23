@@ -40,6 +40,15 @@ class PerformanceServiceTest {
             Portfolio portfolio = new Portfolio("test", BigDecimal.valueOf(1000000));
             PaperTradingEngine engine = mock(PaperTradingEngine.class);
             when(engine.getPortfolio()).thenReturn(portfolio);
+            // PerformanceService depends on the TradingService interface (not the concrete
+            // PaperTradingEngine), so it can only reach totalValue via
+            // TradingService.getTotalValue() — getPortfolio() isn't on that interface and
+            // can't be, since core (where TradingService lives) can't depend on broker's
+            // Portfolio type. In production PaperTradingEngine.getTotalValue() delegates to
+            // portfolio.getTotalValue(), which for a fresh portfolio with no positions equals
+            // the initial capital — stub that directly instead of the unreachable
+            // getPortfolio().
+            when(engine.getTotalValue()).thenReturn(portfolio.getTotalValue());
             when(engine.getTotalPnL()).thenReturn(BigDecimal.valueOf(50000));
             when(engine.getInitialCapital()).thenReturn(BigDecimal.valueOf(1000000));
 

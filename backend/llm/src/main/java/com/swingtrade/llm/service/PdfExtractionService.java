@@ -4,7 +4,7 @@ import com.swingtrade.data.entity.PdfExtractionEntity;
 import com.swingtrade.data.repository.PdfExtractionRepository;
 import com.swingtrade.llm.config.PdfExtractionPromptLoader;
 import com.swingtrade.llm.domain.EarningsData;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -133,9 +133,9 @@ public class PdfExtractionService {
                 json = json.substring(start, end + 1);
             }
 
-            com.fasterxml.jackson.databind.ObjectMapper mapper =
-                new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
+            tools.jackson.databind.ObjectMapper mapper =
+                new tools.jackson.databind.ObjectMapper();
+            tools.jackson.databind.JsonNode root = mapper.readTree(json);
 
             return new com.swingtrade.llm.domain.EarningsData(
                 root.has("symbol") ? root.get("symbol").asText() : null,
@@ -153,7 +153,7 @@ public class PdfExtractionService {
         }
     }
 
-    private java.math.BigDecimal toBigDecimal(com.fasterxml.jackson.databind.JsonNode root, String field) {
+    private java.math.BigDecimal toBigDecimal(tools.jackson.databind.JsonNode root, String field) {
         if (!root.has(field)) return null;
         JsonNode node = root.get(field);
         if (node.isBigDecimal()) return node.decimalValue();

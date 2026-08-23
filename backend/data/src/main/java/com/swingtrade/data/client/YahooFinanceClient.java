@@ -1,7 +1,7 @@
 package com.swingtrade.data.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.data.service.CandleData;
 import com.swingtrade.data.service.ChartMeta;
 import com.swingtrade.data.service.InstrumentDetails;

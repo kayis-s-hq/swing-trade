@@ -2,7 +2,7 @@ package com.swingtrade.llm.service;
 
 import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.DisplayName;

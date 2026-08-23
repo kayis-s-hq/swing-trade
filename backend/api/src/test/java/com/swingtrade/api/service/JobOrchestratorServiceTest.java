@@ -4,7 +4,8 @@ import com.swingtrade.api.service.JobOrchestratorService.JobRunProgress;
 import com.swingtrade.api.service.JobOrchestratorService.JobRunSummary;
 import com.swingtrade.api.service.JobOrchestratorService.StageStats;
 import com.swingtrade.api.service.JobOrchestratorService.SymbolDetail;
-import com.swingtrade.broker.engine.PaperTradingEngine;
+import com.swingtrade.domain.service.TradingService;
+import com.swingtrade.core.metrics.JobOrchestratorMetrics;
 import com.swingtrade.data.entity.JobRunEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.repository.JobRunRepository;
@@ -63,7 +64,10 @@ class JobOrchestratorServiceTest {
     private BacktestEngine backtestEngine;
 
     @Mock
-    private PaperTradingEngine paperTradingEngine;
+    private TradingService tradingService;
+
+    @Mock
+    private JobOrchestratorMetrics jobOrchestratorMetrics;
 
     @Mock
     private JobRunRepository jobRunRepository;
@@ -129,9 +133,9 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             service = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, paperTradingEngine,
+                    signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore);
+                    watchlistStore, candleStore, jobOrchestratorMetrics);
         }
 
         @Test
@@ -202,9 +206,9 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             svc = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, paperTradingEngine,
+                    signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore);
+                    watchlistStore, candleStore, jobOrchestratorMetrics);
         }
 
         @Test
@@ -243,9 +247,9 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             svc = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, paperTradingEngine,
+                    signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore);
+                    watchlistStore, candleStore, jobOrchestratorMetrics);
         }
 
         @Test
@@ -284,9 +288,9 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             svc = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, paperTradingEngine,
+                    signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore);
+                    watchlistStore, candleStore, jobOrchestratorMetrics);
         }
 
         @Test
@@ -334,9 +338,9 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             svc = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, paperTradingEngine,
+                    signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore);
+                    watchlistStore, candleStore, jobOrchestratorMetrics);
         }
 
         @Test

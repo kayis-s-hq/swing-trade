@@ -1,6 +1,6 @@
 package com.swingtrade.strategy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.WatchlistStore;
@@ -40,7 +40,7 @@ class BacktestEngineTest {
 
     @BeforeEach
     void setUp() {
-        PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
+        PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class));
         engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
             new ObjectMapper(), "target/test-reports");
     }
@@ -265,12 +265,14 @@ class BacktestEngineTest {
         void metricsIncludeSharpeDrawdownExpectancy() {
             // Build candles that produce 3+ trades with mixed wins/losses
             List<OhlcvCandle> candles = new ArrayList<>();
-            double price = 100.0;
-            LocalDate date = LocalDate.of(2024, 1, 1);
+            LocalDate nextCycleStart = LocalDate.of(2024, 1, 1);
             // Create 3 entry setups spread across the candle series
             for (int cycle = 0; cycle < 3; cycle++) {
-                // Zigzag uptrend to build indicators
-                candles.addAll(buildZigzagUptrendCandles(60, 100.0 + cycle * 10, 0.5, 0.75, 1_000_000L));
+                // Zigzag uptrend to build indicators. Each cycle's block must start strictly
+                // after the previous cycle's last date — buildZigzagUptrendCandles otherwise
+                // always restarts at a fixed date, which would produce out-of-order bars once
+                // concatenated into a single chronological series.
+                candles.addAll(buildZigzagUptrendCandles(60, 100.0 + cycle * 10, 0.5, 0.75, 1_000_000L, nextCycleStart));
                 // Volume bump to trigger entry
                 OhlcvCandle last = candles.get(candles.size() - 1);
                 BigDecimal bumpClose = last.close().multiply(BigDecimal.valueOf(1.005));
@@ -299,6 +301,8 @@ class BacktestEngineTest {
                 OhlcvCandle prev = candles.get(candles.size() - 1);
                 candles.add(OhlcvCandle.of(SYMBOL, prev.date().plusDays(1),
                     prev.close(), prev.close(), prev.close(), prev.close(), 1_000_000L));
+
+                nextCycleStart = candles.get(candles.size() - 1).date().plusDays(1);
             }
 
             stub(candles);
@@ -397,9 +401,21 @@ class BacktestEngineTest {
 
     private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
                                                                double upPercent, double downPercent, long volume) {
+        return buildZigzagUptrendCandles(count, startPrice, upPercent, downPercent, volume, LocalDate.of(2024, 1, 1));
+    }
+
+    /**
+     * Overload accepting an explicit start date, so callers that chain multiple zigzag blocks
+     * into one chronological series (e.g. one per backtest cycle) can keep dates strictly
+     * increasing across blocks instead of every block restarting at the same hardcoded date
+     * (which ta4j's {@code BaseBarSeries} rejects as an out-of-order bar).
+     */
+    private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
+                                                               double upPercent, double downPercent, long volume,
+                                                               LocalDate startDate) {
         List<OhlcvCandle> candles = new ArrayList<>();
         double price = startPrice;
-        LocalDate date = LocalDate.of(2024, 1, 1);
+        LocalDate date = startDate;
         for (int i = 0; i < count; i++) {
             double changePercent = (i % 3 == 2) ? -downPercent : upPercent;
             double open = price;

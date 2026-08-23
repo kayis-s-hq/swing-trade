@@ -9,17 +9,17 @@ CREATE TABLE sentiment_accuracy (
     symbol        VARCHAR(20) NOT NULL,
     analysis_date DATE NOT NULL,
     llm_score     VARCHAR(20) NOT NULL,           -- POSITIVE, NEUTRAL, NEGATIVE
-    llm_confidence REAL NOT NULL,                 -- LLM's own confidence (0.0-1.0)
-    numeric_score REAL NOT NULL,                  -- Mapped numeric score (-1.0 to +1.0)
+    llm_confidence FLOAT NOT NULL,                 -- LLM's own confidence (0.0-1.0)
+    numeric_score FLOAT NOT NULL,                  -- Mapped numeric score (-1.0 to +1.0)
 
     -- Ground truth
-    actual_return_1d  DECIMAL(10,6),
-    actual_return_5d  DECIMAL(10,6),
-    actual_return_21d DECIMAL(10,6),
+    actual_return_1d  NUMERIC(10,6),
+    actual_return_5d  NUMERIC(10,6),
+    actual_return_21d NUMERIC(10,6),
     ground_truth_label VARCHAR(10),                -- UP, DOWN, FLAT
 
     was_correct       BOOLEAN,
-    pnl_pct           DECIMAL(10,6),
+    pnl_pct           NUMERIC(10,6),
 
     -- Context
     market_regime     VARCHAR(10),                -- BULL, BEAR, NEUTRAL

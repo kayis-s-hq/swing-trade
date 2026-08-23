@@ -37,7 +37,8 @@ public class BrokerModuleIntegrationTest {
         props.setInitialBalance(INITIAL_CAPITAL);
         OrderManager orderManager = new OrderManager();
         PositionManager positionManager = new PositionManager(props);
-        paperTradingEngine = new PaperTradingEngine(orderManager, positionManager, props, null, null);
+        paperTradingEngine = new PaperTradingEngine(orderManager, positionManager, props,
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class));
         brokerService = new PaperTradingServiceImpl(paperTradingEngine, orderManager, null);
     }
 

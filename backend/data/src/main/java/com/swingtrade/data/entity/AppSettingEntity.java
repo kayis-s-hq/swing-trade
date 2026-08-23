@@ -21,7 +21,7 @@ public class AppSettingEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 64, unique = true)
+    @Column(name = "key", nullable = false, length = 64, unique = true)
     private String key;
 
     @Column(columnDefinition = "TEXT")
