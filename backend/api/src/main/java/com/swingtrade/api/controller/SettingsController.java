@@ -86,6 +86,9 @@ public class SettingsController {
         settings.put("openai.base_url", appSettingsService.get("openai.base_url", "https://api.openai.com/v1"));
         settings.put("openai.model", appSettingsService.get("openai.model", "gpt-4o"));
         settings.put("openai.api_key", appSettingsService.get("openai.api_key", ""));
+        settings.put("ollama.base_url", appSettingsService.get("ollama.base_url", "http://localhost:11434/v1"));
+        settings.put("ollama.model", appSettingsService.get("ollama.model", "qwen3:4b"));
+        settings.put("ollama.api_key", appSettingsService.get("ollama.api_key", ""));
         settings.put("llamacpp.model", appSettingsService.get("llamacpp.model", "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"));
         settings.put("llm.pdf.base_url", appSettingsService.get("llm.pdf.base_url", ""));
         settings.put("llm.pdf.model", appSettingsService.get("llm.pdf.model", ""));
@@ -111,7 +114,7 @@ public class SettingsController {
                 LlmServerManager manager = switch (backend) {
                     case LOCAL -> localServerManager;
                     case PI_SSH -> piServerManager;
-                    case OPENAI -> null; // no server to manage
+                    case OPENAI, OLLAMA -> null; // no server to manage
                 };
                 if (manager != null && manager.isRunning()) {
                     manager.restart();
@@ -175,7 +178,7 @@ public class SettingsController {
 
             // Test actual LLM inference with a temporary client — does NOT affect the active backend.
             String piBaseUrl = "http://piworm.local:8090";
-            boolean inferenceOk = testInference(piBaseUrl);
+            boolean inferenceOk = testInference(piBaseUrl, "qwen3-4b");
             result.put("success", inferenceOk);
             result.put("message", inferenceOk
                 ? "Pi SSH connection successful, llama-server started and responded to inference"
@@ -193,10 +196,11 @@ public class SettingsController {
         }
     }
 
-    private boolean testInference(String baseUrl) {
+    private boolean testInference(String baseUrl, String model) {
         try {
             String payload = """
-                {"model":"qwen3-4b","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":8,"temperature":0.2}""";
+                {"model":"%s","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":8,"temperature":0.2}"""
+                .formatted(model);
             java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                 .uri(java.net.URI.create(baseUrl + "/v1/chat/completions"))
@@ -241,6 +245,36 @@ public class SettingsController {
             return ResponseEntity.ok(ApiResponse.ok(result));
         } catch (Exception e) {
             logger.warn("OpenAI test failed: {}", e.getMessage());
+            result.put("success", false);
+            result.put("message", "Connection failed: " + e.getMessage());
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        }
+    }
+
+    @PostMapping("/settings/test/ollama")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> testOllamaConnection() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            // Test directly against the Ollama-specific settings, regardless of which backend
+            // is currently ACTIVE in llm.backend — testInference() takes a raw base URL, so this
+            // does not affect (and is not affected by) llmClientProvider's currently-resolved backend.
+            String baseUrl = appSettingsService.get("ollama.base_url", "http://localhost:11434/v1");
+            String model = appSettingsService.get("ollama.model", "qwen3:4b");
+            // testInference() appends "/v1/chat/completions" to the base URL it's given, so strip
+            // a trailing "/v1" here (the configured ollama.base_url includes it, per OpenAiChatModel
+            // convention) to avoid producing ".../v1/v1/chat/completions".
+            String completionsBaseUrl = baseUrl.endsWith("/v1")
+                ? baseUrl.substring(0, baseUrl.length() - "/v1".length())
+                : baseUrl;
+
+            boolean inferenceOk = testInference(completionsBaseUrl, model);
+            result.put("success", inferenceOk);
+            result.put("message", inferenceOk
+                ? "Ollama responded successfully"
+                : "Ollama connection failed or returned an unexpected response");
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        } catch (Exception e) {
+            logger.warn("Ollama test failed: {}", e.getMessage());
             result.put("success", false);
             result.put("message", "Connection failed: " + e.getMessage());
             return ResponseEntity.ok(ApiResponse.ok(result));

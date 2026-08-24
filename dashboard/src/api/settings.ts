@@ -75,6 +75,14 @@ export async function testOpenAiConnection(): Promise<
   return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
 }
 
+export async function testOllamaConnection(): Promise<
+  ApiResponse<{ success: boolean; message: string }>
+> {
+  const raw = await rawFetch('/settings/test/ollama', { method: 'POST' })
+  if (!raw.ok) return errResponse(raw.error!)
+  return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
+}
+
 export async function getGpuHubSettings(): Promise<ApiResponse<Record<string, string>>> {
   const raw = await rawFetch('/settings/gpuhub')
   if (!raw.ok) return errResponse(raw.error!)

@@ -238,6 +238,12 @@
               >
                 External OpenAI-compatible LLM endpoint. No server management needed.
               </div>
+              <div
+                v-else-if="llmSettings.llmBackend === 'ollama'"
+                class="rounded-md bg-bg-primary p-3"
+              >
+                Local Ollama server for sentiment analysis. Runs entirely on your machine.
+              </div>
             </div>
           </div>
 
@@ -404,6 +410,57 @@
               :class="openaiTestSuccess ? 'text-success' : 'text-danger'"
             >
               {{ openaiTestResult }}
+            </div>
+          </div>
+
+          <!-- Ollama (Local LLM server) -->
+          <div v-show="llmSettings.llmBackend === 'ollama'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">Ollama</h3>
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.ollamaBaseUrl"
+                placeholder="http://localhost:11434/v1"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+            </div>
+
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.ollamaModel"
+                placeholder="qwen3:4b"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+              <span class="self-center text-xs text-text-muted">Model</span>
+            </div>
+
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.ollamaApiKey"
+                type="password"
+                placeholder="optional — Ollama usually doesn't require one"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+              <span class="self-center text-xs text-text-muted">API Key (optional)</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <p class="text-xs text-text-muted">
+                Local Ollama server for sentiment analysis. Runs entirely on your machine.
+              </p>
+              <button
+                :disabled="testingOllama"
+                class="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+                @click="testOllamaConnection"
+              >
+                {{ testingOllama ? 'Testing...' : 'Test' }}
+              </button>
+            </div>
+
+            <div
+              v-if="ollamaTestResult"
+              class="text-xs"
+              :class="ollamaTestSuccess ? 'text-success' : 'text-danger'"
+            >
+              {{ ollamaTestResult }}
             </div>
           </div>
 
@@ -587,6 +644,7 @@ import {
   testDiscordWebhook as apiTestDiscordWebhook,
   testPiConnection as apiTestPiConnection,
   testOpenAiConnection as apiTestOpenAiConnection,
+  testOllamaConnection as apiTestOllamaConnection,
   startPiServer as apiStartPiServer,
   stopPiServer as apiStopPiServer,
   getPiServerStatus as apiGetPiServerStatus,
@@ -618,6 +676,7 @@ const testingPdf = ref(false)
 const testingDiscord = ref(false)
 const testingPi = ref(false)
 const testingOpenai = ref(false)
+const testingOllama = ref(false)
 const piTestResult = ref('')
 const piTestSuccess = ref(false)
 const piServerRunning = ref(false)
@@ -625,6 +684,8 @@ const piServerStatusMsg = ref('')
 const piLoading = ref(false)
 const openaiTestResult = ref('')
 const openaiTestSuccess = ref(false)
+const ollamaTestResult = ref('')
+const ollamaTestSuccess = ref(false)
 const saving = ref(false)
 const saved = ref(false)
 const toastMessage = ref('')
@@ -643,6 +704,7 @@ const llmBackends = [
   { value: 'local' as const, label: 'Local' },
   { value: 'pi_ssh' as const, label: 'Pi SSH' },
   { value: 'gpuhub' as const, label: 'OpenAI' },
+  { value: 'ollama' as const, label: 'Ollama' },
 ]
 
 const healthColor = (status: string) => {
@@ -762,6 +824,13 @@ const handleSave = async () => {
       setTimeout(() => {
         saved.value = false
       }, 2000)
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    } else {
+      toastMessage.value = 'Failed to save settings'
+      toastType.value = 'error'
+      toastVisible.value = true
       setTimeout(() => {
         toastVisible.value = false
       }, 4000)
@@ -1011,6 +1080,54 @@ const testOpenAiConnection = async () => {
   }
 }
 
+const testOllamaConnection = async () => {
+  testingOllama.value = true
+  ollamaTestResult.value = ''
+  ollamaTestSuccess.value = false
+  try {
+    const res = await apiTestOllamaConnection()
+    if (res.success && res.data) {
+      ollamaTestResult.value = res.data.message ?? (res.data.success ? 'Connected!' : 'Failed')
+      ollamaTestSuccess.value = res.data.success
+      if (res.data.success) {
+        toastMessage.value = 'Ollama responded successfully'
+        toastType.value = 'success'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+      } else {
+        toastMessage.value = 'Ollama responded but unexpected output'
+        toastType.value = 'warning'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+      }
+    } else {
+      ollamaTestResult.value = res.error ?? 'Test failed'
+      ollamaTestSuccess.value = false
+      toastMessage.value = ollamaTestResult.value
+      toastType.value = 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    }
+  } catch (err: unknown) {
+    ollamaTestResult.value = err instanceof Error ? err.message : 'Network error'
+    ollamaTestSuccess.value = false
+    toastMessage.value = ollamaTestResult.value
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
+  } finally {
+    testingOllama.value = false
+  }
+}
+
 const handleMessage = (event: MessageEvent) => {
   if (event.data?.type === 'fyers_auth_success') {
     authResultBanner.value = 'success'
@@ -1042,7 +1159,15 @@ onMounted(async () => {
   refreshFyersStatus()
   refreshHealth()
   refreshPiStatus()
-  await loadSettings()
+  const failedSections = await loadSettings()
+  if (failedSections.length > 0) {
+    toastMessage.value = `Failed to load: ${failedSections.join(', ')}. Showing defaults.`
+    toastType.value = 'warning'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 6000)
+  }
   window.addEventListener('message', handleMessage)
 })
 

@@ -18,11 +18,14 @@ interface TradingConfig {
 }
 
 interface LlmSettings {
-  llmBackend: 'local' | 'pi_ssh' | 'gpuhub'
+  llmBackend: 'local' | 'pi_ssh' | 'gpuhub' | 'ollama'
   llmBaseUrl: string
   openaiBaseUrl: string
   openaiModel: string
   openaiApiKey: string
+  ollamaBaseUrl: string
+  ollamaModel: string
+  ollamaApiKey: string
   llamacppModel: string
   pdfBaseUrl: string
   pdfModel: string
@@ -55,6 +58,9 @@ const defaults: SettingsState = {
     openaiBaseUrl: 'https://api.openai.com/v1',
     openaiModel: 'gpt-4o',
     openaiApiKey: '',
+    ollamaBaseUrl: 'http://localhost:11434/v1',
+    ollamaModel: 'qwen3:4b',
+    ollamaApiKey: '',
     llamacppModel: '/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf',
     pdfBaseUrl: '',
     pdfModel: 'gemma-4-E2B',
@@ -75,8 +81,14 @@ function parseTradingConfig(raw: Record<string, string>): TradingConfig {
   }
 }
 
-async function loadAll(): Promise<SettingsState> {
+interface LoadAllResult {
+  state: SettingsState
+  failedSections: string[]
+}
+
+async function loadAll(): Promise<LoadAllResult> {
   const state: SettingsState = { ...defaults, tradingConfig: { ...defaults.tradingConfig } }
+  const failedSections: string[] = []
 
   // Load LLM settings
   try {
@@ -84,18 +96,24 @@ async function loadAll(): Promise<SettingsState> {
     if (llmRes.success && llmRes.data) {
       Object.assign(state.llmSettings, {
         llmBackend:
-          (llmRes.data['llm.backend'] as 'local' | 'pi_ssh' | 'gpuhub') ||
+          (llmRes.data['llm.backend'] as 'local' | 'pi_ssh' | 'gpuhub' | 'ollama') ||
           state.llmSettings.llmBackend,
         llmBaseUrl: llmRes.data['llm.base_url'] || state.llmSettings.llmBaseUrl,
         openaiBaseUrl: llmRes.data['openai.base_url'] || state.llmSettings.openaiBaseUrl,
         openaiModel: llmRes.data['openai.model'] || state.llmSettings.openaiModel,
+        ollamaBaseUrl: llmRes.data['ollama.base_url'] || state.llmSettings.ollamaBaseUrl,
+        ollamaModel: llmRes.data['ollama.model'] || state.llmSettings.ollamaModel,
         llamacppModel: llmRes.data['llamacpp.model'] || state.llmSettings.llamacppModel,
         pdfBaseUrl: llmRes.data['llm.pdf.base_url'] || state.llmSettings.pdfBaseUrl,
         pdfModel: llmRes.data['llm.pdf.model'] || state.llmSettings.pdfModel,
       })
+    } else {
+      console.warn('Failed to load LLM settings:', llmRes.error)
+      failedSections.push('LLM settings')
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn('Failed to load LLM settings:', err)
+    failedSections.push('LLM settings')
   }
 
   // Load Discord settings
@@ -105,9 +123,13 @@ async function loadAll(): Promise<SettingsState> {
       state.discordSettings.webhookUrl =
         discordRes.data['discord.webhook.url'] || state.discordSettings.webhookUrl
       state.discordSettings.enabled = discordRes.data['discord.webhook.enabled'] === 'true'
+    } else {
+      console.warn('Failed to load Discord settings:', discordRes.error)
+      failedSections.push('Discord settings')
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn('Failed to load Discord settings:', err)
+    failedSections.push('Discord settings')
   }
 
   // Load trading config
@@ -115,22 +137,27 @@ async function loadAll(): Promise<SettingsState> {
     const tradingRes = await getTradingSettings()
     if (tradingRes.success && tradingRes.data) {
       Object.assign(state.tradingConfig, parseTradingConfig(tradingRes.data))
+    } else {
+      console.warn('Failed to load trading config:', tradingRes.error)
+      failedSections.push('trading config')
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn('Failed to load trading config:', err)
+    failedSections.push('trading config')
   }
 
-  return state
+  return { state, failedSections }
 }
 
 const state = reactive<SettingsState>(defaults as SettingsState)
 let loaded = false
 
-export async function loadSettings() {
-  if (loaded) return
-  const fresh = await loadAll()
+export async function loadSettings(): Promise<string[]> {
+  if (loaded) return []
+  const { state: fresh, failedSections } = await loadAll()
   Object.assign(state, fresh)
   loaded = true
+  return failedSections
 }
 
 export async function saveSettings(): Promise<boolean> {
@@ -142,6 +169,9 @@ export async function saveSettings(): Promise<boolean> {
       'openai.base_url': state.llmSettings.openaiBaseUrl,
       'openai.model': state.llmSettings.openaiModel,
       'openai.api_key': state.llmSettings.openaiApiKey,
+      'ollama.base_url': state.llmSettings.ollamaBaseUrl,
+      'ollama.model': state.llmSettings.ollamaModel,
+      'ollama.api_key': state.llmSettings.ollamaApiKey,
       'llamacpp.model': state.llmSettings.llamacppModel,
       'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
       'llm.pdf.model': state.llmSettings.pdfModel,
@@ -175,6 +205,9 @@ export async function saveLlmSettings(): Promise<boolean> {
     'openai.base_url': state.llmSettings.openaiBaseUrl,
     'openai.model': state.llmSettings.openaiModel,
     'openai.api_key': state.llmSettings.openaiApiKey,
+    'ollama.base_url': state.llmSettings.ollamaBaseUrl,
+    'ollama.model': state.llmSettings.ollamaModel,
+    'ollama.api_key': state.llmSettings.ollamaApiKey,
     'llamacpp.model': state.llmSettings.llamacppModel,
     'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
     'llm.pdf.model': state.llmSettings.pdfModel,
