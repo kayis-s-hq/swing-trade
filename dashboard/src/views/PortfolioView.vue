@@ -30,7 +30,9 @@
     <ErrorBoundary :error="error">
       <template #error>
         <div class="flex flex-col items-center justify-center py-20">
-          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <p class="text-sm text-danger">
+            {{ errorMessage }}
+          </p>
           <button
             class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
             @click="refreshPortfolio"

@@ -39,7 +39,7 @@ public class LlmConfig {
             AppSettingsStore appSettingsStore,
             @Value("${spring.ai.openai.api-key:none}") String apiKey) {
         return createChatModel(appSettingsStore, "llm.base_url",
-                "http://localhost:8080", "openai.model", "qwen3-4b", apiKey);
+                "http://localhost:8080/v1", "openai.model", "qwen3-4b", apiKey);
     }
 
     @Bean
@@ -47,7 +47,7 @@ public class LlmConfig {
             AppSettingsStore appSettingsStore,
             @Value("${spring.ai.openai.api-key:none}") String apiKey) {
         return createChatModel(appSettingsStore, "llm.base_url",
-                "http://piworm.local:8090", "openai.model", "qwen3-4b", apiKey);
+                "http://piworm.local:8090/v1", "openai.model", "qwen3-4b", apiKey);
     }
 
     @Bean
@@ -55,14 +55,21 @@ public class LlmConfig {
             AppSettingsStore appSettingsStore,
             @Value("${spring.ai.openai.api-key:none}") String apiKey) {
         return createChatModel(appSettingsStore, "openai.base_url",
-                "https://api.openai.com", "openai.model", "gpt-4o", apiKey);
+                "https://api.openai.com/v1", "openai.model", "gpt-4o", apiKey);
+    }
+
+    @Bean
+    public OpenAiChatModel ollamaChatModel(
+            AppSettingsStore appSettingsStore,
+            @Value("${spring.ai.openai.api-key:none}") String apiKey) {
+        return createChatModel(appSettingsStore, "ollama.base_url",
+                "http://localhost:11434/v1", "ollama.model", "qwen3:4b", apiKey);
     }
 
     private OpenAiChatModel createChatModel(AppSettingsStore settings, String urlKey,
                                             String defaultUrl, String modelKey,
                                             String defaultModel, String apiKey) {
         String baseUrl = settings.get(urlKey)
-                .map(this::stripTrailingV1)
                 .orElse(defaultUrl);
         String model = settings.get(modelKey).orElse(defaultModel);
         String key = resolveApiKey(settings, apiKey);
@@ -88,13 +95,6 @@ public class LlmConfig {
             return "";
         }
         return key;
-    }
-
-    private String stripTrailingV1(String url) {
-        if (url == null) return null;
-        String normalized = url.endsWith("/v1") ? url.substring(0, url.length() - 3) : url;
-        if (normalized.endsWith("/")) normalized = normalized.substring(0, normalized.length() - 1);
-        return normalized;
     }
 
     @Primary

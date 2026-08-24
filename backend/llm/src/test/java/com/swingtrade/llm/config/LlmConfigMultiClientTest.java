@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Integration tests for multi-client LLM configuration.
  *
  * Validates:
- * - Three OpenAiChatModel beans are created (local, pi_ssh, openai)
+ * - Four OpenAiChatModel beans are created (local, pi_ssh, openai, ollama)
  * - Each reads its own base URL from settings with fallback defaults
  */
 @SpringBootTest(classes = LlmConfig.class)
@@ -67,9 +67,16 @@ class LlmConfigMultiClientTest {
     }
 
     @Test
-    @DisplayName("should have exactly three ChatModel beans")
-    void shouldHaveExactlyThreeChatModelBeans() {
+    @DisplayName("should create ollamaChatModel bean")
+    void shouldCreateOllamaChatModelBean() {
+        OpenAiChatModel ollama = context.getBean("ollamaChatModel", OpenAiChatModel.class);
+        assertThat(ollama).isNotNull();
+    }
+
+    @Test
+    @DisplayName("should have exactly four ChatModel beans")
+    void shouldHaveExactlyFourChatModelBeans() {
         Map<String, OpenAiChatModel> beans = context.getBeansOfType(OpenAiChatModel.class);
-        assertThat(beans).hasSize(3);
+        assertThat(beans).hasSize(4);
     }
 }

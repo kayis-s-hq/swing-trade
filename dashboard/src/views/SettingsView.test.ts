@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 
@@ -13,7 +13,7 @@ function mountSettings(SettingsView: any) {
   const router = createRouterMock()
   return mount(SettingsView, {
     global: {
-      router,
+      plugins: [router],
       stubs: {
         LoadingSpinner: true,
         ErrorBoundary: {
@@ -181,7 +181,7 @@ describe('SettingsView — Save Flow', () => {
     const SettingsView = (await import('./SettingsView.vue')).default
     const wrapper = mount(SettingsView, {
       global: {
-        router: createRouterMock(),
+        plugins: [createRouterMock()],
         stubs: {
           LoadingSpinner: true,
           ErrorBoundary: {
@@ -205,7 +205,7 @@ describe('SettingsView — Save Flow', () => {
     const SettingsView = (await import('./SettingsView.vue')).default
     const wrapper = mount(SettingsView, {
       global: {
-        router: createRouterMock(),
+        plugins: [createRouterMock()],
         stubs: {
           LoadingSpinner: true,
           ErrorBoundary: {

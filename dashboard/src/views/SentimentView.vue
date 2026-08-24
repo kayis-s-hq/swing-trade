@@ -227,11 +227,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import {
-  getSentimentLatest,
-  getSentimentHistory,
-  getLatestNews,
-} from '../api/sentiment'
+import { getSentimentLatest, getSentimentHistory, getLatestNews } from '../api/sentiment'
 import { getWatchlist } from '../api/watchlist'
 import { runFullAnalysis } from '../api/analysis'
 import type {
