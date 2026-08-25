@@ -5,6 +5,7 @@ import vuePlugin from 'eslint-plugin-vue'
 import vueParser from 'vue-eslint-parser'
 import tsParser from '@typescript-eslint/parser'
 import pluginTs from '@typescript-eslint/eslint-plugin'
+import eslintConfigPrettier from 'eslint-config-prettier'
 
 export default defineConfig(
   { ignores: ['dist/', 'node_modules/', '.venv/'] },
@@ -45,5 +46,8 @@ export default defineConfig(
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-debugger': 'error',
     },
-  }
+  },
+
+  // Must be last — disables formatting rules that conflict with Prettier
+  eslintConfigPrettier
 )
