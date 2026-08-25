@@ -6,7 +6,11 @@ export interface RawFetchResult {
   error?: string
 }
 
-export async function rawFetch(path: string, init?: RequestInit, retries = 3): Promise<RawFetchResult> {
+export async function rawFetch(
+  path: string,
+  init?: RequestInit,
+  retries = 3
+): Promise<RawFetchResult> {
   let lastError: string = ''
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -74,7 +78,10 @@ export async function rawFetch(path: string, init?: RequestInit, retries = 3): P
   return { ok: false, data: null, error: lastError }
 }
 
-export const errResponse = <T>(error: string): import('./types').ApiResponse<T> => ({ success: false, error })
+export const errResponse = <T>(error: string): import('./types').ApiResponse<T> => ({
+  success: false,
+  error,
+})
 
 export const unwrap = <T>(raw: RawFetchResult): T => {
   const resp = raw.data as import('./types').ApiResponse<T> | null

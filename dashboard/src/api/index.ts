@@ -44,12 +44,7 @@ export {
 } from './watchlist'
 
 // Ingestion
-export {
-  getIngestionStatus,
-  triggerDataPull,
-  getPullProgress,
-  cancelDataPull,
-} from './ingestion'
+export { getIngestionStatus, triggerDataPull, getPullProgress, cancelDataPull } from './ingestion'
 
 // Settings
 export {
@@ -62,6 +57,7 @@ export {
   testDiscordWebhook,
   testPiConnection,
   testOpenAiConnection,
+  testOllamaConnection,
   startPiServer,
   stopPiServer,
   getPiServerStatus,
@@ -90,41 +86,19 @@ export {
 } from './sentiment'
 
 // Backtest
-export {
-  runBacktest,
-  runBacktestAll,
-  listBacktestReports,
-  getBacktestReport,
-} from './backtest'
+export { runBacktest, runBacktestAll, listBacktestReports, getBacktestReport } from './backtest'
 
 // Analysis
-export {
-  getCompositeAnalysis,
-  runFullAnalysis,
-} from './analysis'
+export { getCompositeAnalysis, runFullAnalysis } from './analysis'
 
 // Job
-export {
-  startJobRun,
-  getJobRunProgress,
-  getJobRunSummary,
-  listJobRuns,
-  cancelJobRun,
-} from './job'
+export { startJobRun, getJobRunProgress, getJobRunSummary, listJobRuns, cancelJobRun } from './job'
 
 // Holidays
-export {
-  getTodayHolidayStatus,
-  getUpcomingHolidays,
-} from './holidays'
+export { getTodayHolidayStatus, getUpcomingHolidays } from './holidays'
 
 // Fyers
-export {
-  getFyersLoginUrl,
-  fyersAuthCode,
-  getFyersStatus,
-  fyersLogout,
-} from './fyers'
+export { getFyersLoginUrl, fyersAuthCode, getFyersStatus, fyersLogout } from './fyers'
 
 // Backfill
 export { backfillSymbol } from './backfill'

@@ -3,8 +3,14 @@ import { mount, VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import Toast from './Toast.vue'
 
+interface ToastTestProps {
+  message: string
+  type: 'success' | 'error' | 'warning' | 'info'
+  duration: number
+}
+
 function mountToast(
-  props = { message: 'Saved', type: 'success' as const, duration: 4000 }
+  props: ToastTestProps = { message: 'Saved', type: 'success', duration: 4000 }
 ): VueWrapper {
   return mount(Toast, { props })
 }
@@ -23,7 +29,7 @@ describe('Toast', () => {
   })
 
   it('renders message with correct type styling', async () => {
-    const wrapper = mountToast({ message: 'Saved', type: 'success' })
+    const wrapper = mountToast({ message: 'Saved', type: 'success', duration: 3000 })
     await nextTick()
     const toast = findToast()
     expect(toast?.textContent).toContain('Saved')
@@ -45,14 +51,14 @@ describe('Toast', () => {
   })
 
   it('shows error type with danger styling', () => {
-    const wrapper = mountToast({ message: 'Error!', type: 'error' })
+    const wrapper = mountToast({ message: 'Error!', type: 'error', duration: 3000 })
     const toast = findToast()
     expect(toast?.className).toContain('danger')
     wrapper.unmount()
   })
 
   it('aria-live set to assertive for errors', () => {
-    const wrapper = mountToast({ message: 'Error!', type: 'error' })
+    const wrapper = mountToast({ message: 'Error!', type: 'error', duration: 3000 })
     const toast = findToast() as HTMLElement
     expect(toast.getAttribute('role')).toBe('alert')
     expect(toast.getAttribute('aria-live')).toBe('assertive')
@@ -60,14 +66,14 @@ describe('Toast', () => {
   })
 
   it('aria-live set to polite for non-errors', () => {
-    const wrapper = mountToast({ message: 'Info', type: 'info' })
+    const wrapper = mountToast({ message: 'Info', type: 'info', duration: 3000 })
     const toast = findToast() as HTMLElement
     expect(toast.getAttribute('aria-live')).toBe('polite')
     wrapper.unmount()
   })
 
   it('teleports to body', () => {
-    const wrapper = mountToast({ message: 'Teleport', type: 'success' })
+    const wrapper = mountToast({ message: 'Teleport', type: 'success', duration: 3000 })
     expect(document.body.contains(findToast()!)).toBe(true)
     wrapper.unmount()
   })

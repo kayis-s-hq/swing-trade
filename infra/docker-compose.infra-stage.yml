@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: swing_trade_stage_postgres
+    environment:
+      POSTGRES_DB: swingtrade_stage
+      POSTGRES_USER: swingtrade_user
+      POSTGRES_PASSWORD: swingtrade_password
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_stage_data:/var/lib/postgresql/data
+    networks:
+      - swingtrade-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swingtrade_user -d swingtrade_stage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api:
+    image: swing-trade-api:stage
+    container_name: swing-trade-stage-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime-stage
+    ports:
+      - "8081:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=stage
+      - DB_HOST=swing_trade_stage_postgres
+      - DB_PORT=5432
+      - DB_NAME=swingtrade_stage
+      - DB_USER=swingtrade_user
+      - DB_PASSWORD=swingtrade_password
+      - LANGCHAIN4J_OPEN_AI_API_KEY=${LANGCHAIN4J_OPEN_AI_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://localhost:8000}
+      - LLM_MODEL_NAME=${LLM_MODEL_NAME:-claude-sonnet-4-6}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-30000}
+      - LOG_FILE=/var/log/swing-trade/stage.log
+      - TZ=Asia/Kolkata
+    volumes:
+      - stage_logs:/var/log/swing-trade
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - swingtrade-network
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1G
+
+  dashboard:
+    image: swing-trade-dashboard:stage
+    container_name: swing-trade-stage-dashboard
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "8082:80"
+    depends_on:
+      - api
+    networks:
+      - swingtrade-network
+
+networks:
+  swingtrade-network:
+    driver: bridge
+
+volumes:
+  postgres_stage_data:
+  stage_logs:

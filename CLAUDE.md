@@ -52,7 +52,7 @@ Agent(description="frontend", prompt="...", subagent_type="frontend-dev")
 
 This repo has **one** active backend:
 
-- **`backend/`** — Multi-module Gradle project (8 modules: core, data, strategy, llm, broker, api, gpuhub) with Spring Boot 3.5.9. Architecture: data ingestion, technical analysis, LLM sentiment, paper trading, GPU deployment management, REST API.
+- **`backend/`** — Multi-module Gradle project (8 modules: core, data, strategy, llm, broker, api, gpuhub) with Spring Boot 4.1.1. Architecture: data ingestion, technical analysis, LLM sentiment, paper trading, GPU deployment management, REST API.
 
 ## Java Version
 
@@ -80,7 +80,7 @@ This repo has **one** active backend:
 
 ```
 swing-trade/
-├── backend/                # Multi-module Gradle project (Spring Boot 3.5.9)
+├── backend/                # Multi-module Gradle project (Spring Boot 4.1.1)
 │   ├── build.gradle.kts    # Root build + dependency management (BOMs, shared plugins, test configs)
 │   ├── settings.gradle.kts # Project settings + repository config
 │   ├── gradle.properties   # Gradle config (cache, JVM args)
@@ -95,13 +95,10 @@ swing-trade/
 │
 ├── infra/                  # Infrastructure (Docker, env, monitoring, nginx)
 │   ├── env/                # Environment files (.env, .env.dev, .env.stage, .env.example)
-│   ├── docker-compose.yml  # Default compose (dashboard + backend)
-│   ├── docker-compose.infra-dev.yml   # Dev PostgreSQL + Redis on pi-node
-│   ├── docker-compose.infra-stage.yml # Stage PostgreSQL + Redis on pi-node
-│   ├── docker-compose.monitoring-stage.yml # Stage monitoring
-│   ├── docker-compose.reports.yml     # Backtest reports service
-│   ├── Dockerfile          # Backend Dockerfile
-│   ├── deploy.sh           # Stage deployment script
+│   ├── docker-compose.infra-dev.yml   # Dev PostgreSQL on pi-node
+│   ├── docker-compose.infra-stage.yml # Stage PostgreSQL on pi-node
+│   ├── Dockerfile          # Backend Dockerfile (JVM)
+│   ├── Dockerfile.native    # Backend Dockerfile (GraalVM native image)
 │   ├── monitoring/         # Prometheus + Grafana config
 │   ├── nginx/              # Nginx configs (dashboard, reports)
 │   └── dashboard/          # Dashboard Dockerfile
@@ -112,7 +109,7 @@ swing-trade/
 ├── dashboard/              # Vue 3 + TypeScript frontend
 │   ├── src/
 │   │   ├── api/            # API client, types, config
-│   │   ├── components/     # 25 components: cards, badges, status indicators, stage detail views, error boundary, article browser
+│   │   ├── components/     # 27 components: cards, badges, status indicators, stage detail views, error boundary, article browser
 │   │   ├── views/          # 13 views: Dashboard, Positions, Signals, Portfolio, Watchlist, DataIngestion, Settings, Backtest, Monitoring, News, Orchestrator, Sentiment, NotFound
 │   │   ├── router/         # Vue Router
 │   │   ├── stores/         # Pinia stores: appState, settings, theme
@@ -135,7 +132,7 @@ swing-trade/
 │   └── workflows/          # ci.yml, deploy-main.yml, deploy-stage.yml
 │
 ├── .hooks/                 # Git hooks (pre-commit, pre-push)
-├── bin/                    # Shell scripts
+├── bin/                    # swingdev CLI wrapper (start/stop/status/logs/infra/wait/profile/dashboard/api)
 └── dev-stack.sh            # Dev stack orchestration script
 ```
 
@@ -167,14 +164,15 @@ core -> (none — leaf module)
 
 ### Backend
 - Java 21 (MUST use via sdkman — NOT Java 25/26)
-- Spring Boot 3.5.9
+- Spring Boot 4.1.1 (Jackson 3 / `tools.jackson` BOM 3.1.5, Hibernate 7)
 - Gradle 9.6.1 (Kotlin DSL, multi-module build)
 - LangChain4j 1.18.1 (LLM integration)
 - PostgreSQL 16 + TimescaleDB (time-series)
 - TA4j 0.16 (technical analysis)
-- Flyway 12.9.0 (22 migrations)
+- Flyway 12.4.0 (migrations consolidated — see DB Migrations)
 - Lombok 1.18.34
 - ArchUnit 1.4.1 (module boundary enforcement)
+- GraalVM native image plugin 0.10.6 (api module, `infra/Dockerfile.native`)
 
 ### Frontend
 - Vue 3.5 + TypeScript + Composition API
@@ -193,6 +191,7 @@ cd backend
 ./gradlew test                           # Run all unit tests (unit + JaCoCo)
 ./gradlew :api:test                      # Specific module tests
 ./gradlew :api:bootRun --args='--spring.profiles.active=local,fyers'  # Run API locally
+./run-local.sh                             # Run API locally (sources infra/env/.env, profile `local`)
 ./gradlew check                          # Tests + PMD + checkstyle + integration tests
 ./gradlew jacocoTestReport               # Coverage report
 ./gradlew jacocoTestCoverageVerification # 80% line coverage threshold check
@@ -213,6 +212,8 @@ yarn format:write             # Prettier formatting
 ```
 
 ### Dev Stack
+`bin/swingdev` is a CLI wrapper around `dev-stack.sh` (adds `env-check`, `wait`, `profile`, `full-start`, `--profile`/`--port` flags). Both work.
+
 ```bash
 ./dev-stack.sh start           # Start infra on pi-node + Spring Boot + Vue locally
 ./dev-stack.sh stop            # Stop all local services + infra on pi-node
@@ -236,32 +237,15 @@ Local services: Spring Boot API on `8080` (profile `local,fyers`), Vue Dashboard
 
 ## DB Migrations
 
-22 Flyway migrations in `backend/data/src/main/resources/db/migration/`:
+Migrations in `backend/data/src/main/resources/db/migration/` were **consolidated**: the historical V1–V24 sequence was squashed into a single base schema. Version numbers intentionally skip V2–V24.
 
 | Migration | Purpose |
 |-----------|---------|
-| V1 | Base schema (TimescaleDB hypertable, stocks, signals, positions, trades, sentiment) |
-| V2 | Adjusted close column for OHLCV |
-| V3 | Watchlist table |
-| V4 | Daily loss circuit breaker + sentiment fix |
-| V5 | Trade labels |
-| V6 | Fyers symbol master |
-| V7 | Signal strategy |
-| V8 | Intelligence tables |
-| V9 | App settings |
-| V10 | Kill switch table |
-| V11 | Sentiment accuracy enhancement |
-| V12 | Sentiment metadata |
-| V13 | Paper trading state |
-| V14 | NSE holidays table |
-| V15 | Snapshot created at |
-| V16 | Positions broker columns |
-| V17 | Article count on sentiment |
-| V18 | News articles table |
-| V19 | Sentiment score on signals |
-| V20 | Job runs (job orchestrator) |
-| V21 | Consolidated positions |
-| V22 | Signal sentiment reasoning |
+| V1 | Consolidated base schema — 22 tables (stocks, ohlcv_candles hypertable, signals, positions, trades, sentiment_results, watchlist, daily_loss_circuit_breaker_state, trade_labels, fyers_symbol_master, news_items, pdf_extractions, sentiment_accuracy, app_settings, kill_switch, nse_holidays, news_articles, job_runs, job_run_stages, paper_trading_portfolio[_snapshots], paper_trading_orders) |
+| V25 | `version` integer column on 21 entity tables — `@Version` optimistic locking on all JPA entities |
+| V26 | `positions.broker_position_id` — broker-enriched position tracking |
+
+New migrations continue from V27. Existing databases that still carry the old V1–V24 history in `flyway_schema_history` must be recreated or repaired — the consolidated V1 checksum differs from the original.
 
 ## API Endpoints
 
@@ -287,7 +271,7 @@ Local services: Spring Boot API on `8080` (profile `local,fyers`), Vue Dashboard
 | `/api/ingestion` | POST | Manual data ingestion trigger |
 | `/api/sentiment` | Various | Sentiment API endpoints |
 | `/api/settings` | Various | App settings management |
-| `/api/job-runs` | Various | Job orchestrator runs |
+| `/api/job/runs` | Various | Job orchestrator runs |
 | `/actuator/health` | GET | Spring Boot actuator |
 
 ### GPUHub API (`/gpuhub/*`)
@@ -336,7 +320,7 @@ Three GitHub Actions workflows on self-hosted runners:
 - Integration tests: `*IntegrationTest.java` in `src/integrationTest/` — run via `./gradlew check`
 - JaCoCo: 80% line coverage threshold, auto-finalized after `test`
 - ArchUnit: module boundary enforcement (runs as unit test)
-- Frontend E2E: Playwright tests in `dashboard/tests/e2e/` (8 tests: orchestrator-debug, positions-view, settings-view, signal-view-check, signals-selection, signals-view, stage-sanity, visual-check)
+- Frontend E2E: Playwright tests in `dashboard/tests/e2e/` — `views/` (8: orchestrator-debug, positions-view, settings-view, signal-view-check, signals-selection, signals-view, stage-sanity, visual-check) + `behaviors/` (paper-trading-behavior)
 - Frontend unit: Vitest tests in `dashboard/src/` (SettingsView, Toast)
 
 ## Spring Profiles
@@ -358,7 +342,7 @@ All project documentation lives under `docs/`:
 
 | Path | Contents |
 |------|----------|
-| `docs/plans/` | Implementation plans (handoff artifacts) — 9 active plans + archive |
+| `docs/plans/` | Implementation plans (handoff artifacts) — 12 active plans + `archive/` (9 archived) |
 | `docs/specs/` | Design specs — 2 specs (Indian news sources, sentiment pipeline accordion) |
 | `docs/analysis/` | Architecture audit, full analysis orchestration, LLM accuracy monitoring, sentiment analysis redesign |
 | `docs/api-references/` | Fyers API v3, Yahoo Finance API, GPUHub elastic deployment |
@@ -410,4 +394,4 @@ implementation("com.fyers:sdk:1.9.0")
 - Remove explicit `hibernate.dialect` — auto-detected in Hibernate 6.6+
 - Set `spring.jpa.open-in-view: false` to avoid lazy-loading warnings
 - Broker module tests have pre-existing compilation errors (Position record constructor mismatch, missing RiskControlsService class)
-- Native image build (GraalVM) not implemented
+- Native image build (GraalVM) in progress — plugin applied to api module, `infra/Dockerfile.native` exists; not yet deployed

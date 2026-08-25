@@ -1,5 +1,3 @@
-import org.springframework.boot.gradle.tasks.bundling.BootJar
-
 plugins {
     java
     id("org.springframework.boot") version "4.1.1"
@@ -19,6 +17,14 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    // Spring Boot's ImperativeHttpClientAutoConfiguration probes for a blocking HTTP client
+    // implementation via ClientHttpRequestFactoryBuilder.detect() (tries Jetty, then
+    // HttpComponents, then JDK). Without a real client on the classpath it still attempts the
+    // Jetty branch and fails with NoClassDefFoundError (org.eclipse.jetty.http.HttpCookieStore)
+    // even though Jetty isn't a declared dependency. Adding HttpComponents Client5 makes it the
+    // preferred candidate so the Jetty branch is never attempted. Version is managed by the
+    // spring-boot-dependencies BOM imported in the root build.gradle.kts.
+    implementation("org.apache.httpcomponents.client5:httpclient5")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -40,6 +46,12 @@ dependencies {
     implementation("org.postgresql:postgresql")
     implementation("org.flywaydb:flyway-core:12.4.0")
     implementation("org.flywaydb:flyway-database-postgresql:12.4.0")
+    // Spring Boot 4 modularized Flyway autoconfiguration out of spring-boot-autoconfigure
+    // into its own artifact (org.springframework.boot.flyway.autoconfigure.FlywayMigrationInitializer).
+    // Raw flyway-core/flyway-database-postgresql alone do NOT trigger Flyway at startup —
+    // this is the artifact that activates spring.flyway.* properties. Version managed by the
+    // spring-boot-dependencies BOM imported in the root build.gradle.kts.
+    implementation("org.springframework.boot:spring-boot-flyway")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
@@ -60,6 +72,18 @@ springBoot {
     buildInfo()
 }
 
+// Copies the api module's full runtime classpath (all resolved dependency jars —
+// Spring Boot, Hibernate, Postgres driver, fyersjavasdk, etc.) into build/runtimeDeps/.
+// Used by infra/Dockerfile's jar-build stage to assemble /app/lib/ alongside the
+// thin api-plain.jar produced by the `jar` task, since this project uses a plain
+// jar + lib/ classpath layout instead of Spring Boot's bootJar.
+tasks.register<Copy>("copyRuntimeDeps") {
+    group = "build"
+    description = "Copies the api module's runtime classpath jars into build/runtimeDeps/"
+    from(configurations.runtimeClasspath)
+    into(layout.buildDirectory.dir("runtimeDeps"))
+}
+
 tasks.named("processTestAot").configure {
     enabled = false
 }
@@ -78,12 +102,6 @@ graalvmNative {
 }
 
 tasks {
-    named<BootJar>("bootJar") {
-        manifest {
-            attributes["Main-Class"] = "com.swingtrade.api.app.SwingTradeApiApplication"
-        }
-    }
-
     test {
         useJUnitPlatform()
         jvmArgs(

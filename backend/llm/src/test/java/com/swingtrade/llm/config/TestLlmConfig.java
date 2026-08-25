@@ -133,8 +133,9 @@ public class TestLlmConfig {
             LlmBackendSelector selector,
             OpenAiChatModel localChatModel,
             OpenAiChatModel piSshChatModel,
-            OpenAiChatModel openAiChatModel) {
-        return new LlmClientProvider(selector, localChatModel, piSshChatModel, openAiChatModel);
+            OpenAiChatModel openAiChatModel,
+            OpenAiChatModel ollamaChatModel) {
+        return new LlmClientProvider(selector, localChatModel, piSshChatModel, openAiChatModel, ollamaChatModel);
     }
 
     // ===== H2 Database Configuration for Testing =====

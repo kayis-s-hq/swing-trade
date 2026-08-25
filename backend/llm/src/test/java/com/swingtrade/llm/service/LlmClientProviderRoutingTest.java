@@ -38,11 +38,14 @@ class LlmClientProviderRoutingTest {
     @Mock
     private OpenAiChatModel openAiModel;
 
+    @Mock
+    private OpenAiChatModel ollamaModel;
+
     private LlmClientProvider provider;
 
     @BeforeEach
     void setUp() {
-        provider = new LlmClientProvider(selector, localModel, piSshModel, openAiModel);
+        provider = new LlmClientProvider(selector, localModel, piSshModel, openAiModel, ollamaModel);
     }
 
     @Nested
@@ -90,6 +93,24 @@ class LlmClientProviderRoutingTest {
         void shouldReturnOpenAiClientWhenBackendIsOpenai() {
             // Arrange
             when(selector.resolve()).thenReturn(LlmBackendSelector.Backend.OPENAI);
+
+            // Act
+            com.swingtrade.llm.client.LlmClient client = provider.getClient();
+
+            // Assert
+            assertThat(client).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Routing — OLLAMA backend")
+    class OllamaRouting {
+
+        @Test
+        @DisplayName("should return ollama client when backend is ollama")
+        void shouldReturnOllamaClientWhenBackendIsOllama() {
+            // Arrange
+            when(selector.resolve()).thenReturn(LlmBackendSelector.Backend.OLLAMA);
 
             // Act
             com.swingtrade.llm.client.LlmClient client = provider.getClient();
