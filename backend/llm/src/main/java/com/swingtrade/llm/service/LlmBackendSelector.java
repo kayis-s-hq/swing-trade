@@ -14,7 +14,8 @@ public class LlmBackendSelector {
     public enum Backend {
         LOCAL("local"),
         PI_SSH("pi_ssh"),
-        OPENAI("openai");
+        OPENAI("openai"),
+        OLLAMA("ollama");
 
         private final String key;
 

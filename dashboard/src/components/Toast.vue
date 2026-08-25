@@ -58,9 +58,13 @@ watch(() => props.message, show)
       role="alert"
       :aria-live="type === 'error' ? 'assertive' : 'polite'"
     >
-      <svg class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <template v-html="icons[type]" />
-      </svg>
+      <svg
+        class="h-4 w-4 flex-shrink-0"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        v-html="icons[type]"
+      />
       <span>{{ message }}</span>
     </div>
   </Teleport>

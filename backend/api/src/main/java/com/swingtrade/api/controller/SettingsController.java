@@ -5,6 +5,7 @@ import com.swingtrade.broker.service.DiscordNotificationService;
 import com.swingtrade.data.service.AppSettingsService;
 import com.swingtrade.data.service.MarketDataClientProvider;
 import com.swingtrade.llm.client.LlmClient;
+import com.swingtrade.llm.config.LlmProperties;
 import com.swingtrade.llm.service.LlamaCppServerManager;
 import com.swingtrade.llm.service.LlmBackendSelector;
 import com.swingtrade.llm.service.LlmClientProvider;
@@ -18,22 +19,41 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import tools.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api")
 public class SettingsController {
 
     private static final Logger logger = LoggerFactory.getLogger(SettingsController.class);
+    private static final int TEST_INFERENCE_MAX_TOKENS = 512;
+    private static final Pattern OK_PATTERN = Pattern.compile("(?i)\\bok\\b");
+    private static final Set<String> SECRET_SETTING_KEYS = Set.of(
+        "openai.api_key",
+        "ollama.api_key",
+        "gpuhub.api_key"
+    );
 
     private final MarketDataClientProvider marketDataClientProvider;
     private final AppSettingsService appSettingsService;
+    private final LlmProperties llmProperties;
     private final DiscordNotificationService discordNotificationService;
     private final LlmBackendSelector selector;
     private final LlmClientProvider llmClientProvider;
@@ -43,6 +63,7 @@ public class SettingsController {
     @Autowired
     public SettingsController(MarketDataClientProvider marketDataClientProvider,
                               AppSettingsService appSettingsService,
+                              LlmProperties llmProperties,
                               DiscordNotificationService discordNotificationService,
                               LlmBackendSelector selector,
                               LlmClientProvider llmClientProvider,
@@ -50,6 +71,7 @@ public class SettingsController {
                               PiLlamaServerManager piServerManager) {
         this.marketDataClientProvider = marketDataClientProvider;
         this.appSettingsService = appSettingsService;
+        this.llmProperties = llmProperties;
         this.discordNotificationService = discordNotificationService;
         this.selector = selector;
         this.llmClientProvider = llmClientProvider;
@@ -80,30 +102,44 @@ public class SettingsController {
 
     @GetMapping("/settings/llm")
     public ResponseEntity<ApiResponse<Map<String, String>>> getLlmSettings() {
-        Map<String, String> settings = new java.util.LinkedHashMap<>();
-        settings.put("llm.base_url", appSettingsService.get("llm.base_url", ""));
-        settings.put("llm.backend", appSettingsService.get("llm.backend", "local"));
-        settings.put("openai.base_url", appSettingsService.get("openai.base_url", "https://api.openai.com/v1"));
-        settings.put("openai.model", appSettingsService.get("openai.model", "gpt-4o"));
-        settings.put("openai.api_key", appSettingsService.get("openai.api_key", ""));
-        settings.put("llamacpp.model", appSettingsService.get("llamacpp.model", "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"));
-        settings.put("llm.pdf.base_url", appSettingsService.get("llm.pdf.base_url", ""));
-        settings.put("llm.pdf.model", appSettingsService.get("llm.pdf.model", ""));
-        settings.put("gpuhub.api_key", appSettingsService.get("gpuhub.api_key", ""));
+        Map<String, String> settings = new LinkedHashMap<>();
+        settings.put("llm.base_url", appSettingsService.get(
+            "llm.base_url", llmProperties.getBaseUrl().toString()));
+        settings.put("llm.backend", appSettingsService.get(
+            "llm.backend", llmProperties.getBackend()));
+        settings.put("openai.base_url", appSettingsService.get(
+            "openai.base_url", llmProperties.getProviders().getOpenai().getBaseUrl().toString()));
+        settings.put("openai.model", appSettingsService.get(
+            "openai.model", llmProperties.getProviders().getOpenai().getModel()));
+        settings.put("ollama.base_url", appSettingsService.get(
+            "ollama.base_url", llmProperties.getProviders().getOllama().getBaseUrl().toString()));
+        settings.put("ollama.model", appSettingsService.get(
+            "ollama.model", llmProperties.getProviders().getOllama().getModel()));
+        settings.put("llamacpp.model", appSettingsService.get(
+            "llamacpp.model", llmProperties.getLlamaCpp().getModel()));
+        settings.put("llm.pdf.base_url", appSettingsService.get(
+            "llm.pdf.base_url", llmProperties.getPdf().getBaseUrl().toString()));
+        settings.put("llm.pdf.model", appSettingsService.get(
+            "llm.pdf.model", llmProperties.getPdf().getModel()));
+        addSecretConfiguredFlag(settings, "openai.api_key");
+        addSecretConfiguredFlag(settings, "ollama.api_key");
+        addSecretConfiguredFlag(settings, "gpuhub.api_key");
         return ResponseEntity.ok(ApiResponse.ok(settings));
     }
 
     @PutMapping("/settings/llm")
     public ResponseEntity<ApiResponse<Map<String, String>>> setLlmSettings(
             @RequestBody Map<String, String> body) {
-        String oldBackend = appSettingsService.get("llm.backend", "local");
+        String oldBackend = appSettingsService.get("llm.backend", llmProperties.getBackend());
+        String oldLlamaCppModel = appSettingsService.get(
+            "llamacpp.model", llmProperties.getLlamaCpp().getModel());
         body.forEach((key, value) -> appSettingsService.set(key, value));
 
         // Handle server restart when backend or model changes
         String newBackend = body.getOrDefault("llm.backend", oldBackend);
         boolean backendChanged = !oldBackend.equals(newBackend);
         boolean modelChanged = body.containsKey("llamacpp.model")
-                && !body.get("llamacpp.model").equals(appSettingsService.get("llamacpp.model", ""));
+                && !body.get("llamacpp.model").equals(oldLlamaCppModel);
 
         if (backendChanged || modelChanged) {
             try {
@@ -111,7 +147,7 @@ public class SettingsController {
                 LlmServerManager manager = switch (backend) {
                     case LOCAL -> localServerManager;
                     case PI_SSH -> piServerManager;
-                    case OPENAI -> null; // no server to manage
+                    case OPENAI, OLLAMA -> null; // no server to manage
                 };
                 if (manager != null && manager.isRunning()) {
                     manager.restart();
@@ -120,14 +156,13 @@ public class SettingsController {
                 logger.warn("llama-server restart failed: {}", e.getMessage());
             }
         }
-        return ResponseEntity.ok(ApiResponse.ok(body));
+        return ResponseEntity.ok(ApiResponse.ok(safeSettingsResponse(body)));
     }
 
     @GetMapping("/settings/gpuhub")
     public ResponseEntity<ApiResponse<Map<String, String>>> getGpuHubSettings() {
-        Map<String, String> settings = Map.of(
-            "gpuhub.api_key", appSettingsService.get("gpuhub.api_key", "")
-        );
+        Map<String, String> settings = new LinkedHashMap<>();
+        addSecretConfiguredFlag(settings, "gpuhub.api_key");
         return ResponseEntity.ok(ApiResponse.ok(settings));
     }
 
@@ -135,7 +170,27 @@ public class SettingsController {
     public ResponseEntity<ApiResponse<Map<String, String>>> setGpuHubSettings(
             @RequestBody Map<String, String> body) {
         body.forEach((key, value) -> appSettingsService.set(key, value));
-        return ResponseEntity.ok(ApiResponse.ok(body));
+        return ResponseEntity.ok(ApiResponse.ok(safeSettingsResponse(body)));
+    }
+
+    private Map<String, String> safeSettingsResponse(Map<String, String> settings) {
+        Map<String, String> safeSettings = new LinkedHashMap<>();
+        settings.forEach((key, value) -> {
+            if (!SECRET_SETTING_KEYS.contains(key)) {
+                safeSettings.put(key, value);
+            }
+        });
+        SECRET_SETTING_KEYS.stream()
+            .filter(settings::containsKey)
+            .forEach(key -> addSecretConfiguredFlag(safeSettings, key));
+        return safeSettings;
+    }
+
+    private void addSecretConfiguredFlag(Map<String, String> settings, String secretKey) {
+        boolean configured = appSettingsService.get(secretKey)
+            .filter(value -> !value.isBlank())
+            .isPresent();
+        settings.put("%s.configured".formatted(secretKey), Boolean.toString(configured));
     }
 
     @GetMapping("/settings/discord")
@@ -174,8 +229,10 @@ public class SettingsController {
             }
 
             // Test actual LLM inference with a temporary client — does NOT affect the active backend.
-            String piBaseUrl = "http://piworm.local:8090";
-            boolean inferenceOk = testInference(piBaseUrl);
+            LlmProperties.Provider piDefaults = llmProperties.getProviders().getPiSsh();
+            URI piBaseUrl = piInferenceBaseUrl();
+            String piModel = appSettingsService.get("openai.model", piDefaults.getModel());
+            boolean inferenceOk = testInference(piBaseUrl, piModel);
             result.put("success", inferenceOk);
             result.put("message", inferenceOk
                 ? "Pi SSH connection successful, llama-server started and responded to inference"
@@ -188,34 +245,72 @@ public class SettingsController {
         } catch (Exception e) {
             logger.warn("Pi SSH test failed: {}", e.getMessage());
             result.put("success", false);
-            result.put("message", "SSH connection failed: " + e.getMessage());
+            result.put("message", "SSH connection failed");
             return ResponseEntity.ok(ApiResponse.ok(result));
         }
     }
 
-    private boolean testInference(String baseUrl) {
+    // Reasoning-capable local models spend part of the token budget on internal reasoning
+    // before emitting content. This budget leaves enough headroom for a short health-check reply.
+    private boolean testInference(URI baseUrl, String model) {
         try {
             String payload = """
-                {"model":"qwen3-4b","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":8,"temperature":0.2}""";
-            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create(baseUrl + "/v1/chat/completions"))
+                {"model":"%s","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":%d,"temperature":0.2}"""
+                .formatted(model, TEST_INFERENCE_MAX_TOKENS);
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(chatCompletionsUri(baseUrl))
                 .header("Content-Type", "application/json")
-                .timeout(java.time.Duration.ofSeconds(30))
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload))
+                .timeout(Duration.ofSeconds(30))
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
                 .build();
-            java.net.http.HttpResponse<String> response = client.send(request,
-                java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) return false;
-            // Parse "choices[0].message.content" from the JSON response
-            var mapper = new tools.jackson.databind.ObjectMapper();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                return false;
+            }
+            ObjectMapper mapper = new ObjectMapper();
             var node = mapper.readTree(response.body());
             var content = node.path("choices").path(0).path("message").path("content").asText(null);
-            return content != null && content.trim().equalsIgnoreCase("OK");
+            return content != null && !content.isBlank() && OK_PATTERN.matcher(content).find();
         } catch (Exception e) {
             logger.debug("Inference test failed: {}", e.getMessage());
             return false;
         }
+    }
+
+    URI piInferenceBaseUrl() {
+        return llmProperties.getProviders().getPiSsh().getBaseUrl();
+    }
+
+    URI ollamaInferenceBaseUrl() {
+        URI configuredBaseUrl = llmProperties.getProviders().getOllama().getBaseUrl();
+        try {
+            URI runtimeBaseUrl = URI.create(appSettingsService.get(
+                "ollama.base_url", configuredBaseUrl.toString()));
+            if (hasSameOrigin(runtimeBaseUrl, configuredBaseUrl)) {
+                return runtimeBaseUrl;
+            }
+            logger.warn("Ignoring Ollama inference URL with unapproved origin");
+        } catch (IllegalArgumentException ignored) {
+            logger.warn("Ignoring invalid Ollama inference URL");
+        }
+        return configuredBaseUrl;
+    }
+
+    private boolean hasSameOrigin(URI candidate, URI configured) {
+        return Objects.equals(candidate.getScheme(), configured.getScheme())
+            && Objects.equals(candidate.getHost(), configured.getHost())
+            && candidate.getPort() == configured.getPort()
+            && candidate.getUserInfo() == null
+            && candidate.getQuery() == null
+            && candidate.getFragment() == null;
+    }
+
+    static URI chatCompletionsUri(URI baseUrl) {
+        return UriComponentsBuilder.fromUri(baseUrl)
+            .pathSegment("chat", "completions")
+            .build()
+            .toUri();
     }
 
     @PostMapping("/settings/test/openai")
@@ -234,7 +329,7 @@ public class SettingsController {
                 Map.of("role", "user", "content", "Respond with a single word.")
             );
             String response = client.generateChatCompletion(messages, 16, 0.0)
-                .block(java.time.Duration.ofSeconds(30));
+                .block(Duration.ofSeconds(30));
             boolean ok = response != null && !response.isBlank();
             result.put("success", ok);
             result.put("message", ok ? "OpenAI-compatible LLM responded successfully" : "LLM returned empty response");
@@ -242,7 +337,30 @@ public class SettingsController {
         } catch (Exception e) {
             logger.warn("OpenAI test failed: {}", e.getMessage());
             result.put("success", false);
-            result.put("message", "Connection failed: " + e.getMessage());
+            result.put("message", "Connection failed");
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        }
+    }
+
+    @PostMapping("/settings/test/ollama")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> testOllamaConnection() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            // Test directly against Ollama settings without changing the active backend.
+            LlmProperties.Provider ollamaDefaults = llmProperties.getProviders().getOllama();
+            URI baseUrl = ollamaInferenceBaseUrl();
+            String model = appSettingsService.get("ollama.model", ollamaDefaults.getModel());
+
+            boolean inferenceOk = testInference(baseUrl, model);
+            result.put("success", inferenceOk);
+            result.put("message", inferenceOk
+                ? "Ollama responded successfully"
+                : "Ollama connection failed or returned an unexpected response");
+            return ResponseEntity.ok(ApiResponse.ok(result));
+        } catch (Exception e) {
+            logger.warn("Ollama test failed: {}", e.getMessage());
+            result.put("success", false);
+            result.put("message", "Connection failed");
             return ResponseEntity.ok(ApiResponse.ok(result));
         }
     }
@@ -268,7 +386,7 @@ public class SettingsController {
             logger.warn("Pi start failed: {}", e.getMessage());
             result.put("success", false);
             result.put("running", false);
-            result.put("message", "Failed to start: " + e.getMessage());
+            result.put("message", "Failed to start");
             return ResponseEntity.ok(ApiResponse.ok(result));
         }
     }
@@ -287,7 +405,7 @@ public class SettingsController {
             logger.warn("Pi stop failed: {}", e.getMessage());
             result.put("success", false);
             result.put("running", true);
-            result.put("message", "Failed to stop: " + e.getMessage());
+            result.put("message", "Failed to stop");
             return ResponseEntity.ok(ApiResponse.ok(result));
         }
     }

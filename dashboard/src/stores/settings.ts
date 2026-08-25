@@ -17,12 +17,17 @@ interface TradingConfig {
   allocationPerPosition: number
 }
 
+type LlmBackend = 'local' | 'pi_ssh' | 'openai' | 'ollama'
+
 interface LlmSettings {
-  llmBackend: 'local' | 'pi_ssh' | 'gpuhub'
+  llmBackend: LlmBackend
   llmBaseUrl: string
   openaiBaseUrl: string
   openaiModel: string
   openaiApiKey: string
+  ollamaBaseUrl: string
+  ollamaModel: string
+  ollamaApiKey: string
   llamacppModel: string
   pdfBaseUrl: string
   pdfModel: string
@@ -51,18 +56,47 @@ const defaults: SettingsState = {
   },
   llmSettings: {
     llmBackend: 'local',
-    llmBaseUrl: 'http://localhost:8080/v1',
-    openaiBaseUrl: 'https://api.openai.com/v1',
-    openaiModel: 'gpt-4o',
+    llmBaseUrl: '',
+    openaiBaseUrl: '',
+    openaiModel: '',
     openaiApiKey: '',
-    llamacppModel: '/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf',
+    ollamaBaseUrl: '',
+    ollamaModel: '',
+    ollamaApiKey: '',
+    llamacppModel: '',
     pdfBaseUrl: '',
-    pdfModel: 'gemma-4-E2B',
+    pdfModel: '',
   },
   discordSettings: {
     webhookUrl: '',
     enabled: false,
   },
+}
+
+const supportedLlmBackends = new Set<LlmBackend>(['local', 'pi_ssh', 'openai', 'ollama'])
+
+function createDefaultState(): SettingsState {
+  return {
+    selectedBroker: defaults.selectedBroker,
+    tradingConfig: { ...defaults.tradingConfig },
+    llmSettings: { ...defaults.llmSettings },
+    discordSettings: { ...defaults.discordSettings },
+  }
+}
+
+function parseLlmBackend(raw: string | undefined): LlmBackend {
+  // Normalize the legacy persisted value without exposing it as a selectable backend.
+  if (raw === 'gpuhub') return 'openai'
+  return supportedLlmBackends.has(raw as LlmBackend)
+    ? (raw as LlmBackend)
+    : defaults.llmSettings.llmBackend
+}
+
+function applySettings(target: SettingsState, source: SettingsState) {
+  target.selectedBroker = source.selectedBroker
+  Object.assign(target.tradingConfig, source.tradingConfig)
+  Object.assign(target.llmSettings, source.llmSettings)
+  Object.assign(target.discordSettings, source.discordSettings)
 }
 
 function parseTradingConfig(raw: Record<string, string>): TradingConfig {
@@ -75,27 +109,36 @@ function parseTradingConfig(raw: Record<string, string>): TradingConfig {
   }
 }
 
-async function loadAll(): Promise<SettingsState> {
-  const state: SettingsState = { ...defaults, tradingConfig: { ...defaults.tradingConfig } }
+interface LoadAllResult {
+  state: SettingsState
+  failedSections: string[]
+}
+
+async function loadAll(): Promise<LoadAllResult> {
+  const state = createDefaultState()
+  const failedSections: string[] = []
 
   // Load LLM settings
   try {
     const llmRes = await getLlmSettings()
     if (llmRes.success && llmRes.data) {
+      // Secret fields intentionally stay blank; a blank input means "keep the configured secret".
       Object.assign(state.llmSettings, {
-        llmBackend:
-          (llmRes.data['llm.backend'] as 'local' | 'pi_ssh' | 'gpuhub') ||
-          state.llmSettings.llmBackend,
-        llmBaseUrl: llmRes.data['llm.base_url'] || state.llmSettings.llmBaseUrl,
-        openaiBaseUrl: llmRes.data['openai.base_url'] || state.llmSettings.openaiBaseUrl,
-        openaiModel: llmRes.data['openai.model'] || state.llmSettings.openaiModel,
-        llamacppModel: llmRes.data['llamacpp.model'] || state.llmSettings.llamacppModel,
-        pdfBaseUrl: llmRes.data['llm.pdf.base_url'] || state.llmSettings.pdfBaseUrl,
-        pdfModel: llmRes.data['llm.pdf.model'] || state.llmSettings.pdfModel,
+        llmBackend: parseLlmBackend(llmRes.data['llm.backend']),
+        llmBaseUrl: llmRes.data['llm.base_url'] ?? state.llmSettings.llmBaseUrl,
+        openaiBaseUrl: llmRes.data['openai.base_url'] ?? state.llmSettings.openaiBaseUrl,
+        openaiModel: llmRes.data['openai.model'] ?? state.llmSettings.openaiModel,
+        ollamaBaseUrl: llmRes.data['ollama.base_url'] ?? state.llmSettings.ollamaBaseUrl,
+        ollamaModel: llmRes.data['ollama.model'] ?? state.llmSettings.ollamaModel,
+        llamacppModel: llmRes.data['llamacpp.model'] ?? state.llmSettings.llamacppModel,
+        pdfBaseUrl: llmRes.data['llm.pdf.base_url'] ?? state.llmSettings.pdfBaseUrl,
+        pdfModel: llmRes.data['llm.pdf.model'] ?? state.llmSettings.pdfModel,
       })
+    } else {
+      failedSections.push('LLM settings')
     }
   } catch {
-    /* ignore */
+    failedSections.push('LLM settings')
   }
 
   // Load Discord settings
@@ -105,9 +148,11 @@ async function loadAll(): Promise<SettingsState> {
       state.discordSettings.webhookUrl =
         discordRes.data['discord.webhook.url'] || state.discordSettings.webhookUrl
       state.discordSettings.enabled = discordRes.data['discord.webhook.enabled'] === 'true'
+    } else {
+      failedSections.push('Discord settings')
     }
   } catch {
-    /* ignore */
+    failedSections.push('Discord settings')
   }
 
   // Load trading config
@@ -115,37 +160,57 @@ async function loadAll(): Promise<SettingsState> {
     const tradingRes = await getTradingSettings()
     if (tradingRes.success && tradingRes.data) {
       Object.assign(state.tradingConfig, parseTradingConfig(tradingRes.data))
+    } else {
+      failedSections.push('Trading settings')
     }
   } catch {
-    /* ignore */
+    failedSections.push('Trading settings')
   }
 
-  return state
+  return { state, failedSections }
 }
 
-const state = reactive<SettingsState>(defaults as SettingsState)
+const state = reactive<SettingsState>(createDefaultState())
 let loaded = false
 
-export async function loadSettings() {
-  if (loaded) return
-  const fresh = await loadAll()
-  Object.assign(state, fresh)
-  loaded = true
+export async function loadSettings(): Promise<string[]> {
+  if (loaded) return []
+  const { state: fresh, failedSections } = await loadAll()
+  applySettings(state, fresh)
+  loaded = failedSections.length === 0
+  return failedSections
+}
+
+function createLlmPayload(): Record<string, string> {
+  const settings: Record<string, string> = {
+    'llm.base_url': state.llmSettings.llmBaseUrl,
+    'llm.backend': state.llmSettings.llmBackend,
+    'openai.base_url': state.llmSettings.openaiBaseUrl,
+    'openai.model': state.llmSettings.openaiModel,
+    'ollama.base_url': state.llmSettings.ollamaBaseUrl,
+    'ollama.model': state.llmSettings.ollamaModel,
+    'llamacpp.model': state.llmSettings.llamacppModel,
+    'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
+    'llm.pdf.model': state.llmSettings.pdfModel,
+  }
+
+  const openaiApiKey = state.llmSettings.openaiApiKey.trim()
+  const ollamaApiKey = state.llmSettings.ollamaApiKey.trim()
+  if (openaiApiKey) settings['openai.api_key'] = openaiApiKey
+  if (ollamaApiKey) settings['ollama.api_key'] = ollamaApiKey
+
+  return settings
+}
+
+function clearSensitiveInputs() {
+  state.llmSettings.openaiApiKey = ''
+  state.llmSettings.ollamaApiKey = ''
 }
 
 export async function saveSettings(): Promise<boolean> {
   const body = {
     broker: state.selectedBroker,
-    llm: {
-      'llm.base_url': state.llmSettings.llmBaseUrl,
-      'llm.backend': state.llmSettings.llmBackend,
-      'openai.base_url': state.llmSettings.openaiBaseUrl,
-      'openai.model': state.llmSettings.openaiModel,
-      'openai.api_key': state.llmSettings.openaiApiKey,
-      'llamacpp.model': state.llmSettings.llamacppModel,
-      'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
-      'llm.pdf.model': state.llmSettings.pdfModel,
-    },
+    llm: createLlmPayload(),
     discord: {
       'discord.webhook.url': state.discordSettings.webhookUrl,
       'discord.webhook.enabled': String(state.discordSettings.enabled),
@@ -164,27 +229,19 @@ export async function saveSettings(): Promise<boolean> {
     console.error('Failed to save settings:', res.error)
     return false
   }
+  clearSensitiveInputs()
   return true
 }
 
 // Keep individual save methods for toggle-on-change behavior
 export async function saveLlmSettings(): Promise<boolean> {
-  const settings: Record<string, string> = {
-    'llm.backend': state.llmSettings.llmBackend,
-    'llm.base_url': state.llmSettings.llmBaseUrl,
-    'openai.base_url': state.llmSettings.openaiBaseUrl,
-    'openai.model': state.llmSettings.openaiModel,
-    'openai.api_key': state.llmSettings.openaiApiKey,
-    'llamacpp.model': state.llmSettings.llamacppModel,
-    'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
-    'llm.pdf.model': state.llmSettings.pdfModel,
-  }
-  const res = await setLlmSettings(settings)
+  const res = await setLlmSettings(createLlmPayload())
   if (!res.success) {
     console.error('Failed to save LLM settings:', res.error)
     return false
   }
-  return res.success
+  clearSensitiveInputs()
+  return true
 }
 
 export async function saveDiscordSettings(): Promise<boolean> {
@@ -220,7 +277,8 @@ export function getSettings() {
 }
 
 export function resetSettings() {
-  Object.assign(state, defaults)
+  applySettings(state, createDefaultState())
+  loaded = false
 }
 
 export const brokerLabels: Record<string, string> = {

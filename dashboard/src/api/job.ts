@@ -1,5 +1,10 @@
 import { rawFetch, errResponse } from './shared'
-import type { ApiResponse, JobRunResponse, JobRunProgressResponse, JobRunSummaryResponse } from './types'
+import type {
+  ApiResponse,
+  JobRunResponse,
+  JobRunProgressResponse,
+  JobRunSummaryResponse,
+} from './types'
 
 export async function startJobRun(triggerType = 'MANUAL'): Promise<ApiResponse<JobRunResponse>> {
   const params = new URLSearchParams({ triggerType })

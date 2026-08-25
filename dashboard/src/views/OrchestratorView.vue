@@ -49,7 +49,9 @@
     <ErrorBoundary :error="error">
       <template #error>
         <div class="flex flex-col items-center justify-center py-20">
-          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <p class="text-sm text-danger">
+            {{ errorMessage }}
+          </p>
           <button
             class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
             @click="refresh"
@@ -112,7 +114,7 @@
                   >
                     {{ stage }}
                   </th>
-                  <th class="pb-2 px-3 text-center text-xs font-medium text-text-muted"></th>
+                  <th class="pb-2 px-3 text-center text-xs font-medium text-text-muted" />
                 </tr>
               </thead>
               <tbody>
@@ -121,7 +123,9 @@
                     class="border-b border-border-subtle/50 hover:bg-bg-hover/50 cursor-pointer"
                     @click="toggleSymbol(symbol)"
                   >
-                    <td class="py-2 pr-4 font-medium text-text-primary">{{ symbol }}</td>
+                    <td class="py-2 pr-4 font-medium text-text-primary">
+                      {{ symbol }}
+                    </td>
                     <td v-for="stage in stages" :key="stage" class="py-2 px-3 text-center">
                       <StageIcon :status="getStageStatus(symbol, stage)" />
                     </td>
@@ -188,7 +192,9 @@
             v-if="currentRun.errorMessage"
             class="mt-3 rounded-md border border-danger/30 bg-danger/5 p-3"
           >
-            <p class="text-xs text-danger">{{ currentRun.errorMessage }}</p>
+            <p class="text-xs text-danger">
+              {{ currentRun.errorMessage }}
+            </p>
           </div>
         </div>
 
@@ -240,8 +246,12 @@
                 class="border-b border-border-subtle/50 hover:bg-bg-hover/50 cursor-pointer"
                 @click="viewRun(run.runId)"
               >
-                <td class="py-2 pr-4 text-text-primary">{{ formatTime(run.startedAt) }}</td>
-                <td class="py-2 pr-4 text-text-muted">{{ run.triggerType }}</td>
+                <td class="py-2 pr-4 text-text-primary">
+                  {{ formatTime(run.startedAt) }}
+                </td>
+                <td class="py-2 pr-4 text-text-muted">
+                  {{ run.triggerType }}
+                </td>
                 <td class="py-2 pr-4">
                   <StatusBadge :status="run.status" :label="run.status" />
                 </td>
@@ -251,10 +261,10 @@
                     >({{ run.failedCount }} failed)</span
                   >
                 </td>
-                <td class="py-2 pr-4 text-text-muted" v-if="run.completedAt">
+                <td v-if="run.completedAt" class="py-2 pr-4 text-text-muted">
                   {{ formatDuration(run.startedAt, run.completedAt) }}
                 </td>
-                <td class="py-2 pr-4 text-text-muted" v-else>-</td>
+                <td v-else class="py-2 pr-4 text-text-muted">-</td>
                 <td class="py-2 text-text-muted">
                   <button
                     class="text-xs text-brand hover:underline"

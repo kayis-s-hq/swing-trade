@@ -6,6 +6,7 @@ import com.swingtrade.data.repository.JobRunRepository;
 import com.swingtrade.domain.JobRun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -22,15 +23,23 @@ public class JobRunScheduler {
 
     private final JobOrchestratorService orchestratorService;
     private final JobRunRepository jobRunRepository;
+    private final boolean schedulerEnabled;
 
     public JobRunScheduler(JobOrchestratorService orchestratorService,
-                           JobRunRepository jobRunRepository) {
+                           JobRunRepository jobRunRepository,
+                           @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled) {
         this.orchestratorService = orchestratorService;
         this.jobRunRepository = jobRunRepository;
+        this.schedulerEnabled = schedulerEnabled;
     }
 
     @Scheduled(cron = "0 0 18 * * MON-FRI", zone = "Asia/Kolkata")
     public void runScheduledPipeline() {
+        if (!schedulerEnabled) {
+            logger.debug("Scheduler disabled (app.features.scheduler.enabled=false) — skipping scheduled pipeline run");
+            return;
+        }
+
         List<JobRunEntity> running = jobRunRepository
             .findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name());
         if (!running.isEmpty()) {

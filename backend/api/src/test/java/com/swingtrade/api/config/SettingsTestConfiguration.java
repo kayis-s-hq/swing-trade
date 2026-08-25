@@ -4,15 +4,18 @@ import com.swingtrade.api.controller.SettingsController;
 import com.swingtrade.broker.service.DiscordNotificationService;
 import com.swingtrade.data.service.AppSettingsService;
 import com.swingtrade.data.service.MarketDataClientProvider;
+import com.swingtrade.llm.config.LlmProperties;
 import com.swingtrade.llm.service.LlamaCppServerManager;
 import com.swingtrade.llm.service.LlmBackendSelector;
 import com.swingtrade.llm.service.LlmClientProvider;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 @SpringBootApplication
 @Import(SettingsController.class)
+@EnableConfigurationProperties(LlmProperties.class)
 public class SettingsTestConfiguration {
 
     @Bean

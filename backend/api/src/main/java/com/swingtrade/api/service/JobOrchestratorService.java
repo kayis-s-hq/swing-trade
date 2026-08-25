@@ -21,6 +21,7 @@ import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,7 +46,6 @@ import java.util.concurrent.TimeoutException;
 public class JobOrchestratorService {
 
     private static final Logger logger = LoggerFactory.getLogger(JobOrchestratorService.class);
-    private static final int MAX_CONCURRENT = 3;
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     // Per-stage timeouts (seconds)
@@ -56,19 +56,9 @@ public class JobOrchestratorService {
     private static final long TIMEOUT_BACKTEST = 120L;
     private static final long TIMEOUT_PAPER_TRADE = 30L;
 
-    private final Semaphore semaphore = new Semaphore(MAX_CONCURRENT);
-    private final ExecutorService asyncExecutor = new ThreadPoolExecutor(
-        3,  // 3 cores — matches MAX_CONCURRENT
-        3,  // max = 3
-        60L, TimeUnit.SECONDS,
-        new LinkedBlockingQueue<>(10),
-        r -> {
-            Thread t = new Thread(r, "job-orchestrator-%d".formatted(Thread.activeCount()));
-            t.setDaemon(true);
-            return t;
-        },
-        new ThreadPoolExecutor.CallerRunsPolicy()
-    );
+    private final long pollIntervalMs;
+    private final Semaphore semaphore;
+    private final ExecutorService asyncExecutor;
 
     private final DataIngestionService dataIngestionService;
     private final NewsIngestionService newsIngestionService;
@@ -95,7 +85,23 @@ public class JobOrchestratorService {
             SignalStore signalStore,
             WatchlistStore watchlistStore,
             CandleStore candleStore,
-            JobOrchestratorMetrics jobMetrics) {
+            JobOrchestratorMetrics jobMetrics,
+            @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
+            @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs) {
+        this.pollIntervalMs = pollIntervalMs;
+        this.semaphore = new Semaphore(maxConcurrent);
+        this.asyncExecutor = new ThreadPoolExecutor(
+            maxConcurrent,
+            maxConcurrent,
+            60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(10),
+            r -> {
+                Thread t = new Thread(r, "job-orchestrator-%d".formatted(Thread.activeCount()));
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.CallerRunsPolicy()
+        );
         this.dataIngestionService = dataIngestionService;
         this.newsIngestionService = newsIngestionService;
         this.sentimentService = sentimentService;
@@ -195,7 +201,7 @@ public class JobOrchestratorService {
         List<CompletableFuture<Void>> futures = symbols.stream().map(symbol ->
             CompletableFuture.runAsync(() -> processSymbol(finalRun.runId(), symbol, today), asyncExecutor)
                 .exceptionally(ex -> {
-                    logError(finalRun.runId(), symbol, "Pipeline failed", ex);
+                    logUnattributedPipelineError(symbol, ex);
                     return null;
                 })
         ).toList();
@@ -230,22 +236,56 @@ public class JobOrchestratorService {
         return run;
     }
 
+    /** Ordered stage definition used to drive processSymbol and its failure-gating. */
+    private record StageDef(JobRunStage.StageName name, StageExecutor executor, long timeoutSec) {}
+
+    /** A stage can complete normally or skip without being treated as an operational error. */
+    private record StageExecutionResult(JobRunStage.Status status, String summary) {
+        private static StageExecutionResult completed(String summary) {
+            return new StageExecutionResult(JobRunStage.Status.COMPLETED, summary);
+        }
+
+        private static StageExecutionResult skipped(String summary) {
+            return new StageExecutionResult(JobRunStage.Status.SKIPPED, summary);
+        }
+    }
+
     private void processSymbol(UUID runId, String symbol, LocalDate today) {
+        JobRunStage.StageName[] currentStage = {JobRunStage.StageName.DATA_FETCH};
         try {
-            semaphore.acquire();
+            acquireSlot(symbol);
             try {
-                executeStage(runId, symbol, JobRunStage.StageName.DATA_FETCH,
-                    () -> stageDataFetch(symbol), TIMEOUT_DATA_FETCH);
-                executeStage(runId, symbol, JobRunStage.StageName.NEWS,
-                    () -> stageNews(symbol), TIMEOUT_NEWS);
-                executeStage(runId, symbol, JobRunStage.StageName.SENTIMENT,
-                    () -> stageSentiment(symbol, today), TIMEOUT_SENTIMENT);
-                executeStage(runId, symbol, JobRunStage.StageName.SIGNAL,
-                    () -> stageSignal(symbol), TIMEOUT_SIGNAL);
-                executeStage(runId, symbol, JobRunStage.StageName.BACKTEST,
-                    () -> stageBacktest(symbol), TIMEOUT_BACKTEST);
-                executeStage(runId, symbol, JobRunStage.StageName.PAPER_TRADE,
-                    () -> stagePaperTrade(symbol), TIMEOUT_PAPER_TRADE);
+                List<StageDef> stageDefs = List.of(
+                    new StageDef(JobRunStage.StageName.DATA_FETCH,
+                        () -> StageExecutionResult.completed(stageDataFetch(symbol)), TIMEOUT_DATA_FETCH),
+                    new StageDef(JobRunStage.StageName.NEWS,
+                        () -> StageExecutionResult.completed(stageNews(symbol)), TIMEOUT_NEWS),
+                    new StageDef(JobRunStage.StageName.SENTIMENT,
+                        () -> StageExecutionResult.completed(stageSentiment(symbol, today)), TIMEOUT_SENTIMENT),
+                    new StageDef(JobRunStage.StageName.SIGNAL,
+                        () -> StageExecutionResult.completed(stageSignal(symbol)), TIMEOUT_SIGNAL),
+                    new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol), TIMEOUT_BACKTEST),
+                    new StageDef(JobRunStage.StageName.PAPER_TRADE,
+                        () -> StageExecutionResult.completed(stagePaperTrade(symbol)), TIMEOUT_PAPER_TRADE)
+                );
+
+                boolean priorStageBlocked = false;
+                for (StageDef stageDef : stageDefs) {
+                    currentStage[0] = stageDef.name();
+                    if (priorStageBlocked) {
+                        String reason = "Skipped — an earlier stage did not complete";
+                        updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.SKIPPED,
+                            null, null, reason);
+                        logger.debug("Skipping stage {} for {}: earlier stage did not complete",
+                            stageDef.name(), symbol);
+                        continue;
+                    }
+                    boolean succeeded = executeStage(runId, symbol, stageDef.name(),
+                        stageDef.executor(), stageDef.timeoutSec());
+                    if (!succeeded) {
+                        priorStageBlocked = true;
+                    }
+                }
 
                 recordCompletion(runId, symbol);
             } finally {
@@ -253,24 +293,40 @@ public class JobOrchestratorService {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            logError(runId, symbol, "Pipeline interrupted", e);
+            logError(runId, symbol, currentStage[0], "Pipeline interrupted", e);
         } catch (Exception e) {
-            logError(runId, symbol, "Pipeline failed", e);
+            logError(runId, symbol, currentStage[0], "Pipeline failed", e);
+        }
+    }
+
+    /**
+     * Acquires a processing slot, polling every {@code pollIntervalMs} instead of
+     * blocking indefinitely so waits are observable and the poll cadence is configurable
+     * via {@code job.orchestrator.poll-interval-ms}.
+     */
+    private void acquireSlot(String symbol) throws InterruptedException {
+        while (!semaphore.tryAcquire(pollIntervalMs, TimeUnit.MILLISECONDS)) {
+            logger.debug("Waiting for a processing slot for {} (poll interval {}ms)", symbol, pollIntervalMs);
         }
     }
 
     @FunctionalInterface
     private interface StageExecutor {
-        String execute() throws Exception;
+        StageExecutionResult execute() throws Exception;
     }
 
-    private void executeStage(UUID runId, String symbol, JobRunStage.StageName stage,
+    /**
+     * Executes a single stage and records its outcome.
+     *
+     * @return true if the stage completed successfully, false if it errored, timed out, or skipped
+     */
+    private boolean executeStage(UUID runId, String symbol, JobRunStage.StageName stage,
                               StageExecutor executor, long timeoutSec) {
         updateStageStatus(runId, symbol, stage, JobRunStage.Status.RUNNING, null, null, null);
 
         long start = System.currentTimeMillis();
         try {
-            CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> {
+            CompletableFuture<StageExecutionResult> future = CompletableFuture.supplyAsync(() -> {
                 try {
                     return executor.execute();
                 } catch (Exception e) {
@@ -278,22 +334,26 @@ public class JobOrchestratorService {
                 }
             }, asyncExecutor);
 
-            String result = future.get(timeoutSec, TimeUnit.SECONDS);
+            StageExecutionResult result = future.get(timeoutSec, TimeUnit.SECONDS);
             long duration = System.currentTimeMillis() - start;
-            updateStageStatus(runId, symbol, stage, JobRunStage.Status.COMPLETED,
-                duration, null, result);
-            logger.debug("Stage {} completed for {} in {}ms", stage, symbol, duration);
+            updateStageStatus(runId, symbol, stage, result.status(),
+                duration, null, result.summary());
+            logger.debug("Stage {} finished with status {} for {} in {}ms",
+                stage, result.status(), symbol, duration);
+            return result.status() == JobRunStage.Status.COMPLETED;
         } catch (TimeoutException e) {
             long duration = System.currentTimeMillis() - start;
             String msg = "Stage timed out after " + timeoutSec + "s";
             updateStageStatus(runId, symbol, stage, JobRunStage.Status.ERROR,
                 duration, msg, null);
             logger.warn("{} for {}", msg, symbol);
+            return false;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - start;
             updateStageStatus(runId, symbol, stage, JobRunStage.Status.ERROR,
                 duration, e.getMessage(), null);
             logger.warn("Stage {} failed for {}: {}", stage, symbol, e.getMessage());
+            return false;
         }
     }
 
@@ -321,16 +381,17 @@ public class JobOrchestratorService {
             String.format("%.0f", s.confidence().doubleValue() * 100) + "%").orElse("no signal");
     }
 
-    private String stageBacktest(String symbol) {
+    private StageExecutionResult stageBacktest(String symbol) {
         try {
             BacktestConfig config = BacktestConfig.defaults();
             BacktestResult result = backtestEngine.runBacktest(symbol, "NSE", config);
-            return result.totalTrades() + " trades, " +
-                String.format("%.0f", result.winRate()) + "% win, " +
-                String.format("%.1f", result.totalReturn()) + "% return";
-        } catch (Exception e) {
-            logger.debug("Backtest skipped for {}: {}", symbol, e.getMessage());
-            return "skipped (insufficient data)";
+            String summary = result.totalTrades() + " trades, "
+                + String.format("%.0f", result.winRate()) + "% win, "
+                + String.format("%.1f", result.totalReturn()) + "% return";
+            return StageExecutionResult.completed(summary);
+        } catch (IllegalStateException e) {
+            logger.info("Backtest skipped for {}: {}", symbol, e.getMessage());
+            return StageExecutionResult.skipped(e.getMessage());
         }
     }
 
@@ -398,11 +459,20 @@ public class JobOrchestratorService {
         }
     }
 
-    private void logError(UUID runId, String symbol, String prefix, Throwable ex) {
+    private void logError(UUID runId, String symbol, JobRunStage.StageName stage, String prefix, Throwable ex) {
         String msg = prefix + " for " + symbol + ": " + ex.getMessage();
         logger.error(msg, ex);
-        updateStageStatus(runId, symbol, JobRunStage.StageName.DATA_FETCH,
+        updateStageStatus(runId, symbol, stage,
             JobRunStage.Status.ERROR, null, msg, null);
+    }
+
+    /**
+     * Logs a pipeline-level failure that escaped {@link #processSymbol} entirely (e.g. an
+     * uncaught {@link Error}) — no specific stage row is touched since we cannot know which
+     * stage, if any, was executing when the failure happened.
+     */
+    private void logUnattributedPipelineError(String symbol, Throwable ex) {
+        logger.error("Pipeline failed for {}: {}", symbol, ex.getMessage(), ex);
     }
 
     private void completeRun(UUID runId, JobRun.Status status, String errorMessage) {

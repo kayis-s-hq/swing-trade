@@ -17,6 +17,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Controller for Fyers authentication flow.
@@ -127,9 +128,12 @@ public class FyersAuthController {
      */
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getStatus() {
+        // Map.of(...) throws NPE on any null value/key. clientId can be null when
+        // FYERS_CLIENT_ID is not configured (e.g. not yet authenticated on stage),
+        // so build the response with a null-safe fallback instead of crashing.
         return ResponseEntity.ok(Map.of(
             "connected", authService.validateToken(),
-            "clientId", authService.getClientId()
+            "clientId", Objects.requireNonNullElse(authService.getClientId(), "not configured")
         ));
     }
 

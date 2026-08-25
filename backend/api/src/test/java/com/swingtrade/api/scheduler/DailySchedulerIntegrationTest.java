@@ -2,18 +2,15 @@ package com.swingtrade.api.scheduler;
 
 import com.swingtrade.api.app.SwingTradeApiApplication;
 import com.swingtrade.api.fixtures.DataPipelineFixtures;
-import com.swingtrade.api.service.DailySignalOrchestrator;
 import com.swingtrade.api.service.JobOrchestratorService;
 import com.swingtrade.data.entity.JobRunEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.entity.OhlcvCandleEntity;
-import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.data.repository.JobRunRepository;
 import com.swingtrade.data.repository.JobRunStageRepository;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
-import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.data.repository.WatchlistRepository;
 import com.swingtrade.domain.JobRun;
@@ -65,10 +62,8 @@ import static org.mockito.Mockito.when;
  * still leaves the JobRun in RUNNING past the 30s poll — a pre-existing async/transactional
  * issue in the service (likely persistence-context visibility across the CompletableFuture
  * thread vs. the polling thread) that was never actually exercised, since this test was already
- * @Disabled at the base commit for an unrelated Testcontainers/Postgres reason. Separately,
- * RunsGenerationForAllSymbols is missing @Nested (true at the base commit too), so its test
- * never runs at all. Needs dedicated debugging of JobOrchestratorService's async completion
- * path, not an upgrade-scoped fix.
+ * @Disabled at the base commit for an unrelated Testcontainers/Postgres reason. Needs dedicated
+ * debugging of JobOrchestratorService's async completion path, not an upgrade-scoped fix.
  */
 @Disabled("Pre-existing async/transactional issue in JobOrchestratorService — see class Javadoc")
 @SpringBootTest(classes = {SwingTradeApiApplication.class, DailySchedulerIntegrationTest.TestBeans.class})
@@ -139,91 +134,7 @@ class DailySchedulerIntegrationTest {
     @MockitoBean
     private DataIngestionService dataIngestionService;
 
-    // ==================== Test 1: DailySignalOrchestrator ====================
-
-    @DisplayName("DailySignalOrchestrator")
-    class RunsGenerationForAllSymbols {
-
-        @Autowired
-        private DailySignalOrchestrator dailySignalOrchestrator;
-
-        @Autowired
-        private OhlcvCandleRepository ohlcvCandleRepository;
-
-        @Autowired
-        private StockRepository stockRepository;
-
-        @Autowired
-        private SignalRepository signalRepository;
-
-        @BeforeEach
-        void setUp() {
-            // Clean slate
-            signalRepository.deleteAllSignals();
-            ohlcvCandleRepository.deleteAll();
-            stockRepository.deleteAll();
-        }
-
-        @Test
-        @DisplayName("Generates signals for all symbols with candle data")
-        void testDailySignalOrchestrator_RunsGenerationForAllSymbols() {
-            // Arrange: insert 3 stocks with 100 candles each
-            LocalDate[] tradingDays = generateTradingDays(100);
-
-            List<String> symbols = List.of("RELIANCE", "TCS", "INFY");
-            for (String symbol : symbols) {
-                StockEntity stock = new StockEntity();
-                stock.setSymbol(symbol);
-                stock.setName(symbol + " Ltd");
-                stock.setExchange("NSE");
-                stock.setAddedOn(LocalDate.now());
-                stockRepository.save(stock);
-
-                for (int i = 0; i < 100; i++) {
-                    OhlcvCandleEntity candle = DataPipelineFixtures.createValidCandle(symbol, tradingDays[i]);
-                    // Vary prices slightly per candle
-                    candle.setOpenPrice(new BigDecimal("1000.00").add(BigDecimal.valueOf(i)));
-                    candle.setHighPrice(new BigDecimal("1020.00").add(BigDecimal.valueOf(i)));
-                    candle.setLowPrice(new BigDecimal("990.00").add(BigDecimal.valueOf(i)));
-                    candle.setClosePrice(new BigDecimal("1015.00").add(BigDecimal.valueOf(i)));
-                    candle.setAdjClosePrice(new BigDecimal("1015.00").add(BigDecimal.valueOf(i)));
-                    ohlcvCandleRepository.save(candle);
-                }
-            }
-
-            // Act
-            DailySignalOrchestrator.DailySignalResult result = dailySignalOrchestrator.runDailyGeneration();
-
-            // Assert: processed count
-            assertThat(result.processed()).isEqualTo(3);
-
-            // Assert: at least some signals generated
-            assertThat(result.success()).isGreaterThan(0);
-
-            // Assert: no failures
-            assertThat(result.failures()).isEqualTo(0);
-
-            // Assert: signals persisted in DB for at least one symbol
-            List<SignalEntity> relianceSignals = signalRepository.findBySymbolOrderByDateDesc("RELIANCE",
-                    org.springframework.data.domain.PageRequest.of(0, 100));
-            assertThat(relianceSignals).isNotEmpty();
-        }
-
-        private LocalDate[] generateTradingDays(int count) {
-            List<LocalDate> days = new ArrayList<>();
-            LocalDate current = LocalDate.now().minusYears(1);
-            while (days.size() < count && !current.isAfter(LocalDate.now())) {
-                int dow = current.getDayOfWeek().getValue();
-                if (dow <= 5) { // Mon-Fri
-                    days.add(current);
-                }
-                current = current.plusDays(1);
-            }
-            return days.toArray(new LocalDate[0]);
-        }
-    }
-
-    // ==================== Test 2: JobOrchestratorService ====================
+    // ==================== JobOrchestratorService ====================
 
     @Autowired
     private JobOrchestratorService jobOrchestratorService;

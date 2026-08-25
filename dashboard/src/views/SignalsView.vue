@@ -100,7 +100,9 @@
     <ErrorBoundary :error="error">
       <template #error>
         <div v-if="error" class="flex flex-col items-center justify-center py-20">
-          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <p class="text-sm text-danger">
+            {{ errorMessage }}
+          </p>
           <button
             class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
             @click="refreshSignals"
@@ -128,7 +130,9 @@
               }"
             />
           </div>
-          <p class="mt-2 text-xs text-text-muted">{{ progressMessage || 'Starting...' }}</p>
+          <p class="mt-2 text-xs text-text-muted">
+            {{ progressMessage || 'Starting...' }}
+          </p>
         </div>
 
         <!-- Generation summary -->
@@ -146,7 +150,10 @@
           >
             {{ showSkipReasons ? 'Hide reasons' : 'Show reasons' }}
           </button>
-          <div v-if="showSkipReasons && generationSummary.reasons.length > 0" class="mt-2 space-y-1">
+          <div
+            v-if="showSkipReasons && generationSummary.reasons.length > 0"
+            class="mt-2 space-y-1"
+          >
             <p
               v-for="(reason, i) in generationSummary.reasons"
               :key="i"
@@ -298,7 +305,9 @@ const execResult = ref<{ success: number; failed: number; errors: string[] } | n
 const progressMessage = ref('')
 const progressCurrent = ref(0)
 const progressTotal = ref(0)
-const generationSummary = ref<{ generated: number; skipped: number; reasons: string[] } | null>(null)
+const generationSummary = ref<{ generated: number; skipped: number; reasons: string[] } | null>(
+  null
+)
 const showSkipReasons = ref(false)
 
 const filteredSignals = computed(() => {

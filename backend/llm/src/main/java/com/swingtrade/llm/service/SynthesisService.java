@@ -51,7 +51,9 @@ public class SynthesisService {
 
             return parseResponse(llmResponse, composite);
         } catch (Exception e) {
-            logger.warn("LLM synthesis failed for {}: {}, using fallback", symbol, e.getMessage());
+            logger.warn("LLM synthesis failed for {}: {}: {}, using fallback",
+                symbol, e.getClass().getName(), e.getMessage());
+            logger.debug("LLM synthesis failure stack trace for {}", symbol, e);
             return fallbackSynthesis(composite);
         }
     }
@@ -111,7 +113,9 @@ public class SynthesisService {
                 true
             );
         } catch (Exception e) {
-            logger.debug("BeanOutputConverter failed, falling back to Jackson parsing: {}", e.getMessage());
+            logger.debug("BeanOutputConverter failed, falling back to Jackson parsing: {}: {}",
+                e.getClass().getName(), e.getMessage());
+            logger.debug("BeanOutputConverter failure stack trace", e);
             return parseWithFallback(response, composite);
         }
     }
@@ -134,7 +138,9 @@ public class SynthesisService {
                 dto.getKeyDrivers(), dto.getBullishFactors(), dto.getBearishFactors(), true
             );
         } catch (Exception e) {
-            logger.warn("Failed to parse synthesis JSON: {}, fallback", e.getMessage());
+            logger.warn("Failed to parse synthesis JSON: {}: {}, fallback",
+                e.getClass().getName(), e.getMessage());
+            logger.debug("Synthesis JSON parse failure stack trace", e);
             return fallbackSynthesis(composite);
         }
     }

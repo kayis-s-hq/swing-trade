@@ -23,7 +23,8 @@ export default defineConfig({
             console.log('[VITE PROXY]', req.method, req.url, '->', proxyReq.path)
           })
           proxy.on('proxyRes', (proxyRes, req, res) => {
-            const isSSE = req.url?.includes('/stream') ||
+            const isSSE =
+              req.url?.includes('/stream') ||
               proxyRes.headers['content-type']?.includes('text/event-stream')
             if (isSSE) {
               // Prevent buffering: forward headers immediately and remove content-length
