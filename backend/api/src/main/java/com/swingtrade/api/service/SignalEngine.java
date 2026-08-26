@@ -26,33 +26,20 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Entry point for signal generation. Delegates pipeline logic to
- * {@link DailySignalOrchestrator} and {@link SignalPipeline}.
+ * Entry point for signal generation. Delegates pipeline logic to {@link SignalPipeline}.
  */
 @Component
 public class SignalEngine {
 
     private static final Logger logger = LoggerFactory.getLogger(SignalEngine.class);
 
-    private final DailySignalOrchestrator orchestrator;
     private final SignalPipeline pipeline;
     private final SignalStore signalStore;
 
-    public SignalEngine(DailySignalOrchestrator orchestrator,
-                        SignalPipeline pipeline,
+    public SignalEngine(SignalPipeline pipeline,
                         SignalStore signalStore) {
-        this.orchestrator = orchestrator;
         this.pipeline = pipeline;
         this.signalStore = signalStore;
-    }
-
-    /**
-     * Generate signals for all stocks with data.
-     * Called by JobOrchestratorService — @Scheduled removed in favor of unified pipeline.
-     */
-    // @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Kolkata")
-    public void generateDailySignals() {
-        orchestrator.runDailyGeneration();
     }
 
     /**

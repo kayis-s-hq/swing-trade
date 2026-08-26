@@ -233,7 +233,7 @@
                 <span class="text-text-secondary">Port:</span> 8089
               </div>
               <div
-                v-else-if="llmSettings.llmBackend === 'gpuhub'"
+                v-else-if="llmSettings.llmBackend === 'openai'"
                 class="rounded-md bg-bg-primary p-3"
               >
                 External OpenAI-compatible LLM endpoint. No server management needed.
@@ -260,17 +260,11 @@
             </div>
 
             <div class="flex gap-2">
-              <select
+              <input
                 v-model="llmSettings.llamacppModel"
-                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
-              >
-                <option value="/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf">
-                  Qwen3-4B (fast, default)
-                </option>
-                <option value="/home/dietpi/.synapse/models/google_gemma-4-E2B-it-Q4_0.gguf">
-                  Gemma-4 (larger, super analysis)
-                </option>
-              </select>
+                placeholder="Path to the GGUF model configured on the server"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
               <span class="self-center text-xs text-text-muted">Model</span>
             </div>
 
@@ -287,17 +281,11 @@
               llama.cpp server on Pi 5 (dietpi@piworm). Java starts/stops it via SSH on port 8089.
             </p>
             <div class="flex gap-2">
-              <select
+              <input
                 v-model="llmSettings.llamacppModel"
-                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
-              >
-                <option value="/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf">
-                  Qwen3-4B (fast, default)
-                </option>
-                <option value="/home/dietpi/.synapse/models/google_gemma-4-E2B-it-Q4_0.gguf">
-                  Gemma-4 (larger, super analysis)
-                </option>
-              </select>
+                placeholder="Path to the GGUF model configured on the server"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
               <span class="self-center text-xs text-text-muted">Model</span>
             </div>
             <p class="text-xs text-text-muted">
@@ -362,7 +350,7 @@
           </div>
 
           <!-- OpenAI-compatible LLM (Super Analysis) -->
-          <div v-show="llmSettings.llmBackend === 'gpuhub'" class="space-y-4 mb-6">
+          <div v-show="llmSettings.llmBackend === 'openai'" class="space-y-4 mb-6">
             <h3 class="text-sm font-medium text-text-secondary">OpenAI-compatible LLM</h3>
             <div class="flex gap-2">
               <input
@@ -376,7 +364,8 @@
               <input
                 v-model="llmSettings.openaiApiKey"
                 type="password"
-                placeholder="sk-..."
+                autocomplete="new-password"
+                placeholder="Leave blank to keep the configured key"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
               />
               <span class="self-center text-xs text-text-muted">API Key</span>
@@ -437,7 +426,8 @@
               <input
                 v-model="llmSettings.ollamaApiKey"
                 type="password"
-                placeholder="optional — Ollama usually doesn't require one"
+                autocomplete="new-password"
+                placeholder="Optional; leave blank to keep the configured key"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
               />
               <span class="self-center text-xs text-text-muted">API Key (optional)</span>
@@ -703,7 +693,7 @@ const brokers = [
 const llmBackends = [
   { value: 'local' as const, label: 'Local' },
   { value: 'pi_ssh' as const, label: 'Pi SSH' },
-  { value: 'gpuhub' as const, label: 'OpenAI' },
+  { value: 'openai' as const, label: 'OpenAI' },
   { value: 'ollama' as const, label: 'Ollama' },
 ]
 

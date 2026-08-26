@@ -330,6 +330,12 @@ case "${1:-help}" in
     # --- Step 7: Stop existing stage deployment ---
     echo "🛑 Stopping existing stage deployment on pi-node..."
     ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml down" 2>/dev/null || true
+    # Belt-and-suspenders: force-remove by exact name too. `compose down` only
+    # matches containers carrying this project's compose labels — a container
+    # left over from a prior deploy under a different project name (e.g. a
+    # different CWD basename) won't be touched by it and blocks `up` with a
+    # "name already in use" conflict.
+    ssh dietpi@piworm.local "docker rm -f swing-trade-stage-api swing-trade-stage-dashboard swing_trade_stage_postgres" 2>/dev/null || true
     echo "✓ Existing deployment stopped"
     echo ""
 
