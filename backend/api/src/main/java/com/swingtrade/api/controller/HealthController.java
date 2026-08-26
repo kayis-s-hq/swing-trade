@@ -117,9 +117,12 @@ public class HealthController {
         status.setSystemInfo(HealthStatus.SystemInfo.fromSystem());
 
         if (dataIngestionService != null) {
+            // Upstox is unconfigured — the hardcoded "provider=Upstox / status=Active" detail
+            // is commented out because it reported Upstox as active even when the configured
+            // provider was Yahoo (kept for future re-enablement).
             status.addComponent("market-data", new HealthStatus.ComponentStatus(
-                    "market-data", "UP", "Market Data Service",
-                    Map.of("provider", "Upstox", "status", "Active")));
+                    "market-data", "UP", "Market Data Service"));
+            //         Map.of("provider", "Upstox", "status", "Active")));
         } else {
             status.addComponent("market-data", new HealthStatus.ComponentStatus(
                     "market-data", "UP", "Market Data Service (not configured)"));

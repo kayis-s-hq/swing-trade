@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.time.LocalDate;
+// Only used by the commented-out Upstox pull-historical endpoint below.
+// import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -178,42 +179,44 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.ok(data));
     }
 
-    /**
-     * Pull historical data from Upstox for a stock.
-     *
-     * @param symbol stock symbol
-     * @param startDate start date (YYYY-MM-DD)
-     * @param endDate end date (YYYY-MM-DD)
-     * @return API response with ingestion result
-     */
-    @PostMapping("/data/pull-historical")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> pullHistoricalData(
-            @RequestParam String symbol,
-            @RequestParam String startDate,
-            @RequestParam String endDate) {
+    // Upstox is unconfigured — this endpoint (backed by DataIngestionService.pullDataFromUpstox)
+    // is commented out along with that method (kept for future re-enablement).
+    // /**
+    //  * Pull historical data from Upstox for a stock.
+    //  *
+    //  * @param symbol stock symbol
+    //  * @param startDate start date (YYYY-MM-DD)
+    //  * @param endDate end date (YYYY-MM-DD)
+    //  * @return API response with ingestion result
+    //  */
+    // @PostMapping("/data/pull-historical")
+    // public ResponseEntity<ApiResponse<Map<String, Object>>> pullHistoricalData(
+    //         @RequestParam String symbol,
+    //         @RequestParam String startDate,
+    //         @RequestParam String endDate) {
 
-        logger.info("Pulling historical data for {}: {} to {}", symbol, startDate, endDate);
+    //     logger.info("Pulling historical data for {}: {} to {}", symbol, startDate, endDate);
 
-        try {
-            LocalDate from = LocalDate.parse(startDate);
-            LocalDate to = LocalDate.parse(endDate);
+    //     try {
+    //         LocalDate from = LocalDate.parse(startDate);
+    //         LocalDate to = LocalDate.parse(endDate);
 
-            int ingested = dataIngestionService.pullDataFromUpstox(symbol, from, to);
+    //         int ingested = dataIngestionService.pullDataFromUpstox(symbol, from, to);
 
-            Map<String, Object> data = new ConcurrentHashMap<>();
-            data.put("symbol", symbol);
-            data.put("startDate", startDate);
-            data.put("endDate", endDate);
-            data.put("ingested", ingested);
+    //         Map<String, Object> data = new ConcurrentHashMap<>();
+    //         data.put("symbol", symbol);
+    //         data.put("startDate", startDate);
+    //         data.put("endDate", endDate);
+    //         data.put("ingested", ingested);
 
-            return ResponseEntity.ok(ApiResponse.ok(data));
+    //         return ResponseEntity.ok(ApiResponse.ok(data));
 
-        } catch (Exception e) {
-            logger.error("Error pulling historical data for {}: {}", symbol, e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("Failed to pull historical data: " + e.getMessage()));
-        }
-    }
+    //     } catch (Exception e) {
+    //         logger.error("Error pulling historical data for {}: {}", symbol, e.getMessage(), e);
+    //         return ResponseEntity.internalServerError()
+    //                 .body(ApiResponse.error("Failed to pull historical data: " + e.getMessage()));
+    //     }
+    // }
 
     /**
      * Get data ingestion status for a stock.

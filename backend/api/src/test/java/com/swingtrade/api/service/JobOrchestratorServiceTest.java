@@ -34,6 +34,7 @@ import org.mockito.quality.Strictness;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,6 +55,8 @@ import static org.mockito.Mockito.*;
 @MockitoSettings(strictness = Strictness.STRICT_STUBS)
 @DisplayName("JobOrchestratorService tests")
 class JobOrchestratorServiceTest {
+
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private JobOrchestratorService service;
 
@@ -144,7 +147,7 @@ class JobOrchestratorServiceTest {
                     dataIngestionService, newsIngestionService, sentimentService,
                     signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L);
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
 
         @Test
@@ -287,10 +290,6 @@ class JobOrchestratorServiceTest {
                     JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
                     return entity == null ? List.of() : List.of(entity);
                 });
-            when(jobRunStageRepository.findByRunIdAndStageName(any(UUID.class), eq("ERROR")))
-                .thenAnswer(invocation -> stageState.values().stream()
-                    .filter(entity -> JobRunStage.Status.ERROR.name().equals(entity.getStatus()))
-                    .toList());
             when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
                 .thenAnswer(invocation -> List.copyOf(stageState.values()));
 
@@ -323,6 +322,253 @@ class JobOrchestratorServiceTest {
             assertThat(paperTradeStage.getErrorMessage()).isNull();
             verifyNoInteractions(signalStore, tradingService);
         }
+
+        @Test
+        @DisplayName("Completion callback failure forces the run to FAILED instead of leaving it RUNNING")
+        void shouldForceRunToFailedWhenCompletionCallbackThrows() throws InterruptedException {
+            AtomicReference<JobRunEntity> runState = new AtomicReference<>();
+            CountDownLatch runCompleted = new CountDownLatch(1);
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("RELIANCE"));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                if (!JobRun.Status.RUNNING.name().equals(entity.getStatus())) {
+                    runCompleted.countDown();
+                }
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
+                .thenThrow(new RuntimeException("stage table unavailable"));
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(runState.get().getStatus()).isEqualTo(JobRun.Status.FAILED.name());
+            assertThat(runState.get().getCompletedAt()).isNotNull();
+            assertThat(runState.get().getErrorMessage()).contains("Run finalization failed");
+        }
+
+        @Test
+        @DisplayName("Majority of symbols with an ERROR stage marks the run FAILED")
+        void shouldMarkRunFailedWhenMajorityOfSymbolsHaveErrorStage() throws InterruptedException {
+            AtomicReference<JobRunEntity> runState = new AtomicReference<>();
+            CountDownLatch runCompleted = new CountDownLatch(1);
+            UUID stageRunId = UUID.randomUUID();
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("A", "B", "C"));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                if (!JobRun.Status.RUNNING.name().equals(entity.getStatus())) {
+                    runCompleted.countDown();
+                }
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
+                .thenReturn(List.of(
+                    makeStageEntity(stageRunId, "A", JobRunStage.StageName.SIGNAL,
+                        JobRunStage.Status.ERROR.name(), 10L, null),
+                    makeStageEntity(stageRunId, "B", JobRunStage.StageName.SIGNAL,
+                        JobRunStage.Status.ERROR.name(), 10L, null),
+                    makeStageEntity(stageRunId, "C", JobRunStage.StageName.SIGNAL,
+                        JobRunStage.Status.COMPLETED.name(), 10L, "ok")
+                ));
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(runState.get().getStatus()).isEqualTo(JobRun.Status.FAILED.name());
+            assertThat(runState.get().getErrorMessage()).contains("2 symbols failed");
+        }
+
+        @Test
+        @DisplayName("Minority of symbols with an ERROR stage keeps the run COMPLETED")
+        void shouldKeepRunCompletedWhenOnlyMinorityOfSymbolsHaveErrorStage() throws InterruptedException {
+            AtomicReference<JobRunEntity> runState = new AtomicReference<>();
+            CountDownLatch runCompleted = new CountDownLatch(1);
+            UUID stageRunId = UUID.randomUUID();
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("A", "B", "C"));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                if (!JobRun.Status.RUNNING.name().equals(entity.getStatus())) {
+                    runCompleted.countDown();
+                }
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
+                .thenReturn(List.of(
+                    makeStageEntity(stageRunId, "A", JobRunStage.StageName.SIGNAL,
+                        JobRunStage.Status.ERROR.name(), 10L, null),
+                    makeStageEntity(stageRunId, "B", JobRunStage.StageName.SIGNAL,
+                        JobRunStage.Status.COMPLETED.name(), 10L, "ok"),
+                    makeStageEntity(stageRunId, "C", JobRunStage.StageName.SIGNAL,
+                        JobRunStage.Status.COMPLETED.name(), 10L, "ok")
+                ));
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(runState.get().getStatus()).isEqualTo(JobRun.Status.COMPLETED.name());
+            assertThat(runState.get().getErrorMessage()).isNull();
+        }
+    }
+
+    // ==================== findActiveRun ====================
+
+    @Nested
+    @DisplayName("findActiveRun")
+    class FindActiveRun {
+
+        private JobOrchestratorService svc;
+
+        @BeforeEach
+        void setUp() {
+            runId = UUID.randomUUID();
+            svc = new JobOrchestratorService(
+                    dataIngestionService, newsIngestionService, sentimentService,
+                    signalPipeline, backtestEngine, tradingService,
+                    jobRunRepository, jobRunStageRepository, signalStore,
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
+        }
+
+        @Test
+        @DisplayName("No RUNNING run returns empty")
+        void shouldReturnEmptyWhenNoRunIsRunning() {
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of());
+
+            assertThat(svc.findActiveRun()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("RUNNING run within the staleness threshold is reported as active")
+        void shouldReturnRunWhenRunningRunIsWithinStalenessThreshold() {
+            // 1 symbol at maxConcurrent=3 → 1 batch → 840s * 1 * 6 = 5040s = 84 min threshold
+            JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
+                LocalDateTime.now(IST).minusMinutes(5));
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of(entity));
+
+            assertThat(svc.findActiveRun())
+                .isPresent()
+                .get()
+                .extracting(JobRun::runId)
+                .isEqualTo(runId);
+        }
+
+        @Test
+        @DisplayName("RUNNING run older than the staleness threshold is not blocking")
+        void shouldReturnEmptyWhenOnlyRunningRunIsOlderThanStalenessThreshold() {
+            // Threshold is 84 min (840s * 1 batch * 6); 90 min is past it.
+            JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
+                LocalDateTime.now(IST).minusMinutes(90));
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of(entity));
+
+            assertThat(svc.findActiveRun()).isEmpty();
+        }
+    }
+
+    // ==================== reapOrphanedRuns ====================
+
+    @Nested
+    @DisplayName("reapOrphanedRuns")
+    class ReapOrphanedRuns {
+
+        private JobOrchestratorService svc;
+
+        private JobOrchestratorService newService(boolean reaperEnabled) {
+            return new JobOrchestratorService(
+                    dataIngestionService, newsIngestionService, sentimentService,
+                    signalPipeline, backtestEngine, tradingService,
+                    jobRunRepository, jobRunStageRepository, signalStore,
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, reaperEnabled);
+        }
+
+        @BeforeEach
+        void setUp() {
+            runId = UUID.randomUUID();
+            svc = newService(true);
+        }
+
+        @Test
+        @DisplayName("Disabled reaper never touches the repositories")
+        void shouldDoNothingWhenReaperIsDisabled() {
+            newService(false).reapOrphanedRuns();
+
+            verifyNoInteractions(jobRunRepository, jobRunStageRepository, jobOrchestratorMetrics);
+        }
+
+        @Test
+        @DisplayName("No RUNNING runs is a no-op")
+        void shouldDoNothingWhenNoRunsAreRunning() {
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of());
+
+            svc.reapOrphanedRuns();
+
+            verify(jobRunRepository, never()).save(any(JobRunEntity.class));
+            verify(jobRunStageRepository, never()).saveAll(any());
+            verifyNoInteractions(jobOrchestratorMetrics);
+        }
+
+        @Test
+        @DisplayName("Fresh RUNNING run is left untouched")
+        void shouldLeaveFreshRunningRunUntouched() {
+            JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
+                LocalDateTime.now(IST).minusMinutes(5));
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of(entity));
+
+            svc.reapOrphanedRuns();
+
+            assertThat(entity.getStatus()).isEqualTo(JobRun.Status.RUNNING.name());
+            verify(jobRunRepository, never()).save(any(JobRunEntity.class));
+            verify(jobRunStageRepository, never()).saveAll(any());
+            verifyNoInteractions(jobOrchestratorMetrics);
+        }
+
+        @Test
+        @DisplayName("Stale RUNNING run and its RUNNING stages are force-failed")
+        void shouldReapStaleRunningRunAndItsRunningStages() {
+            // Threshold is 84 min (840s * 1 batch * 6); 2 h is past it.
+            JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
+                LocalDateTime.now(IST).minusHours(2));
+            entity.setCompletedAt(null);
+            JobRunStageEntity stage = makeStageEntity(runId, "RELIANCE",
+                JobRunStage.StageName.SENTIMENT, JobRunStage.Status.RUNNING.name(), null, null);
+            stage.setCompletedAt(null);
+
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of(entity));
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(runId))
+                .thenReturn(List.of(stage));
+
+            svc.reapOrphanedRuns();
+
+            assertThat(entity.getStatus()).isEqualTo(JobRun.Status.FAILED.name());
+            assertThat(entity.getCompletedAt()).isNotNull();
+            assertThat(entity.getErrorMessage()).contains("orphaned");
+            verify(jobRunRepository).save(entity);
+
+            assertThat(stage.getStatus()).isEqualTo(JobRunStage.Status.ERROR.name());
+            assertThat(stage.getCompletedAt()).isNotNull();
+            assertThat(stage.getErrorMessage()).contains("orphaned");
+            verify(jobRunStageRepository).saveAll(List.of(stage));
+
+            verify(jobOrchestratorMetrics).recordRunReaped();
+            verify(jobOrchestratorMetrics, never()).recordRunFailed(anyLong());
+            verify(jobOrchestratorMetrics, never()).recordRunCompleted(anyLong());
+        }
     }
 
     // ==================== cancelRun ====================
@@ -340,7 +586,7 @@ class JobOrchestratorServiceTest {
                     dataIngestionService, newsIngestionService, sentimentService,
                     signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L);
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
 
         @Test
@@ -381,7 +627,7 @@ class JobOrchestratorServiceTest {
                     dataIngestionService, newsIngestionService, sentimentService,
                     signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L);
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
 
         @Test
@@ -422,7 +668,7 @@ class JobOrchestratorServiceTest {
                     dataIngestionService, newsIngestionService, sentimentService,
                     signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L);
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
 
         @Test
@@ -472,7 +718,7 @@ class JobOrchestratorServiceTest {
                     dataIngestionService, newsIngestionService, sentimentService,
                     signalPipeline, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
-                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L);
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
 
         @Test

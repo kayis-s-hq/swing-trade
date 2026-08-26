@@ -1,5 +1,6 @@
 package com.swingtrade.api.controller;
 
+import com.swingtrade.api.dto.ErrorResponse;
 import com.swingtrade.api.dto.JobRunResponse;
 import com.swingtrade.api.dto.JobRunStageResponse;
 import com.swingtrade.api.service.JobOrchestratorService;
@@ -7,6 +8,7 @@ import com.swingtrade.domain.JobRun;
 import com.swingtrade.data.entity.JobRunEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -34,10 +37,20 @@ public class JobRunController {
 
     /**
      * POST /api/job/runs/start — Start a new run (manual trigger).
+     * Returns 409 CONFLICT if a run is already in progress.
      */
     @PostMapping("/start")
-    public ResponseEntity<JobRunResponse> startRun(
+    public ResponseEntity<?> startRun(
             @RequestParam(defaultValue = "MANUAL") String triggerType) {
+        Optional<JobRun> activeRun = orchestratorService.findActiveRun();
+        if (activeRun.isPresent()) {
+            logger.info("Rejecting {} job run trigger — run {} is already in progress",
+                triggerType, activeRun.get().runId());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.conflict(
+                    "A job run is already in progress: " + activeRun.get().runId()));
+        }
+
         logger.info("Manual job run triggered (triggerType={})", triggerType);
         JobRun.TriggerType type = "SCHEDULED".equalsIgnoreCase(triggerType)
             ? JobRun.TriggerType.SCHEDULED

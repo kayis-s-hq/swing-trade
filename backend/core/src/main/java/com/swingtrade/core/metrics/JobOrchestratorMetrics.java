@@ -58,4 +58,14 @@ public class JobOrchestratorMetrics {
         runsFailed.increment();
         runDuration.record(Duration.ofMillis(durationMs));
     }
+
+    /**
+     * Records a run that the watchdog force-failed because it was found orphaned
+     * (RUNNING past its staleness threshold, e.g. abandoned by a JVM restart). Unlike
+     * {@link #recordRunFailed}, this does not touch {@code activeRuns} — the orphaned run's
+     * start was never recorded as active in this JVM instance.
+     */
+    public void recordRunReaped() {
+        runsFailed.increment();
+    }
 }

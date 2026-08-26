@@ -22,12 +22,15 @@ import com.swingtrade.strategy.BacktestResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -49,12 +52,24 @@ public class JobOrchestratorService {
     // Per-stage timeouts (seconds)
     private static final long TIMEOUT_DATA_FETCH = 30L;
     private static final long TIMEOUT_NEWS = 30L;
-    private static final long TIMEOUT_SENTIMENT = 60L;
+    // Matches SentimentService.ANALYSIS_TIMEOUT_SECONDS: CPU-only local LLM generation
+    // can legitimately run for minutes, so the outer stage must not cut the inner wait short.
+    private static final long TIMEOUT_SENTIMENT = 600L;
     private static final long TIMEOUT_SIGNAL = 30L;
     private static final long TIMEOUT_BACKTEST = 120L;
     private static final long TIMEOUT_PAPER_TRADE = 30L;
 
+    /** Worst-case wall-clock seconds a single symbol can spend across all six stages. */
+    private static final long STAGE_TIMEOUT_SUM_SECONDS =
+        TIMEOUT_DATA_FETCH + TIMEOUT_NEWS + TIMEOUT_SENTIMENT
+            + TIMEOUT_SIGNAL + TIMEOUT_BACKTEST + TIMEOUT_PAPER_TRADE;
+
+    /** Generous margin over the worst case before a RUNNING row is considered orphaned. */
+    private static final long STALE_RUN_SAFETY_MULTIPLIER = 6L;
+
     private final long pollIntervalMs;
+    private final int maxConcurrent;
+    private final boolean reaperEnabled;
     private final Semaphore semaphore;
     private final ExecutorService asyncExecutor;
 
@@ -85,8 +100,11 @@ public class JobOrchestratorService {
             CandleStore candleStore,
             JobOrchestratorMetrics jobMetrics,
             @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
-            @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs) {
+            @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs,
+            @Value("${job.orchestrator.reaper.enabled:true}") boolean reaperEnabled) {
         this.pollIntervalMs = pollIntervalMs;
+        this.maxConcurrent = maxConcurrent;
+        this.reaperEnabled = reaperEnabled;
         this.semaphore = new Semaphore(maxConcurrent);
         this.asyncExecutor = Executors.newThreadPerTaskExecutor(
             Thread.ofVirtual().name("job-orchestrator-", 0).factory());
@@ -196,28 +214,35 @@ public class JobOrchestratorService {
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
             .whenComplete((v, ex) -> {
-                if (ex != null) {
-                    completeRun(finalRun.runId(), JobRun.Status.FAILED, ex.getMessage());
-                } else {
-                    // Count failures
-                    List<JobRunStageEntity> failedStages = jobRunStageRepository
-                        .findByRunIdAndStageName(finalRun.runId(), "ERROR");
-                    if (!failedStages.isEmpty()) {
-                        // Check if >50% symbols had at least one error
-                        List<String> symbolsWithErrors = jobRunStageRepository
-                            .findByRunIdAndStageName(finalRun.runId(), "ERROR").stream()
-                            .map(JobRunStageEntity::getSymbol)
-                            .distinct()
-                            .toList();
-                        if (symbolsWithErrors.size() > symbols.size() / 2) {
-                            completeRun(finalRun.runId(), JobRun.Status.FAILED,
-                                symbolsWithErrors.size() + " symbols failed");
-                        } else {
-                            completeRun(finalRun.runId(), JobRun.Status.COMPLETED, null);
-                        }
+                try {
+                    if (ex != null) {
+                        completeRun(finalRun.runId(), JobRun.Status.FAILED, ex.getMessage());
+                        return;
+                    }
+                    // Count distinct symbols that recorded at least one ERROR stage.
+                    // Filter on stage STATUS, not stageName — "ERROR" is a JobRunStage.Status
+                    // value and never a valid StageName, so the old
+                    // findByRunIdAndStageName(runId, "ERROR") lookup could never match.
+                    List<String> symbolsWithErrors = jobRunStageRepository
+                        .findByRunIdOrderBySymbolAscStageNameAsc(finalRun.runId()).stream()
+                        .filter(e -> JobRunStage.Status.ERROR.name().equals(e.getStatus()))
+                        .map(JobRunStageEntity::getSymbol)
+                        .distinct()
+                        .toList();
+                    if (!symbolsWithErrors.isEmpty() && symbolsWithErrors.size() > symbols.size() / 2) {
+                        completeRun(finalRun.runId(), JobRun.Status.FAILED,
+                            symbolsWithErrors.size() + " symbols failed");
                     } else {
                         completeRun(finalRun.runId(), JobRun.Status.COMPLETED, null);
                     }
+                } catch (Exception completionEx) {
+                    // Never let a failure here vanish silently and leave the JobRun row
+                    // stuck at RUNNING forever.
+                    logger.error("Run {} completion callback failed — forcing run to FAILED "
+                        + "to avoid a stuck RUNNING row: {}",
+                        finalRun.runId(), completionEx.getMessage(), completionEx);
+                    forceRunFailedSafely(finalRun.runId(),
+                        "Run finalization failed: " + completionEx.getMessage());
                 }
             });
 
@@ -489,6 +514,109 @@ public class JobOrchestratorService {
             jobMetrics.recordRunFailed(durationMs);
         }
         logger.info("Run {} completed with status {}", runId, status);
+    }
+
+    /**
+     * Last-resort path when the normal completion logic in {@code whenComplete} throws.
+     * Writes only the JobRun row itself (no stage aggregation) so it has the best chance
+     * of forcing the run out of RUNNING even if the failure was in stage-table access.
+     */
+    private void forceRunFailedSafely(UUID runId, String reason) {
+        try {
+            jobRunRepository.findByRunId(runId).ifPresent(entity -> {
+                entity.setStatus(JobRun.Status.FAILED.name());
+                entity.setCompletedAt(java.time.LocalDateTime.now(IST));
+                entity.setErrorMessage(reason);
+                jobRunRepository.save(entity);
+            });
+            jobMetrics.recordRunFailed(0L);
+        } catch (Exception fatal) {
+            logger.error("CRITICAL: failed to force run {} to FAILED after a completion "
+                + "error — row may be left stuck at RUNNING: {}", runId, fatal.getMessage(), fatal);
+        }
+    }
+
+    /**
+     * Generous, watchlist-size-aware staleness threshold: worst-case per-symbol stage time,
+     * times the number of concurrency batches needed to process {@code symbolsCount} symbols
+     * at {@code maxConcurrent} parallelism, times a large safety multiplier. A run older than
+     * this either survived a JVM restart or is otherwise abandoned.
+     */
+    private Duration staleThreshold(int symbolsCount) {
+        int batches = Math.ceilDiv(Math.max(1, symbolsCount), Math.max(1, maxConcurrent));
+        return Duration.ofSeconds(STAGE_TIMEOUT_SUM_SECONDS * batches * STALE_RUN_SAFETY_MULTIPLIER);
+    }
+
+    private boolean isStale(JobRunEntity run) {
+        if (run.getStartedAt() == null) {
+            return false;
+        }
+        Duration age = Duration.between(run.getStartedAt(), java.time.LocalDateTime.now(IST));
+        return age.compareTo(staleThreshold(run.getSymbolsCount())) > 0;
+    }
+
+    /**
+     * Returns the currently-blocking run, if any. A RUNNING row older than its staleness
+     * threshold is treated as orphaned (not blocking) rather than skipping forever — the
+     * watchdog reaper (see {@link #reapOrphanedRuns()}) cleans up the DB row separately,
+     * but callers should not wait for that before allowing a new run.
+     */
+    @Transactional(readOnly = true)
+    public Optional<JobRun> findActiveRun() {
+        return jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name())
+            .stream()
+            .filter(e -> !isStale(e))
+            .findFirst()
+            .map(JobRunEntity::toDomain);
+    }
+
+    /**
+     * Self-healing watchdog: finds job_runs rows stuck RUNNING past their staleness
+     * threshold (e.g. abandoned by a JVM restart mid-run) and force-fails them, along with
+     * any of their stages still marked RUNNING. Runs shortly after startup and periodically
+     * thereafter so an orphaned run recovers automatically instead of requiring a manual
+     * DB fix.
+     */
+    @Scheduled(
+        initialDelayString = "${job.orchestrator.reaper.initial-delay-ms:15000}",
+        fixedDelayString = "${job.orchestrator.reaper.interval-ms:300000}")
+    public void reapOrphanedRuns() {
+        if (!reaperEnabled) {
+            return;
+        }
+        List<JobRunEntity> running = jobRunRepository
+            .findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name());
+        for (JobRunEntity run : running) {
+            if (isStale(run)) {
+                reapRun(run);
+            }
+        }
+    }
+
+    private void reapRun(JobRunEntity run) {
+        String reason = "Reaped as orphaned: RUNNING for longer than the staleness threshold ("
+            + staleThreshold(run.getSymbolsCount()).toMinutes()
+            + " min) — likely abandoned by a JVM restart";
+        logger.warn("Reaping orphaned run {}: startedAt={}, symbolsCount={}",
+            run.getRunId(), run.getStartedAt(), run.getSymbolsCount());
+
+        run.setStatus(JobRun.Status.FAILED.name());
+        run.setCompletedAt(java.time.LocalDateTime.now(IST));
+        run.setErrorMessage(reason);
+        jobRunRepository.save(run);
+        jobMetrics.recordRunReaped();
+
+        List<JobRunStageEntity> runningStages = jobRunStageRepository
+            .findByRunIdOrderBySymbolAscStageNameAsc(run.getRunId()).stream()
+            .filter(e -> JobRunStage.Status.RUNNING.name().equals(e.getStatus()))
+            .toList();
+        for (JobRunStageEntity stage : runningStages) {
+            stage.setStatus(JobRunStage.Status.ERROR.name());
+            stage.setCompletedAt(java.time.LocalDateTime.now(IST));
+            stage.setErrorMessage(
+                "Reaped as orphaned — run was force-failed while this stage was RUNNING");
+        }
+        jobRunStageRepository.saveAll(runningStages);
     }
 
     /**

@@ -62,4 +62,14 @@ class SentimentPromptLoaderTest {
         assertThat(prompt).contains("swing trade entry");
         assertThat(prompt).contains("1-4 week");
     }
+
+    @Test
+    @DisplayName("User prompt ends with Qwen3 /no_think soft switch")
+    void userPromptEndsWithNoThinkSwitch() throws IOException {
+        String prompt = loader.getUserPrompt();
+        // Qwen3 only honours /no_think when it is the last token of the user turn.
+        assertThat(prompt).endsWith("/no_think");
+        // The JSON-only instruction must survive alongside the switch.
+        assertThat(prompt).contains("Respond with ONLY a JSON object");
+    }
 }

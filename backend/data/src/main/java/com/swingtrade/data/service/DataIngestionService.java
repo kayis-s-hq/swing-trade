@@ -126,49 +126,50 @@ public class DataIngestionService {
         }
     }
 
-    /**
-     * Pull data from Upstox API.
-     * Uses the MarketDataClient (UpstoxServiceClient) for authenticated API calls.
-     *
-     * @param symbol the stock symbol
-     * @param startDate start date
-     * @param endDate end date
-     * @return number of candles successfully ingested
-     */
-    @Transactional
-    public int pullDataFromUpstox(String symbol, LocalDate startDate, LocalDate endDate) {
-        logger.info("Pulling data from Upstox for {} from {} to {}", symbol, startDate, endDate);
+    // Upstox is unconfigured — this ingestion path is commented out (kept for future re-enablement).
+    // /**
+    //  * Pull data from Upstox API.
+    //  * Uses the MarketDataClient (UpstoxServiceClient) for authenticated API calls.
+    //  *
+    //  * @param symbol the stock symbol
+    //  * @param startDate start date
+    //  * @param endDate end date
+    //  * @return number of candles successfully ingested
+    //  */
+    // @Transactional
+    // public int pullDataFromUpstox(String symbol, LocalDate startDate, LocalDate endDate) {
+    //     logger.info("Pulling data from Upstox for {} from {} to {}", symbol, startDate, endDate);
 
-        int count = 0;
-        LocalDate current = startDate;
+    //     int count = 0;
+    //     LocalDate current = startDate;
 
-        while (!current.isAfter(endDate)) {
-            if (candleRepository.existsBySymbolAndDate(symbol, current)) {
-                logger.trace("Candle already exists for {}: {}", symbol, current);
-                current = current.plusDays(1);
-                continue;
-            }
+    //     while (!current.isAfter(endDate)) {
+    //         if (candleRepository.existsBySymbolAndDate(symbol, current)) {
+    //             logger.trace("Candle already exists for {}: {}", symbol, current);
+    //             current = current.plusDays(1);
+    //             continue;
+    //         }
 
-            CandleData candle = marketDataClientProvider.getClient().fetchCandle(symbol, current);
-            if (candle != null && CandleValidator.isValid(candle)) {
-                saveCandle(symbol, candle);
-                count++;
-                ingestionMetrics.recordCandleIngested();
-                logger.trace("Ingested candle for {}: {}", symbol, current);
-            } else if (candle != null) {
-                logger.debug("Rejected invalid candle for {} on {}: {}", symbol, current, candle);
-                ingestionMetrics.recordFetchFailure("upstox");
-            } else {
-                logger.warn("Failed to fetch candle for {}: {}", symbol, current);
-                ingestionMetrics.recordFetchFailure("upstox");
-            }
+    //         CandleData candle = marketDataClientProvider.getClient().fetchCandle(symbol, current);
+    //         if (candle != null && CandleValidator.isValid(candle)) {
+    //             saveCandle(symbol, candle);
+    //             count++;
+    //             ingestionMetrics.recordCandleIngested();
+    //             logger.trace("Ingested candle for {}: {}", symbol, current);
+    //         } else if (candle != null) {
+    //             logger.debug("Rejected invalid candle for {} on {}: {}", symbol, current, candle);
+    //             ingestionMetrics.recordFetchFailure("upstox");
+    //         } else {
+    //             logger.warn("Failed to fetch candle for {}: {}", symbol, current);
+    //             ingestionMetrics.recordFetchFailure("upstox");
+    //         }
 
-            current = current.plusDays(1);
-        }
+    //         current = current.plusDays(1);
+    //     }
 
-        logger.info("Data pull completed: {} candles ingested for {}", count, symbol);
-        return count;
-    }
+    //     logger.info("Data pull completed: {} candles ingested for {}", count, symbol);
+    //     return count;
+    // }
 
     /**
      * Save a candle to the database.
