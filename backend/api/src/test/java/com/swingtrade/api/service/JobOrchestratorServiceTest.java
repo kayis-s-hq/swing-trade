@@ -39,8 +39,12 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -144,22 +148,24 @@ class JobOrchestratorServiceTest {
         }
 
         @Test
-        @DisplayName("Empty watchlist returns immediately with RUNNING status")
-        void testStartRun_EmptyWatchlist_CompletesImmediately() {
+        @DisplayName("Empty watchlist completes immediately")
+        void shouldCompleteImmediatelyWhenWatchlistIsEmpty() {
             when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of());
             when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(a -> {
                 JobRunEntity e = a.getArgument(0);
                 capturedRunEntity = e;
                 return e;
             });
-            when(jobRunRepository.findByRunId(any(UUID.class))).thenReturn(java.util.Optional.of(capturedRunEntity));
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> java.util.Optional.of(capturedRunEntity));
 
             JobRun run = service.startRun(JobRun.TriggerType.MANUAL);
 
-            // startRun returns immediately with RUNNING; DB updated async
-            assertThat(run.status()).isEqualTo(JobRun.Status.RUNNING);
+            assertThat(run.status()).isEqualTo(JobRun.Status.COMPLETED);
             assertThat(run.triggerType()).isEqualTo(JobRun.TriggerType.MANUAL);
-            verify(jobRunRepository, atLeastOnce()).save(any(JobRunEntity.class));
+            assertThat(run.completedAt()).isNotNull();
+            assertThat(capturedRunEntity.getStatus()).isEqualTo(JobRun.Status.COMPLETED.name());
+            verify(jobOrchestratorMetrics).recordRunCompleted(anyLong());
         }
 
         @Test
@@ -171,12 +177,14 @@ class JobOrchestratorServiceTest {
                 capturedRunEntity = e;
                 return e;
             });
-            when(jobRunRepository.findByRunId(any(UUID.class))).thenReturn(java.util.Optional.of(capturedRunEntity));
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> java.util.Optional.of(capturedRunEntity));
 
             JobRun run = service.startRun(JobRun.TriggerType.SCHEDULED);
 
             assertThat(run.status()).isEqualTo(JobRun.Status.RUNNING);
             assertThat(run.triggerType()).isEqualTo(JobRun.TriggerType.SCHEDULED);
+            assertThat(run.symbolsCount()).isEqualTo(1);
             verify(jobRunRepository, atLeast(1)).save(any(JobRunEntity.class));
         }
 
@@ -196,6 +204,53 @@ class JobOrchestratorServiceTest {
 
             assertThat(run.status()).isEqualTo(JobRun.Status.RUNNING);
             verify(watchlistStore, times(1)).getActiveWatchlistSymbols();
+        }
+
+        @Test
+        @DisplayName("Manual trigger returns immediately when the watchlist exceeds executor capacity")
+        void shouldReturnImmediatelyWhenWatchlistExceedsExecutorCapacity() throws Exception {
+            List<String> symbols = IntStream.range(0, 20)
+                .mapToObj(index -> "SYMBOL" + index)
+                .toList();
+            CountDownLatch dataFetchStarted = new CountDownLatch(1);
+            CountDownLatch releaseDataFetch = new CountDownLatch(1);
+            CountDownLatch runCompleted = new CountDownLatch(1);
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(symbols);
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                capturedRunEntity = entity;
+                if (!JobRun.Status.RUNNING.name().equals(entity.getStatus())) {
+                    runCompleted.countDown();
+                }
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.of(capturedRunEntity));
+            doAnswer(invocation -> {
+                dataFetchStarted.countDown();
+                releaseDataFetch.await(5, TimeUnit.SECONDS);
+                return null;
+            }).when(dataIngestionService).processSingleStock(anyString(), any(LocalDate.class));
+
+            ExecutorService requestExecutor = Executors.newSingleThreadExecutor();
+            try {
+                Future<JobRun> response = requestExecutor.submit(
+                    () -> service.startRun(JobRun.TriggerType.MANUAL));
+
+                JobRun run = response.get(1, TimeUnit.SECONDS);
+
+                assertThat(run.status()).isEqualTo(JobRun.Status.RUNNING);
+                assertThat(run.symbolsCount()).isEqualTo(symbols.size());
+                assertThat(dataFetchStarted.await(1, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                releaseDataFetch.countDown();
+                requestExecutor.shutdownNow();
+                boolean requestTerminated = requestExecutor.awaitTermination(2, TimeUnit.SECONDS);
+                boolean pipelineCompleted = runCompleted.await(2, TimeUnit.SECONDS);
+                assertThat(requestTerminated).isTrue();
+                assertThat(pipelineCompleted).isTrue();
+            }
         }
 
         @Test
