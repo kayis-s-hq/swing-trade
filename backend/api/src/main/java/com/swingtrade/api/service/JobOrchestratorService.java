@@ -32,9 +32,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -90,18 +88,8 @@ public class JobOrchestratorService {
             @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs) {
         this.pollIntervalMs = pollIntervalMs;
         this.semaphore = new Semaphore(maxConcurrent);
-        this.asyncExecutor = new ThreadPoolExecutor(
-            maxConcurrent,
-            maxConcurrent,
-            60L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(10),
-            r -> {
-                Thread t = new Thread(r, "job-orchestrator-%d".formatted(Thread.activeCount()));
-                t.setDaemon(true);
-                return t;
-            },
-            new ThreadPoolExecutor.CallerRunsPolicy()
-        );
+        this.asyncExecutor = Executors.newThreadPerTaskExecutor(
+            Thread.ofVirtual().name("job-orchestrator-", 0).factory());
         this.dataIngestionService = dataIngestionService;
         this.newsIngestionService = newsIngestionService;
         this.sentimentService = sentimentService;
@@ -167,23 +155,23 @@ public class JobOrchestratorService {
         jobRunRepository.save(JobRunEntity.fromDomain(run));
         jobMetrics.recordRunStarted();
 
-        final JobRun finalRun = run;
-
         List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
         if (symbols.isEmpty()) {
             logger.info("No watchlist symbols — completing run with zero symbols");
-            var entity = jobRunRepository.findByRunId(run.runId()).orElseThrow();
-            entity.setSymbolsCount(0);
-            entity.setCompletedCount(0);
-            entity.setFailedCount(0);
-            entity.setCompletedAt(java.time.LocalDateTime.now(IST));
-            jobRunRepository.save(entity);
-            return run;
+            completeRun(run.runId(), JobRun.Status.COMPLETED, null);
+            return jobRunRepository.findByRunId(run.runId())
+                .orElseThrow()
+                .toDomain();
         }
 
         var entity2 = jobRunRepository.findByRunId(run.runId()).orElseThrow();
         entity2.setSymbolsCount(symbols.size());
         jobRunRepository.save(entity2);
+        run = new JobRun(
+            run.runId(), run.triggerType(), run.status(), run.startedAt(), run.completedAt(),
+            symbols.size(), run.completedCount(), run.failedCount(), run.errorMessage()
+        );
+        final JobRun finalRun = run;
 
         // Initialize stage rows for all symbols
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
