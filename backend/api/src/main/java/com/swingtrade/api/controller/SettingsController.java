@@ -118,7 +118,8 @@ public class SettingsController {
         settings.put("llamacpp.model", appSettingsService.get(
             "llamacpp.model", llmProperties.getLlamaCpp().getModel()));
         settings.put("llm.pdf.base_url", appSettingsService.get(
-            "llm.pdf.base_url", llmProperties.getPdf().getBaseUrl().toString()));
+            "llm.pdf.base_url",
+            llmProperties.getPdf().getBaseUrl() != null ? llmProperties.getPdf().getBaseUrl().toString() : ""));
         settings.put("llm.pdf.model", appSettingsService.get(
             "llm.pdf.model", llmProperties.getPdf().getModel()));
         addSecretConfiguredFlag(settings, "openai.api_key");
