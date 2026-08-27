@@ -4,6 +4,7 @@ import com.swingtrade.data.entity.OhlcvCandleEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -17,6 +18,15 @@ import java.util.Optional;
  */
 @Repository
 public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, Long> {
+
+    @Modifying
+    @Query(value = "INSERT INTO ohlcv_candles (symbol, date, open_price, high_price, low_price, close_price, volume, adj_close_price) "
+        + "VALUES (:symbol, :date, :open, :high, :low, :close, :volume, :adjClose) "
+        + "ON CONFLICT (symbol, date) DO NOTHING", nativeQuery = true)
+    int insertIfAbsent(@Param("symbol") String symbol, @Param("date") LocalDate date,
+                       @Param("open") java.math.BigDecimal open, @Param("high") java.math.BigDecimal high,
+                       @Param("low") java.math.BigDecimal low, @Param("close") java.math.BigDecimal close,
+                       @Param("volume") long volume, @Param("adjClose") java.math.BigDecimal adjClose);
 
     /**
      * Finds the most recent candle for a stock.
@@ -110,6 +120,10 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
      * @param symbol the stock symbol
      */
     void deleteBySymbol(String symbol);
+
+    @Modifying
+    @Query("DELETE FROM OhlcvCandleEntity c WHERE c.symbol = :symbol AND c.date = :date")
+    int deleteBySymbolAndDate(@Param("symbol") String symbol, @Param("date") LocalDate date);
 
     /**
      * Finds candles by date range across all symbols.

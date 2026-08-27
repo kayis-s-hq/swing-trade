@@ -30,10 +30,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import com.swingtrade.data.service.MarketCalendar;
 
 /**
  * Yahoo Finance API client for fetching OHLCV market data.
@@ -54,6 +56,7 @@ public class YahooFinanceClient implements MarketDataClient {
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final java.time.Clock clock;
+    private final MarketCalendar marketCalendar;
 
     // URI format strings — static to avoid repeated allocation
     private static final String CANDLE_URI_FMT = "/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d&events=history&includePrePost=false";
@@ -93,6 +96,7 @@ public class YahooFinanceClient implements MarketDataClient {
                        java.time.Clock clock, reactor.netty.resources.LoopResources loop) {
         this.objectMapper = mapperSupplier.get();
         this.clock = clock;
+        this.marketCalendar = null;
         this.webClient = WebClient.builder()
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
                         HttpClient.create().baseUrl(baseUrl).runOn(loop)))
@@ -102,14 +106,21 @@ public class YahooFinanceClient implements MarketDataClient {
 
     // Public constructor with configurable baseUrl (for Spring @Value injection)
     public YahooFinanceClient(String baseUrl, ObjectMapper objectMapper, java.time.Clock clock) {
-        this(baseUrl, objectMapper, clock, null, null, null);
+        this(baseUrl, objectMapper, clock, null, null, null, null);
     }
 
     // Public constructor with Resilience4j support (injected by Spring)
     public YahooFinanceClient(String baseUrl, ObjectMapper objectMapper, java.time.Clock clock,
                               CircuitBreaker circuitBreaker, Bulkhead bulkhead, TimeLimiter timeLimiter) {
+        this(baseUrl, objectMapper, clock, circuitBreaker, bulkhead, timeLimiter, null);
+    }
+
+    public YahooFinanceClient(String baseUrl, ObjectMapper objectMapper, java.time.Clock clock,
+                              CircuitBreaker circuitBreaker, Bulkhead bulkhead, TimeLimiter timeLimiter,
+                              MarketCalendar marketCalendar) {
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.marketCalendar = marketCalendar;
         this.webClient = WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(
                     HttpClient.create()
@@ -248,14 +259,29 @@ public class YahooFinanceClient implements MarketDataClient {
             JsonNode adjArr = result.get(0).path("indicators").path("adjclose")
                 .isArray() && result.get(0).path("indicators").path("adjclose").size() > 0
                     ? result.get(0).path("indicators").path("adjclose").get(0).path("adjclose") : null;
+            ZoneId exchangeZone = resolveExchangeZone(result.get(0).path("meta"));
             for (int i = 0; i < timestamps.size(); i++) {
-                if (closeArr.isNull() || closeArr.get(i).asDouble(0) == 0) continue;
+                LocalDate resolvedDate = LocalDate.ofInstant(Instant.ofEpochSecond(timestamps.get(i).asLong()), exchangeZone);
+                String rejection = null;
+                if (resolvedDate.isBefore(startDate) || resolvedDate.isAfter(endDate)) rejection = "outside_requested_range";
+                else if (resolvedDate.getDayOfWeek().getValue() > 5) rejection = "non_trading_day";
+                else if (marketCalendar != null && !marketCalendar.isNseTradingSession(resolvedDate)) rejection = "nse_holiday";
+                else if (closeArr.isMissingNode() || closeArr.get(i).isNull() || closeArr.get(i).asDouble(0) == 0) rejection = "null_or_zero_close";
+                if (rejection != null) {
+                    logger.warn("Rejected Yahoo candle timestamp symbol={} sourceTimestamp={} resolvedDate={} reason={}",
+                        symbol, timestamps.get(i).asLong(), resolvedDate, rejection);
+                    continue;
+                }
                 long volume = volumeArr.isNull() ? 0 : volumeArr.get(i).asLong(0);
-                if (volume == 0) continue;
+                if (volume == 0 || openArr.get(i).isNull() || highArr.get(i).isNull() || lowArr.get(i).isNull()) {
+                    logger.warn("Rejected Yahoo candle timestamp symbol={} sourceTimestamp={} resolvedDate={} reason=null_or_zero_ohlcv",
+                        symbol, timestamps.get(i).asLong(), resolvedDate);
+                    continue;
+                }
                 BigDecimal adjClose = (adjArr != null && !adjArr.isNull() && i < adjArr.size())
                     ? parseBigDecimal(adjArr.get(i)) : parseBigDecimal(closeArr.get(i));
                 candles.add(CandleData.of(symbol,
-                    LocalDate.ofInstant(Instant.ofEpochSecond(timestamps.get(i).asLong()), ZoneOffset.UTC),
+                    resolvedDate,
                     parseBigDecimal(openArr.get(i)), parseBigDecimal(highArr.get(i)),
                     parseBigDecimal(lowArr.get(i)), parseBigDecimal(closeArr.get(i)), volume, adjClose));
             }
@@ -265,6 +291,15 @@ public class YahooFinanceClient implements MarketDataClient {
             logger.error("Error fetching candles for {}: {}", symbol, e.getMessage());
         }
         return candles;
+    }
+
+    private ZoneId resolveExchangeZone(JsonNode meta) {
+        String timezone = meta.path("timezone").asText("");
+        try {
+            return timezone.isBlank() ? ZoneId.of("Asia/Kolkata") : ZoneId.of(timezone);
+        } catch (Exception ignored) {
+            return ZoneId.of("Asia/Kolkata");
+        }
     }
 
     /**

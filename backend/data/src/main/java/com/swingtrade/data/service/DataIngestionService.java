@@ -5,9 +5,12 @@ import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.data.repository.WatchlistRepository;
+import com.swingtrade.data.repository.ReconciliationAuditRepository;
+import com.swingtrade.data.entity.ReconciliationAuditEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -16,6 +19,10 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Service for ingesting and managing OHLCV market data.
@@ -32,14 +39,19 @@ public class DataIngestionService {
     private final MarketDataClientProvider marketDataClientProvider;
     private final TransactionTemplate txTemplate;
     private final DataIngestionMetrics ingestionMetrics;
+    private final MarketCalendar marketCalendar;
+    private final ReconciliationAuditRepository reconciliationAuditRepository;
 
+    @Autowired
     public DataIngestionService(
         OhlcvCandleRepository candleRepository,
         StockRepository stockRepository,
         WatchlistRepository watchlistRepository,
         MarketDataClientProvider marketDataClientProvider,
         TransactionTemplate txTemplate,
-        DataIngestionMetrics ingestionMetrics
+        DataIngestionMetrics ingestionMetrics,
+        MarketCalendar marketCalendar,
+        ReconciliationAuditRepository reconciliationAuditRepository
     ) {
         this.candleRepository = candleRepository;
         this.stockRepository = stockRepository;
@@ -47,6 +59,26 @@ public class DataIngestionService {
         this.marketDataClientProvider = marketDataClientProvider;
         this.txTemplate = txTemplate;
         this.ingestionMetrics = ingestionMetrics;
+        this.marketCalendar = marketCalendar;
+        this.reconciliationAuditRepository = reconciliationAuditRepository;
+    }
+
+    /** Compatibility constructor for lightweight unit tests. */
+    public DataIngestionService(OhlcvCandleRepository candleRepository,
+        StockRepository stockRepository, WatchlistRepository watchlistRepository,
+        MarketDataClientProvider marketDataClientProvider, TransactionTemplate txTemplate,
+        DataIngestionMetrics ingestionMetrics, MarketCalendar marketCalendar) {
+        this(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider,
+            txTemplate, ingestionMetrics, marketCalendar, null);
+    }
+
+    /** Compatibility constructor for lightweight unit tests. */
+    public DataIngestionService(OhlcvCandleRepository candleRepository,
+        StockRepository stockRepository, WatchlistRepository watchlistRepository,
+        MarketDataClientProvider marketDataClientProvider, TransactionTemplate txTemplate,
+        DataIngestionMetrics ingestionMetrics) {
+        this(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider,
+            txTemplate, ingestionMetrics, null, null);
     }
 
     /**
@@ -82,16 +114,12 @@ public class DataIngestionService {
         int saved = 0;
         int skipped = 0;
         for (CandleData candle : candles) {
-            if (!candleRepository.existsBySymbolAndDate(symbol, candle.date())) {
-                if (CandleValidator.isValid(candle)) {
-                    txTemplate.execute(status -> {
-                        saveCandle(symbol, candle);
-                        return null;
-                    });
-                    saved++;
-                } else {
-                    skipped++;
-                }
+            if (isNseTradingSession(candle.date()) && CandleValidator.isValid(candle)) {
+                Integer insertedResult = txTemplate.execute(status -> saveCandle(symbol, candle));
+                int inserted = insertedResult == null ? 1 : insertedResult;
+                if (inserted == 1) saved++; else skipped++;
+            } else {
+                skipped++;
             }
         }
         logger.info("Processed {}: {} candles fetched, {} newly saved, {} rejected by validation",
@@ -107,6 +135,9 @@ public class DataIngestionService {
     public void processSingleStock(String symbol, LocalDate date) {
         logger.debug("Processing single stock: {} for date {}", symbol, date);
 
+        if (!isNseTradingSession(date)) {
+            return;
+        }
         if (candleRepository.existsBySymbolAndDate(symbol, date)) {
             logger.trace("Candle already exists for {}: {}", symbol, date);
             return;
@@ -177,29 +208,27 @@ public class DataIngestionService {
      * @param symbol the stock symbol
      * @param candle the candle data
      */
-    private void saveCandle(String symbol, CandleData candle) {
-        OhlcvCandleEntity entity = new OhlcvCandleEntity();
-        entity.setSymbol(symbol);
-        entity.setDate(candle.date());
-        entity.setOpenPrice(candle.open());
-        entity.setHighPrice(candle.high());
-        entity.setLowPrice(candle.low());
-        entity.setClosePrice(candle.close());
-        entity.setVolume(candle.volume());
-        entity.setAdjClosePrice(candle.adjClose());
-        candleRepository.save(entity);
+    private int saveCandle(String symbol, CandleData candle) {
+        return candleRepository.insertIfAbsent(symbol, candle.date(), candle.open(), candle.high(),
+            candle.low(), candle.close(), candle.volume(), candle.adjClose());
     }
 
     private List<LocalDate> getTradingDays(LocalDate startDate, LocalDate endDate) {
         List<LocalDate> tradingDays = new ArrayList<>();
         LocalDate current = startDate;
         while (!current.isAfter(endDate)) {
-            if (current.getDayOfWeek().getValue() <= 5) {
+            if (isNseTradingSession(current)) {
                 tradingDays.add(current);
             }
             current = current.plusDays(1);
         }
         return tradingDays;
+    }
+
+    private boolean isNseTradingSession(LocalDate date) {
+        return marketCalendar == null
+            ? date.getDayOfWeek().getValue() <= 5
+            : marketCalendar.isNseTradingSession(date);
     }
 
     /**
@@ -319,6 +348,69 @@ public class DataIngestionService {
      */
     public Optional<OhlcvCandleEntity> getLatestCandle(String symbol) {
         return candleRepository.findLatestBySymbol(symbol);
+    }
+
+    /** Bounded dry-run reconciliation; apply is atomic after the provider response is complete. */
+    public Map<String, Object> reconcile(String symbol, LocalDate fromDate, LocalDate toDate, boolean apply) {
+        if (toDate.isBefore(fromDate) || fromDate.plusDays(10).isBefore(toDate)) {
+            throw new IllegalArgumentException("reconciliation range must be at most 10 calendar days");
+        }
+        if (!marketCalendar.isCoverageVerified(fromDate, toDate)) {
+            return Map.of("symbol", symbol, "from", fromDate, "to", toDate,
+                "status", "CALENDAR_INCOMPLETE");
+        }
+        List<LocalDate> expected = marketCalendar.expectedNseSessions(fromDate, toDate);
+        List<OhlcvCandleEntity> stored = candleRepository.findBySymbolAndDateRange(
+            symbol, fromDate, toDate, org.springframework.data.domain.Pageable.unpaged());
+        Set<LocalDate> storedDates = stored.stream().map(OhlcvCandleEntity::getDate).collect(Collectors.toSet());
+        List<LocalDate> missing = expected.stream().filter(d -> !storedDates.contains(d)).toList();
+        List<LocalDate> invalidStored = stored.stream().map(OhlcvCandleEntity::getDate)
+            .filter(d -> !expected.contains(d)).toList();
+        List<CandleData> source = new ArrayList<>();
+        marketDataClientProvider.getClient().fetchCandles(symbol, fromDate, toDate).forEach(source::add);
+        Map<LocalDate, CandleData> validSource = source.stream()
+            .filter(c -> expected.contains(c.date()) && CandleValidator.isValid(c, false))
+            .collect(Collectors.toMap(CandleData::date, c -> c, (a, b) -> a));
+        List<LocalDate> sourceIncomplete = missing.stream().filter(d -> !validSource.containsKey(d)).toList();
+        String terminal = sourceIncomplete.isEmpty() ? "COMPLETED" : "SOURCE_INCOMPLETE";
+        int inserted = 0;
+        int removed = 0;
+        if (apply && "COMPLETED".equals(terminal)) {
+            final Map<LocalDate, CandleData> fetched = validSource;
+            int[] counts = txTemplate.execute(status -> {
+                int deletes = invalidStored.stream().mapToInt(d -> candleRepository.deleteBySymbolAndDate(symbol, d)).sum();
+                int inserts = missing.stream().mapToInt(d -> saveCandle(symbol, fetched.get(d))).sum();
+                return new int[]{inserts, deletes};
+            });
+            if (counts != null) { inserted = counts[0]; removed = counts[1]; }
+        }
+        Map<String, Object> result = new HashMap<>();
+        Map<LocalDate, List<OhlcvCandleEntity>> byDate = stored.stream()
+            .collect(Collectors.groupingBy(OhlcvCandleEntity::getDate));
+        List<Map<String, Object>> duplicates = byDate.entrySet().stream()
+            .filter(e -> e.getValue().size() > 1)
+            .map(e -> Map.<String, Object>of("date", e.getKey(), "ids",
+                e.getValue().stream().map(OhlcvCandleEntity::getId).toList(), "count", e.getValue().size()))
+            .toList();
+        result.put("symbol", symbol); result.put("from", fromDate); result.put("to", toDate);
+        result.put("expected", expected); result.put("storedDates", storedDates);
+        result.put("missing", missing); result.put("nonTradingDayDates", invalidStored);
+        result.put("invalidStored", invalidStored); result.put("duplicateGroups", duplicates);
+        result.put("sourceIncomplete", sourceIncomplete);
+        result.put("inserted", inserted); result.put("invalidStoredRemoved", removed);
+        String quality = !duplicates.isEmpty() ? "DUPLICATE"
+            : !invalidStored.isEmpty() ? "INVALID_DATE"
+            : !missing.isEmpty() ? "MISSING" : "GOOD";
+        result.put("qualityStatus", quality);
+        result.put("earliestDate", stored.stream().map(OhlcvCandleEntity::getDate).min(LocalDate::compareTo).orElse(null));
+        result.put("latestDate", stored.stream().map(OhlcvCandleEntity::getDate).max(LocalDate::compareTo).orElse(null));
+        result.put("count", stored.size());
+        result.put("status", terminal);
+        if (apply && reconciliationAuditRepository != null) {
+            reconciliationAuditRepository.save(new ReconciliationAuditEntity(symbol, fromDate, toDate,
+                terminal, missing.size(), inserted, removed));
+        }
+        return result;
     }
 
     /**

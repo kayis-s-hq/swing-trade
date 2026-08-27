@@ -2,6 +2,7 @@ package com.swingtrade.data.config;
 
 import com.swingtrade.data.client.YahooFinanceClient;
 import com.swingtrade.data.service.MarketDataClient;
+import com.swingtrade.data.service.MarketCalendar;
 // Upstox is unconfigured — imports commented out along with the upstox bean below.
 // import com.swingtrade.data.service.NseInstrumentService;
 // import com.swingtrade.data.service.UpstoxAuthService;
@@ -24,9 +25,10 @@ public class MarketDataClientConfig {
             @Value("${yahoo.api.base-url:https://query1.finance.yahoo.com}") String baseUrl,
             @Qualifier("yahoo") CircuitBreaker circuitBreaker,
             @Qualifier("yahoo") Bulkhead bulkhead,
-            @Qualifier("yahoo") TimeLimiter timeLimiter) {
+            @Qualifier("yahoo") TimeLimiter timeLimiter,
+            MarketCalendar marketCalendar) {
         return new YahooFinanceClient(baseUrl, new tools.jackson.databind.ObjectMapper(),
-            java.time.Clock.systemUTC(), circuitBreaker, bulkhead, timeLimiter);
+            java.time.Clock.systemUTC(), circuitBreaker, bulkhead, timeLimiter, marketCalendar);
     }
 
     // Upstox is unconfigured — bean commented out (kept for future re-enablement).

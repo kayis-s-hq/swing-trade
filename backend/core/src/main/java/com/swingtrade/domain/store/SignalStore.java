@@ -27,9 +27,12 @@ public interface SignalStore {
      */
     Signal save(Signal signal, String warningFlag);
 
+    Signal save(Signal signal, String warningFlag, String strategy);
+
     void markProcessed(Long signalId);
 
     Optional<Signal> findLatestBySymbol(String symbol);
+    Optional<Signal> findLatestBySymbolAndStrategy(String symbol, String strategy);
 
     List<String> findAllDistinctSymbols();
 
@@ -78,6 +81,8 @@ public interface SignalStore {
      * @return number of signals deleted
      */
     int deleteBySymbolAndDate(String symbol, LocalDate date);
+
+    int deleteBySymbolAndDateAndStrategy(String symbol, LocalDate date, String strategy);
 
     /**
      * Deletes all signals for a given date. Used to clear stale signals before regeneration.

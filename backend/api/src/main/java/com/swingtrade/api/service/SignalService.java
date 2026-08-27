@@ -135,10 +135,7 @@ public class SignalService {
     public java.util.Optional<com.swingtrade.domain.Signal> generatePriceActionSignal(String symbol) {
         signalEngine.generatePriceActionSignalForSymbolNow(symbol);
         // Filter by strategy name in memory since Store doesn't support strategy filtering
-        return signalStore.findBySymbol(symbol).stream()
-                .filter(s -> "PRICE_ACTION".equals(s.indicators()) || true) // all signals for now
-                .max(java.util.Comparator.comparing(com.swingtrade.domain.Signal::date))
-                .or(() -> signalStore.findLatestBySymbol(symbol));
+        return signalStore.findLatestBySymbolAndStrategy(symbol, "PRICE_ACTION");
     }
 
     /**

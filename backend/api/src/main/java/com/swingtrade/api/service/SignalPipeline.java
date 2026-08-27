@@ -94,7 +94,7 @@ public class SignalPipeline {
         LocalDate latestDate = chronologicalCandles.get(chronologicalCandles.size() - 1).date();
 
         // Clear any stale processed signals for this symbol/date so retries can regenerate
-        persistenceService.deleteBySymbolAndDate(symbol, latestDate);
+        persistenceService.deleteBySymbolAndDateAndStrategy(symbol, latestDate, "DEFAULT");
 
         SignalResult result;
         try {
