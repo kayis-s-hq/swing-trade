@@ -254,15 +254,23 @@ public class SettingsController {
     // Reasoning-capable local models spend part of the token budget on internal reasoning
     // before emitting content. This budget leaves enough headroom for a short health-check reply.
     private boolean testInference(URI baseUrl, String model) {
+        return testInference(baseUrl, model, "");
+    }
+
+    private boolean testInference(URI baseUrl, String model, String apiKey) {
         try {
             String payload = """
                 {"model":"%s","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":%d,"temperature":0.2}"""
                 .formatted(model, TEST_INFERENCE_MAX_TOKENS);
             HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(chatCompletionsUri(baseUrl))
                 .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(30))
+                .timeout(Duration.ofSeconds(30));
+            if (apiKey != null && !apiKey.isBlank()) {
+                requestBuilder.header("Authorization", "Bearer " + apiKey);
+            }
+            HttpRequest request = requestBuilder
                 .POST(HttpRequest.BodyPublishers.ofString(payload))
                 .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -351,8 +359,9 @@ public class SettingsController {
             LlmProperties.Provider ollamaDefaults = llmProperties.getProviders().getOllama();
             URI baseUrl = ollamaInferenceBaseUrl();
             String model = appSettingsService.get("ollama.model", ollamaDefaults.getModel());
+            String apiKey = appSettingsService.get("ollama.api_key", "");
 
-            boolean inferenceOk = testInference(baseUrl, model);
+            boolean inferenceOk = testInference(baseUrl, model, apiKey);
             result.put("success", inferenceOk);
             result.put("message", inferenceOk
                 ? "Ollama responded successfully"

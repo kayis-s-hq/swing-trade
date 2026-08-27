@@ -69,7 +69,7 @@ public class LlmConfig {
             LlmProperties properties,
             @Value("${spring.ai.openai.api-key:none}") String apiKey) {
         return createChatModel(appSettingsStore, "llm.base_url", "openai.model",
-                properties.getProviders().getLocal(), apiKey);
+                properties.getProviders().getLocal(), "openai.api_key", apiKey);
     }
 
     @Bean
@@ -78,7 +78,7 @@ public class LlmConfig {
             LlmProperties properties,
             @Value("${spring.ai.openai.api-key:none}") String apiKey) {
         return createChatModel(appSettingsStore, "llm.base_url", "openai.model",
-                properties.getProviders().getPiSsh(), apiKey);
+                properties.getProviders().getPiSsh(), "openai.api_key", apiKey);
     }
 
     @Bean
@@ -87,7 +87,7 @@ public class LlmConfig {
             LlmProperties properties,
             @Value("${spring.ai.openai.api-key:none}") String apiKey) {
         return createChatModel(appSettingsStore, "openai.base_url", "openai.model",
-                properties.getProviders().getOpenai(), apiKey);
+                properties.getProviders().getOpenai(), "openai.api_key", apiKey);
     }
 
     @Bean
@@ -99,22 +99,24 @@ public class LlmConfig {
         // OLLAMA_TIMEOUT/OLLAMA_MAX_RETRIES javadoc above) — a slow-but-working
         // request should be given time to finish rather than be replayed.
         return createChatModel(appSettingsStore, "ollama.base_url", "ollama.model",
-                properties.getProviders().getOllama(), apiKey, OLLAMA_TIMEOUT, OLLAMA_MAX_RETRIES);
+                properties.getProviders().getOllama(), "ollama.api_key", apiKey,
+                OLLAMA_TIMEOUT, OLLAMA_MAX_RETRIES);
     }
 
     private OpenAiChatModel createChatModel(AppSettingsStore settings, String urlKey,
                                             String modelKey, LlmProperties.Provider defaults,
-                                            String apiKey) {
-        return createChatModel(settings, urlKey, modelKey, defaults, apiKey, null, null);
+                                            String apiKeySetting, String apiKey) {
+        return createChatModel(settings, urlKey, modelKey, defaults, apiKeySetting, apiKey, null, null);
     }
 
     private OpenAiChatModel createChatModel(AppSettingsStore settings, String urlKey,
                                             String modelKey, LlmProperties.Provider defaults,
-                                            String apiKey, Duration timeout, Integer maxRetries) {
+                                            String apiKeySetting, String springDefaultApiKey,
+                                            Duration timeout, Integer maxRetries) {
         String baseUrl = settings.get(urlKey)
                 .orElseGet(() -> defaults.getBaseUrl().toString());
         String model = settings.get(modelKey).orElseGet(defaults::getModel);
-        String key = resolveApiKey(settings, apiKey);
+        String key = resolveApiKey(settings, apiKeySetting, springDefaultApiKey);
 
         OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder()
             .model(model)
@@ -133,9 +135,9 @@ public class LlmConfig {
             .build();
     }
 
-    private String resolveApiKey(AppSettingsStore settings, String springDefault) {
-        String key = settings.get("openai.api_key").orElse(springDefault);
-        if ("none".equals(key) || key.isBlank()) {
+    private String resolveApiKey(AppSettingsStore settings, String settingKey, String springDefault) {
+        String key = settings.get(settingKey).orElse(springDefault);
+        if ("openai.api_key".equals(settingKey) && ("none".equals(key) || key.isBlank())) {
             key = settings.get("gpuhub.api_key").orElse(key);
         }
         if ("none".equals(key) || key.isBlank()) {
