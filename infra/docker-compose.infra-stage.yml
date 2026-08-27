@@ -22,6 +22,8 @@ services:
   api:
     image: swing-trade-api:stage
     container_name: swing-trade-stage-api
+    env_file:
+      - .env.stage
     build:
       context: .
       dockerfile: Dockerfile
