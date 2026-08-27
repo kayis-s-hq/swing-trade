@@ -27,20 +27,7 @@
       </button>
     </div>
 
-    <ErrorBoundary :error="error">
-      <template #error>
-        <div class="flex flex-col items-center justify-center py-20">
-          <p class="text-sm text-danger">
-            {{ errorMessage }}
-          </p>
-          <button
-            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
-            @click="refreshDashboard"
-          >
-            Retry
-          </button>
-        </div>
-      </template>
+    <ErrorBoundary :error="false">
       <div v-if="loading" class="flex items-center justify-center py-20">
         <LoadingSpinner message="Loading market data..." />
       </div>
@@ -116,13 +103,22 @@
           <div class="flex items-center justify-between border-b border-border-subtle px-5 py-3">
             <div>
               <h2 class="text-sm font-semibold text-text-primary">Active Positions</h2>
-              <p class="text-xs text-text-muted">{{ positions.length }} positions</p>
+              <p v-if="!positionsError" class="text-xs text-text-muted">
+                {{ positions.length }} positions
+              </p>
             </div>
             <router-link to="/positions" class="text-sm font-medium text-brand hover:underline">
               View All →
             </router-link>
           </div>
-          <div class="w-full overflow-x-auto">
+          <ErrorMessage
+            v-if="positionsError"
+            title="Couldn’t load positions"
+            message="Active positions are temporarily unavailable."
+            action-label="Retry"
+            @action="loadPositions"
+          />
+          <div v-else class="w-full overflow-x-auto">
             <table class="min-w-full">
               <thead>
                 <tr class="border-b border-border-subtle bg-bg-primary/50">
@@ -221,9 +217,11 @@ import type {
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import HealthStatus from '../components/HealthStatus.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
-import { useAsyncData } from '../composables/useAsyncData'
+import ErrorMessage from '../components/ErrorMessage.vue'
+import { asAppError, type AppError } from '../errors/appError'
 
-const { loading, error, errorMessage, execute } = useAsyncData<void>()
+const loading = ref(true)
+const positionsError = ref<AppError | null>(null)
 const marketOverview = ref<MarketOverview | null>(null)
 const positions = ref<Position[]>([])
 const portfolioSummary = ref<PortfolioSummary | null>(null)
@@ -250,21 +248,30 @@ const metrics = computed(() => [
   },
 ])
 
-const refreshDashboard = () => {
-  execute(async () => {
-    const [overviewRes, posRes, summaryRes, healthRes] = await Promise.all([
-      getMarketOverview(),
-      getPositions(),
-      getPortfolioSummary(),
-      getHealthStatus(),
-    ])
-    if (overviewRes.success && overviewRes.data) marketOverview.value = overviewRes.data
-    if (posRes.success && posRes.data) positions.value = posRes.data
-    if (summaryRes.success && summaryRes.data) portfolioSummary.value = summaryRes.data
-    if (healthRes.success && healthRes.data) healthData.value = healthRes.data
-    if (overviewRes.error || posRes.error || summaryRes.error)
-      throw new Error(overviewRes.error ?? posRes.error ?? summaryRes.error)
-  })
+const loadPositions = async () => {
+  positionsError.value = null
+  try {
+    positions.value = await getPositions()
+  } catch (cause) {
+    positionsError.value = asAppError(cause)
+  }
+}
+
+const refreshDashboard = async () => {
+  loading.value = true
+  await Promise.allSettled([
+    getMarketOverview().then((value) => {
+      marketOverview.value = value
+    }),
+    loadPositions(),
+    getPortfolioSummary().then((value) => {
+      portfolioSummary.value = value
+    }),
+    getHealthStatus().then((value) => {
+      healthData.value = value
+    }),
+  ])
+  loading.value = false
 }
 
 onMounted(() => {

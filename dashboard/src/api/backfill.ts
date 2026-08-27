@@ -1,14 +1,8 @@
-import { rawFetch, unwrap, errResponse } from './shared'
-import type { ApiResponse } from './types'
+import { apiRequest } from './shared'
 
-export async function backfillSymbol(
-  symbol: string,
-  years: number = 3
-): Promise<ApiResponse<string>> {
-  const raw = await rawFetch(
+export async function backfillSymbol(symbol: string, years: number = 3): Promise<string> {
+  return apiRequest<string>(
     `/ingestion/backfill?symbol=${encodeURIComponent(symbol)}&years=${years}`,
-    { method: 'POST' }
+    { method: 'POST', responseContract: 'direct' }
   )
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<string>(raw) }
 }

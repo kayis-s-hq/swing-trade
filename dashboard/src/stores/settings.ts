@@ -114,6 +114,13 @@ interface LoadAllResult {
   failedSections: string[]
 }
 
+function readData<T>(value: T | { success: boolean; data?: T }): T | undefined {
+  if (typeof value === 'object' && value !== null && 'success' in value) {
+    return value.success ? value.data : undefined
+  }
+  return value as T
+}
+
 async function loadAll(): Promise<LoadAllResult> {
   const state = createDefaultState()
   const failedSections: string[] = []
@@ -121,18 +128,19 @@ async function loadAll(): Promise<LoadAllResult> {
   // Load LLM settings
   try {
     const llmRes = await getLlmSettings()
-    if (llmRes.success && llmRes.data) {
+    const llmData = readData(llmRes)
+    if (llmData) {
       // Secret fields intentionally stay blank; a blank input means "keep the configured secret".
       Object.assign(state.llmSettings, {
-        llmBackend: parseLlmBackend(llmRes.data['llm.backend']),
-        llmBaseUrl: llmRes.data['llm.base_url'] ?? state.llmSettings.llmBaseUrl,
-        openaiBaseUrl: llmRes.data['openai.base_url'] ?? state.llmSettings.openaiBaseUrl,
-        openaiModel: llmRes.data['openai.model'] ?? state.llmSettings.openaiModel,
-        ollamaBaseUrl: llmRes.data['ollama.base_url'] ?? state.llmSettings.ollamaBaseUrl,
-        ollamaModel: llmRes.data['ollama.model'] ?? state.llmSettings.ollamaModel,
-        llamacppModel: llmRes.data['llamacpp.model'] ?? state.llmSettings.llamacppModel,
-        pdfBaseUrl: llmRes.data['llm.pdf.base_url'] ?? state.llmSettings.pdfBaseUrl,
-        pdfModel: llmRes.data['llm.pdf.model'] ?? state.llmSettings.pdfModel,
+        llmBackend: parseLlmBackend(llmData['llm.backend']),
+        llmBaseUrl: llmData['llm.base_url'] ?? state.llmSettings.llmBaseUrl,
+        openaiBaseUrl: llmData['openai.base_url'] ?? state.llmSettings.openaiBaseUrl,
+        openaiModel: llmData['openai.model'] ?? state.llmSettings.openaiModel,
+        ollamaBaseUrl: llmData['ollama.base_url'] ?? state.llmSettings.ollamaBaseUrl,
+        ollamaModel: llmData['ollama.model'] ?? state.llmSettings.ollamaModel,
+        llamacppModel: llmData['llamacpp.model'] ?? state.llmSettings.llamacppModel,
+        pdfBaseUrl: llmData['llm.pdf.base_url'] ?? state.llmSettings.pdfBaseUrl,
+        pdfModel: llmData['llm.pdf.model'] ?? state.llmSettings.pdfModel,
       })
     } else {
       failedSections.push('LLM settings')
@@ -144,10 +152,11 @@ async function loadAll(): Promise<LoadAllResult> {
   // Load Discord settings
   try {
     const discordRes = await getDiscordSettings()
-    if (discordRes.success && discordRes.data) {
+    const discordData = readData(discordRes)
+    if (discordData) {
       state.discordSettings.webhookUrl =
-        discordRes.data['discord.webhook.url'] || state.discordSettings.webhookUrl
-      state.discordSettings.enabled = discordRes.data['discord.webhook.enabled'] === 'true'
+        discordData['discord.webhook.url'] || state.discordSettings.webhookUrl
+      state.discordSettings.enabled = discordData['discord.webhook.enabled'] === 'true'
     } else {
       failedSections.push('Discord settings')
     }
@@ -158,8 +167,9 @@ async function loadAll(): Promise<LoadAllResult> {
   // Load trading config
   try {
     const tradingRes = await getTradingSettings()
-    if (tradingRes.success && tradingRes.data) {
-      Object.assign(state.tradingConfig, parseTradingConfig(tradingRes.data))
+    const tradingData = readData(tradingRes)
+    if (tradingData) {
+      Object.assign(state.tradingConfig, parseTradingConfig(tradingData))
     } else {
       failedSections.push('Trading settings')
     }
@@ -172,13 +182,15 @@ async function loadAll(): Promise<LoadAllResult> {
 
 const state = reactive<SettingsState>(createDefaultState())
 let loaded = false
+let failedSections: string[] = []
 
 export async function loadSettings(): Promise<string[]> {
   if (loaded) return []
-  const { state: fresh, failedSections } = await loadAll()
+  const { state: fresh, failedSections: failures } = await loadAll()
   applySettings(state, fresh)
-  loaded = failedSections.length === 0
-  return failedSections
+  failedSections = failures
+  loaded = failures.length === 0
+  return failures
 }
 
 function createLlmPayload(): Record<string, string> {
@@ -208,6 +220,7 @@ function clearSensitiveInputs() {
 }
 
 export async function saveSettings(): Promise<boolean> {
+  if (failedSections.length > 0) return false
   const body = {
     broker: state.selectedBroker,
     llm: createLlmPayload(),
@@ -225,8 +238,8 @@ export async function saveSettings(): Promise<boolean> {
   }
 
   const res = await saveAllSettings(body)
-  if (!res.success) {
-    console.error('Failed to save settings:', res.error)
+  if (!readData(res)) {
+    console.error('Failed to save settings')
     return false
   }
   clearSensitiveInputs()
@@ -236,8 +249,8 @@ export async function saveSettings(): Promise<boolean> {
 // Keep individual save methods for toggle-on-change behavior
 export async function saveLlmSettings(): Promise<boolean> {
   const res = await setLlmSettings(createLlmPayload())
-  if (!res.success) {
-    console.error('Failed to save LLM settings:', res.error)
+  if (!readData(res)) {
+    console.error('Failed to save LLM settings')
     return false
   }
   clearSensitiveInputs()
@@ -250,8 +263,8 @@ export async function saveDiscordSettings(): Promise<boolean> {
     'discord.webhook.enabled': String(state.discordSettings.enabled),
   }
   const res = await setDiscordSettings(settings)
-  if (!res.success) {
-    console.error('Failed to save Discord settings:', res.error)
+  if (!readData(res)) {
+    console.error('Failed to save Discord settings')
     return false
   }
   return true
@@ -265,8 +278,8 @@ export async function saveTradingConfig(): Promise<boolean> {
     'trading.take_profit': String(state.tradingConfig.takeProfit),
   }
   const res = await setTradingSettings(settings)
-  if (!res.success) {
-    console.error('Failed to save trading config:', res.error)
+  if (!readData(res)) {
+    console.error('Failed to save trading config')
     return false
   }
   return true

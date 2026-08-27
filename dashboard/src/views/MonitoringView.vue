@@ -29,21 +29,7 @@
       </button>
     </div>
 
-    <ErrorBoundary :error="error">
-      <template #error>
-        <div class="flex flex-col items-center justify-center py-20">
-          <p class="text-sm text-danger">
-            {{ errorMessage }}
-          </p>
-          <button
-            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
-            @click="loadAll"
-          >
-            Retry
-          </button>
-        </div>
-      </template>
-
+    <ErrorBoundary :error="false">
       <!-- Overview Tab -->
       <div v-if="activeTab === 'overview'">
         <!-- Metric Cards -->
@@ -83,7 +69,14 @@
         <!-- Signal Volume -->
         <div class="mt-6 card-panel p-5">
           <h3 class="mb-4 text-sm font-semibold text-text-primary">Signal Volume</h3>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <ErrorMessage
+            v-if="signalVolumeError"
+            title="Couldn’t load signal volume"
+            message="Signal volume is temporarily unavailable."
+            action-label="Retry"
+            @action="loadSignalVolume"
+          />
+          <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
               <p class="text-xs text-text-muted">Today</p>
               <p class="text-2xl font-bold">
@@ -544,9 +537,10 @@ import type {
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import AccuracyMetricCard from '../components/AccuracyMetricCard.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
-import { useAsyncData } from '../composables/useAsyncData'
+import ErrorMessage from '../components/ErrorMessage.vue'
+import { asAppError, type AppError } from '../errors/appError'
 
-const { error, errorMessage, execute } = useAsyncData<void>()
+const signalVolumeError = ref<AppError | null>(null)
 
 const tabs = [
   { key: 'overview', label: 'Overview' },
@@ -566,35 +560,41 @@ const ece = ref<ECEStats | null>(null)
 
 const total = ref(0)
 
-const loadAll = () => {
-  execute(async () => {
-    const [statsRes, summaryRes, windowRes, regimeRes, symbolRes, calRes, volRes, eceRes] =
-      await Promise.all([
-        getAccuracyStats(),
-        getAccuracySummary(),
-        getAccuracyByWindow(),
-        getAccuracyByRegime(),
-        getAccuracyBySymbol(),
-        getCalibration(),
-        getSignalVolume(),
-        getECE(),
-      ])
+const loadSignalVolume = async () => {
+  signalVolumeError.value = null
+  try {
+    signalVolume.value = await getSignalVolume()
+  } catch (cause) {
+    signalVolumeError.value = asAppError(cause)
+  }
+}
 
-    if (statsRes.success && statsRes.data) {
-      stats.value = statsRes.data
-      total.value = statsRes.data.total
-    } else {
-      throw new Error(statsRes.error || 'Failed to load accuracy data')
-    }
-
-    if (summaryRes.success && summaryRes.data) summary.value = summaryRes.data
-    if (windowRes.success && windowRes.data) byWindow.value = windowRes.data
-    if (regimeRes.success && regimeRes.data) byRegime.value = regimeRes.data
-    if (symbolRes.success && symbolRes.data) bySymbol.value = symbolRes.data
-    if (calRes.success && calRes.data) calibration.value = calRes.data
-    if (volRes.success && volRes.data) signalVolume.value = volRes.data
-    if (eceRes.success && eceRes.data) ece.value = eceRes.data
-  })
+const loadAll = async () => {
+  await Promise.allSettled([
+    getAccuracyStats().then((value) => {
+      stats.value = value
+      total.value = stats.value.total
+    }),
+    getAccuracySummary().then((value) => {
+      summary.value = value
+    }),
+    getAccuracyByWindow().then((value) => {
+      byWindow.value = value
+    }),
+    getAccuracyByRegime().then((value) => {
+      byRegime.value = value
+    }),
+    getAccuracyBySymbol().then((value) => {
+      bySymbol.value = value
+    }),
+    getCalibration().then((value) => {
+      calibration.value = value
+    }),
+    loadSignalVolume(),
+    getECE().then((value) => {
+      ece.value = value
+    }),
+  ])
 }
 
 const formatPercent = (v: number | undefined | null): string => {

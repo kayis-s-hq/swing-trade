@@ -49,7 +49,7 @@
       <div class="card-panel p-4">
         <div class="flex items-center gap-4 text-sm">
           <span class="text-text-muted">Symbol:</span>
-          <span class="font-semibold text-text-primary">{{ symbolInput }}</span>
+          <span class="font-semibold text-text-primary">{{ displayedSymbol }}</span>
           <span class="text-text-muted">|</span>
           <span class="text-text-muted">Articles:</span>
           <span class="font-semibold text-text-primary">{{ articles.length }}</span>
@@ -138,15 +138,23 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getLatestNews, getWatchlist } from '../api/client'
+import { getLatestNews } from '../api/client'
+import { getWatchlist } from '../api/watchlist'
 import type { NewsArticle, WatchlistEntry } from '../api/types'
 
 const symbolInput = ref('')
+const displayedSymbol = ref('')
+let requestSequence = 0
 const loading = ref(false)
 const error = ref('')
 const articles = ref<NewsArticle[]>([])
 const expandedArticles = ref(new Set<number>())
 const watchlistSymbols = ref<WatchlistEntry[]>([])
+function confirmed<T>(value: T | { success: boolean; data?: T }): T | undefined {
+  if (typeof value === 'object' && value !== null && 'success' in value)
+    return value.success ? value.data : undefined
+  return value as T
+}
 
 const sourceCount = computed(() => {
   const sources = new Set(articles.value.map((a: NewsArticle) => a.source))
@@ -154,26 +162,30 @@ const sourceCount = computed(() => {
 })
 
 onMounted(async () => {
-  const wr = await getWatchlist()
-  if (wr.success && wr.data) watchlistSymbols.value = wr.data
+  watchlistSymbols.value = await getWatchlist()
 })
 
 async function fetchNews() {
-  if (!symbolInput.value.trim()) return
+  const symbol = symbolInput.value.trim().toUpperCase()
+  if (!symbol) return
+  const sequence = ++requestSequence
   loading.value = true
   error.value = ''
-  expandedArticles.value = new Set()
   try {
-    const res = await getLatestNews(symbolInput.value)
-    if (res.success && res.data) {
-      articles.value = res.data
+    const res = await getLatestNews(symbol)
+    if (sequence !== requestSequence) return
+    const data = confirmed<NewsArticle[]>(res)
+    if (data) {
+      articles.value = data
+      displayedSymbol.value = symbol
+      expandedArticles.value = new Set()
     } else {
-      error.value = res.error || 'Failed to fetch news'
+      error.value = 'Couldn’t fetch news. Try again.'
     }
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to fetch news'
+  } catch {
+    if (sequence === requestSequence) error.value = 'Couldn’t fetch news. Try again.'
   } finally {
-    loading.value = false
+    if (sequence === requestSequence) loading.value = false
   }
 }
 

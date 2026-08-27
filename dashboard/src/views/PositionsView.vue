@@ -43,166 +43,168 @@
       </div>
     </div>
 
-    <ErrorBoundary :error="error">
-      <template #error>
-        <div class="flex flex-col items-center justify-center py-20">
-          <p class="text-sm text-danger">
-            {{ errorMessage }}
-          </p>
+    <div v-if="successNotice" role="status" class="mb-3 text-sm text-success">
+      {{ successNotice }}
+    </div>
+    <div v-if="staleWarning" role="status" class="mb-3 text-sm text-warning">
+      {{ staleWarning }}
+    </div>
+
+    <ErrorMessage
+      v-if="error"
+      title="Couldn’t load positions"
+      :message="
+        formatAppError(error, { title: 'Couldn’t load positions', operation: 'read' }).message
+      "
+      action-label="Retry"
+      :busy="loading"
+      @action="refreshPositions"
+    />
+    <div v-else-if="loading" class="flex items-center justify-center py-20">
+      <LoadingSpinner message="Loading positions..." />
+    </div>
+
+    <template v-else>
+      <!-- Filters -->
+      <div class="mb-4 flex items-center gap-3">
+        <input
+          v-model="searchQuery"
+          placeholder="Search symbol..."
+          class="w-56 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 transition-colors focus:border-brand/50 focus:outline-none"
+        />
+        <div class="flex rounded-md border border-border-subtle">
           <button
-            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
-            @click="refreshPositions"
+            v-for="filter in ['ALL', 'OPEN', 'CLOSED']"
+            :key="filter"
+            class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
+            :class="
+              statusFilter === filter
+                ? 'bg-brand-subtle text-brand'
+                : 'text-text-muted hover:bg-bg-hover'
+            "
+            @click="statusFilter = filter"
           >
-            Retry
+            {{ filter }}
           </button>
         </div>
-      </template>
-      <div v-if="loading" class="flex items-center justify-center py-20">
-        <LoadingSpinner message="Loading positions..." />
       </div>
 
-      <template v-else>
-        <!-- Filters -->
-        <div class="mb-4 flex items-center gap-3">
-          <input
-            v-model="searchQuery"
-            placeholder="Search symbol..."
-            class="w-56 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 transition-colors focus:border-brand/50 focus:outline-none"
-          />
-          <div class="flex rounded-md border border-border-subtle">
-            <button
-              v-for="filter in ['ALL', 'OPEN', 'CLOSED']"
-              :key="filter"
-              class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
-              :class="
-                statusFilter === filter
-                  ? 'bg-brand-subtle text-brand'
-                  : 'text-text-muted hover:bg-bg-hover'
-              "
-              @click="statusFilter = filter"
-            >
-              {{ filter }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Table -->
-        <div class="card-panel">
-          <div class="w-full overflow-x-auto">
-            <table class="min-w-full">
-              <thead>
-                <tr class="border-b border-border-subtle bg-bg-primary/50">
-                  <th
-                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                  >
-                    Symbol
-                  </th>
-                  <th
-                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                  >
-                    Entry
-                  </th>
-                  <th
-                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                  >
-                    Qty
-                  </th>
-                  <th
-                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                  >
-                    Current
-                  </th>
-                  <th
-                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                  >
-                    Stop Loss
-                  </th>
-                  <th
-                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                  >
-                    Target
-                  </th>
-                  <th
-                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                  >
-                    Status
-                  </th>
-                  <th
-                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                  >
-                    P&L
-                  </th>
-                  <th
-                    class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
-                  >
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border-subtle/50">
-                <tr
-                  v-for="pos in filteredPositions"
-                  :key="pos.id"
-                  class="transition-colors hover:bg-bg-hover"
+      <!-- Table -->
+      <div class="card-panel">
+        <div class="w-full overflow-x-auto">
+          <table class="min-w-full">
+            <thead>
+              <tr class="border-b border-border-subtle bg-bg-primary/50">
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
                 >
-                  <td class="px-5 py-4 text-sm font-semibold text-text-primary">
-                    {{ pos.symbol }}
-                  </td>
-                  <td class="px-5 py-4 text-sm text-text-secondary">₹{{ pos.entryPrice }}</td>
-                  <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                    {{ pos.quantity }}
-                  </td>
-                  <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                    ₹{{ pos.currentPrice }}
-                  </td>
-                  <td class="px-5 py-4 text-right text-sm text-danger">
-                    {{ pos.stopLoss ?? '—' }}
-                  </td>
-                  <td class="px-5 py-4 text-right text-sm text-success">
-                    {{ pos.target ?? '—' }}
-                  </td>
-                  <td class="px-5 py-4">
-                    <span
-                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                      :class="
-                        pos.status === 'OPEN'
-                          ? 'bg-success-bg text-success'
-                          : 'bg-danger-bg text-danger'
-                      "
-                      >{{ pos.status }}</span
-                    >
-                  </td>
-                  <td
-                    class="px-5 py-4 text-right text-sm font-semibold"
-                    :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
+                  Symbol
+                </th>
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Entry
+                </th>
+                <th
+                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Qty
+                </th>
+                <th
+                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Current
+                </th>
+                <th
+                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Stop Loss
+                </th>
+                <th
+                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Target
+                </th>
+                <th
+                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Status
+                </th>
+                <th
+                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  P&L
+                </th>
+                <th
+                  class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Action
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border-subtle/50">
+              <tr
+                v-for="pos in filteredPositions"
+                :key="pos.id"
+                class="transition-colors hover:bg-bg-hover"
+              >
+                <td class="px-5 py-4 text-sm font-semibold text-text-primary">
+                  {{ pos.symbol }}
+                </td>
+                <td class="px-5 py-4 text-sm text-text-secondary">₹{{ pos.entryPrice }}</td>
+                <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                  {{ pos.quantity }}
+                </td>
+                <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                  ₹{{ pos.currentPrice }}
+                </td>
+                <td class="px-5 py-4 text-right text-sm text-danger">
+                  {{ pos.stopLoss ?? '—' }}
+                </td>
+                <td class="px-5 py-4 text-right text-sm text-success">
+                  {{ pos.target ?? '—' }}
+                </td>
+                <td class="px-5 py-4">
+                  <span
+                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                    :class="
+                      pos.status === 'OPEN'
+                        ? 'bg-success-bg text-success'
+                        : 'bg-danger-bg text-danger'
+                    "
+                    >{{ pos.status }}</span
                   >
-                    {{ pos.pnl >= 0 ? '+' : '' }}₹{{ pos.pnl }}
-                    <span class="ml-1 text-xs font-normal opacity-70"
-                      >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
-                    >
-                  </td>
-                  <td class="px-5 py-4 text-center">
-                    <button
-                      v-if="pos.status === 'OPEN'"
-                      class="rounded-md border border-danger/30 px-2.5 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
-                      @click="showCloseModal(pos)"
-                    >
-                      Close
-                    </button>
-                    <span v-else class="text-xs text-text-muted">—</span>
-                  </td>
-                </tr>
-                <tr v-if="filteredPositions.length === 0">
-                  <td colspan="9" class="px-5 py-12 text-center text-sm text-text-muted">
-                    No positions found
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                </td>
+                <td
+                  class="px-5 py-4 text-right text-sm font-semibold"
+                  :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
+                >
+                  {{ pos.pnl >= 0 ? '+' : '' }}₹{{ pos.pnl }}
+                  <span class="ml-1 text-xs font-normal opacity-70"
+                    >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
+                  >
+                </td>
+                <td class="px-5 py-4 text-center">
+                  <button
+                    v-if="pos.status === 'OPEN'"
+                    class="rounded-md border border-danger/30 px-2.5 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+                    @click="showCloseModal(pos)"
+                  >
+                    Close
+                  </button>
+                  <span v-else class="text-xs text-text-muted">—</span>
+                </td>
+              </tr>
+              <tr v-if="filteredPositions.length === 0">
+                <td colspan="9" class="px-5 py-12 text-center text-sm text-text-muted">
+                  No positions found
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </template>
-    </ErrorBoundary>
+      </div>
+    </template>
   </div>
 
   <!-- New Position Modal -->
@@ -230,6 +232,14 @@
             </svg>
           </button>
         </div>
+
+        <ErrorMessage
+          v-if="mutationError && mutationTarget === 'create'"
+          class="mb-4"
+          v-bind="mutationError"
+          :focus-on-mount="true"
+          @action="refreshAfterUnknownMutation"
+        />
 
         <form class="space-y-4" @submit.prevent="submitNewPosition">
           <div>
@@ -387,6 +397,14 @@
           </button>
         </div>
 
+        <ErrorMessage
+          v-if="mutationError && mutationTarget === 'close'"
+          class="mb-4"
+          v-bind="mutationError"
+          :focus-on-mount="true"
+          @action="refreshAfterUnknownMutation"
+        />
+
         <div class="mb-4 rounded-lg bg-bg-surface p-4">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-text-primary">{{ closeTarget.symbol }}</span>
@@ -442,14 +460,26 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getPositions, getClosedPositions, closePosition, executeTrade } from '../api/client'
+import { getPositions, getClosedPositions, closePosition, executeTrade } from '../api/positions'
 import type { Position } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
-import ErrorBoundary from '../components/ErrorBoundary.vue'
+import ErrorMessage from '../components/ErrorMessage.vue'
 import { useAsyncData } from '../composables/useAsyncData'
+import { formatAppError, type FormattedErrorDetail } from '../errors/appError'
 
-const { loading, error, errorMessage, execute } = useAsyncData()
+interface MutationErrorPresentation {
+  title: string
+  message: string
+  details?: FormattedErrorDetail[]
+  actionLabel?: string
+}
+
+const { loading, error, execute } = useAsyncData<void>()
 const positions = ref<Position[]>([])
+const successNotice = ref('')
+const staleWarning = ref('')
+const mutationError = ref<MutationErrorPresentation | null>(null)
+const mutationTarget = ref<'create' | 'close' | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref('ALL')
 
@@ -461,15 +491,45 @@ const filteredPositions = computed(() => {
   })
 })
 
-const refreshPositions = () => {
-  execute(async () => {
-    const openRes = await getPositions()
-    const openPositions: Position[] = openRes.success && openRes.data ? openRes.data : []
-    const closedRes = await getClosedPositions()
-    const closedPositions: Position[] = closedRes.success && closedRes.data ? closedRes.data : []
+const refreshPositions = async (): Promise<boolean> => {
+  await execute(async () => {
+    const [openPositions, closedPositions] = await Promise.all([
+      getPositions(),
+      getClosedPositions(),
+    ])
     positions.value = [...openPositions, ...closedPositions]
-    if (openRes.error || closedRes.error) throw new Error(openRes.error || closedRes.error)
   })
+  return error.value === null
+}
+
+function presentMutationError(
+  errorLike: unknown,
+  target: 'create' | 'close'
+): MutationErrorPresentation {
+  const formatted = formatAppError(errorLike, {
+    title: target === 'create' ? 'Couldn’t create position' : 'Couldn’t close position',
+    operation: 'mutation',
+    refreshLabel: 'Refresh positions',
+  })
+  const outcomeUnknown =
+    typeof errorLike === 'object' &&
+    errorLike !== null &&
+    'outcomeUnknown' in errorLike &&
+    errorLike.outcomeUnknown === true
+  return {
+    ...formatted,
+    title: outcomeUnknown
+      ? target === 'create'
+        ? 'Order could not be confirmed'
+        : 'Position closure could not be confirmed'
+      : formatted.title,
+    actionLabel: formatted.action?.label,
+  }
+}
+
+async function refreshAfterUnknownMutation() {
+  const refreshed = await refreshPositions()
+  if (refreshed) mutationError.value = null
 }
 
 // New Position Modal
@@ -489,6 +549,8 @@ const newPos = ref({
 
 const submitNewPosition = async () => {
   submitting.value = true
+  mutationError.value = null
+  mutationTarget.value = 'create'
   try {
     await executeTrade({
       symbol: newPos.value.symbol,
@@ -498,6 +560,7 @@ const submitNewPosition = async () => {
       price: newPos.value.price,
       limitPrice: newPos.value.limitPrice,
       stopPrice: newPos.value.stopLoss,
+      target: newPos.value.target,
       entryReason: newPos.value.entryReason,
     })
     showNewPositionModal.value = false
@@ -512,10 +575,14 @@ const submitNewPosition = async () => {
       target: undefined,
       entryReason: '',
     }
-    await refreshPositions()
+    successNotice.value = 'Position created.'
+    const refreshed = await refreshPositions()
+    if (!refreshed) {
+      staleWarning.value = 'Positions refresh failed. The displayed list may be stale.'
+      error.value = null
+    }
   } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to create position'
-    error.value = true
+    mutationError.value = presentMutationError(err, 'create')
   } finally {
     submitting.value = false
   }
@@ -530,20 +597,28 @@ const closeReason = ref('')
 const showCloseModal = (pos: Position) => {
   closeTarget.value = pos
   closeReason.value = ''
+  mutationError.value = null
+  mutationTarget.value = 'close'
   showClosePositionModal.value = true
 }
 
 const submitClosePosition = async () => {
   if (!closeTarget.value) return
   closing.value = true
+  mutationError.value = null
+  mutationTarget.value = 'close'
   try {
     await closePosition(closeTarget.value.symbol, closeReason.value || 'manual_close')
     showClosePositionModal.value = false
     closeTarget.value = null
-    await refreshPositions()
+    successNotice.value = 'Position closed.'
+    const refreshed = await refreshPositions()
+    if (!refreshed) {
+      staleWarning.value = 'Positions refresh failed. The displayed list may be stale.'
+      error.value = null
+    }
   } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to close position'
-    error.value = true
+    mutationError.value = presentMutationError(err, 'close')
   } finally {
     closing.value = false
   }
