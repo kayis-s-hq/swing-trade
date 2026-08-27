@@ -127,7 +127,31 @@
       </p>
     </div>
 
-    <ErrorBoundary :error="error">
+    <div
+      v-if="operationNotice"
+      role="alert"
+      class="mb-4 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning"
+    >
+      <p>{{ operationNotice }}</p>
+      <button
+        v-if="offerPullStatusRefresh"
+        class="mt-2 text-xs font-medium underline"
+        @click="refreshPullStatus"
+      >
+        Refresh pull status
+      </button>
+    </div>
+
+    <div
+      v-if="pollingWarning"
+      role="status"
+      class="mb-4 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning"
+    >
+      <p>Progress refresh failed. The last progress may be stale.</p>
+      <button class="mt-2 text-xs font-medium underline" @click="retryPollNow">Retry now</button>
+    </div>
+
+    <ErrorBoundary :error="Boolean(error)">
       <template #error>
         <div class="flex flex-col items-center justify-center py-20">
           <p class="text-sm text-danger">
@@ -264,21 +288,23 @@ import {
   triggerDataPull,
   getPullProgress,
   cancelDataPull,
-  getFyersStatus,
-  getFyersLoginUrl,
-  setBroker as apiSetBroker,
-} from '../api/client'
+} from '../api/ingestion'
+import { getFyersStatus, getFyersLoginUrl, setBroker as apiSetBroker } from '../api/client'
 import type { IngestionStatus, PullProgress } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import { useAsyncData } from '../composables/useAsyncData'
+import { safeHumanMessage } from '../errors/appError'
 import { getSettings } from '../stores/settings'
 
 const settings = getSettings()
 const backendBroker = ref(settings.selectedBroker)
-const { loading, error, errorMessage, execute } = useAsyncData()
+const { loading, error, errorMessage, execute } = useAsyncData<void>()
 const status = ref<IngestionStatus[]>([])
 const fyersConnected = ref(false)
+const operationNotice = ref('')
+const offerPullStatusRefresh = ref(false)
+const pollingWarning = ref(false)
 
 const pulling = ref(false)
 const pullProgress = ref<PullProgress | null>(null)
@@ -328,28 +354,26 @@ const syncBroker = async () => {
   }
 }
 
-const loadStatus = () => {
-  execute(async () => {
+const loadStatus = async () => {
+  await execute(async () => {
     await syncBroker()
     const [statusResult, fyersResult, progressResult] = await Promise.all([
       getIngestionStatus(),
       getFyersStatus(),
       getPullProgress(),
     ])
-    if (statusResult.success && statusResult.data && Array.isArray(statusResult.data)) {
-      status.value = statusResult.data
-    } else {
-      status.value = []
-      throw new Error(statusResult.error || 'Failed to load ingestion status')
+    status.value = statusResult
+    const fyersData =
+      typeof fyersResult === 'object' && fyersResult !== null && 'data' in fyersResult
+        ? fyersResult.data
+        : fyersResult
+    if (typeof fyersData === 'object' && fyersData !== null && 'connected' in fyersData) {
+      fyersConnected.value = fyersData.connected === true
     }
-    if (fyersResult.success && fyersResult.data) {
-      fyersConnected.value = fyersResult.data.connected
-    }
-    // Check for active pull in progress
-    if (progressResult.success && progressResult.data && progressResult.data.status === 'running') {
+    if (progressResult.status === 'running') {
       pulling.value = true
-      pullProgress.value = progressResult.data
-      startPolling(progressResult.data.pullId)
+      pullProgress.value = progressResult
+      startPolling(progressResult.pullId)
     }
   })
 }
@@ -362,23 +386,22 @@ const startPull = async () => {
   pulling.value = true
   pullComplete.value = false
   pullProgress.value = null
+  operationNotice.value = ''
   try {
     const result = await triggerDataPull(1)
-    if (result.success && result.data) {
-      startPolling(result.data.pullId)
-    } else {
-      pulling.value = false
-      console.error('[Ingestion] Pull failed:', result.error, result)
-      alert(result.error || 'Failed to start data pull')
-    }
+    startPolling(result.pullId)
   } catch (err: unknown) {
     pulling.value = false
-    console.error('[Ingestion] Pull error:', err)
-    alert(err instanceof Error ? err.message : 'Failed to start data pull')
+    operationNotice.value = safeHumanMessage(
+      err instanceof Error ? err.message : undefined,
+      'The data pull could not be started.'
+    )
   }
 }
 
 const cancelPull = async () => {
+  operationNotice.value = ''
+  offerPullStatusRefresh.value = false
   try {
     await cancelDataPull()
     pulling.value = false
@@ -387,42 +410,63 @@ const cancelPull = async () => {
       pollTimer = null
     }
   } catch (err: unknown) {
-    alert(err instanceof Error ? err.message : 'Failed to cancel pull')
+    const outcomeUnknown =
+      typeof err === 'object' &&
+      err !== null &&
+      'outcomeUnknown' in err &&
+      err.outcomeUnknown === true
+    operationNotice.value = outcomeUnknown
+      ? 'Cancellation could not be confirmed. Refresh pull status before taking another action.'
+      : safeHumanMessage(
+          err instanceof Error ? err.message : undefined,
+          'The data pull could not be cancelled.'
+        )
+    offerPullStatusRefresh.value = outcomeUnknown
+  }
+}
+
+async function pollProgress(pullId: string) {
+  try {
+    const result = await getPullProgress(pullId)
+    pullProgress.value = result
+    pollingWarning.value = false
+    if (result.status === 'completed' || result.status === 'cancelled') {
+      pulling.value = false
+      pullComplete.value = result.status === 'completed'
+      pullCompleted.value = result
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+      if (result.status === 'completed') await loadStatus()
+    }
+  } catch {
+    pollingWarning.value = true
   }
 }
 
 const startPolling = (pullId: string) => {
   if (pollTimer) clearInterval(pollTimer)
-  pollTimer = setInterval(async () => {
-    try {
-      const result = await getPullProgress(pullId)
-      if (result.success && result.data) {
-        pullProgress.value = result.data
-        if (result.data.status === 'completed' || result.data.status === 'cancelled') {
-          pulling.value = false
-          pullComplete.value = result.data.status === 'completed'
-          pullCompleted.value = result.data
-          if (pollTimer) {
-            clearInterval(pollTimer)
-            pollTimer = null
-          }
-          // Refresh status after pull completes
-          if (result.data.status === 'completed') {
-            await loadStatus()
-          }
-        }
-      }
-    } catch {
-      // Ignore polling errors
-    }
-  }, 1000)
+  pollTimer = setInterval(() => void pollProgress(pullId), 1000)
+}
+
+async function retryPollNow() {
+  if (pullProgress.value?.pullId) await pollProgress(pullProgress.value.pullId)
+}
+
+async function refreshPullStatus() {
+  if (pullProgress.value?.pullId) await pollProgress(pullProgress.value.pullId)
+  if (!pollingWarning.value) {
+    operationNotice.value = ''
+    offerPullStatusRefresh.value = false
+  }
 }
 
 const openFyersAuth = async () => {
   try {
     const result = await getFyersLoginUrl()
-    if (result.success && result.data?.url) {
-      const authWindow = window.open(result.data.url, 'fyers-auth', 'width=500,height=600')
+    if (result.url) {
+      const authWindow = window.open(result.url, 'fyers-auth', 'width=500,height=600')
 
       // Poll for auth completion — callback redirects to settings, we detect via status
       let attempts = 0
@@ -433,7 +477,7 @@ const openFyersAuth = async () => {
           await loadStatus()
         } else {
           const status = await getFyersStatus()
-          if (status.success && status.data?.connected) {
+          if (status.connected) {
             clearInterval(pollInterval)
             fyersConnected.value = true
             await loadStatus()
@@ -442,7 +486,10 @@ const openFyersAuth = async () => {
       }, 2000)
     }
   } catch (err: unknown) {
-    alert(err instanceof Error ? err.message : 'Failed to get Fyers login URL')
+    operationNotice.value = safeHumanMessage(
+      err instanceof Error ? err.message : undefined,
+      'The broker login URL could not be loaded.'
+    )
   }
 }
 

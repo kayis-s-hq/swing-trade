@@ -27,20 +27,7 @@
       </button>
     </div>
 
-    <ErrorBoundary :error="error">
-      <template #error>
-        <div class="flex flex-col items-center justify-center py-20">
-          <p class="text-sm text-danger">
-            {{ errorMessage }}
-          </p>
-          <button
-            class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
-            @click="refreshPortfolio"
-          >
-            Retry
-          </button>
-        </div>
-      </template>
+    <ErrorBoundary :error="false">
       <div v-if="loading" class="flex items-center justify-center py-20">
         <LoadingSpinner message="Loading portfolio data..." />
       </div>
@@ -51,13 +38,28 @@
           :equity-points="equityPoints"
           @range-change="handleRangeChange"
         />
+        <ErrorMessage
+          v-if="performanceError"
+          title="Portfolio refresh failed"
+          message="Showing the last successful performance snapshot."
+          action-label="Retry"
+          @action="refreshPerformance"
+        />
+        <p v-if="lastPerformanceUpdate" class="mt-2 text-xs text-text-muted">
+          Last updated
+          <time :datetime="lastPerformanceUpdate.toISOString()">
+            {{ lastPerformanceUpdate.toLocaleTimeString() }}
+          </time>
+        </p>
 
         <!-- Trade History -->
         <div class="mt-6 card-panel">
           <div class="flex items-center justify-between border-b border-border-subtle px-5 py-3">
             <div>
               <h2 class="text-sm font-semibold text-text-primary">Trade History</h2>
-              <p class="text-xs text-text-muted">{{ recentTrades.length }} records</p>
+              <p v-if="!tradeHistoryError" class="text-xs text-text-muted">
+                {{ recentTrades.length }} records
+              </p>
             </div>
             <select
               v-model="timeRange"
@@ -71,7 +73,14 @@
               <option value="ALL">All Time</option>
             </select>
           </div>
-          <div class="w-full overflow-x-auto">
+          <ErrorMessage
+            v-if="tradeHistoryError"
+            title="Couldn’t load trade history"
+            message="Trade history is temporarily unavailable."
+            action-label="Retry"
+            @action="loadTradeHistory"
+          />
+          <div v-else class="w-full overflow-x-auto">
             <table class="min-w-full">
               <thead>
                 <tr class="border-b border-border-subtle bg-bg-primary/50">
@@ -170,9 +179,13 @@ import type { PortfolioSummary, Position, EquityPoint } from '../api/types'
 import PerformanceMetrics from '../components/PerformanceMetrics.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
-import { useAsyncData } from '../composables/useAsyncData'
+import ErrorMessage from '../components/ErrorMessage.vue'
+import { asAppError, type AppError } from '../errors/appError'
 
-const { loading, error, errorMessage, execute } = useAsyncData<void>()
+const loading = ref(true)
+const performanceError = ref<AppError | null>(null)
+const tradeHistoryError = ref<AppError | null>(null)
+const lastPerformanceUpdate = ref<Date | null>(null)
 const portfolioSummary = ref<PortfolioSummary | null>(null)
 const recentTrades = ref<Position[]>([])
 const equityPoints = ref<EquityPoint[]>([])
@@ -183,25 +196,41 @@ const tradeDuration = (entryDate: string): string => {
   return `${days}d`
 }
 
-const handleRangeChange = async (range: string) => {
-  timeRange.value = range
-  const res = await getEquityCurve(range)
-  if (res.success && res.data) equityPoints.value = res.data.data
-}
-
-const refreshPortfolio = () => {
-  execute(async () => {
-    const [summaryRes, tradesRes, equityRes] = await Promise.all([
+const refreshPerformance = async () => {
+  performanceError.value = null
+  try {
+    const [summaryValue, equityValue] = await Promise.all([
       getPortfolioSummary(),
-      getTradeHistory(10),
       getEquityCurve(timeRange.value),
     ])
-    if (summaryRes.success && summaryRes.data) portfolioSummary.value = summaryRes.data
-    if (tradesRes.success && tradesRes.data) recentTrades.value = tradesRes.data
-    if (equityRes.success && equityRes.data) equityPoints.value = equityRes.data.data
-    if (summaryRes.error || tradesRes.error || equityRes.error)
-      throw new Error(summaryRes.error ?? tradesRes.error ?? equityRes.error)
-  })
+    const nextSummary = summaryValue
+    const nextEquity = equityValue
+    portfolioSummary.value = nextSummary
+    equityPoints.value = nextEquity.data
+    lastPerformanceUpdate.value = new Date()
+  } catch (cause) {
+    performanceError.value = asAppError(cause)
+  }
+}
+
+const loadTradeHistory = async () => {
+  tradeHistoryError.value = null
+  try {
+    recentTrades.value = await getTradeHistory(10)
+  } catch (cause) {
+    tradeHistoryError.value = asAppError(cause)
+  }
+}
+
+const handleRangeChange = async (range: string) => {
+  timeRange.value = range
+  await refreshPerformance()
+}
+
+const refreshPortfolio = async () => {
+  loading.value = portfolioSummary.value === null && recentTrades.value.length === 0
+  await Promise.all([refreshPerformance(), loadTradeHistory()])
+  loading.value = false
 }
 
 onMounted(() => {

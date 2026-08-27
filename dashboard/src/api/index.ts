@@ -2,7 +2,24 @@
 // New code should import from domain-specific modules directly.
 
 // Shared infrastructure
-export { rawFetch, unwrap, toNum, errResponse } from './shared'
+export { apiRequest, apiSseEvents, toNum } from './shared'
+export type { ApiRequestOptions, ApiSseEventOptions, ResponseContract } from './shared'
+export { AppError, asAppError, formatAppError, isAppError } from '../errors/appError'
+export {
+  CancelledError,
+  MalformedResponseError,
+  NetworkError,
+  RuntimeAppError,
+  TimeoutError,
+  isErrorKind,
+} from '../errors/errorClasses'
+export type {
+  AppErrorKind,
+  AppErrorOperation,
+  AppErrorOptions,
+  FormatAppErrorOptions,
+  FormattedAppError,
+} from '../errors/appError'
 
 // Health
 export { checkHealth, getHealthStatus } from './health'
@@ -20,7 +37,7 @@ export {
   generatePriceActionSignal,
   triggerScan,
 } from './signals'
-export type { SignalGenerationProgress } from './signals'
+export type { SignalGenerationProgress, SignalStreamOptions } from './signals'
 
 // Positions
 export {
@@ -90,6 +107,7 @@ export { runBacktest, runBacktestAll, listBacktestReports, getBacktestReport } f
 
 // Analysis
 export { getCompositeAnalysis, runFullAnalysis } from './analysis'
+export type { AnalysisStreamOptions } from './analysis'
 
 // Job
 export { startJobRun, getJobRunProgress, getJobRunSummary, listJobRuns, cancelJobRun } from './job'

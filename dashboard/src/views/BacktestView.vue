@@ -247,6 +247,13 @@
           Refresh
         </button>
       </div>
+      <ErrorMessage
+        v-if="reportsError"
+        title="Saved reports couldn’t be loaded"
+        message="Check the backend connection, then retry."
+        action-label="Retry"
+        @action="loadReports"
+      />
       <ul class="divide-y divide-border-subtle/50">
         <li
           v-for="filename in reports"
@@ -262,7 +269,10 @@
           </button>
         </li>
       </ul>
-      <div v-if="reports.length === 0" class="py-4 text-center text-sm text-text-muted">
+      <div
+        v-if="!reportsError && reportsLoaded && reports.length === 0"
+        class="py-4 text-center text-sm text-text-muted"
+      >
         No saved reports yet.
       </div>
     </div>
@@ -274,6 +284,7 @@ import { ref, onMounted } from 'vue'
 import { runBacktest, runBacktestAll, listBacktestReports, getBacktestReport } from '../api/client'
 import type { BacktestResult, BacktestReportSummary } from '../api/types'
 import MetricCard from '../components/MetricCard.vue'
+import ErrorMessage from '../components/ErrorMessage.vue'
 
 const symbol = ref('')
 const exchange = ref('NSE')
@@ -284,6 +295,16 @@ const runError = ref('')
 const result = ref<BacktestResult | null>(null)
 const summary = ref<BacktestReportSummary | null>(null)
 const reports = ref<string[]>([])
+const reportsError = ref(false)
+const reportsLoaded = ref(false)
+let reportRequestId = 0
+
+function confirmed<T>(value: T | { success: boolean; data?: T; error?: string }): T | undefined {
+  if (typeof value === 'object' && value !== null && 'success' in value) {
+    return value.success ? value.data : undefined
+  }
+  return value as T
+}
 
 const handleRunSingle = async () => {
   if (!symbol.value.trim()) return
@@ -292,10 +313,10 @@ const handleRunSingle = async () => {
   result.value = null
   try {
     const res = await runBacktest(symbol.value, exchange.value)
-    if (res.success && res.data) {
-      result.value = res.data
-    } else {
-      runError.value = res.error || 'Backtest failed — check the symbol has enough candle history.'
+    const data = confirmed(res)
+    if (data) result.value = data
+    else {
+      runError.value = 'Backtest failed — check the symbol has enough candle history.'
     }
   } finally {
     running.value = false
@@ -308,11 +329,12 @@ const handleRunAll = async () => {
   summary.value = null
   try {
     const res = await runBacktestAll(exchange.value)
-    if (res.success && res.data) {
-      summary.value = res.data
+    const data = confirmed(res)
+    if (data) {
+      summary.value = data
       await loadReports()
     } else {
-      runError.value = res.error || 'Watchlist backtest failed.'
+      runError.value = 'Watchlist backtest failed.'
     }
   } finally {
     runningAll.value = false
@@ -320,15 +342,33 @@ const handleRunAll = async () => {
 }
 
 const loadReports = async () => {
-  const res = await listBacktestReports()
-  if (res.success && res.data) reports.value = res.data
+  const requestId = ++reportRequestId
+  reportsError.value = false
+  try {
+    const res = await listBacktestReports()
+    if (requestId !== reportRequestId) return
+    const data = confirmed(res)
+    if (data) reports.value = data
+    else reportsError.value = true
+  } catch {
+    if (requestId === reportRequestId) reportsError.value = true
+  } finally {
+    if (requestId === reportRequestId) reportsLoaded.value = true
+  }
 }
 
 const viewReport = async (filename: string) => {
-  const res = await getBacktestReport(filename)
-  if (res.success && res.data) {
-    summary.value = res.data
-    result.value = null
+  const requestId = ++reportRequestId
+  try {
+    const res = await getBacktestReport(filename)
+    if (requestId !== reportRequestId) return
+    const data = confirmed(res)
+    if (data) {
+      summary.value = data
+      result.value = null
+    }
+  } catch {
+    // Keep the last confirmed report visible when a newer report cannot load.
   }
 }
 

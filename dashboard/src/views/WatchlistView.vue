@@ -66,7 +66,19 @@
       </form>
     </div>
 
-    <ErrorBoundary :error="error">
+    <div v-if="staleWarning" role="status" class="mb-4 text-sm text-warning">
+      {{ staleWarning }}
+    </div>
+
+    <ErrorMessage
+      v-if="mutationError"
+      class="mb-4"
+      v-bind="mutationError"
+      :focus-on-mount="true"
+      @action="loadWatchlist"
+    />
+
+    <ErrorBoundary :error="Boolean(error)">
       <template #error>
         <div class="flex flex-col items-center justify-center py-20">
           <p class="text-sm text-danger">
@@ -188,50 +200,75 @@ import {
   addToWatchlist,
   removeFromWatchlist,
   toggleWatchlistActive,
-} from '../api/client'
+} from '../api/watchlist'
 import type { WatchlistEntry } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
+import ErrorMessage from '../components/ErrorMessage.vue'
 import { useAsyncData } from '../composables/useAsyncData'
+import { formatAppError, type FormattedErrorDetail } from '../errors/appError'
 
-const { loading, error, errorMessage, execute } = useAsyncData()
+interface MutationErrorPresentation {
+  title: string
+  message: string
+  details?: FormattedErrorDetail[]
+  actionLabel?: string
+}
+
+const { loading, error, errorMessage, execute } = useAsyncData<void>()
 const watchlist = ref<WatchlistEntry[]>([])
+const mutationError = ref<MutationErrorPresentation | null>(null)
+const staleWarning = ref('')
 const showAddForm = ref(false)
 const newSymbol = ref('')
 const newName = ref('')
 const adding = ref(false)
 
-const loadWatchlist = () => {
-  execute(async () => {
-    console.log('[Watchlist] Loading watchlist...')
-    const result = await getWatchlist()
-    if (result.success && result.data) {
-      console.log('[Watchlist] Loaded', result.data.length, 'entries')
-      watchlist.value = result.data
-    } else {
-      console.error('[Watchlist] Load failed:', result.error, result)
-      throw new Error(result.error || 'Failed to load watchlist')
-    }
+const loadWatchlist = async (): Promise<boolean> => {
+  await execute(async () => {
+    watchlist.value = await getWatchlist()
   })
+  return error.value === null
+}
+
+async function refreshAfterConfirmedMutation() {
+  staleWarning.value = ''
+  if (!(await loadWatchlist())) {
+    staleWarning.value =
+      'Watchlist update confirmed, but refresh failed. Displayed rows may be stale.'
+    error.value = null
+    errorMessage.value = ''
+  }
+}
+
+function showMutationError(errorLike: unknown, title: string) {
+  const formatted = formatAppError(errorLike, {
+    title,
+    operation: 'mutation',
+    refreshLabel: 'Refresh watchlist',
+  })
+  mutationError.value = {
+    title: formatted.title,
+    message: formatted.message,
+    details: formatted.details,
+    actionLabel: formatted.action?.label,
+  }
 }
 
 const handleSubmit = async () => {
   if (!newSymbol.value.trim()) return
   adding.value = true
+  mutationError.value = null
+  const symbol = newSymbol.value.trim().toUpperCase()
   try {
-    const result = await addToWatchlist(newSymbol.value, newName.value || undefined)
-    if (result.success) {
-      newSymbol.value = ''
-      newName.value = ''
-      showAddForm.value = false
-      await loadWatchlist()
-    } else {
-      console.error('[Watchlist] Add failed:', result.error, result)
-      alert(result.error || 'Failed to add stock')
-    }
+    const added = await addToWatchlist(newSymbol.value, newName.value || undefined)
+    watchlist.value = [...watchlist.value.filter((item) => item.symbol !== added.symbol), added]
+    newSymbol.value = ''
+    newName.value = ''
+    showAddForm.value = false
+    await refreshAfterConfirmedMutation()
   } catch (err: unknown) {
-    console.error('[Watchlist] Add error:', err)
-    alert(err instanceof Error ? err.message : 'Failed to add stock')
+    showMutationError(err, `Couldn’t add ${symbol || 'stock'}`)
   } finally {
     adding.value = false
   }
@@ -239,32 +276,26 @@ const handleSubmit = async () => {
 
 const removeEntry = async (symbol: string) => {
   if (!confirm(`Remove ${symbol} from watchlist?`)) return
+  mutationError.value = null
   try {
-    const result = await removeFromWatchlist(symbol)
-    if (result.success) {
-      await loadWatchlist()
-    } else {
-      console.error('[Watchlist] Remove failed:', result.error, result)
-      alert(result.error || 'Failed to remove stock')
-    }
+    await removeFromWatchlist(symbol)
+    watchlist.value = watchlist.value.filter((item) => item.symbol !== symbol)
+    await refreshAfterConfirmedMutation()
   } catch (err: unknown) {
-    console.error('[Watchlist] Remove error:', err)
-    alert(err instanceof Error ? err.message : 'Failed to remove stock')
+    showMutationError(err, `Couldn’t remove ${symbol}`)
   }
 }
 
 const toggleEntry = async (symbol: string) => {
-  const entry = watchlist.value.find((e) => e.symbol === symbol)
+  const entry = watchlist.value.find((item) => item.symbol === symbol)
   if (!entry) return
+  mutationError.value = null
   try {
-    const result = await toggleWatchlistActive(symbol, entry.isActive)
-    if (result.success) {
-      await loadWatchlist()
-    } else {
-      console.error('[Watchlist] Toggle failed:', result.error, result)
-    }
+    const updated = await toggleWatchlistActive(symbol, !entry.isActive)
+    watchlist.value = watchlist.value.map((item) => (item.symbol === symbol ? updated : item))
+    await refreshAfterConfirmedMutation()
   } catch (err: unknown) {
-    console.error('[Watchlist] Toggle error:', err)
+    showMutationError(err, `Couldn’t update ${symbol}`)
   }
 }
 

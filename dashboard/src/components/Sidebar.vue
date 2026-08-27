@@ -50,35 +50,17 @@
     <div class="border-t border-border-subtle p-3">
       <div v-if="!collapsed" class="rounded-md border border-border-subtle bg-bg-primary/50 p-3">
         <div class="mb-1 flex items-center gap-2">
-          <span
-            class="inline-block h-2 w-2 rounded-full"
-            :class="
-              healthStatus === 'down'
-                ? 'bg-error'
-                : healthStatus === 'degraded'
-                  ? 'bg-warning'
-                  : 'bg-success pulse-dot'
-            "
-          />
+          <span class="inline-block h-2 w-2 rounded-full" :class="healthDotClass" />
           <span class="text-xs font-medium text-text-muted">System Status</span>
         </div>
         <div
+          role="status"
+          aria-live="polite"
+          :aria-label="`Backend health: ${healthLabel}`"
           class="text-xs font-medium"
-          :class="
-            healthStatus === 'down'
-              ? 'text-error'
-              : healthStatus === 'degraded'
-                ? 'text-warning'
-                : 'text-success'
-          "
+          :class="healthTextClass"
         >
-          {{
-            healthStatus === 'down'
-              ? 'Backend Down'
-              : healthStatus === 'degraded'
-                ? 'Degraded'
-                : 'Engine Active'
-          }}
+          {{ healthLabel }}
         </div>
         <div class="mt-0.5 text-[10px] text-text-muted">Sync {{ lastSync }}</div>
         <div class="mt-2 border-t border-border-subtle pt-2 text-[10px] text-text-muted">
@@ -123,12 +105,16 @@
 import { computed } from 'vue'
 import { iconPaths } from './Icons'
 import { getSettings, brokerLabels } from '../stores/settings'
+import type { BackendHealthStatus } from '../stores/appState'
 
 const settings = getSettings()
-const props = defineProps<{
-  collapsed: boolean
-  healthStatus?: '' | 'healthy' | 'degraded' | 'down'
-}>()
+const props = withDefaults(
+  defineProps<{
+    collapsed: boolean
+    healthStatus?: BackendHealthStatus
+  }>(),
+  { healthStatus: 'checking' }
+)
 defineEmits<{ toggle: [] }>()
 
 const lastSync = computed(() => {
@@ -141,9 +127,29 @@ const lastSync = computed(() => {
   })
 })
 
-const healthStatus = computed(
-  () => (props.healthStatus || 'healthy') as '' | 'healthy' | 'degraded' | 'down'
-)
+const healthLabel = computed(() => {
+  const labels: Record<BackendHealthStatus, string> = {
+    checking: 'Checking',
+    healthy: 'Healthy',
+    degraded: 'Degraded',
+    unavailable: 'Unavailable',
+  }
+  return labels[props.healthStatus]
+})
+
+const healthDotClass = computed(() => {
+  if (props.healthStatus === 'unavailable') return 'bg-error'
+  if (props.healthStatus === 'degraded') return 'bg-warning'
+  if (props.healthStatus === 'checking') return 'bg-text-muted pulse-dot'
+  return 'bg-success pulse-dot'
+})
+
+const healthTextClass = computed(() => {
+  if (props.healthStatus === 'unavailable') return 'text-error'
+  if (props.healthStatus === 'degraded') return 'text-warning'
+  if (props.healthStatus === 'checking') return 'text-text-muted'
+  return 'text-success'
+})
 
 const brokerLabel = computed(() => brokerLabels[settings.selectedBroker] || 'Unknown')
 

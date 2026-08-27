@@ -1,21 +1,70 @@
 import { reactive } from 'vue'
 import { checkHealth } from '../api/health'
+import { AppError, asAppError } from '../errors/appError'
 
-const state = reactive({
-  backendUp: true,
-  backendError: '',
-  lastHealthCheck: 0,
-  healthStatus: '' as '' | 'healthy' | 'degraded' | 'down',
-  connectionFailed: false,
+export type BackendHealthStatus = 'checking' | 'healthy' | 'degraded' | 'unavailable'
+
+interface AppState {
+  healthStatus: BackendHealthStatus
+  healthError: AppError | null
+  checking: boolean
+  lastHealthAttempt: number | null
+  lastHealthSuccess: number | null
+  bannerDismissed: boolean
+}
+
+const state = reactive<AppState>({
+  healthStatus: 'checking',
+  healthError: null,
+  checking: false,
+  lastHealthAttempt: null,
+  lastHealthSuccess: null,
+  bannerDismissed: false,
 })
 
 let healthInterval: ReturnType<typeof setInterval> | null = null
 let healthPromise: Promise<void> | null = null
 
-export async function startHealthPolling(intervalMs = 15000): Promise<void> {
-  if (healthInterval) return
-  healthInterval = setInterval(doHealthCheck, intervalMs)
-  await doHealthCheck()
+function failureStatus(error: AppError): BackendHealthStatus {
+  return error.kind === 'network' || error.kind === 'timeout' ? 'unavailable' : 'degraded'
+}
+
+export function checkHealthNow(): Promise<void> {
+  if (healthPromise) return healthPromise
+
+  state.checking = true
+  state.lastHealthAttempt = Date.now()
+  healthPromise = (async () => {
+    try {
+      const response = await checkHealth()
+      state.healthStatus = response.status === 'UP' ? 'healthy' : 'degraded'
+      state.healthError = null
+      state.lastHealthSuccess = Date.now()
+      if (state.healthStatus === 'healthy') state.bannerDismissed = false
+    } catch (error: unknown) {
+      const healthError = asAppError(error, {
+        message: 'The backend health check failed.',
+        retryable: true,
+      })
+      state.healthStatus = failureStatus(healthError)
+      state.healthError = healthError
+    } finally {
+      state.checking = false
+    }
+  })().finally(() => {
+    healthPromise = null
+  })
+
+  return healthPromise
+}
+
+export async function startHealthPolling(intervalMs = 15_000): Promise<void> {
+  if (!healthInterval) {
+    healthInterval = setInterval(() => {
+      void checkHealthNow()
+    }, intervalMs)
+  }
+  await checkHealthNow()
 }
 
 export function stopHealthPolling(): void {
@@ -25,29 +74,10 @@ export function stopHealthPolling(): void {
   }
 }
 
-async function doHealthCheck(): Promise<void> {
-  if (healthPromise) return
-  healthPromise = (async () => {
-    const res = await checkHealth()
-    if (res.success && res.data) {
-      state.backendUp = true
-      state.backendError = ''
-      state.healthStatus = res.data.status === 'UP' ? 'healthy' : 'degraded'
-      state.connectionFailed = false
-      state.lastHealthCheck = Date.now()
-    } else {
-      state.backendUp = false
-      state.backendError = res.error || 'Backend server is unreachable'
-      // "Unable to connect" = down; HTTP errors = degraded (server is running but broken)
-      state.connectionFailed = state.backendError.includes('Unable to connect')
-      state.healthStatus = state.connectionFailed ? 'down' : 'degraded'
-    }
-  })().finally(() => {
-    healthPromise = null
-  })
-  await healthPromise
+export function dismissBackendBanner(): void {
+  state.bannerDismissed = true
 }
 
-export function getAppState() {
+export function getAppState(): AppState {
   return state
 }

@@ -6,7 +6,7 @@
         <p class="mt-1 text-sm text-text-muted">Broker connections and trading configuration</p>
       </div>
       <button
-        :disabled="saving"
+        :disabled="saving || unconfirmedDefaults"
         class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
         :class="saved ? 'bg-success' : ''"
         @click="handleSave"
@@ -76,6 +76,13 @@
     </div>
 
     <div class="max-w-2xl">
+      <div
+        v-if="unconfirmedDefaults"
+        role="status"
+        class="mb-4 rounded-lg bg-warning-bg p-3 text-sm text-warning"
+      >
+        Some settings could not be loaded; showing unconfirmed defaults. Retry before saving.
+      </div>
       <!-- Auth Success/Error Banner -->
       <div
         v-if="authResultBanner"
@@ -128,11 +135,16 @@
           >
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
+                <span v-if="fyersStatusError" class="text-sm font-medium text-warning"
+                  >Status unavailable</span
+                >
                 <span
+                  v-else
                   class="h-2.5 w-2.5 rounded-full"
                   :class="fyersConnected ? 'bg-success pulse-dot' : 'bg-danger'"
                 />
                 <span
+                  v-if="!fyersStatusError"
                   class="text-sm font-medium"
                   :class="fyersConnected ? 'text-success' : 'text-text-muted'"
                 >
@@ -146,7 +158,10 @@
           </div>
 
           <!-- Connect Button -->
-          <div v-if="settings.selectedBroker === 'fyers' && !fyersConnected" class="mt-4 space-y-3">
+          <div
+            v-if="settings.selectedBroker === 'fyers' && !fyersConnected && !fyersStatusError"
+            class="mt-4 space-y-3"
+          >
             <button
               :disabled="authing"
               class="w-full rounded-md bg-brand px-4 py-2.5 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
@@ -298,7 +313,12 @@
                   class="h-2.5 w-2.5 rounded-full"
                   :class="piServerRunning ? 'bg-success' : 'bg-danger'"
                 />
-                <span class="text-xs" :class="piServerRunning ? 'text-success' : 'text-text-muted'">
+                <span v-if="piStatusError" class="text-xs text-warning">Status unavailable</span>
+                <span
+                  v-else
+                  class="text-xs"
+                  :class="piServerRunning ? 'text-success' : 'text-text-muted'"
+                >
                   {{ piServerRunning ? 'Running' : 'Stopped' }}
                 </span>
               </div>
@@ -308,7 +328,7 @@
             </div>
             <div class="flex gap-2 pt-1">
               <button
-                v-if="!piServerRunning"
+                v-if="!piStatusError && !piServerRunning"
                 :disabled="piLoading"
                 class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
                 @click="handlePiStart"
@@ -316,7 +336,7 @@
                 {{ piLoading ? 'Starting...' : 'Start Server' }}
               </button>
               <button
-                v-else
+                v-else-if="!piStatusError"
                 :disabled="piLoading"
                 class="rounded-md border border-danger/30 bg-danger-bg px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
                 @click="handlePiStop"
@@ -324,6 +344,7 @@
                 {{ piLoading ? 'Stopping...' : 'Stop Server' }}
               </button>
               <button
+                v-if="!piStatusError"
                 :disabled="piLoading"
                 class="rounded-md border border-border-subtle px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary disabled:opacity-50"
                 @click="refreshPiStatus"
@@ -592,6 +613,9 @@
               </span>
             </div>
           </div>
+          <div v-else-if="healthStatusError" class="py-8 text-center text-sm text-warning">
+            Status unavailable
+          </div>
           <div v-else class="flex items-center justify-center py-8">
             <LoadingSpinner :message="'Checking system...'" :small="true" />
           </div>
@@ -601,7 +625,7 @@
 
     <!-- Save Button -->
     <button
-      :disabled="saving"
+      :disabled="saving || unconfirmedDefaults"
       class="w-full rounded-md bg-brand px-4 py-3 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
       :class="saved ? 'bg-success' : ''"
       @click="handleSave"
@@ -640,6 +664,7 @@ import {
   getPiServerStatus as apiGetPiServerStatus,
 } from '../api/client'
 import type { FyersStatus, HealthStatus } from '../api/types'
+import { formatAppError } from '../errors/appError'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import Toast from '../components/Toast.vue'
 import {
@@ -654,9 +679,20 @@ const activeTab = ref('broker')
 const settings = getSettings()
 const llmSettings = settings.llmSettings
 const discordSettings = settings.discordSettings
+
+function confirmed<T>(value: T | { success: boolean; data?: T }): T | undefined {
+  if (typeof value === 'object' && value !== null && 'data' in value) {
+    return value.success ? value.data : undefined
+  }
+  return value as T
+}
 const fyersStatus = ref<FyersStatus | null>(null)
-const fyersConnected = computed(() => fyersStatus.value?.connected ?? false)
+const fyersStatusError = ref(false)
+const fyersConnected = computed(
+  () => !fyersStatusError.value && (fyersStatus.value?.connected ?? false)
+)
 const healthStatus = ref<HealthStatus | null>(null)
+const healthStatusError = ref(false)
 const authResultBanner = ref<'success' | 'error' | null>(null)
 
 const authing = ref(false)
@@ -672,6 +708,8 @@ const piTestSuccess = ref(false)
 const piServerRunning = ref(false)
 const piServerStatusMsg = ref('')
 const piLoading = ref(false)
+const piStatusError = ref(false)
+const unconfirmedDefaults = ref(false)
 const openaiTestResult = ref('')
 const openaiTestSuccess = ref(false)
 const ollamaTestResult = ref('')
@@ -712,8 +750,15 @@ const healthDot = (status: string) => {
 }
 
 const refreshFyersStatus = async () => {
-  const res = await getFyersStatus()
-  if (res.success && res.data) fyersStatus.value = res.data
+  fyersStatusError.value = false
+  try {
+    const res = await getFyersStatus()
+    const data = confirmed(res)
+    if (data) fyersStatus.value = data
+    else fyersStatusError.value = true
+  } catch {
+    fyersStatusError.value = true
+  }
 }
 
 const pollFyersStatus = () => {
@@ -724,14 +769,15 @@ const pollFyersStatus = () => {
   pollTimer = window.setInterval(async () => {
     try {
       const res = await getFyersStatus()
-      if (res.success && res.data && res.data.connected) {
+      const data = confirmed(res)
+      if (data?.connected) {
         if (pollTimer) {
           clearInterval(pollTimer)
           pollTimer = null
         }
         authResultBanner.value = 'success'
         showAuthCodeInput.value = false
-        fyersStatus.value = res.data
+        fyersStatus.value = data
       }
     } catch {
       // ignore polling errors
@@ -741,18 +787,27 @@ const pollFyersStatus = () => {
 
 const refreshHealth = async () => {
   const { getHealthStatus } = await import('../api/client')
-  const res = await getHealthStatus()
-  if (res.success && res.data) healthStatus.value = res.data
+  healthStatusError.value = false
+  try {
+    const res = await getHealthStatus()
+    const legacy = res as unknown as { success?: boolean; data?: HealthStatus }
+    const data = legacy.success !== undefined ? (legacy.success ? legacy.data : undefined) : res
+    if (data) healthStatus.value = data
+    else healthStatusError.value = true
+  } catch {
+    healthStatusError.value = true
+  }
 }
 
 const startFyersAuth = async () => {
   authing.value = true
   try {
     const res = await getFyersLoginUrl()
-    if (!res.success || !res.data) throw new Error(res.error ?? 'Failed to get login URL')
+    const data = confirmed(res)
+    if (!data) throw new Error('Failed to get login URL')
 
     const popup = window.open(
-      res.data.url,
+      data.url,
       'fyers-auth',
       'width=600,height=700,left=' +
         Math.round(window.screen.width / 2 - 300) +
@@ -785,12 +840,19 @@ const submitAuthCode = async () => {
   authing.value = true
   try {
     const res = await fyersAuthCode(authCodeInput.value.trim())
-    if (!res.success) throw new Error(res.error ?? 'Auth failed')
-    fyersStatus.value = res.data ?? null
+    const data = confirmed(res)
+    if (!data) throw new Error('Auth failed')
+    fyersStatus.value = data
     showAuthCodeInput.value = false
     authCodeInput.value = ''
   } catch (err: unknown) {
-    alert(err instanceof Error ? err.message : 'Auth failed')
+    authResultBanner.value = 'error'
+    toastMessage.value = 'Fyers authentication failed. Please try again.'
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
   } finally {
     authing.value = false
   }
@@ -798,7 +860,8 @@ const submitAuthCode = async () => {
 
 const disconnectFyers = async () => {
   const res = await fyersLogout()
-  fyersStatus.value = res.success && res.data ? res.data : null
+  const data = confirmed(res)
+  if (data) fyersStatus.value = data
 }
 
 const handleSave = async () => {
@@ -826,7 +889,11 @@ const handleSave = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Failed to save settings'
+    toastMessage.value = formatAppError(err, {
+      title: 'Settings could not be saved',
+      operation: 'mutation',
+      refreshLabel: 'Refresh settings',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -857,7 +924,10 @@ const testPdfExtraction = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Failed to save PDF settings'
+    toastMessage.value = formatAppError(err, {
+      title: 'PDF settings could not be saved',
+      operation: 'mutation',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -881,8 +951,8 @@ const testDiscordWebhook = async () => {
   }
   testingDiscord.value = true
   try {
-    const res = await apiTestDiscordWebhook()
-    if (res.success && res.data?.success) {
+    const result = confirmed(await apiTestDiscordWebhook())
+    if (result?.success) {
       toastMessage.value = 'Discord webhook test successful!'
       toastType.value = 'success'
       toastVisible.value = true
@@ -890,7 +960,7 @@ const testDiscordWebhook = async () => {
         toastVisible.value = false
       }, 4000)
     } else {
-      toastMessage.value = res.error ?? 'Discord webhook test failed'
+      toastMessage.value = 'Discord webhook test failed'
       toastType.value = 'error'
       toastVisible.value = true
       setTimeout(() => {
@@ -898,7 +968,10 @@ const testDiscordWebhook = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Discord webhook test failed'
+    toastMessage.value = formatAppError(err, {
+      title: 'Discord webhook test failed',
+      operation: 'mutation',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -910,33 +983,37 @@ const testDiscordWebhook = async () => {
 }
 
 const refreshPiStatus = async () => {
+  piStatusError.value = false
   try {
-    const res = await apiGetPiServerStatus()
-    if (res.success && res.data) {
-      piServerRunning.value = res.data.running ?? false
-      piServerStatusMsg.value = res.data.message ?? ''
+    const status = confirmed(await apiGetPiServerStatus())
+    if (status) {
+      piServerRunning.value = status.running ?? false
+      piServerStatusMsg.value = status.message ?? ''
     }
   } catch {
-    // ignore
+    piStatusError.value = true
   }
 }
 
 const handlePiStart = async () => {
   piLoading.value = true
   try {
-    const res = await apiStartPiServer()
-    if (res.success && res.data) {
-      piServerRunning.value = res.data.running ?? false
-      piServerStatusMsg.value = res.data.message ?? ''
-      toastMessage.value = res.data.message ?? ''
-      toastType.value = res.data.success ? 'success' : 'error'
+    const result = confirmed(await apiStartPiServer())
+    if (result) {
+      piServerRunning.value = result.running ?? false
+      piServerStatusMsg.value = result.message ?? ''
+      toastMessage.value = result.message ?? ''
+      toastType.value = result.success ? 'success' : 'error'
       toastVisible.value = true
       setTimeout(() => {
         toastVisible.value = false
       }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Failed to start Pi server'
+    toastMessage.value = formatAppError(err, {
+      title: 'Pi server could not start',
+      operation: 'mutation',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -950,19 +1027,22 @@ const handlePiStart = async () => {
 const handlePiStop = async () => {
   piLoading.value = true
   try {
-    const res = await apiStopPiServer()
-    if (res.success && res.data) {
-      piServerRunning.value = res.data.running ?? false
-      piServerStatusMsg.value = res.data.message ?? ''
-      toastMessage.value = res.data.message ?? ''
-      toastType.value = res.data.success ? 'success' : 'error'
+    const result = confirmed(await apiStopPiServer())
+    if (result) {
+      piServerRunning.value = result.running ?? false
+      piServerStatusMsg.value = result.message ?? ''
+      toastMessage.value = result.message ?? ''
+      toastType.value = result.success ? 'success' : 'error'
       toastVisible.value = true
       setTimeout(() => {
         toastVisible.value = false
       }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Failed to stop Pi server'
+    toastMessage.value = formatAppError(err, {
+      title: 'Pi server could not stop',
+      operation: 'mutation',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -978,11 +1058,11 @@ const testPiConnection = async () => {
   piTestResult.value = ''
   piTestSuccess.value = false
   try {
-    const res = await apiTestPiConnection()
-    if (res.success && res.data) {
-      piTestResult.value = res.data.message ?? (res.data.success ? 'Connected!' : 'Failed to start')
-      piTestSuccess.value = res.data.success
-      if (res.data.success) {
+    const result = confirmed(await apiTestPiConnection())
+    if (result) {
+      piTestResult.value = result.message ?? (result.success ? 'Connected!' : 'Failed to start')
+      piTestSuccess.value = result.success
+      if (result.success) {
         toastMessage.value = 'Pi SSH connection successful — llama-server started on Pi'
         toastType.value = 'success'
         toastVisible.value = true
@@ -999,7 +1079,7 @@ const testPiConnection = async () => {
         }, 4000)
       }
     } else {
-      piTestResult.value = res.error ?? 'Test failed'
+      piTestResult.value = 'Test failed'
       piTestSuccess.value = false
       toastMessage.value = piTestResult.value
       toastType.value = 'error'
@@ -1009,7 +1089,10 @@ const testPiConnection = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    piTestResult.value = err instanceof Error ? err.message : 'Network error'
+    piTestResult.value = formatAppError(err, {
+      title: 'Pi inference test failed',
+      operation: 'mutation',
+    }).message
     piTestSuccess.value = false
     toastMessage.value = piTestResult.value
     toastType.value = 'error'
@@ -1027,11 +1110,11 @@ const testOpenAiConnection = async () => {
   openaiTestResult.value = ''
   openaiTestSuccess.value = false
   try {
-    const res = await apiTestOpenAiConnection()
-    if (res.success && res.data) {
-      openaiTestResult.value = res.data.message ?? (res.data.success ? 'Connected!' : 'Failed')
-      openaiTestSuccess.value = res.data.success
-      if (res.data.success) {
+    const result = confirmed(await apiTestOpenAiConnection())
+    if (result) {
+      openaiTestResult.value = result.message ?? (result.success ? 'Connected!' : 'Failed')
+      openaiTestSuccess.value = result.success
+      if (result.success) {
         toastMessage.value = 'OpenAI-compatible LLM responded successfully'
         toastType.value = 'success'
         toastVisible.value = true
@@ -1047,7 +1130,7 @@ const testOpenAiConnection = async () => {
         }, 4000)
       }
     } else {
-      openaiTestResult.value = res.error ?? 'Test failed'
+      openaiTestResult.value = 'Test failed'
       openaiTestSuccess.value = false
       toastMessage.value = openaiTestResult.value
       toastType.value = 'error'
@@ -1057,7 +1140,10 @@ const testOpenAiConnection = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    openaiTestResult.value = err instanceof Error ? err.message : 'Network error'
+    openaiTestResult.value = formatAppError(err, {
+      title: 'OpenAI connection test failed',
+      operation: 'mutation',
+    }).message
     openaiTestSuccess.value = false
     toastMessage.value = openaiTestResult.value
     toastType.value = 'error'
@@ -1075,11 +1161,11 @@ const testOllamaConnection = async () => {
   ollamaTestResult.value = ''
   ollamaTestSuccess.value = false
   try {
-    const res = await apiTestOllamaConnection()
-    if (res.success && res.data) {
-      ollamaTestResult.value = res.data.message ?? (res.data.success ? 'Connected!' : 'Failed')
-      ollamaTestSuccess.value = res.data.success
-      if (res.data.success) {
+    const result = confirmed(await apiTestOllamaConnection())
+    if (result) {
+      ollamaTestResult.value = result.message ?? (result.success ? 'Connected!' : 'Failed')
+      ollamaTestSuccess.value = result.success
+      if (result.success) {
         toastMessage.value = 'Ollama responded successfully'
         toastType.value = 'success'
         toastVisible.value = true
@@ -1095,7 +1181,7 @@ const testOllamaConnection = async () => {
         }, 4000)
       }
     } else {
-      ollamaTestResult.value = res.error ?? 'Test failed'
+      ollamaTestResult.value = 'Test failed'
       ollamaTestSuccess.value = false
       toastMessage.value = ollamaTestResult.value
       toastType.value = 'error'
@@ -1105,7 +1191,10 @@ const testOllamaConnection = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    ollamaTestResult.value = err instanceof Error ? err.message : 'Network error'
+    ollamaTestResult.value = formatAppError(err, {
+      title: 'Ollama connection test failed',
+      operation: 'mutation',
+    }).message
     ollamaTestSuccess.value = false
     toastMessage.value = ollamaTestResult.value
     toastType.value = 'error'
@@ -1150,6 +1239,7 @@ onMounted(async () => {
   refreshHealth()
   refreshPiStatus()
   const failedSections = await loadSettings()
+  unconfirmedDefaults.value = failedSections.length > 0
   if (failedSections.length > 0) {
     toastMessage.value = `Failed to load: ${failedSections.join(', ')}. Showing defaults.`
     toastType.value = 'warning'
