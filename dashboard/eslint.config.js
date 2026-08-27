@@ -67,5 +67,5 @@ export default defineConfig(
   {
     files: ['tests/e2e/**/*.{js,ts}'],
     rules: { 'no-restricted-syntax': 'off' },
-  },
+  }
 )
