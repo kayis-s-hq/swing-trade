@@ -46,6 +46,22 @@ class PromptFilesTest {
     }
 
     @Test
+    @DisplayName("Sentiment user prompts end with Qwen3 /no_think soft switch")
+    void sentimentUserPromptsDisableThinking() throws IOException {
+        Path promptsDir = Paths.get("src/main/resources/prompts");
+
+        for (String name : Set.of("sentiment-user.md", "sentiment-user-earnings.md")) {
+            String content = Files.readString(promptsDir.resolve(name)).trim();
+            if (!content.endsWith("/no_think")) {
+                throw new AssertionError(
+                    "Prompt " + name + " must end with the /no_think soft switch so Qwen3 skips its"
+                        + " chain-of-thought block; last 40 chars were: "
+                        + content.substring(Math.max(0, content.length() - 40)));
+            }
+        }
+    }
+
+    @Test
     @DisplayName("All prompt files are non-empty")
     void allPromptFilesNonEmpty() throws IOException {
         Path promptsDir = Paths.get("src/main/resources/prompts");

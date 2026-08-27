@@ -15,3 +15,5 @@ Start your response with { and end with }.
   "red_flags": ["list any specific risks"],
   "catalysts": ["list any upcoming catalysts"]
 }
+
+/no_think

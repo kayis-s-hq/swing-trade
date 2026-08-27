@@ -1,8 +1,6 @@
 package com.swingtrade.api.scheduler;
 
 import com.swingtrade.api.service.JobOrchestratorService;
-import com.swingtrade.data.entity.JobRunEntity;
-import com.swingtrade.data.repository.JobRunRepository;
 import com.swingtrade.domain.JobRun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,7 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import java.util.Optional;
 
 /**
  * Triggers the job orchestrator pipeline on a schedule.
@@ -22,14 +20,11 @@ public class JobRunScheduler {
     private static final Logger logger = LoggerFactory.getLogger(JobRunScheduler.class);
 
     private final JobOrchestratorService orchestratorService;
-    private final JobRunRepository jobRunRepository;
     private final boolean schedulerEnabled;
 
     public JobRunScheduler(JobOrchestratorService orchestratorService,
-                           JobRunRepository jobRunRepository,
                            @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled) {
         this.orchestratorService = orchestratorService;
-        this.jobRunRepository = jobRunRepository;
         this.schedulerEnabled = schedulerEnabled;
     }
 
@@ -40,11 +35,10 @@ public class JobRunScheduler {
             return;
         }
 
-        List<JobRunEntity> running = jobRunRepository
-            .findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name());
-        if (!running.isEmpty()) {
+        Optional<JobRun> activeRun = orchestratorService.findActiveRun();
+        if (activeRun.isPresent()) {
             logger.info("Skipping scheduled run: another run is in progress (runId={})",
-                running.get(0).getRunId());
+                activeRun.get().runId());
             return;
         }
 

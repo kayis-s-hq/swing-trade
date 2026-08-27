@@ -13,8 +13,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -74,6 +77,20 @@ class JobRunControllerTest {
                 .andExpect(jsonPath("$.triggerType").value("SCHEDULED"));
 
             verify(orchestratorService).startRun(JobRun.TriggerType.SCHEDULED);
+        }
+
+        @Test
+        @DisplayName("Rejects with 409 when another run is already active")
+        void shouldReject409WhenAnotherRunIsAlreadyActive() throws Exception {
+            JobRun active = runningRun(JobRun.TriggerType.SCHEDULED);
+            when(orchestratorService.findActiveRun()).thenReturn(Optional.of(active));
+
+            mockMvc.perform(post("/api/job/runs/start"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.code").value("CONFLICT"));
+
+            verify(orchestratorService, never()).startRun(any());
         }
     }
 }

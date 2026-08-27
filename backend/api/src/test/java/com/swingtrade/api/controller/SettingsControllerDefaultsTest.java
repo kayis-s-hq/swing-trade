@@ -131,6 +131,41 @@ class SettingsControllerDefaultsTest {
                 .doesNotContainValue("top-secret")
                 .doesNotContainKey("openai.api_key");
         }
+
+        @Test
+        void shouldHandleNullPdfBaseUrlWithoutThrowingNullPointerException() {
+            // Build a properties fixture with PDF baseUrl left null (simulate unset env var)
+            LlmProperties props = new LlmProperties();
+            props.setBaseUrl(URI.create("http://active-default.test/v1"));
+            props.setBackend("pi_ssh");
+            configureProvider(props.getProviders().getOpenai(),
+                "https://openai-default.test/v1", "openai-default");
+            configureProvider(props.getProviders().getOllama(),
+                "http://ollama-default.test/v1", "ollama-default");
+            configureProvider(props.getProviders().getPiSsh(),
+                "http://pi-default.test/v1", "pi-default");
+            props.getLlamaCpp().setModel("/models/default.gguf");
+            props.getPdf().setModel("pdf-default");
+            // Intentionally do NOT set PDF baseUrl — it will stay null
+
+            SettingsController testController = new SettingsController(
+                marketDataClientProvider,
+                appSettingsService,
+                props,
+                discordNotificationService,
+                selector,
+                llmClientProvider,
+                localServerManager,
+                piServerManager
+            );
+
+            Map<String, String> settings = testController.getLlmSettings().getBody().data();
+
+            // Should return empty string as default, not throw NPE
+            assertThat(settings)
+                .containsEntry("llm.pdf.base_url", "")
+                .containsEntry("llm.pdf.model", "pdf-default");
+        }
     }
 
     @Nested
