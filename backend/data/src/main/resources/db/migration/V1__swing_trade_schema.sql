@@ -533,14 +533,14 @@ ALTER TABLE trades ADD CONSTRAINT fk_trades_position FOREIGN KEY (position_id) R
 -- Seeds
 -- ============================================================================
 
--- Watchlist: active universe (HDFC is retained as an inactive historical row)
+-- Watchlist: Nifty 50 top 15 stocks (V3)
 INSERT INTO watchlist (symbol, name, exchange) VALUES
     ('RELIANCE', 'Reliance Industries Limited', 'NSE'),
     ('TCS', 'Tata Consultancy Services Limited', 'NSE'),
     ('INFY', 'Infosys Limited', 'NSE'),
     ('HDFCBANK', 'HDFC Bank Limited', 'NSE'),
     ('ICICIBANK', 'ICICI Bank Limited', 'NSE'),
-    ('HDFC', 'Housing Development Finance Corporation Limited', 'NSE', FALSE),
+    ('HDFC', 'Housing Development Finance Corporation Limited', 'NSE'),
     ('SBIN', 'State Bank of India', 'NSE'),
     ('BHARTIARTL', 'Bharti Airtel Limited', 'NSE'),
     ('ITC', 'ITC Limited', 'NSE'),
