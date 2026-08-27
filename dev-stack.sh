@@ -391,7 +391,7 @@ case "${1:-help}" in
 
     # --- Step 12: Connect pi-prometheus to stage network ---
     echo "📊 Connecting pi-prometheus to stage network..."
-    ssh dietpi@piworm.local "docker network connect swing-trade-stage_swingtrade-network pi-prometheus" 2>/dev/null || true
+    ssh dietpi@piworm.local "docker network connect swing-trade_swingtrade-network pi-prometheus" 2>/dev/null || true
     echo "✓ Prometheus can now scrape stage API"
     echo ""
 
