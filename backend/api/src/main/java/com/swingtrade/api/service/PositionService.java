@@ -59,10 +59,19 @@ public class PositionService {
 
     /**
      * Get open paper trading positions.
+     *
+     * <p>Reads from the DB-backed {@link PositionStore} rather than the
+     * in-memory {@code TradingService} engine store, so results stay
+     * consistent with the single-lookup endpoints ({@code getPositionBySymbol},
+     * {@code getPositionsBySymbol}), which are already DB-backed. The
+     * in-memory engine store can diverge from the DB (e.g. duplicate or
+     * stale entries with no DB id) after restarts or partial persistence
+     * failures, so the DB is treated as the authoritative source for listing.
+     *
      * @return List of open paper positions as PositionResponse DTOs
      */
     public List<PositionResponse> getOpenPositions() {
-        return tradingService.getOpenPositions().stream()
+        return positionStore.findAllOpen().stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
@@ -82,8 +91,12 @@ public class PositionService {
      * @return PositionResponse details for the symbol, or null if not found
      */
     public PositionResponse getPositionBySymbol(String symbol) {
-        Position pos = tradingService.findOpenPositionBySymbol(symbol);
-        if (pos != null) return convertToResponse(pos);
+        // Read from the DB-backed PositionStore (same source as getOpenPositions()
+        // and getRiskSummary()) rather than the in-memory TradingService engine
+        // store, so this can't return a stale/orphaned in-memory position after
+        // the DB-backed truth has moved on (e.g. after a close).
+        Optional<Position> openPos = positionStore.findBySymbol(symbol);
+        if (openPos.isPresent()) return convertToResponse(openPos.get());
         // Fall back to closed positions
         List<Position> all = positionStore.findBySymbolOrderByEntryDateDesc(symbol);
         if (!all.isEmpty()) return convertToResponse(all.get(0));
@@ -270,9 +283,12 @@ public class PositionService {
             return convertToResponse(tradingService.findOpenPositionBySymbol(request.getSymbol()));
         }
 
-        // Create position in engine via order pipeline
-        // Note: executePendingOrder calls stateService.savePosition() which persists
-        // the position to the DB. We must NOT create a second DB entity.
+        // Create position in engine via order pipeline.
+        // executePendingOrder() already creates AND persists the position
+        // internally (PaperTradingEngine.createPositionFromOrder() +
+        // stateService.savePosition()). We must NOT call createPositionFromOrder()
+        // again here — doing so previously produced a second, orphaned
+        // in-memory-only position for the same order/symbol.
         final String[] positionId = {null};
         Order order = switch (request.getDirection()) {
             case LONG -> orderService.createBuyOrder(
@@ -282,7 +298,11 @@ public class PositionService {
         };
         order = tradingService.executePendingOrder(order.getOrderId(), entryPrice);
         if (order.getStatus() == OrderStatus.FILLED) {
-com.swingtrade.domain.Position pos = tradingService.createPositionFromOrder(order);
+            com.swingtrade.domain.Position pos = tradingService.findOpenPositionBySymbol(request.getSymbol());
+            if (pos == null) {
+                throw new RuntimeException(
+                    "Position not found after order execution for symbol " + request.getSymbol());
+            }
             positionId[0] = pos.positionId();
         } else {
             throw new RuntimeException("Order not filled for symbol " + request.getSymbol() + ": status=" + order.getStatus());
@@ -311,6 +331,14 @@ com.swingtrade.domain.Position pos = tradingService.createPositionFromOrder(orde
                     });
             });
 
+        // Guard against orphaned rows: any entity reaching this point (freshly built,
+        // or matched by symbol from a legacy/partial write) must carry the engine's
+        // positionId so PaperTradingEngine.closePosition(Long) can resolve it back to
+        // the in-memory position later. Without this, close-by-DB-id lookups NPE.
+        if ((entity.getPositionId() == null || entity.getPositionId().isBlank()) && positionId[0] != null) {
+            entity.setPositionId(positionId[0]);
+        }
+
         PositionEntity savedEntity = positionRepository.save(entity);
         logger.info("Position for symbol: {} at price: {} (engine position: {})",
             request.getSymbol(), entryPrice, positionId[0]);
@@ -336,7 +364,9 @@ com.swingtrade.domain.Position pos = tradingService.createPositionFromOrder(orde
      * @return Risk summary
      */
     public RiskSummary getRiskSummary() {
-        List<Position> openPositions = tradingService.getOpenPositions();
+        // Use the DB-backed store (same source as getOpenPositions()) to avoid
+        // double-counting exposure from stale/duplicate in-memory engine entries.
+        List<Position> openPositions = positionStore.findAllOpen();
         RiskSummary summary = new RiskSummary();
 
         BigDecimal totalExposure = openPositions.stream()
