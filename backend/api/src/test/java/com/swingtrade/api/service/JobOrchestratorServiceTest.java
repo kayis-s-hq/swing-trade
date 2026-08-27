@@ -910,7 +910,10 @@ class JobOrchestratorServiceTest {
                 symbolProcessingFinished.countDown();
                 return 1;
             });
-            when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
+            // lenient: shouldTolerateRaceBetweenCancelRunWriteAndExecuteStageWrite() overrides
+            // this with a more specific stub (adds a simulated optimistic-lock failure), which
+            // makes this default stub unused for that one test.
+            lenient().when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
                 JobRunStageEntity entity = invocation.getArgument(0);
                 stageState.put(entity.getStageName(), entity);
                 if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
@@ -988,6 +991,71 @@ class JobOrchestratorServiceTest {
                 .isEqualTo(JobRun.Status.CANCELLED.name());
 
             verify(jobOrchestratorMetrics).recordRunCancelled();
+        }
+
+        @Test
+        @DisplayName("A race between cancelRun()'s belt-and-suspenders write and executeStage()'s own "
+            + "cancellation write does not corrupt the stage's terminal status or abort the remaining stage loop")
+        void shouldTolerateRaceBetweenCancelRunWriteAndExecuteStageWrite() throws InterruptedException {
+            when(sentimentService.analyzeStockSentiment(eq("RELIANCE"), any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    sentimentStarted.countDown();
+                    try {
+                        Thread.sleep(30_000);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException("sentiment call interrupted", e);
+                    }
+                    throw new IllegalStateException("should have been interrupted before reaching here");
+                });
+            // Simulate real Hibernate/Spring Data optimistic-locking behavior discovered during live
+            // verification against the real Postgres/Hibernate stack: cancelRun()'s belt-and-suspenders
+            // saveAll() (a different repository method, unaffected by this stub) wins the race and writes
+            // SENTIMENT -> CANCELLED first. executeStage()'s own save() call for the exact same terminal
+            // write then loses the race, exactly as production logged:
+            // "Row was already updated or deleted by another transaction".
+            when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
+                JobRunStageEntity entity = invocation.getArgument(0);
+                if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
+                        && JobRunStage.Status.CANCELLED.name().equals(entity.getStatus())) {
+                    throw new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                        JobRunStageEntity.class, 1L);
+                }
+                stageState.put(entity.getStageName(), entity);
+                if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
+                        && !"RUNNING".equals(entity.getStatus())) {
+                    sentimentStageFinalized.countDown();
+                }
+                return entity;
+            });
+
+            JobRun startedRun = service.startRun(JobRun.TriggerType.MANUAL);
+
+            assertThat(sentimentStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            service.cancelRun(startedRun.runId());
+
+            assertThat(symbolProcessingFinished.await(5, TimeUnit.SECONDS))
+                .as("processSymbol() must still finish (recordCompletion() must still be reached) even "
+                    + "when executeStage()'s own status write loses a race with cancelRun()'s — the lost "
+                    + "race must not silently abort the rest of the stage loop for this symbol")
+                .isTrue();
+
+            JobRunStageEntity sentimentStage = stageState.get(JobRunStage.StageName.SENTIMENT.name());
+            assertThat(sentimentStage.getStatus())
+                .as("cancelRun()'s belt-and-suspenders write already achieved the correct terminal "
+                    + "CANCELLED state for this row — a losing race on executeStage()'s own (redundant) "
+                    + "write must not revert it to ERROR")
+                .isEqualTo(JobRunStage.Status.CANCELLED.name());
+
+            JobRunStageEntity signalStage = stageState.get(JobRunStage.StageName.SIGNAL.name());
+            assertThat(signalStage.getStatus())
+                .as("later stages must still be visited and reach a terminal CANCELLED state, not be "
+                    + "left dangling at PENDING forever")
+                .isEqualTo(JobRunStage.Status.CANCELLED.name());
+            JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
+            assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.CANCELLED.name());
+
+            assertThat(runState.get().getStatus()).isEqualTo(JobRun.Status.CANCELLED.name());
         }
     }
 
