@@ -2,9 +2,18 @@ package com.swingtrade.api.config;
 
 import com.swingtrade.api.dto.ErrorResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.MethodParameter;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for GlobalExceptionHandler setup.
@@ -78,5 +87,42 @@ class GlobalExceptionHandlerTest {
         assertEquals(500, internalError.getStatus());
         assertEquals("INTERNAL_ERROR", internalError.getCode());
         assertEquals("/api/internal", internalError.getPath());
+    }
+
+    @Test
+    void testHandleTypeMismatchReturnsBadRequest() throws NoSuchMethodException {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        WebRequest request = mock(WebRequest.class);
+        when(request.getDescription(false)).thenReturn("uri=/api/job/runs/not-a-uuid/progress");
+
+        MethodParameter param = new MethodParameter(
+                GlobalExceptionHandlerTest.class.getDeclaredMethod("testHandleTypeMismatchReturnsBadRequest"), -1);
+        MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException(
+                "not-a-uuid", UUID.class, "runId", param, new IllegalArgumentException("Invalid UUID"));
+
+        ResponseEntity<ErrorResponse> response = handler.handleTypeMismatch(ex, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(400, response.getBody().getStatus());
+        assertEquals("VALIDATION_ERROR", response.getBody().getCode());
+        assertEquals("/api/job/runs/not-a-uuid/progress", response.getBody().getPath());
+    }
+
+    @Test
+    void testHandleIllegalArgumentReturnsBadRequest() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        WebRequest request = mock(WebRequest.class);
+        when(request.getDescription(false)).thenReturn("uri=/api/positions");
+
+        IllegalArgumentException ex = new IllegalArgumentException("Price is required and must be greater than zero");
+
+        ResponseEntity<ErrorResponse> response = handler.handleIllegalArgument(ex, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(400, response.getBody().getStatus());
+        assertEquals("VALIDATION_ERROR", response.getBody().getCode());
+        assertEquals("Price is required and must be greater than zero", response.getBody().getMessage());
     }
 }

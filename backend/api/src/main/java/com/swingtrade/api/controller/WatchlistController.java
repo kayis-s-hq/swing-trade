@@ -73,7 +73,7 @@ public class WatchlistController {
             @PathVariable String symbol,
             @RequestParam(defaultValue = "false") boolean activate
     ) {
-        var entity = watchlistService.toggleActive(symbol, !activate);
+        var entity = watchlistService.toggleActive(symbol, activate);
         if (entity == null) {
             return ResponseEntity.notFound().build();
         }

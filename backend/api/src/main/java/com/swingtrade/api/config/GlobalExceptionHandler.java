@@ -12,6 +12,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
@@ -112,6 +113,52 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 "VALIDATION_ERROR",
                 "Missing required parameter: " + ex.getParameterName(),
+                LocalDateTime.now(),
+                request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
+     * Handle a path/query parameter that fails to convert to its declared type
+     * (e.g. a non-UUID {@code runId} path variable). Returns 400 BAD_REQUEST
+     * instead of falling through to the generic 500 handler.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex, WebRequest request) {
+
+        logger.warn("Argument type mismatch: {}", ex.getMessage());
+
+        String requiredType = ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "expected type";
+        ErrorResponse response = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "VALIDATION_ERROR",
+                "Invalid value for '" + ex.getName() + "': expected " + requiredType,
+                LocalDateTime.now(),
+                request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
+     * Handle request-validation failures signalled by service/domain code via
+     * {@link IllegalArgumentException} (e.g. a MARKET order submitted with no
+     * price). Returns 400 BAD_REQUEST instead of falling through to the
+     * generic 500 handler.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(
+            IllegalArgumentException ex, WebRequest request) {
+
+        logger.warn("Invalid request: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "VALIDATION_ERROR",
+                ex.getMessage(),
                 LocalDateTime.now(),
                 request.getDescription(false).replace("uri=", "")
         );

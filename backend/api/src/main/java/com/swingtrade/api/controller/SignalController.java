@@ -392,11 +392,28 @@ public class SignalController {
     }
 
     /**
+     * Path segments used elsewhere in this controller as literal routes (e.g.
+     * {@code GET /api/signals/latest}) rather than as a {@code {symbol}} path
+     * variable. {@code DELETE} has no matching literal mapping for these, so
+     * without this guard they'd silently fall through to
+     * {@link #clearSignalForSymbol} and be treated as a (non-existent) stock
+     * symbol instead of being rejected.
+     */
+    private static final java.util.Set<String> RESERVED_SIGNAL_PATH_SEGMENTS =
+        java.util.Set.of("latest", "date-range", "scan");
+
+    /**
      * Clear signals for a specific symbol.
      */
     @DeleteMapping("/{symbol}")
     @Transactional
     public ResponseEntity<Map<String, Object>> clearSignalForSymbol(@PathVariable String symbol) {
+        if (RESERVED_SIGNAL_PATH_SEGMENTS.contains(symbol.toLowerCase(java.util.Locale.ROOT))) {
+            logger.warn("Rejected DELETE /api/signals/{} — '{}' is a reserved path segment, not a stock symbol",
+                symbol, symbol);
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "'" + symbol + "' is a reserved path segment, not a stock symbol"));
+        }
         logger.info("Clearing signals for {}", symbol);
         List<Signal> signals = signalStore.findBySymbol(symbol);
         int cleared = 0;
