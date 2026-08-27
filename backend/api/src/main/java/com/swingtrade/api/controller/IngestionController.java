@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -35,6 +37,10 @@ public class IngestionController {
     private final DataIngestionService dataIngestionService;
     private final WatchlistService watchlistService;
     private final NseHolidayService holidayService;
+    @Value("${ingestion.reconcile.apply.enabled:false}")
+    private boolean reconcileApplyEnabled;
+    @Value("${reconcile.apply.token:}")
+    private String reconcileApplyToken;
 
     public IngestionController(DataIngestionService dataIngestionService, WatchlistService watchlistService, NseHolidayService holidayService) {
         this.dataIngestionService = dataIngestionService;
@@ -137,6 +143,35 @@ public class IngestionController {
             return ResponseEntity.internalServerError()
                 .body(ApiResponse.error("Failed to get status: " + e.getMessage()));
         }
+    }
+
+    @GetMapping("/ingestion/reconcile")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> reconcile(
+            @RequestParam LocalDate from, @RequestParam LocalDate to,
+            @RequestParam(required = false) String symbol) {
+        if (symbol != null) {
+            return ResponseEntity.ok(ApiResponse.ok(dataIngestionService.reconcile(symbol.toUpperCase(), from, to, false)));
+        }
+        List<Map<String, Object>> reports = watchlistService.getActiveWatchlist().stream()
+            .map(w -> dataIngestionService.reconcile(w.getSymbol(), from, to, false)).toList();
+        String status = reports.stream().map(r -> String.valueOf(r.get("status")))
+            .filter(s -> !"COMPLETED".equals(s)).findFirst().orElse("COMPLETED");
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("reports", reports, "status", status)));
+    }
+
+    @PostMapping("/ingestion/reconcile")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> applyReconcile(
+            @RequestParam LocalDate from, @RequestParam LocalDate to,
+            @RequestParam String symbol, @RequestParam boolean apply,
+            @RequestHeader(value = "X-Reconcile-Token", required = false) String token) {
+        if (!apply || !reconcileApplyEnabled || !watchlistService.getActiveWatchlist().stream()
+                .anyMatch(w -> w.getSymbol().equalsIgnoreCase(symbol))) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("apply requires one active symbol and the local/stage feature gate"));
+        }
+        if (!reconcileApplyToken.isBlank() && !reconcileApplyToken.equals(token)) {
+            return ResponseEntity.status(403).body(ApiResponse.error("invalid reconciliation token"));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(dataIngestionService.reconcile(symbol.toUpperCase(), from, to, true)));
     }
 
     /**

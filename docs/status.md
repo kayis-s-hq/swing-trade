@@ -1,18 +1,23 @@
 # Pre-Pilot Status
 
-Last checked: 2026-08-19
+Last checked: 2026-08-28 (development verification)
+
+## Data-integrity remediation
+
+- Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
+- Candle uniqueness, market-session validation, reconciliation, and audit logging are implemented. Stage validation remains a deployment gate.
 
 ## Data
 
-- [x] 3yr candles backfilled for all 15 stocks
+- [ ] 3yr candles backfilled for all 14 active stocks (the bounded 2026-08-14 through 2026-08-25 repair is verified)
 - [x] Daily EOD scheduler tested - ran at least once successfully
-- [ ] No data gaps - check /api/ingestion/status
+- [x] No gaps, invalid sessions, or duplicates in the repaired 2026-08-14 through 2026-08-25 window (reconciliation verified twice; second apply inserted/removed zero rows)
 - [x] NSE holidays set for FY27 in scheduler
 
 ## Strategy
 
-- [ ] Backtest run on all 15 stocks
-- [ ] Win rate > 45% on at least 8 of 15 stocks
+- [ ] Backtest run on all 14 active stocks
+- [ ] Win rate > 45% on at least 8 of 14 active stocks
 - [ ] Max drawdown < 20% on portfolio
 - [ ] Signal scanner ran today - check /api/signals/latest
 - [ ] Manually verify 1 signal against TradingView chart
@@ -87,7 +92,7 @@ Dismissed (not bugs): C1 (param order safe), C3 (.env not in git), C5 (backtest 
 
 ## LLM Layer
 
-- [x] News ingestion fetching for all 15 stocks
+- [x] News ingestion fetching for all active stocks
 - [ ] Sentiment running on BUY signals
 - [ ] NEGATIVE signals being suppressed
 - [x] Accuracy tracker recording outcomes - pipeline verified end-to-end: evaluation job (nightly 2 AM), 8 metric endpoints, prompt_hash/model_version tracking, SMA200 regime detection. Fixed: OhlcvCandleRepository query returning multiple results (added LIMIT 1), SentimentAccuracyEntity createdAt not set (null constraint violation), SentimentAccuracyService missing LocalDateTime import. VERIFIED: POST /api/sentiment/evaluate/trigger processes pending sentiments, saves accuracy records, computes returns/labels/regimes.

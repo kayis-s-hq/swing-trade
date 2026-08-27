@@ -211,7 +211,7 @@ public class SignalController {
                     .max(java.util.Comparator.comparing(s -> s.date()))
                     .orElse(null);
                 if (latest != null) {
-                    cleared += signalStore.deleteByDate(latest.date());
+                    cleared += signalStore.deleteBySymbolAndDateAndStrategy(symbol, latest.date(), "PRICE_ACTION");
                 }
             }
         }
@@ -273,7 +273,7 @@ public class SignalController {
                         .max(java.util.Comparator.comparing(s -> s.date()))
                         .orElse(null);
                     if (latest != null) {
-                        signalStore.deleteByDate(latest.date());
+                        signalStore.deleteBySymbolAndDateAndStrategy(symbol, latest.date(), "PRICE_ACTION");
                     }
                 }
             }
@@ -418,7 +418,7 @@ public class SignalController {
         List<Signal> signals = signalStore.findBySymbol(symbol);
         int cleared = 0;
         for (Signal s : signals) {
-            cleared += signalStore.deleteByDate(s.date());
+            cleared += signalStore.deleteBySymbolAndDate(symbol, s.date());
         }
         return ResponseEntity.ok(Map.of("cleared", cleared, "symbol", symbol));
     }

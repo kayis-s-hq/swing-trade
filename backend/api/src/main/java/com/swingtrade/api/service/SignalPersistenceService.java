@@ -149,7 +149,9 @@ public class SignalPersistenceService {
                 sentimentScore,
                 sentimentReasoning
         );
-        return signalStore.save(toSave);
+        // This overload is used by the PriceActionSignalEngine; persist the
+        // strategy explicitly instead of relying on SignalEntity's DEFAULT.
+        return signalStore.save(toSave, "", "PRICE_ACTION");
     }
 
     /**
@@ -232,6 +234,10 @@ public class SignalPersistenceService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int deleteBySymbolAndDate(String symbol, LocalDate date) {
         return signalStore.deleteBySymbolAndDate(symbol, date);
+    }
+
+    public int deleteBySymbolAndDateAndStrategy(String symbol, LocalDate date, String strategy) {
+        return signalStore.deleteBySymbolAndDateAndStrategy(symbol, date, strategy);
     }
 
     /**

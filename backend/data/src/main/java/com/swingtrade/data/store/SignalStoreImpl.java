@@ -75,6 +75,13 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
+    public Signal save(Signal signal, String warningFlag, String strategy) {
+        SignalEntity entity = SignalEntity.fromDomain(signal, warningFlag);
+        entity.setStrategy(strategy);
+        return repository.save(entity).toDomain();
+    }
+
+    @Override
     public void markProcessed(Long signalId) {
         Optional<SignalEntity> entity = repository.findById(signalId);
         entity.ifPresent(e -> {
@@ -85,7 +92,16 @@ public class SignalStoreImpl implements SignalStore {
 
     @Override
     public Optional<Signal> findLatestBySymbol(String symbol) {
-        return repository.findLatestBySymbol(symbol).map(SignalEntity::toDomain);
+        List<SignalEntity> results = repository.findLatestBySymbol(symbol,
+            org.springframework.data.domain.PageRequest.of(0, 1));
+        return results.stream().findFirst().map(SignalEntity::toDomain);
+    }
+
+    @Override
+    public Optional<Signal> findLatestBySymbolAndStrategy(String symbol, String strategy) {
+        return repository.findLatestBySymbolAndStrategy(symbol, strategy,
+            org.springframework.data.domain.PageRequest.of(0, 1)).stream()
+            .findFirst().map(SignalEntity::toDomain);
     }
 
     @Override
@@ -137,6 +153,12 @@ public class SignalStoreImpl implements SignalStore {
     @Transactional
     public int deleteBySymbolAndDate(String symbol, LocalDate date) {
         return repository.deleteBySymbolAndDate(symbol, date);
+    }
+
+    @Override
+    @Transactional
+    public int deleteBySymbolAndDateAndStrategy(String symbol, LocalDate date, String strategy) {
+        return repository.deleteBySymbolAndDateAndStrategy(symbol, date, strategy);
     }
 
     @Override
