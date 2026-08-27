@@ -197,6 +197,13 @@ cd backend
 ./gradlew jacocoTestCoverageVerification # 80% line coverage threshold check
 ```
 
+**`bootRun` is flaky for iterative local verification work.** Prefer building a jar and running it directly:
+```bash
+./gradlew :api:bootJar -x test
+java -jar api/build/libs/api.jar --spring.profiles.active=local   # source infra/env/.env first
+```
+Check `lsof -i :8080` before restarting — a stale process is often already running from a previous session.
+
 ### Frontend
 ```bash
 cd dashboard
@@ -235,6 +242,8 @@ Network: `swingtrade-network` (bridge). Volumes: `postgres_data`.
 
 Local services: Spring Boot API on `8080` (profile `local,fyers`), Vue Dashboard on `3003`.
 
+**Direct `psql` access** (for verifying DB state during manual testing): creds are in `infra/env/.env` (`SPRING_DATASOURCE_URL`/`_USERNAME`/`_PASSWORD`) — `PGPASSWORD=<pw> psql -h 192.168.0.100 -p 5435 -U <user> -d swingtrade_db`.
+
 ## DB Migrations
 
 Migrations in `backend/data/src/main/resources/db/migration/` were **consolidated**: the historical V1–V24 sequence was squashed into a single base schema. Version numbers intentionally skip V2–V24.
@@ -254,12 +263,12 @@ New migrations continue from V27. Existing databases that still carry the old V1
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | System health (DB/Upstox connection states) |
-| `/api/signals[/symbol]` | GET | Latest signals or for a specific stock |
+| `/api/signals/latest`, `/api/signals/symbol/{symbol}` | GET | Latest signals or for a specific stock — bare `GET /api/signals` has no handler (405) |
 | `/api/scan` | GET | Scan multiple stocks (`?days=30&marketCap=min`) |
-| `/api/trade` | POST | Execute market order (paper mode) |
+| `/api/positions` | POST | Execute market order / open a position (paper mode) — **not** `/api/trade`, that path doesn't exist |
 | `/api/positions[/symbol]` | GET | View positions |
 | `/api/positions/{symbol}/close` | POST | Close a position |
-| `/api/performance` | GET | P&L, win rate, trade stats |
+| `/api/positions/performance` | GET | P&L, win rate, trade stats — **not** `/api/performance`, that path doesn't exist |
 | `/api/backtest/run` | POST | Backtest one symbol (`?symbol=X&exchange=NSE`) |
 | `/api/backtest/run-all` | POST | Backtest active watchlist, saves report |
 | `/api/backtest/reports[/{filename}]` | GET | List or fetch saved backtest reports |
@@ -393,5 +402,13 @@ implementation("com.fyers:sdk:1.9.0")
 - `LocalDateTime` needs custom Jackson serializer (not serializable by default)
 - Remove explicit `hibernate.dialect` — auto-detected in Hibernate 6.6+
 - Set `spring.jpa.open-in-view: false` to avoid lazy-loading warnings
-- Broker module tests have pre-existing compilation errors (Position record constructor mismatch, missing RiskControlsService class)
 - Native image build (GraalVM) in progress — plugin applied to api module, `infra/Dockerfile.native` exists; not yet deployed
+
+## Paper Trading & Job Orchestrator — Operational Notes
+
+Hardened across several rounds of end-to-end verification (2026-08-27, see PRs #97/#98 and `docs/plans/2026-08-27-job-orchestrator-cancel-interrupt.md`):
+
+- **A new `@Version` (optimistic locking) column on an existing table must backfill existing NULL rows in the same migration**, not just add the column. `ALTER TABLE ... ADD COLUMN version integer` alone leaves every pre-existing row's `version` NULL, and Hibernate's optimistic-lock increment NPEs on the first `UPDATE` of such a row. See `V27__backfill_null_version_columns.sql` for the pattern to follow for any future `@Version` column addition.
+- **`JobOrchestratorService.cancelRun()` actually interrupts in-flight stage work** (e.g. an in-progress Ollama/vLLM sentiment call), not just DB status — `executeStage()` uses a real interruptible `Future` (not `CompletableFuture.supplyAsync()`, whose `cancel(true)` is a no-op) so cancelling a run stops CPU/GPU work within ~1s instead of running out the stage timeout.
+- **Any `job_runs` row left `RUNNING` by a killed/restarted JVM is reaped immediately on startup**, not just by the periodic staleness watchdog (which has a multi-hour grace window by design, for genuinely slow LLM-bound stages within a *live* process). A restart no longer requires a manual `/api/job/runs/{id}/cancel` before a new run can start.
+- **`PaperTradingEngine`'s position-ID counter is seeded from `MAX(position_id)` in the DB on startup** — do not reintroduce an in-memory-only counter for any similar ID-generation scheme; an unseeded counter will reissue IDs that collide with old rows and silently corrupt them on the next restart.

@@ -394,7 +394,7 @@ public class JobOrchestratorService {
         try {
             StageExecutionResult result = future.get(timeoutSec, TimeUnit.SECONDS);
             long duration = System.currentTimeMillis() - start;
-            updateStageStatus(runId, symbol, stage, result.status(),
+            updateStageStatusTolerantly(runId, symbol, stage, result.status(),
                 duration, null, result.summary());
             logger.debug("Stage {} finished with status {} for {} in {}ms",
                 stage, result.status(), symbol, duration);
@@ -402,7 +402,7 @@ public class JobOrchestratorService {
         } catch (CancellationException e) {
             long duration = System.currentTimeMillis() - start;
             String msg = "Cancelled by user request";
-            updateStageStatus(runId, symbol, stage, JobRunStage.Status.CANCELLED,
+            updateStageStatusTolerantly(runId, symbol, stage, JobRunStage.Status.CANCELLED,
                 duration, msg, null);
             logger.info("Stage {} cancelled for {}", stage, symbol);
             return false;
@@ -410,18 +410,47 @@ public class JobOrchestratorService {
             future.cancel(true);
             long duration = System.currentTimeMillis() - start;
             String msg = "Stage timed out after " + timeoutSec + "s";
-            updateStageStatus(runId, symbol, stage, JobRunStage.Status.ERROR,
+            updateStageStatusTolerantly(runId, symbol, stage, JobRunStage.Status.ERROR,
                 duration, msg, null);
             logger.warn("{} for {}", msg, symbol);
             return false;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - start;
-            updateStageStatus(runId, symbol, stage, JobRunStage.Status.ERROR,
+            updateStageStatusTolerantly(runId, symbol, stage, JobRunStage.Status.ERROR,
                 duration, e.getMessage(), null);
             logger.warn("Stage {} failed for {}: {}", stage, symbol, e.getMessage());
             return false;
         } finally {
             inFlightStageFutures.remove(key, future);
+        }
+    }
+
+    /**
+     * Same as {@link #updateStageStatus} but swallows (logs, does not rethrow) a failure to
+     * write the stage's own terminal status. This write can lose a benign race with
+     * {@code cancelRun()}'s "belt-and-suspenders" loop, which independently writes a terminal
+     * CANCELLED status directly to any RUNNING row for the run being cancelled — both writers
+     * can target the exact same row concurrently (one via {@code saveAll()} on the cancelling
+     * thread, this one via {@code save()} on the just-interrupted stage's own thread as it
+     * unwinds). Optimistic locking (the entity's {@code @Version} column) correctly rejects
+     * whichever write loses that race — but before this method existed, a lost race propagated
+     * an uncaught exception out of {@code executeStage()}, which (a) let {@code processSymbol()}'s
+     * outer catch overwrite the row's already-correct CANCELLED status with ERROR, and (b) aborted
+     * the rest of that symbol's stage loop entirely, leaving its remaining stages stuck at PENDING
+     * forever. Confirmed live against the real Postgres/Hibernate stack (not just a theoretical
+     * race): {@code ObjectOptimisticLockingFailureException} / "Row was already updated or deleted
+     * by another transaction" / "Unexpected row count (expected row count 1 but was 0)".
+     */
+    private void updateStageStatusTolerantly(UUID runId, String symbol, JobRunStage.StageName stage,
+                                    JobRunStage.Status status, Long durationMs,
+                                    String errorMessage, String resultSummary) {
+        try {
+            updateStageStatus(runId, symbol, stage, status, durationMs, errorMessage, resultSummary);
+        } catch (Exception e) {
+            logger.debug("Stage {} status write for {} (-> {}) lost a race — most likely "
+                + "cancelRun() already wrote an equivalent terminal status for this row "
+                + "concurrently, which is safe to ignore here: {}",
+                stage, symbol, status, e.getMessage());
         }
     }
 
