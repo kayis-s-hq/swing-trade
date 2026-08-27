@@ -255,7 +255,16 @@ public class FyersAuthService {
     }
 
     public String getClientId() { return fyersConfig.getClientId(); }
-    public boolean validateToken() { return getAccessToken() != null && !getAccessToken().isEmpty(); }
+
+    /**
+     * Checks the current session state without initiating network I/O.
+     * Status endpoints poll this method, so an unauthenticated session must
+     * not repeatedly attempt refresh and fill the logs with expected errors.
+     */
+    public boolean validateToken() {
+        String token = accessTokenRef.get();
+        return token != null && !token.isEmpty();
+    }
 
     private void persistTokens() {
         String path = fyersConfig.getTokenStorePath();
