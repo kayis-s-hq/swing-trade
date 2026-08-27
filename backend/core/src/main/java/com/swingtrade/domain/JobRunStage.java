@@ -19,5 +19,5 @@ public record JobRunStage(
     String resultSummary
 ) {
     public enum StageName { DATA_FETCH, NEWS, SENTIMENT, SIGNAL, BACKTEST, PAPER_TRADE }
-    public enum Status { PENDING, RUNNING, COMPLETED, SKIPPED, ERROR }
+    public enum Status { PENDING, RUNNING, COMPLETED, SKIPPED, ERROR, CANCELLED }
 }

@@ -103,4 +103,16 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
     List<PositionEntity> findByBrokerType(@Param("brokerType") String brokerType);
 
     Optional<PositionEntity> findByPositionId(String positionId);
+
+    /**
+     * Finds all non-null position ID strings across every status and broker
+     * type. Used on startup to reseed in-memory position ID counters (e.g.
+     * {@code PaperTradingEngine}'s POS_ sequence) from the historical
+     * database maximum, so that newly generated IDs never collide with an
+     * existing (open OR closed) row after a restart.
+     *
+     * @return list of position ID strings
+     */
+    @Query("SELECT p.positionId FROM PositionEntity p WHERE p.positionId IS NOT NULL")
+    List<String> findAllPositionIds();
 }

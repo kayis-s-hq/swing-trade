@@ -22,6 +22,8 @@ import com.swingtrade.strategy.BacktestResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,10 +33,14 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -72,6 +78,24 @@ public class JobOrchestratorService {
     private final boolean reaperEnabled;
     private final Semaphore semaphore;
     private final ExecutorService asyncExecutor;
+
+    /**
+     * Currently in-flight stage executions, keyed by "{runId}::{symbol}" — lets cancelRun()
+     * interrupt the actual blocking work (e.g. the SENTIMENT stage's Ollama/vLLM HTTP call),
+     * not just flip DB status. Only one stage runs at a time per symbol since stages execute
+     * sequentially within processSymbol().
+     */
+    private final ConcurrentHashMap<String, Future<StageExecutionResult>> inFlightStageFutures =
+        new ConcurrentHashMap<>();
+
+    /**
+     * Run IDs cancelled via cancelRun() whose background symbol-processing threads may still be
+     * unwinding. Consulted by processSymbol()'s stage loop (stop starting new stages once set)
+     * and by startRun()'s completion callback (don't overwrite CANCELLED back to
+     * COMPLETED/FAILED once those threads finish). Entries are removed once the run's futures
+     * have all completed.
+     */
+    private final Set<UUID> cancelledRunIds = ConcurrentHashMap.newKeySet();
 
     private final DataIngestionService dataIngestionService;
     private final NewsIngestionService newsIngestionService;
@@ -215,6 +239,11 @@ public class JobOrchestratorService {
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
             .whenComplete((v, ex) -> {
                 try {
+                    if (cancelledRunIds.remove(finalRun.runId())) {
+                        logger.info("Run {} finished after cancellation — leaving status as CANCELLED",
+                            finalRun.runId());
+                        return;
+                    }
                     if (ex != null) {
                         completeRun(finalRun.runId(), JobRun.Status.FAILED, ex.getMessage());
                         return;
@@ -285,6 +314,12 @@ public class JobOrchestratorService {
                 boolean priorStageBlocked = false;
                 for (StageDef stageDef : stageDefs) {
                     currentStage[0] = stageDef.name();
+                    if (cancelledRunIds.contains(runId)) {
+                        updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.CANCELLED,
+                            null, "Run cancelled by user request", null);
+                        logger.debug("Skipping stage {} for {}: run was cancelled", stageDef.name(), symbol);
+                        continue;
+                    }
                     if (priorStageBlocked) {
                         String reason = "Skipped — an earlier stage did not complete";
                         updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.SKIPPED,
@@ -323,6 +358,10 @@ public class JobOrchestratorService {
         }
     }
 
+    private static String inFlightKey(UUID runId, String symbol) {
+        return runId + "::" + symbol;
+    }
+
     @FunctionalInterface
     private interface StageExecutor {
         StageExecutionResult execute() throws Exception;
@@ -335,18 +374,24 @@ public class JobOrchestratorService {
      */
     private boolean executeStage(UUID runId, String symbol, JobRunStage.StageName stage,
                               StageExecutor executor, long timeoutSec) {
+        String key = inFlightKey(runId, symbol);
+        long start = System.currentTimeMillis();
+
+        Future<StageExecutionResult> future = asyncExecutor.submit(() -> {
+            try {
+                return executor.execute();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+        // Register BEFORE marking RUNNING in the DB, so that by the time cancelRun() (or any
+        // external observer polling /progress) can see this stage as RUNNING, the future is
+        // already reachable to interrupt — otherwise there is a narrow window where a cancel
+        // request could see "RUNNING" in the DB but find nothing to interrupt.
+        inFlightStageFutures.put(key, future);
         updateStageStatus(runId, symbol, stage, JobRunStage.Status.RUNNING, null, null, null);
 
-        long start = System.currentTimeMillis();
         try {
-            CompletableFuture<StageExecutionResult> future = CompletableFuture.supplyAsync(() -> {
-                try {
-                    return executor.execute();
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            }, asyncExecutor);
-
             StageExecutionResult result = future.get(timeoutSec, TimeUnit.SECONDS);
             long duration = System.currentTimeMillis() - start;
             updateStageStatus(runId, symbol, stage, result.status(),
@@ -354,7 +399,15 @@ public class JobOrchestratorService {
             logger.debug("Stage {} finished with status {} for {} in {}ms",
                 stage, result.status(), symbol, duration);
             return result.status() == JobRunStage.Status.COMPLETED;
+        } catch (CancellationException e) {
+            long duration = System.currentTimeMillis() - start;
+            String msg = "Cancelled by user request";
+            updateStageStatus(runId, symbol, stage, JobRunStage.Status.CANCELLED,
+                duration, msg, null);
+            logger.info("Stage {} cancelled for {}", stage, symbol);
+            return false;
         } catch (TimeoutException e) {
+            future.cancel(true);
             long duration = System.currentTimeMillis() - start;
             String msg = "Stage timed out after " + timeoutSec + "s";
             updateStageStatus(runId, symbol, stage, JobRunStage.Status.ERROR,
@@ -367,6 +420,8 @@ public class JobOrchestratorService {
                 duration, e.getMessage(), null);
             logger.warn("Stage {} failed for {}: {}", stage, symbol, e.getMessage());
             return false;
+        } finally {
+            inFlightStageFutures.remove(key, future);
         }
     }
 
@@ -409,28 +464,56 @@ public class JobOrchestratorService {
     }
 
     private String stagePaperTrade(String symbol) {
-        LocalDate today = LocalDate.now(IST);
         List<Signal> unprocessed = signalStore.findUnprocessed()
             .stream()
             .filter(s -> s.symbol().equals(symbol))
             .toList();
 
         int executed = 0;
+        int failedAfterMark = 0;
         for (Signal signal : unprocessed) {
             OhlcvCandle latest = candleStore.findLatestBySymbol(symbol)
                 .orElse(null);
             if (latest == null || latest.close() == null) continue;
 
+            // Mark the signal processed BEFORE executing the trade, not after. If we executed
+            // first and markProcessed() then threw (e.g. an optimistic-lock failure on a row
+            // with a stale/null @Version), the trade would already be live but the signal
+            // would still show up in findUnprocessed() on the next run/retry — risking a
+            // second real position being opened for the same signal. Marking processed first
+            // makes "already handled" durable before any capital is committed: a failure here
+            // simply skips the trade this run (retried next run), which is the safe failure
+            // mode versus a silent duplicate execution.
+            try {
+                signalStore.markProcessed(signal.id());
+            } catch (Exception e) {
+                logger.warn("""
+                    Failed to mark signal {} processed for {} — skipping trade execution \
+                    this run to avoid a possible duplicate; will retry next run: {}""",
+                    signal.id(), symbol, e.getMessage());
+                continue;
+            }
+
             try {
                 tradingService.executeSignal(signal, latest.close());
-                signalStore.markProcessed(signal.id());
                 executed++;
             } catch (Exception e) {
-                logger.debug("Paper trade failed for {} signal {}: {}",
+                // The signal is already marked processed at this point, so it will NOT be
+                // retried automatically. Log at WARN (not debug) and surface it in the stage
+                // summary so a failed trade attempt is visible for manual follow-up instead of
+                // silently vanishing.
+                failedAfterMark++;
+                logger.warn("""
+                    Paper trade execution failed for {} signal {} AFTER marking it processed \
+                    — this signal will not be retried automatically: {}""",
                     symbol, signal.id(), e.getMessage());
             }
         }
-        return executed + " trade(s) executed";
+        String summary = executed + " trade(s) executed";
+        if (failedAfterMark > 0) {
+            summary += ", " + failedAfterMark + " failed after marking processed (see logs)";
+        }
+        return summary;
     }
 
     private void updateStageStatus(UUID runId, String symbol, JobRunStage.StageName stage,
@@ -576,6 +659,11 @@ public class JobOrchestratorService {
      * any of their stages still marked RUNNING. Runs shortly after startup and periodically
      * thereafter so an orphaned run recovers automatically instead of requiring a manual
      * DB fix.
+     *
+     * <p>This heuristic-based check exists for a run that is stuck WITHIN a still-live JVM
+     * (e.g. a hung LLM call) — it deliberately waits out a large safety margin so it never
+     * kills a legitimately slow-but-progressing run. It is complementary to, and does not
+     * replace, {@link #reapAllRunningRunsOnStartup()} below.</p>
      */
     @Scheduled(
         initialDelayString = "${job.orchestrator.reaper.initial-delay-ms:15000}",
@@ -588,17 +676,42 @@ public class JobOrchestratorService {
             .findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name());
         for (JobRunEntity run : running) {
             if (isStale(run)) {
-                reapRun(run);
+                String reason = """
+                    Reaped as orphaned: RUNNING for longer than the staleness threshold \
+                    (%d min) — likely abandoned by a JVM restart"""
+                    .formatted(staleThreshold(run.getSymbolsCount()).toMinutes());
+                reapRun(run, reason);
             }
         }
     }
 
-    private void reapRun(JobRunEntity run) {
-        String reason = "Reaped as orphaned: RUNNING for longer than the staleness threshold ("
-            + staleThreshold(run.getSymbolsCount()).toMinutes()
-            + " min) — likely abandoned by a JVM restart";
-        logger.warn("Reaping orphaned run {}: startedAt={}, symbolsCount={}",
-            run.getRunId(), run.getStartedAt(), run.getSymbolsCount());
+    /**
+     * Startup-time correction for the restart case: any {@code job_runs} row still marked
+     * RUNNING when this JVM boots is <em>definitely</em> orphaned — the thread that was
+     * executing it belonged to the previous process and no longer exists, so there is no
+     * "wait and see" case here unlike {@link #reapOrphanedRuns()}. Reaping immediately
+     * (rather than waiting out the multi-hour staleness heuristic) avoids forcing a manual
+     * {@code /cancel} call after every routine restart before a new run can start.
+     *
+     * <p>Purely additive: the periodic in-process staleness check above is unchanged and
+     * still runs — it catches a different failure mode (a run stuck while this same JVM is
+     * still alive).</p>
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void reapAllRunningRunsOnStartup() {
+        if (!reaperEnabled) {
+            return;
+        }
+        List<JobRunEntity> running = jobRunRepository
+            .findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name());
+        for (JobRunEntity run : running) {
+            reapRun(run, "Orphaned by application restart — executing thread no longer exists");
+        }
+    }
+
+    private void reapRun(JobRunEntity run, String reason) {
+        logger.warn("Reaping orphaned run {}: startedAt={}, symbolsCount={}, reason={}",
+            run.getRunId(), run.getStartedAt(), run.getSymbolsCount(), reason);
 
         run.setStatus(JobRun.Status.FAILED.name());
         run.setCompletedAt(java.time.LocalDateTime.now(IST));
@@ -628,23 +741,46 @@ public class JobOrchestratorService {
             return;
         }
 
-        // Mark all RUNNING stages as CANCELLED
+        // Flag first so any symbol not yet past acquireSlot(), or about to start its next
+        // stage, sees the signal and stops advancing without doing further work.
+        cancelledRunIds.add(runId);
+
+        // Interrupt whichever stage-level thread(s) are actually in flight for this run —
+        // without this, the DB status flip below has no effect on the already-running blocking
+        // call (e.g. the SENTIMENT stage's Ollama/vLLM HTTP request), which would otherwise
+        // keep burning CPU until it finishes naturally (up to TIMEOUT_SENTIMENT).
+        String prefix = runId + "::";
+        int interruptedCount = 0;
+        for (var entry : inFlightStageFutures.entrySet()) {
+            if (entry.getKey().startsWith(prefix) && entry.getValue().cancel(true)) {
+                interruptedCount++;
+            }
+        }
+        if (interruptedCount > 0) {
+            logger.info("Run {} cancel: interrupted {} in-flight stage thread(s)", runId, interruptedCount);
+        }
+
+        // Mark all RUNNING stages as CANCELLED (belt-and-suspenders alongside the interrupt
+        // above — executeStage()'s own CancellationException handler will also write this same
+        // terminal state once the interrupted thread unwinds).
         for (JobRunStage.StageName stage : JobRunStage.StageName.values()) {
             List<JobRunStageEntity> runningStages = jobRunStageRepository
                 .findByRunIdAndStageName(runId, stage.name()).stream()
                 .filter(e -> "RUNNING".equals(e.getStatus()))
                 .toList();
             for (JobRunStageEntity e : runningStages) {
-                e.setStatus("CANCELLED");
+                e.setStatus(JobRunStage.Status.CANCELLED.name());
                 e.setCompletedAt(java.time.LocalDateTime.now(IST));
+                e.setErrorMessage("Cancelled by user request");
             }
             jobRunStageRepository.saveAll(runningStages);
         }
 
         var entity = runOpt.get();
-        entity.setStatus("CANCELLED");
+        entity.setStatus(JobRun.Status.CANCELLED.name());
         entity.setCompletedAt(java.time.LocalDateTime.now(IST));
         jobRunRepository.save(entity);
+        jobMetrics.recordRunCancelled();
         logger.info("Run {} cancelled", runId);
     }
 

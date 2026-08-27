@@ -66,4 +66,21 @@ class JobOrchestratorMetricsTest {
             assertThat(registry.get("job.run.duration").timer().count()).isZero();
         }
     }
+
+    @Nested
+    @DisplayName("recordRunCancelled")
+    class RecordRunCancelled {
+
+        @Test
+        @DisplayName("Decrements the active gauge without counting as a failure")
+        void shouldDecrementActiveGaugeOnCancel() {
+            metrics.recordRunStarted();
+
+            metrics.recordRunCancelled();
+
+            assertThat(activeGauge()).isZero();
+            assertThat(counter("job.runs.failed")).isZero();
+            assertThat(counter("job.runs.completed")).isZero();
+        }
+    }
 }

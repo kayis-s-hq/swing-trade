@@ -8,7 +8,6 @@ import com.swingtrade.domain.OhlcvCandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -124,7 +123,7 @@ public class PositionManager {
      * Updates the current price for a position and returns a new Position with updated P&L.
      */
     public Position updatePositionPrice(String positionId, BigDecimal currentPrice) {
-        Position position = positions.get(positionId);
+        Position position = getPosition(positionId);
         if (position == null) {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
@@ -257,7 +256,7 @@ public class PositionManager {
      * Executes a partial exit of the position (e.g., 50% at first target).
      */
     public Position partialExitPosition(String positionId, BigDecimal exitRatio, BigDecimal exitPrice) {
-        Position position = positions.get(positionId);
+        Position position = getPosition(positionId);
         if (position == null) {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
@@ -360,10 +359,16 @@ public class PositionManager {
 
     /**
      * Closes a position completely. Returns a new Position instance.
+     *
+     * <p>Intentionally NOT {@code @Transactional}: this class is a pure
+     * in-memory store (a {@link ConcurrentHashMap}) with no JPA/DB
+     * participation, so annotating it provides no transactional guarantee —
+     * it only risks marking a caller's ambient transaction rollback-only if a
+     * lookup here fails (e.g. an unresolved positionId), even when the caller
+     * catches and handles the failure gracefully.
      */
-    @Transactional
     public Position closePosition(String positionId, BigDecimal exitPrice, String reason) {
-        Position position = positions.get(positionId);
+        Position position = getPosition(positionId);
         if (position == null) {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
@@ -373,10 +378,12 @@ public class PositionManager {
 
     /**
      * Closes a position by ID with a specific status (STOPPED, TARGET_HIT, etc.).
+     *
+     * <p>Intentionally NOT {@code @Transactional} — see
+     * {@link #closePosition(String, BigDecimal, String)} for rationale.
      */
-    @Transactional
     public Position closePosition(String positionId, PositionStatus status, String reason) {
-        Position position = positions.get(positionId);
+        Position position = getPosition(positionId);
         if (position == null) {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
@@ -385,8 +392,10 @@ public class PositionManager {
 
     /**
      * Internal method to close a position with specific status. Returns a new Position.
+     *
+     * <p>Intentionally NOT {@code @Transactional} — see
+     * {@link #closePosition(String, BigDecimal, String)} for rationale.
      */
-    @Transactional
     Position closePosition(Position position, PositionStatus status, String reason) {
         if (position.status() == PositionStatus.CLOSED ||
             position.status() == PositionStatus.STOPPED ||
@@ -435,8 +444,15 @@ public class PositionManager {
 
     /**
      * Gets a position by ID.
+     * Returns null (instead of throwing) for a null/blank ID, since
+     * ConcurrentHashMap does not permit null keys and callers may pass
+     * an unresolved positionId (e.g. a DB-backed position that was never
+     * linked to the in-memory engine).
      */
     public Position getPosition(String positionId) {
+        if (positionId == null || positionId.isBlank()) {
+            return null;
+        }
         return positions.get(positionId);
     }
 

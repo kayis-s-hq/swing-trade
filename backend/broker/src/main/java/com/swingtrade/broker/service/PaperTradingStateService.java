@@ -27,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Bridges in-memory PaperTradingEngine with DB persistence.
@@ -39,6 +41,8 @@ public class PaperTradingStateService {
     private static final Logger logger = LoggerFactory.getLogger(PaperTradingStateService.class);
 
     private static final String BROKER_TYPE_PAPER = "PAPER";
+
+    private static final Pattern POSITION_ID_PATTERN = Pattern.compile("^POS_(\\d+)$");
 
     private final PaperTradingEngine engine;
     private final PositionManager positionManager;
@@ -72,6 +76,48 @@ public class PaperTradingStateService {
             logger.info("Paper trading state loaded from DB");
         } catch (Exception e) {
             logger.warn("Failed to load paper trading state from DB, starting fresh: {}", e.getMessage());
+        } finally {
+            // Always attempt to reseed the position ID counter, even if the
+            // loads above partially failed — otherwise a fresh restart would
+            // keep generating IDs from 0 and collide with (and corrupt) an
+            // existing DB row via savePosition()'s upsert-by-positionId.
+            seedPositionCounterFromDb();
+        }
+    }
+
+    /**
+     * Reseeds {@link PaperTradingEngine}'s in-memory position ID counter from
+     * the historical maximum POS_ suffix found in the database (across ALL
+     * statuses and broker types, not just currently-open positions — closed
+     * positions' IDs are still occupied rows). Without this, the counter
+     * always restarts at 0 after a JVM restart, so newly generated IDs would
+     * collide with old (already CLOSED) position_id rows and silently
+     * corrupt them via the upsert in {@link #savePosition(Position)}.
+     */
+    private void seedPositionCounterFromDb() {
+        try {
+            long maxSuffix = 0L;
+            for (String positionId : unifiedPositionRepo.findAllPositionIds()) {
+                if (positionId == null) {
+                    continue;
+                }
+                Matcher matcher = POSITION_ID_PATTERN.matcher(positionId);
+                if (!matcher.matches()) {
+                    continue;
+                }
+                try {
+                    long suffix = Long.parseLong(matcher.group(1));
+                    if (suffix > maxSuffix) {
+                        maxSuffix = suffix;
+                    }
+                } catch (NumberFormatException e) {
+                    logger.warn("Skipping malformed position ID during counter seed: {}", positionId);
+                }
+            }
+            engine.seedPositionCounter(maxSuffix);
+            logger.info("Seeded position ID counter to {} (max POS_ suffix found in DB)", maxSuffix);
+        } catch (Exception e) {
+            logger.warn("Failed to seed position ID counter from DB, starting from 0: {}", e.getMessage());
         }
     }
 
