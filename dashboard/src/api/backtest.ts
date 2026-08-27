@@ -1,34 +1,32 @@
-import { rawFetch, errResponse } from './shared'
-import type { ApiResponse, BacktestResult, BacktestReportSummary } from './types'
+import { apiRequest } from './shared'
+import type { BacktestResult, BacktestReportSummary } from './types'
 
 export async function runBacktest(
   symbol: string,
   exchange: string = 'NSE'
-): Promise<ApiResponse<BacktestResult>> {
+): Promise<BacktestResult> {
   const params = new URLSearchParams({ symbol: symbol.toUpperCase().trim(), exchange })
-  const raw = await rawFetch(`/backtest/run?${params}`, { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as BacktestResult }
+  return apiRequest<BacktestResult>(`/backtest/run?${params}`, {
+    method: 'POST',
+    responseContract: 'direct',
+  })
 }
 
-export async function runBacktestAll(
-  exchange: string = 'NSE'
-): Promise<ApiResponse<BacktestReportSummary>> {
-  const raw = await rawFetch(`/backtest/run-all?exchange=${exchange}`, { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as BacktestReportSummary }
+export async function runBacktestAll(exchange: string = 'NSE'): Promise<BacktestReportSummary> {
+  return apiRequest<BacktestReportSummary>(`/backtest/run-all?exchange=${exchange}`, {
+    method: 'POST',
+    responseContract: 'direct',
+  })
 }
 
-export async function listBacktestReports(): Promise<ApiResponse<string[]>> {
-  const raw = await rawFetch('/backtest/reports')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as string[] }
+export async function listBacktestReports(): Promise<string[]> {
+  return apiRequest<string[]>('/backtest/reports', {
+    responseContract: 'direct',
+  })
 }
 
-export async function getBacktestReport(
-  filename: string
-): Promise<ApiResponse<BacktestReportSummary>> {
-  const raw = await rawFetch(`/backtest/reports/${filename}`)
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as BacktestReportSummary }
+export async function getBacktestReport(filename: string): Promise<BacktestReportSummary> {
+  return apiRequest<BacktestReportSummary>(`/backtest/reports/${encodeURIComponent(filename)}`, {
+    responseContract: 'direct',
+  })
 }

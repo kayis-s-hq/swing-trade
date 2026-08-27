@@ -43,6 +43,17 @@
           />
         </svg>
         <span v-if="holidayLoading">Loading...</span>
+        <template v-else-if="holidayError">
+          <span role="alert">Holiday status unavailable</span>
+          <button
+            type="button"
+            aria-label="Retry holiday status"
+            class="rounded px-1.5 py-0.5 font-medium text-brand hover:bg-brand/10"
+            @click="loadHolidayStatus"
+          >
+            Retry
+          </button>
+        </template>
         <span v-else-if="nextHoliday">{{ nextHoliday.occasion }}</span>
         <span v-else>-</span>
       </div>
@@ -141,6 +152,7 @@ const brokerName = computed(() => brokerLabels[settings.selectedBroker] || 'Trad
 
 const nextHoliday = ref<{ occasion: string; date: string } | null>(null)
 const holidayLoading = ref(true)
+const holidayError = ref(false)
 
 interface MarketState {
   label: string
@@ -208,29 +220,28 @@ const checkBroker = async () => {
     return
   }
   const res = await getFyersStatus()
-  if (res.success && res.data) {
-    brokerConnected.value = res.data.connected
-  }
+  brokerConnected.value = res.connected
 }
 
-onMounted(async () => {
-  updateTime()
-  timer = window.setInterval(updateTime, 1000)
-  checkBroker()
-
+const loadHolidayStatus = async () => {
+  holidayLoading.value = true
+  holidayError.value = false
   try {
     const resp = await getUpcomingHolidays()
-    if (resp.success && resp.data?.holidays && resp.data.holidays.length > 0) {
-      nextHoliday.value = {
-        occasion: resp.data.holidays[0].occasion,
-        date: resp.data.holidays[0].date,
-      }
-    }
+    const holiday = resp.holidays?.[0]
+    nextHoliday.value = holiday ? { occasion: holiday.occasion, date: holiday.date } : null
   } catch {
-    // Ignore — still shows time
+    holidayError.value = true
   } finally {
     holidayLoading.value = false
   }
+}
+
+onMounted(() => {
+  updateTime()
+  timer = window.setInterval(updateTime, 1000)
+  void checkBroker()
+  void loadHolidayStatus()
 })
 
 onUnmounted(() => {

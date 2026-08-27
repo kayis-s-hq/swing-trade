@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type {
-  ApiResponse,
-  MarketOverview,
-  PortfolioSummary,
-  Position,
-  Signal,
-} from '../../../src/api/types'
+import type { MarketOverview, PortfolioSummary, Position, Signal } from '../../../src/api/types'
 
 describe('Position', () => {
   it('should have valid position with all fields', () => {
@@ -184,27 +178,5 @@ describe('MarketOverview', () => {
       todayPnl: 0,
     }
     expect(overview.totalPositions).toBe(0)
-  })
-})
-
-describe('ApiResponse', () => {
-  it('should wrap data correctly on success', () => {
-    const response: ApiResponse<{ name: string }> = {
-      success: true,
-      data: { name: 'test' },
-    }
-    expect(response.success).toBe(true)
-    expect(response.data).toEqual({ name: 'test' })
-    expect(response.error).toBeUndefined()
-  })
-
-  it('should wrap error correctly on failure', () => {
-    const response: ApiResponse<unknown> = {
-      success: false,
-      error: 'Network error',
-    }
-    expect(response.success).toBe(false)
-    expect(response.error).toBe('Network error')
-    expect(response.data).toBeUndefined()
   })
 })

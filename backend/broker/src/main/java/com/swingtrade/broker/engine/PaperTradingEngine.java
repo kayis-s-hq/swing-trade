@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -438,11 +437,20 @@ public class PaperTradingEngine implements TradingService {
      * Looks up the persisted position from DB to get its positionId string
      * (the in-memory counter may have reset on restart).
      *
+     * <p>Intentionally NOT {@code @Transactional}: this method only performs
+     * an in-memory lookup before delegating to {@link #closePosition(String, BigDecimal, String)}
+     * for the actual (already transactional) close-and-persist logic. Callers
+     * (e.g. {@code PositionService}) run their own outer transaction and rely
+     * on catching failures from this method without having the outer
+     * transaction marked rollback-only — annotating this wrapper would cause
+     * any exception thrown here (e.g. an unresolved in-memory position) to be
+     * intercepted by Spring's transaction advice and poison the caller's
+     * transaction even though the caller catches it.
+     *
      * @param positionId the database position ID
      * @return the closed position
-     * @throws IllegalArgumentException if position not found
+     * @throws IllegalArgumentException if position not found (in DB or in memory)
      */
-    @Transactional
     public Position closePosition(Long positionId) {
         // Load position from DB to get its positionId (counter may have reset)
         PositionEntity entity = stateService.getPositionById(positionId);
@@ -450,6 +458,11 @@ public class PaperTradingEngine implements TradingService {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
         String posId = entity.getPositionId();
+        if (posId == null || posId.isBlank()) {
+            throw new IllegalArgumentException(
+                "Position " + positionId + " has no linked in-memory positionId "
+                    + "(was persisted without engine linkage); cannot close via engine");
+        }
         Position position = positionManager.getPosition(posId);
         if (position == null) {
             throw new IllegalArgumentException("Position not found in memory: " + posId);
@@ -466,20 +479,27 @@ public class PaperTradingEngine implements TradingService {
      * Closes a position by its database ID with explicit exit price and reason.
      * Implements TradingService interface method.
      *
+     * <p>Intentionally NOT {@code @Transactional} — see {@link #closePosition(Long)}
+     * for rationale.
+     *
      * @param positionId the database position ID
      * @param exitPrice the exit price
      * @param reason the reason for closing
      * @return the closed position
-     * @throws IllegalArgumentException if position not found
+     * @throws IllegalArgumentException if position not found (in DB or in memory)
      */
     @Override
-    @Transactional
     public Position closePosition(Long positionId, BigDecimal exitPrice, String reason) {
         PositionEntity entity = stateService.getPositionById(positionId);
         if (entity == null) {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
         String posId = entity.getPositionId();
+        if (posId == null || posId.isBlank()) {
+            throw new IllegalArgumentException(
+                "Position " + positionId + " has no linked in-memory positionId "
+                    + "(was persisted without engine linkage); cannot close via engine");
+        }
         Position position = positionManager.getPosition(posId);
         if (position == null) {
             throw new IllegalArgumentException("Position not found in memory: " + posId);
@@ -492,11 +512,20 @@ public class PaperTradingEngine implements TradingService {
     /**
      * Closes a position completely.
      *
+     * <p>Intentionally NOT {@code @Transactional}: {@link PositionManager} is a
+     * pure in-memory store with no JPA/DB participation, so there is no
+     * transactional resource here to protect. If this method were annotated
+     * (directly or transitively via a transactional {@code PositionManager}
+     * method), a failure here (e.g. an unresolved in-memory position lookup)
+     * would mark the caller's ambient transaction (e.g.
+     * {@code PositionService.closePosition()}) rollback-only — surfacing as an
+     * {@code UnexpectedRollbackException} even when the caller catches and
+     * handles the failure gracefully.
+     *
      * @param positionId the position to close
      * @param exitPrice the exit price
      * @param reason the reason for closing
      */
-    @Transactional
     public void closePosition(String positionId, BigDecimal exitPrice, String reason) {
         Position position = positionManager.closePosition(positionId, exitPrice, reason);
         tradeMetrics.recordTradeClose(reason);
@@ -536,6 +565,26 @@ public class PaperTradingEngine implements TradingService {
      */
     private String generatePositionId() {
         return "POS_" + String.format("%08d", positionCounter.incrementAndGet());
+    }
+
+    /**
+     * Seeds the position ID counter so that subsequently generated IDs never
+     * collide with any position (open or closed) already persisted in the
+     * database. The counter always starts at 0 on JVM startup (in-memory
+     * state), so without this seeding step every restart would reissue IDs
+     * from POS_00000001 and silently overwrite unrelated historical rows via
+     * {@code PaperTradingStateService.savePosition()}'s upsert-by-positionId
+     * logic. Called once by {@code PaperTradingStateService.loadState()}
+     * during {@link #initState()}, before any new position can be created.
+     *
+     * <p>Only raises the counter — never lowers it — so repeated or
+     * out-of-order calls are safe.
+     *
+     * @param minValue the minimum counter value, typically the max POS_
+     *     numeric suffix found in the database
+     */
+    public void seedPositionCounter(long minValue) {
+        positionCounter.updateAndGet(current -> Math.max(current, minValue));
     }
 
     /**

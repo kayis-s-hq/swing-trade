@@ -1,29 +1,33 @@
-import { rawFetch, unwrap, errResponse } from './shared'
-import type { ApiResponse, IngestionStatus, PullProgress } from './types'
+import { apiRequest } from './shared'
+import type { IngestionStatus, PullProgress } from './types'
 
-export async function getIngestionStatus(): Promise<ApiResponse<IngestionStatus[]>> {
-  const raw = await rawFetch('/data/status')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<IngestionStatus[]>(raw) }
+export async function getIngestionStatus(): Promise<IngestionStatus[]> {
+  return apiRequest<IngestionStatus[]>('/data/status', {
+    method: 'GET',
+    responseContract: 'direct',
+  })
 }
 
 export async function triggerDataPull(
   yearsBack: number = 1
-): Promise<ApiResponse<{ pullId: string; message: string }>> {
-  const raw = await rawFetch(`/data/pull?yearsBack=${yearsBack}`, { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<{ pullId: string; message: string }>(raw) }
+): Promise<{ pullId: string; message: string }> {
+  return apiRequest<{ pullId: string; message: string }>(`/data/pull?yearsBack=${yearsBack}`, {
+    method: 'POST',
+    responseContract: 'direct',
+  })
 }
 
-export async function getPullProgress(pullId?: string): Promise<ApiResponse<PullProgress>> {
+export async function getPullProgress(pullId?: string): Promise<PullProgress> {
   const params = pullId ? `?pullId=${pullId}` : ''
-  const raw = await rawFetch(`/data/pull/progress${params}`)
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<PullProgress>(raw) }
+  return apiRequest<PullProgress>(`/data/pull/progress${params}`, {
+    method: 'GET',
+    responseContract: 'direct',
+  })
 }
 
-export async function cancelDataPull(): Promise<ApiResponse<string>> {
-  const raw = await rawFetch('/data/pull/cancel', { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<string>(raw) }
+export async function cancelDataPull(): Promise<string> {
+  return apiRequest<string>('/data/pull/cancel', {
+    method: 'POST',
+    responseContract: 'direct',
+  })
 }

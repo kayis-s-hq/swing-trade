@@ -160,11 +160,40 @@ public class PriceActionSignalEngine {
         // signal engine)". BacktestEngine.tryEnter mirrors this threshold so the backtest never
         // drifts from the live signal engine's rules.
         boolean enoughRulesPassed = rulesPassed == 4;
-        SignalType type = enoughRulesPassed ? SignalType.BUY : SignalType.HOLD;
 
-        String reasoning = enoughRulesPassed
-            ? "All entry rules passed: " + String.join("; ", passed)
-            : "Entry rules failed (" + rulesPassed + " of 4 passed): " + String.join("; ", failed);
+        SignalType type;
+        String reasoning;
+        if (enoughRulesPassed) {
+            type = SignalType.BUY;
+            reasoning = "All entry rules passed: %s".formatted(String.join("; ", passed));
+        } else {
+            // Exit confluence: ANY 1 of 3 trend/RSI conditions fires a SELL — deliberately looser
+            // than the strict "all 4 of 4" entry confluence ("enter carefully, exit quickly").
+            // Conditions A and C are the literal inverse of two of the four entry sub-conditions
+            // above, so BUY and SELL can never both be true for the same candle.
+            List<String> exitPassed = new ArrayList<>();
+            List<String> exitFailed = new ArrayList<>();
+
+            boolean closeBelowEma20 = price.compareTo(ema20) < 0;
+            recordRule(closeBelowEma20, exitPassed, exitFailed,
+                "Close < EMA20 (close=%s, ema20=%s)".formatted(fmt(price), fmt(ema20)));
+
+            boolean ema20BelowEma50 = ema20.compareTo(ema50) < 0;
+            recordRule(ema20BelowEma50, exitPassed, exitFailed,
+                "EMA20 < EMA50 (ema20=%s, ema50=%s)".formatted(fmt(ema20), fmt(ema50)));
+
+            boolean rsiBelowLowerBound = rsi.compareTo(RSI_LOWER_BOUND) < 0;
+            recordRule(rsiBelowLowerBound, exitPassed, exitFailed,
+                "RSI < 50 (rsi=%s)".formatted(fmt(rsi)));
+
+            if (closeBelowEma20 || ema20BelowEma50 || rsiBelowLowerBound) {
+                type = SignalType.SELL;
+                reasoning = "Exit rule triggered (%d of 3): %s".formatted(exitPassed.size(), String.join("; ", exitPassed));
+            } else {
+                type = SignalType.HOLD;
+                reasoning = "Entry rules failed (%d of 4 passed): %s".formatted(rulesPassed, String.join("; ", failed));
+            }
+        }
 
         logger.debug("Signal for {} on {}: {} ({})", symbol, date, type, reasoning);
 

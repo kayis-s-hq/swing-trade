@@ -1,38 +1,40 @@
-import { rawFetch, unwrap, errResponse } from './shared'
-import type { ApiResponse, WatchlistEntry } from './types'
+import { apiRequest } from './shared'
+import type { WatchlistEntry } from './types'
 
-export async function getWatchlist(): Promise<ApiResponse<WatchlistEntry[]>> {
-  const raw = await rawFetch('/watchlist')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<WatchlistEntry[]>(raw) }
+export async function getWatchlist(): Promise<WatchlistEntry[]> {
+  return apiRequest<WatchlistEntry[]>('/watchlist', {
+    method: 'GET',
+    responseContract: 'direct',
+  })
 }
 
 export async function addToWatchlist(
   symbol: string,
   name?: string,
   exchange?: string
-): Promise<ApiResponse<WatchlistEntry>> {
+): Promise<WatchlistEntry> {
   const params = new URLSearchParams({ symbol: symbol.toUpperCase().trim() })
   if (name) params.set('name', name)
   if (exchange) params.set('exchange', exchange)
-  const raw = await rawFetch(`/watchlist?${params}`, { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<WatchlistEntry>(raw) }
+  return apiRequest<WatchlistEntry>(`/watchlist?${params}`, {
+    method: 'POST',
+    responseContract: 'direct',
+  })
 }
 
-export async function removeFromWatchlist(symbol: string): Promise<ApiResponse<string>> {
-  const raw = await rawFetch(`/watchlist/${symbol}`, { method: 'DELETE' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<string>(raw) }
+export async function removeFromWatchlist(symbol: string): Promise<string> {
+  return apiRequest<string>(`/watchlist/${symbol}`, {
+    method: 'DELETE',
+    responseContract: 'direct',
+  })
 }
 
 export async function toggleWatchlistActive(
   symbol: string,
   activate: boolean
-): Promise<ApiResponse<WatchlistEntry>> {
-  const raw = await rawFetch(`/watchlist/${symbol}/toggle?activate=${activate}`, {
+): Promise<WatchlistEntry> {
+  return apiRequest<WatchlistEntry>(`/watchlist/${symbol}/toggle?activate=${activate}`, {
     method: 'PATCH',
+    responseContract: 'direct',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<WatchlistEntry>(raw) }
 }

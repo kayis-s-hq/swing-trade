@@ -11,6 +11,7 @@
     <div class="flex flex-1 flex-col overflow-hidden">
       <!-- Backend Down Banner -->
       <BackendDownBanner />
+      <NotificationHost />
 
       <!-- Header -->
       <Header
@@ -20,7 +21,15 @@
 
       <!-- Page Content -->
       <main class="flex-1 overflow-auto bg-bg-primary">
-        <router-view />
+        <router-view v-slot="{ Component, route }">
+          <RuntimeErrorBoundary
+            :key="route.fullPath"
+            :reset-key="route.fullPath"
+            :route="route.fullPath"
+          >
+            <component :is="Component" />
+          </RuntimeErrorBoundary>
+        </router-view>
       </main>
 
       <!-- Bottom Status Bar -->
@@ -29,27 +38,8 @@
       >
         <div class="flex items-center gap-3">
           <span class="flex items-center gap-1.5">
-            <span
-              class="inline-block h-1.5 w-1.5 rounded-full"
-              :class="appState.healthStatus === 'down' ? 'bg-error' : 'bg-success pulse-dot'"
-            />
-            <span
-              :class="
-                appState.healthStatus === 'down'
-                  ? 'text-error'
-                  : appState.healthStatus === 'degraded'
-                    ? 'text-warning'
-                    : ''
-              "
-            >
-              {{
-                appState.healthStatus === 'down'
-                  ? 'Backend Down'
-                  : appState.healthStatus === 'degraded'
-                    ? 'Degraded'
-                    : 'Engine Active'
-              }}
-            </span>
+            <span class="inline-block h-1.5 w-1.5 rounded-full" :class="healthDotClass" />
+            <span :class="healthTextClass">{{ healthLabel }}</span>
           </span>
           <span class="text-border-subtle">│</span>
           <span>NSE/BSE</span>
@@ -69,10 +59,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import Header from './components/Header.vue'
 import BackendDownBanner from './components/BackendDownBanner.vue'
+import NotificationHost from './components/NotificationHost.vue'
+import RuntimeErrorBoundary from './components/RuntimeErrorBoundary.vue'
 import { getAppState, startHealthPolling, stopHealthPolling } from './stores/appState'
 import { getSettings } from './stores/settings'
 
@@ -80,6 +72,29 @@ const appState = getAppState()
 const settings = getSettings()
 const sidebarCollapsed = ref(false)
 const currentTime = ref('')
+
+const healthLabel = computed(() => {
+  const labels = {
+    checking: 'Checking',
+    healthy: 'Healthy',
+    degraded: 'Degraded',
+    unavailable: 'Unavailable',
+  } as const
+  return labels[appState.healthStatus]
+})
+
+const healthDotClass = computed(() => {
+  if (appState.healthStatus === 'unavailable') return 'bg-error'
+  if (appState.healthStatus === 'degraded') return 'bg-warning'
+  if (appState.healthStatus === 'checking') return 'bg-text-muted pulse-dot'
+  return 'bg-success pulse-dot'
+})
+
+const healthTextClass = computed(() => {
+  if (appState.healthStatus === 'unavailable') return 'text-error'
+  if (appState.healthStatus === 'degraded') return 'text-warning'
+  return appState.healthStatus === 'healthy' ? 'text-success' : ''
+})
 
 let timer: number
 const updateTime = () => {

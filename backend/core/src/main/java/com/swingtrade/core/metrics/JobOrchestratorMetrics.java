@@ -68,4 +68,15 @@ public class JobOrchestratorMetrics {
     public void recordRunReaped() {
         runsFailed.increment();
     }
+
+    /**
+     * Records a run cancelled by user request via {@code cancelRun()}. Unlike
+     * {@link #recordRunFailed}, cancellation is not counted as a failure, but
+     * {@code activeRuns} must still be decremented — cancelRun() previously called neither
+     * recordRunCompleted nor recordRunFailed, permanently leaking +1 on the
+     * {@code job.runs.active} gauge for every cancelled run.
+     */
+    public void recordRunCancelled() {
+        activeRuns.decrementAndGet();
+    }
 }

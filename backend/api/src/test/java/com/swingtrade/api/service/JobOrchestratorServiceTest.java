@@ -37,6 +37,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -422,6 +423,144 @@ class JobOrchestratorServiceTest {
         }
     }
 
+    // ==================== stagePaperTrade ordering ====================
+
+    @Nested
+    @DisplayName("stagePaperTrade — signal-processed-before-execution ordering")
+    class StagePaperTrade {
+
+        private AtomicReference<JobRunEntity> runState;
+        private ConcurrentHashMap<String, JobRunStageEntity> stageState;
+        private CountDownLatch runCompleted;
+
+        private final com.swingtrade.domain.Signal buySignal = new com.swingtrade.domain.Signal(
+                42L, "RELIANCE", LocalDate.now(IST), com.swingtrade.domain.Signal.SignalType.BUY,
+                java.math.BigDecimal.valueOf(0.8), "strong setup",
+                java.math.BigDecimal.valueOf(100), java.math.BigDecimal.valueOf(95),
+                java.math.BigDecimal.valueOf(110), java.math.BigDecimal.valueOf(2),
+                "{}", LocalDate.now(IST), null, null);
+
+        private final com.swingtrade.domain.OhlcvCandle latestCandle = com.swingtrade.domain.OhlcvCandle.of(
+                "RELIANCE", LocalDate.now(IST), java.math.BigDecimal.valueOf(99),
+                java.math.BigDecimal.valueOf(101), java.math.BigDecimal.valueOf(98),
+                java.math.BigDecimal.valueOf(100), 1000L);
+
+        @BeforeEach
+        void setUp() {
+            runId = UUID.randomUUID();
+            runState = new AtomicReference<>();
+            stageState = new ConcurrentHashMap<>();
+            runCompleted = new CountDownLatch(1);
+
+            service = new JobOrchestratorService(
+                    dataIngestionService, newsIngestionService, sentimentService,
+                    signalPipeline, backtestEngine, tradingService,
+                    jobRunRepository, jobRunStageRepository, signalStore,
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("RELIANCE"));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                if (!JobRun.Status.RUNNING.name().equals(entity.getStatus())) {
+                    runCompleted.countDown();
+                }
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            when(jobRunRepository.incrementCompletedCount(any(UUID.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = runState.get();
+                entity.setCompletedCount(entity.getCompletedCount() + 1);
+                return 1;
+            });
+            when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
+                JobRunStageEntity entity = invocation.getArgument(0);
+                stageState.put(entity.getStageName(), entity);
+                return entity;
+            });
+            when(jobRunStageRepository.findByRunIdAndSymbolAndStageName(
+                    any(UUID.class), eq("RELIANCE"), anyString()))
+                .thenAnswer(invocation -> {
+                    JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
+                    return entity == null ? List.of() : List.of(entity);
+                });
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
+                .thenAnswer(invocation -> List.copyOf(stageState.values()));
+
+            when(candleStore.findTopBySymbolOrderByDateDesc("RELIANCE", 100)).thenReturn(List.of(latestCandle));
+            when(newsIngestionService.fetchStockNews("RELIANCE")).thenReturn(List.of());
+            when(sentimentService.analyzeStockSentiment(eq("RELIANCE"), any(LocalDate.class)))
+                .thenReturn(SentimentResult.create(
+                    "RELIANCE", LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL,
+                    "No news", "", 0.0));
+            when(signalPipeline.generatePrimarySignal("RELIANCE")).thenReturn(Optional.empty());
+            when(backtestEngine.runBacktest(eq("RELIANCE"), eq("NSE"), any(BacktestConfig.class)))
+                .thenReturn(new BacktestResult("RELIANCE", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+
+            when(signalStore.findUnprocessed()).thenReturn(List.of(buySignal));
+            when(candleStore.findLatestBySymbol("RELIANCE")).thenReturn(Optional.of(latestCandle));
+        }
+
+        @Test
+        @DisplayName("Signal is marked processed before the trade executes")
+        void shouldMarkSignalProcessedBeforeExecutingTrade() throws InterruptedException {
+            when(tradingService.executeSignal(eq(buySignal), eq(latestCandle.close())))
+                .thenReturn(null);
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            var inOrder = inOrder(signalStore, tradingService);
+            inOrder.verify(signalStore).markProcessed(42L);
+            inOrder.verify(tradingService).executeSignal(eq(buySignal), eq(latestCandle.close()));
+
+            JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
+            assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.COMPLETED.name());
+            assertThat(paperTradeStage.getResultSummary()).contains("1 trade(s) executed");
+        }
+
+        @Test
+        @DisplayName("When marking processed fails, the trade is never executed (no duplicate risk)")
+        void shouldNeverExecuteTradeWhenMarkProcessedFails() throws InterruptedException {
+            doThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                    com.swingtrade.data.entity.SignalEntity.class, 42L))
+                .when(signalStore).markProcessed(42L);
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            verify(signalStore).markProcessed(42L);
+            verifyNoInteractions(tradingService);
+
+            JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
+            assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.COMPLETED.name());
+            assertThat(paperTradeStage.getResultSummary()).contains("0 trade(s) executed");
+        }
+
+        @Test
+        @DisplayName("When the trade fails after marking processed, the failure is surfaced and not silently dropped")
+        void shouldSurfaceTradeFailureAfterMarkingProcessed() throws InterruptedException {
+            when(tradingService.executeSignal(eq(buySignal), eq(latestCandle.close())))
+                .thenThrow(new IllegalStateException("broker rejected order"));
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            verify(signalStore).markProcessed(42L);
+            verify(tradingService).executeSignal(eq(buySignal), eq(latestCandle.close()));
+
+            JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
+            assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.COMPLETED.name());
+            assertThat(paperTradeStage.getResultSummary())
+                .contains("0 trade(s) executed")
+                .contains("1 failed after marking processed");
+        }
+    }
+
     // ==================== findActiveRun ====================
 
     @Nested
@@ -571,6 +710,122 @@ class JobOrchestratorServiceTest {
         }
     }
 
+    // ==================== reapAllRunningRunsOnStartup ====================
+
+    @Nested
+    @DisplayName("reapAllRunningRunsOnStartup")
+    class ReapAllRunningRunsOnStartup {
+
+        private JobOrchestratorService svc;
+
+        private JobOrchestratorService newService(boolean reaperEnabled) {
+            return new JobOrchestratorService(
+                    dataIngestionService, newsIngestionService, sentimentService,
+                    signalPipeline, backtestEngine, tradingService,
+                    jobRunRepository, jobRunStageRepository, signalStore,
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, reaperEnabled);
+        }
+
+        @BeforeEach
+        void setUp() {
+            runId = UUID.randomUUID();
+            svc = newService(true);
+        }
+
+        @Test
+        @DisplayName("Disabled reaper never touches the repositories")
+        void shouldDoNothingWhenReaperIsDisabled() {
+            newService(false).reapAllRunningRunsOnStartup();
+
+            verifyNoInteractions(jobRunRepository, jobRunStageRepository, jobOrchestratorMetrics);
+        }
+
+        @Test
+        @DisplayName("No RUNNING runs is a no-op")
+        void shouldDoNothingWhenNoRunsAreRunning() {
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of());
+
+            svc.reapAllRunningRunsOnStartup();
+
+            verify(jobRunRepository, never()).save(any(JobRunEntity.class));
+            verify(jobRunStageRepository, never()).saveAll(any());
+            verifyNoInteractions(jobOrchestratorMetrics);
+        }
+
+        @Test
+        @DisplayName("A RUNNING run that is well within the staleness threshold is still reaped immediately")
+        void shouldReapFreshRunningRunImmediatelyOnStartup() {
+            // Only 5 minutes old — far short of the multi-hour staleness threshold used by
+            // reapOrphanedRuns(). The startup hook must not wait for that: a RUNNING row at
+            // boot time is always orphaned since its executing thread belonged to the
+            // previous JVM.
+            JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
+                LocalDateTime.now(IST).minusMinutes(5));
+            entity.setCompletedAt(null);
+
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of(entity));
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(runId))
+                .thenReturn(List.of());
+
+            svc.reapAllRunningRunsOnStartup();
+
+            assertThat(entity.getStatus()).isEqualTo(JobRun.Status.FAILED.name());
+            assertThat(entity.getCompletedAt()).isNotNull();
+            assertThat(entity.getErrorMessage()).contains("Orphaned by application restart");
+            verify(jobRunRepository).save(entity);
+            verify(jobOrchestratorMetrics).recordRunReaped();
+        }
+
+        @Test
+        @DisplayName("RUNNING stages belonging to the orphaned run are force-failed too")
+        void shouldForceFailRunningStagesOfOrphanedRun() {
+            JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
+                LocalDateTime.now(IST).minusMinutes(1));
+            entity.setCompletedAt(null);
+            JobRunStageEntity stage = makeStageEntity(runId, "RELIANCE",
+                JobRunStage.StageName.SENTIMENT, JobRunStage.Status.RUNNING.name(), null, null);
+            stage.setCompletedAt(null);
+
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of(entity));
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(runId))
+                .thenReturn(List.of(stage));
+
+            svc.reapAllRunningRunsOnStartup();
+
+            assertThat(stage.getStatus()).isEqualTo(JobRunStage.Status.ERROR.name());
+            assertThat(stage.getCompletedAt()).isNotNull();
+            assertThat(stage.getErrorMessage()).contains("orphaned");
+            verify(jobRunStageRepository).saveAll(List.of(stage));
+        }
+
+        @Test
+        @DisplayName("Multiple RUNNING runs are all reaped")
+        void shouldReapMultipleRunningRuns() {
+            JobRunEntity first = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
+                LocalDateTime.now(IST).minusMinutes(1));
+            first.setCompletedAt(null);
+            JobRunEntity second = makeRunEntity(JobRun.Status.RUNNING, 2, 0, 0,
+                LocalDateTime.now(IST).minusMinutes(2));
+            second.setCompletedAt(null);
+
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of(first, second));
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
+                .thenReturn(List.of());
+
+            svc.reapAllRunningRunsOnStartup();
+
+            assertThat(first.getStatus()).isEqualTo(JobRun.Status.FAILED.name());
+            assertThat(second.getStatus()).isEqualTo(JobRun.Status.FAILED.name());
+            verify(jobRunRepository).save(first);
+            verify(jobRunRepository).save(second);
+            verify(jobOrchestratorMetrics, times(2)).recordRunReaped();
+        }
+    }
+
     // ==================== cancelRun ====================
 
     @Nested
@@ -609,6 +864,317 @@ class JobOrchestratorServiceTest {
             svc.cancelRun(runId);
 
             verify(jobRunRepository, never()).save(any());
+        }
+    }
+
+    // ==================== cancelRun — interrupts in-flight work ====================
+
+    @Nested
+    @DisplayName("cancelRun — interrupts in-flight work")
+    class CancelRunInterruptsInFlightWork {
+
+        private AtomicReference<JobRunEntity> runState;
+        private ConcurrentHashMap<String, JobRunStageEntity> stageState;
+        private CountDownLatch sentimentStarted;
+        private CountDownLatch sentimentInterrupted;
+        private CountDownLatch sentimentStageFinalized;
+        private CountDownLatch symbolProcessingFinished;
+
+        @BeforeEach
+        void setUp() {
+            runId = UUID.randomUUID();
+            runState = new AtomicReference<>();
+            stageState = new ConcurrentHashMap<>();
+            sentimentStarted = new CountDownLatch(1);
+            sentimentInterrupted = new CountDownLatch(1);
+            sentimentStageFinalized = new CountDownLatch(1);
+            symbolProcessingFinished = new CountDownLatch(1);
+
+            service = new JobOrchestratorService(
+                    dataIngestionService, newsIngestionService, sentimentService,
+                    signalPipeline, backtestEngine, tradingService,
+                    jobRunRepository, jobRunStageRepository, signalStore,
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("RELIANCE"));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            when(jobRunRepository.incrementCompletedCount(any(UUID.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = runState.get();
+                entity.setCompletedCount(entity.getCompletedCount() + 1);
+                symbolProcessingFinished.countDown();
+                return 1;
+            });
+            // lenient: shouldTolerateRaceBetweenCancelRunWriteAndExecuteStageWrite() overrides
+            // this with a more specific stub (adds a simulated optimistic-lock failure), which
+            // makes this default stub unused for that one test.
+            lenient().when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
+                JobRunStageEntity entity = invocation.getArgument(0);
+                stageState.put(entity.getStageName(), entity);
+                if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
+                        && !"RUNNING".equals(entity.getStatus())) {
+                    sentimentStageFinalized.countDown();
+                }
+                return entity;
+            });
+            when(jobRunStageRepository.saveAll(any())).thenAnswer(invocation -> {
+                List<JobRunStageEntity> entities = invocation.getArgument(0);
+                for (JobRunStageEntity entity : entities) {
+                    stageState.put(entity.getStageName(), entity);
+                    if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
+                            && !"RUNNING".equals(entity.getStatus())) {
+                        sentimentStageFinalized.countDown();
+                    }
+                }
+                return entities;
+            });
+            when(jobRunStageRepository.findByRunIdAndSymbolAndStageName(
+                    any(UUID.class), eq("RELIANCE"), anyString()))
+                .thenAnswer(invocation -> {
+                    JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
+                    return entity == null ? List.of() : List.of(entity);
+                });
+            when(jobRunStageRepository.findByRunIdAndStageName(any(UUID.class), anyString()))
+                .thenAnswer(invocation -> {
+                    JobRunStageEntity entity = stageState.get(invocation.getArgument(1));
+                    return entity == null ? List.of() : List.of(entity);
+                });
+
+            when(candleStore.findTopBySymbolOrderByDateDesc("RELIANCE", 100)).thenReturn(List.of());
+            when(newsIngestionService.fetchStockNews("RELIANCE")).thenReturn(List.of());
+        }
+
+        @Test
+        @DisplayName("Cancelling a run interrupts the blocking SENTIMENT-stage thread instead of only flipping DB status")
+        void shouldInterruptInFlightSentimentStageOnCancel() throws InterruptedException {
+            when(sentimentService.analyzeStockSentiment(eq("RELIANCE"), any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    sentimentStarted.countDown();
+                    try {
+                        Thread.sleep(30_000);
+                    } catch (InterruptedException e) {
+                        sentimentInterrupted.countDown();
+                        throw new RuntimeException("sentiment call interrupted", e);
+                    }
+                    throw new IllegalStateException("should have been interrupted before reaching here");
+                });
+
+            JobRun startedRun = service.startRun(JobRun.TriggerType.MANUAL);
+
+            assertThat(sentimentStarted.await(2, TimeUnit.SECONDS))
+                .as("SENTIMENT stage should have started before we cancel")
+                .isTrue();
+
+            service.cancelRun(startedRun.runId());
+
+            assertThat(sentimentInterrupted.await(5, TimeUnit.SECONDS))
+                .as("cancelRun() must interrupt the thread blocked in the SENTIMENT stage call, "
+                    + "not just update DB status")
+                .isTrue();
+            assertThat(sentimentStageFinalized.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(symbolProcessingFinished.await(5, TimeUnit.SECONDS)).isTrue();
+
+            JobRunStageEntity sentimentStage = stageState.get(JobRunStage.StageName.SENTIMENT.name());
+            assertThat(sentimentStage.getStatus())
+                .as("interrupted stage must land in a clean terminal state, not stay RUNNING")
+                .isEqualTo(JobRunStage.Status.CANCELLED.name());
+            assertThat(sentimentStage.getErrorMessage()).containsIgnoringCase("cancel");
+
+            assertThat(runState.get().getStatus())
+                .as("the run must stay CANCELLED — the async completion callback must not "
+                    + "overwrite it back to COMPLETED/FAILED once the interrupted stage unwinds")
+                .isEqualTo(JobRun.Status.CANCELLED.name());
+
+            verify(jobOrchestratorMetrics).recordRunCancelled();
+        }
+
+        @Test
+        @DisplayName("A race between cancelRun()'s belt-and-suspenders write and executeStage()'s own "
+            + "cancellation write does not corrupt the stage's terminal status or abort the remaining stage loop")
+        void shouldTolerateRaceBetweenCancelRunWriteAndExecuteStageWrite() throws InterruptedException {
+            when(sentimentService.analyzeStockSentiment(eq("RELIANCE"), any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    sentimentStarted.countDown();
+                    try {
+                        Thread.sleep(30_000);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException("sentiment call interrupted", e);
+                    }
+                    throw new IllegalStateException("should have been interrupted before reaching here");
+                });
+            // Simulate real Hibernate/Spring Data optimistic-locking behavior discovered during live
+            // verification against the real Postgres/Hibernate stack: cancelRun()'s belt-and-suspenders
+            // saveAll() (a different repository method, unaffected by this stub) wins the race and writes
+            // SENTIMENT -> CANCELLED first. executeStage()'s own save() call for the exact same terminal
+            // write then loses the race, exactly as production logged:
+            // "Row was already updated or deleted by another transaction".
+            when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
+                JobRunStageEntity entity = invocation.getArgument(0);
+                if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
+                        && JobRunStage.Status.CANCELLED.name().equals(entity.getStatus())) {
+                    throw new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                        JobRunStageEntity.class, 1L);
+                }
+                stageState.put(entity.getStageName(), entity);
+                if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
+                        && !"RUNNING".equals(entity.getStatus())) {
+                    sentimentStageFinalized.countDown();
+                }
+                return entity;
+            });
+
+            JobRun startedRun = service.startRun(JobRun.TriggerType.MANUAL);
+
+            assertThat(sentimentStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+            service.cancelRun(startedRun.runId());
+
+            assertThat(symbolProcessingFinished.await(5, TimeUnit.SECONDS))
+                .as("processSymbol() must still finish (recordCompletion() must still be reached) even "
+                    + "when executeStage()'s own status write loses a race with cancelRun()'s — the lost "
+                    + "race must not silently abort the rest of the stage loop for this symbol")
+                .isTrue();
+
+            JobRunStageEntity sentimentStage = stageState.get(JobRunStage.StageName.SENTIMENT.name());
+            assertThat(sentimentStage.getStatus())
+                .as("cancelRun()'s belt-and-suspenders write already achieved the correct terminal "
+                    + "CANCELLED state for this row — a losing race on executeStage()'s own (redundant) "
+                    + "write must not revert it to ERROR")
+                .isEqualTo(JobRunStage.Status.CANCELLED.name());
+
+            JobRunStageEntity signalStage = stageState.get(JobRunStage.StageName.SIGNAL.name());
+            assertThat(signalStage.getStatus())
+                .as("later stages must still be visited and reach a terminal CANCELLED state, not be "
+                    + "left dangling at PENDING forever")
+                .isEqualTo(JobRunStage.Status.CANCELLED.name());
+            JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
+            assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.CANCELLED.name());
+
+            assertThat(runState.get().getStatus()).isEqualTo(JobRun.Status.CANCELLED.name());
+        }
+    }
+
+    // ==================== cancelRun — stops queued symbols from starting new work ====================
+
+    @Nested
+    @DisplayName("cancelRun — stops queued symbols from starting new work")
+    class CancelRunStopsQueuedSymbols {
+
+        private AtomicReference<JobRunEntity> runState;
+        private ConcurrentHashMap<String, JobRunStageEntity> stageState; // key: symbol + "::" + stageName
+        private CountDownLatch anySentimentStarted;
+        private final Set<String> symbolsThatStartedSentiment = ConcurrentHashMap.newKeySet();
+        private CountDownLatch bothSymbolsFinished;
+
+        @BeforeEach
+        void setUp() {
+            runId = UUID.randomUUID();
+            runState = new AtomicReference<>();
+            stageState = new ConcurrentHashMap<>();
+            anySentimentStarted = new CountDownLatch(1);
+            bothSymbolsFinished = new CountDownLatch(2);
+
+            // maxConcurrent = 1: symbol B cannot start until symbol A releases its permit.
+            // pollIntervalMs = 50 so B's acquireSlot() polling doesn't slow the test down.
+            service = new JobOrchestratorService(
+                    dataIngestionService, newsIngestionService, sentimentService,
+                    signalPipeline, backtestEngine, tradingService,
+                    jobRunRepository, jobRunStageRepository, signalStore,
+                    watchlistStore, candleStore, jobOrchestratorMetrics, 1, 50L, true);
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("A", "B"));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            when(jobRunRepository.incrementCompletedCount(any(UUID.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = runState.get();
+                entity.setCompletedCount(entity.getCompletedCount() + 1);
+                bothSymbolsFinished.countDown();
+                return 1;
+            });
+            when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
+                JobRunStageEntity entity = invocation.getArgument(0);
+                stageState.put(entity.getSymbol() + "::" + entity.getStageName(), entity);
+                return entity;
+            });
+            when(jobRunStageRepository.saveAll(any())).thenAnswer(invocation -> {
+                List<JobRunStageEntity> entities = invocation.getArgument(0);
+                for (JobRunStageEntity entity : entities) {
+                    stageState.put(entity.getSymbol() + "::" + entity.getStageName(), entity);
+                }
+                return entities;
+            });
+            when(jobRunStageRepository.findByRunIdAndSymbolAndStageName(
+                    any(UUID.class), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String key = invocation.getArgument(1) + "::" + invocation.getArgument(2);
+                    JobRunStageEntity entity = stageState.get(key);
+                    return entity == null ? List.of() : List.of(entity);
+                });
+            when(jobRunStageRepository.findByRunIdAndStageName(any(UUID.class), anyString()))
+                .thenAnswer(invocation -> {
+                    String stageName = invocation.getArgument(1);
+                    return stageState.values().stream()
+                        .filter(e -> stageName.equals(e.getStageName()))
+                        .toList();
+                });
+
+            when(candleStore.findTopBySymbolOrderByDateDesc(anyString(), eq(100))).thenReturn(List.of());
+            when(newsIngestionService.fetchStockNews(anyString())).thenReturn(List.of());
+            when(sentimentService.analyzeStockSentiment(anyString(), any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    String symbol = invocation.getArgument(0);
+                    symbolsThatStartedSentiment.add(symbol);
+                    anySentimentStarted.countDown();
+                    try {
+                        Thread.sleep(30_000);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException("interrupted", e);
+                    }
+                    throw new IllegalStateException("should have been interrupted before reaching here");
+                });
+        }
+
+        @Test
+        @DisplayName("A symbol still queued behind maxConcurrent is fully cancelled without doing any real work")
+        void shouldCancelQueuedSymbolWithoutDoingRealWork() throws InterruptedException {
+            JobRun startedRun = service.startRun(JobRun.TriggerType.MANUAL);
+
+            assertThat(anySentimentStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(symbolsThatStartedSentiment).hasSize(1);
+            String activeSymbol = symbolsThatStartedSentiment.iterator().next();
+            String queuedSymbol = activeSymbol.equals("A") ? "B" : "A";
+
+            service.cancelRun(startedRun.runId());
+
+            assertThat(bothSymbolsFinished.await(10, TimeUnit.SECONDS))
+                .as("both symbols' processSymbol() must finish (quickly) after cancel — the "
+                    + "queued one should never do real work, and the active one should unwind "
+                    + "promptly once interrupted")
+                .isTrue();
+
+            verify(dataIngestionService, never())
+                .processSingleStock(eq(queuedSymbol), any(LocalDate.class));
+
+            JobRunStageEntity queuedDataFetch =
+                stageState.get(queuedSymbol + "::" + JobRunStage.StageName.DATA_FETCH.name());
+            assertThat(queuedDataFetch.getStatus()).isEqualTo(JobRunStage.Status.CANCELLED.name());
+            assertThat(queuedDataFetch.getErrorMessage()).containsIgnoringCase("cancel");
+
+            JobRunStageEntity queuedPaperTrade =
+                stageState.get(queuedSymbol + "::" + JobRunStage.StageName.PAPER_TRADE.name());
+            assertThat(queuedPaperTrade.getStatus()).isEqualTo(JobRunStage.Status.CANCELLED.name());
+
+            assertThat(runState.get().getStatus()).isEqualTo(JobRun.Status.CANCELLED.name());
         }
     }
 

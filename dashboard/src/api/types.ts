@@ -93,12 +93,6 @@ export interface FyersLoginUrl {
 
 export type BrokerType = 'fyers' | 'upstox' | 'yahoo' | 'none'
 
-export interface ApiResponse<T = unknown> {
-  success: boolean
-  data?: T
-  error?: string
-}
-
 // ---------------------------------------------------------------------------
 // Watchlist
 // ---------------------------------------------------------------------------
@@ -323,6 +317,7 @@ export interface AnalysisProgress {
   message: string
   timestamp: string
   details?: StageDetails
+  _eventType?: 'progress'
 }
 
 export interface StageDetails {
@@ -341,10 +336,11 @@ export interface SynthesisResult {
 }
 
 export interface FullAnalysisResult {
-  composite: CompositeAnalysis
+  composite: CompositeAnalysis | null
   progress: AnalysisProgress[]
   durationMs: number
   symbol: string
+  _eventType?: 'complete'
 }
 
 // ---------------------------------------------------------------------------

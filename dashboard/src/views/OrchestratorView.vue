@@ -53,7 +53,38 @@
       </div>
     </div>
 
-    <ErrorBoundary :error="error">
+    <div
+      v-if="operationNotice"
+      :class="[
+        'mb-4 flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm',
+        operationNotice.tone === 'success'
+          ? 'border-success/30 bg-success/5 text-success'
+          : operationNotice.tone === 'warning'
+            ? 'border-warning/30 bg-warning/5 text-warning'
+            : 'border-danger/30 bg-danger/5 text-danger',
+      ]"
+      :role="operationNotice.tone === 'danger' ? 'alert' : 'status'"
+    >
+      <span>{{ operationNotice.message }}</span>
+      <button
+        v-if="operationNotice.refreshStatus"
+        type="button"
+        class="shrink-0 rounded-md border border-current/40 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-bg-hover"
+        @click="refreshCurrentStatus"
+      >
+        Refresh current status
+      </button>
+    </div>
+
+    <div
+      v-if="staleStatusWarning"
+      class="mb-4 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning"
+      role="status"
+    >
+      {{ staleStatusWarning }}
+    </div>
+
+    <ErrorBoundary :error="Boolean(error)">
       <template #error>
         <div class="flex flex-col items-center justify-center py-20">
           <p class="text-sm text-danger">
@@ -298,8 +329,15 @@ import StatusBadge from '../components/StatusBadge.vue'
 import StageIcon from '../components/StageIcon.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import { useAsyncData } from '../composables/useAsyncData'
+import { safeHumanMessage } from '../errors/appError'
 
 const STAGES = ['DATA_FETCH', 'NEWS', 'SENTIMENT', 'SIGNAL', 'BACKTEST', 'PAPER_TRADE'] as const
+
+type OperationNotice = {
+  message: string
+  tone: 'success' | 'warning' | 'danger'
+  refreshStatus: boolean
+}
 
 const { loading, error, errorMessage, execute } = useAsyncData<void>()
 const currentRunId = ref<string | null>(null)
@@ -312,6 +350,8 @@ const logEntries = ref<Array<{ time: string; message: string; type: 'info' | 'wa
 const expandedSymbol = ref<string | null>(null)
 const isStarting = ref(false)
 const isRunning = ref(false)
+const operationNotice = ref<OperationNotice | null>(null)
+const staleStatusWarning = ref('')
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -406,29 +446,49 @@ function syncRunState(status: JobRunResponse['status'] | string) {
   }
 }
 
+function hasUnknownOutcome(errorLike: unknown): boolean {
+  return (
+    typeof errorLike === 'object' &&
+    errorLike !== null &&
+    'outcomeUnknown' in errorLike &&
+    errorLike.outcomeUnknown === true
+  )
+}
+
+function safeErrorMessage(errorLike: unknown, fallback: string): string {
+  return safeHumanMessage(errorLike instanceof Error ? errorLike.message : undefined, fallback)
+}
+
 async function startRun() {
   if (runButtonDisabled.value) return
 
   isStarting.value = true
-  error.value = false
+  error.value = null
   errorMessage.value = ''
+  operationNotice.value = null
+  staleStatusWarning.value = ''
   try {
-    const res = await startJobRun()
-    if (res.success && res.data) {
-      currentRunId.value = res.data.runId
-      currentRun.value = res.data
-      syncRunState(res.data.status)
-      stageRows.value = []
-      rebuildLookup()
-      logEntries.value = []
-      addLogEntry('Pipeline run started')
-    } else {
-      errorMessage.value = res.error || 'Failed to start run'
-      error.value = true
-    }
+    const run = await startJobRun()
+    currentRunId.value = run.runId
+    currentRun.value = run
+    syncRunState(run.status)
+    stageRows.value = []
+    rebuildLookup()
+    logEntries.value = []
+    addLogEntry('Pipeline run started')
   } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to start run'
-    error.value = true
+    operationNotice.value = hasUnknownOutcome(err)
+      ? {
+          message:
+            'Run start could not be confirmed. Refresh current status before attempting another start.',
+          tone: 'warning',
+          refreshStatus: true,
+        }
+      : {
+          message: safeErrorMessage(err, 'The run could not be started.'),
+          tone: 'danger',
+          refreshStatus: false,
+        }
   } finally {
     isStarting.value = false
   }
@@ -436,46 +496,78 @@ async function startRun() {
 
 async function cancelRun() {
   if (!currentRunId.value) return
+
+  operationNotice.value = null
+  staleStatusWarning.value = ''
   try {
-    const res = await cancelJobRun(currentRunId.value)
-    if (!res.success) {
-      errorMessage.value = res.error || 'Failed to cancel run'
-      error.value = true
-      return
+    await cancelJobRun(currentRunId.value)
+    operationNotice.value = {
+      message: 'Cancellation confirmed.',
+      tone: 'success',
+      refreshStatus: false,
     }
-    addLogEntry('Run cancelled', 'warn')
+    addLogEntry('Cancellation confirmed', 'warn')
     await refresh()
-  } catch {
-    errorMessage.value = 'Failed to cancel run'
-    error.value = true
+    if (error.value) {
+      staleStatusWarning.value =
+        'Cancellation confirmed, but the current status refresh failed. The displayed run status may be stale.'
+      error.value = null
+      errorMessage.value = ''
+    }
+  } catch (err: unknown) {
+    operationNotice.value = hasUnknownOutcome(err)
+      ? {
+          message:
+            'Cancellation could not be confirmed. The displayed run state is unchanged; refresh current status before taking another action.',
+          tone: 'warning',
+          refreshStatus: true,
+        }
+      : {
+          message: safeErrorMessage(err, 'The run could not be cancelled.'),
+          tone: 'danger',
+          refreshStatus: false,
+        }
   }
 }
 
-function refresh() {
-  return execute(async () => {
+async function refreshCurrentStatus() {
+  staleStatusWarning.value = ''
+  await refresh()
+  if (error.value) {
+    staleStatusWarning.value =
+      'The current status refresh failed. The displayed run status may be stale.'
+    error.value = null
+    errorMessage.value = ''
+    return
+  }
+  operationNotice.value = null
+}
+
+async function refresh() {
+  await execute(async () => {
     // If we have a currentRunId, load its progress
     if (currentRunId.value) {
-      const progressRes = await getJobRunProgress(currentRunId.value)
-      if (progressRes.success && progressRes.data) {
-        currentRunId.value = progressRes.data.runId
+      const progress = await getJobRunProgress(currentRunId.value)
+      if (progress) {
+        currentRunId.value = progress.runId
         currentRun.value = {
-          runId: progressRes.data.runId,
+          runId: progress.runId,
           triggerType: 'MANUAL',
-          status: progressRes.data.status as JobRunResponse['status'],
-          startedAt: progressRes.data.startedAt ?? new Date().toISOString(),
-          completedAt: progressRes.data.completedAt ?? null,
-          symbolsCount: progressRes.data.totalSymbols,
-          completedCount: progressRes.data.completedSymbols,
-          failedCount: progressRes.data.failedSymbols,
+          status: progress.status as JobRunResponse['status'],
+          startedAt: progress.startedAt ?? new Date().toISOString(),
+          completedAt: progress.completedAt ?? null,
+          symbolsCount: progress.totalSymbols,
+          completedCount: progress.completedSymbols,
+          failedCount: progress.failedSymbols,
           errorMessage: null,
         }
-        stageRows.value = [...progressRes.data.stages]
+        stageRows.value = [...progress.stages]
         rebuildLookup()
         expandedSymbol.value = null
-        syncRunState(progressRes.data.status)
+        syncRunState(progress.status)
 
         // Log stage changes
-        for (const stage of progressRes.data.stages) {
+        for (const stage of progress.stages) {
           if (stage.status === 'COMPLETED' && stage.resultSummary) {
             addLogEntry(`${stage.symbol} ${stage.stageName} -> COMPLETED (${stage.resultSummary})`)
           } else if (stage.status === 'ERROR') {
@@ -488,25 +580,25 @@ function refresh() {
       }
     } else {
       // No currentRunId — load the latest run's progress
-      const runsRes = await listJobRuns()
-      if (runsRes.success && runsRes.data && runsRes.data.length > 0) {
-        const latest = runsRes.data[0]
+      const runs = await listJobRuns()
+      if (runs.length > 0) {
+        const latest = runs[0]
         currentRunId.value = latest.runId
         currentRun.value = latest
         syncRunState(latest.status)
-        const progressRes = await getJobRunProgress(latest.runId)
-        if (progressRes.success && progressRes.data) {
+        const progress = await getJobRunProgress(latest.runId)
+        if (progress) {
           currentRun.value = {
             ...latest,
-            status: progressRes.data.status as JobRunResponse['status'],
-            completedAt: progressRes.data.completedAt ?? null,
-            symbolsCount: progressRes.data.totalSymbols,
-            completedCount: progressRes.data.completedSymbols,
-            failedCount: progressRes.data.failedSymbols,
+            status: progress.status as JobRunResponse['status'],
+            completedAt: progress.completedAt ?? null,
+            symbolsCount: progress.totalSymbols,
+            completedCount: progress.completedSymbols,
+            failedCount: progress.failedSymbols,
           }
-          stageRows.value = [...progressRes.data.stages]
+          stageRows.value = [...progress.stages]
           rebuildLookup()
-          syncRunState(progressRes.data.status)
+          syncRunState(progress.status)
         }
       }
     }
@@ -514,14 +606,18 @@ function refresh() {
     // Load history
     await loadHistory()
   })
+
+  if (error.value) {
+    errorMessage.value = safeHumanMessage(
+      errorMessage.value,
+      'The orchestrator status could not be refreshed.'
+    )
+  }
 }
 
 async function loadHistory() {
   try {
-    const res = await listJobRuns()
-    if (res.success && res.data) {
-      pastRuns.value = res.data
-    }
+    pastRuns.value = await listJobRuns()
   } catch {
     // Ignore
   }
@@ -533,23 +629,23 @@ async function viewRun(runId: string) {
   syncRunState(currentRun.value?.status ?? 'COMPLETED')
   expandedSymbol.value = null
   loading.value = true
-  error.value = false
+  error.value = null
   try {
-    const summaryRes = await getJobRunProgress(runId)
-    if (summaryRes.success && summaryRes.data) {
+    const progress = await getJobRunProgress(runId)
+    if (progress) {
       if (currentRun.value) {
         currentRun.value = {
           ...currentRun.value,
-          status: summaryRes.data.status as JobRunResponse['status'],
-          completedAt: summaryRes.data.completedAt ?? currentRun.value.completedAt,
-          symbolsCount: summaryRes.data.totalSymbols,
-          completedCount: summaryRes.data.completedSymbols,
-          failedCount: summaryRes.data.failedSymbols,
+          status: progress.status as JobRunResponse['status'],
+          completedAt: progress.completedAt ?? currentRun.value.completedAt,
+          symbolsCount: progress.totalSymbols,
+          completedCount: progress.completedSymbols,
+          failedCount: progress.failedSymbols,
         }
       }
-      stageRows.value = [...summaryRes.data.stages]
+      stageRows.value = [...progress.stages]
       rebuildLookup()
-      syncRunState(summaryRes.data.status)
+      syncRunState(progress.status)
     }
   } catch {
     // Ignore

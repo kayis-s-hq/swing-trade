@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JobRunProgressResponse, JobRunResponse } from '../api/types'
 import OrchestratorView from './OrchestratorView.vue'
@@ -30,10 +30,28 @@ const runningProgress: JobRunProgressResponse = {
   totalSymbols: 2,
   completedSymbols: 0,
   failedSymbols: 0,
+  startedAt: activeRun.startedAt,
   stages: [],
 }
 
-function mountView() {
+function appError(
+  message: string,
+  options: { kind?: string; outcomeUnknown?: boolean } = {}
+): Error & { kind: string; outcomeUnknown: boolean; retryable: boolean } {
+  return Object.assign(new Error(message), {
+    name: 'AppError',
+    kind: options.kind ?? 'validation',
+    outcomeUnknown: options.outcomeUnknown ?? false,
+    retryable: false,
+  })
+}
+
+function confirmed<T extends object>(data: T): T & { success: true; data: T } {
+  const value = (Array.isArray(data) ? [...data] : { ...data }) as T
+  return Object.assign(value, { success: true as const, data })
+}
+
+function mountView(): VueWrapper {
   return mount(OrchestratorView, {
     global: {
       stubs: {
@@ -43,7 +61,10 @@ function mountView() {
         },
         LoadingSpinner: { template: '<div>Loading orchestrator data...</div>' },
         StageIcon: true,
-        StatusBadge: true,
+        StatusBadge: {
+          props: ['status', 'label'],
+          template: '<span data-testid="run-status">{{ label || status }}</span>',
+        },
       },
     },
   })
@@ -57,10 +78,16 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+function button(wrapper: VueWrapper, label: string) {
+  const match = wrapper.findAll('button').find((candidate) => candidate.text().trim() === label)
+  if (!match) throw new Error(`Button not found: ${label}`)
+  return match
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  apiMocks.listJobRuns.mockResolvedValue({ success: true, data: [] })
-  apiMocks.getJobRunProgress.mockResolvedValue({ success: true, data: runningProgress })
+  apiMocks.listJobRuns.mockResolvedValue(confirmed<JobRunResponse[]>([]))
+  apiMocks.getJobRunProgress.mockResolvedValue(confirmed(runningProgress))
   apiMocks.cancelJobRun.mockResolvedValue({ success: true })
 })
 
@@ -68,9 +95,9 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('OrchestratorView — Run control', () => {
+describe('OrchestratorView — run control', () => {
   it('shows an immediate starting state and prevents duplicate start requests', async () => {
-    const startRequest = deferred<{ success: true; data: JobRunResponse }>()
+    const startRequest = deferred<JobRunResponse>()
     apiMocks.startJobRun.mockReturnValue(startRequest.promise)
     const wrapper = mountView()
     await flushPromises()
@@ -85,7 +112,7 @@ describe('OrchestratorView — Run control', () => {
     await runButton.trigger('click')
     expect(apiMocks.startJobRun).toHaveBeenCalledTimes(1)
 
-    startRequest.resolve({ success: true, data: activeRun })
+    startRequest.resolve(confirmed(activeRun))
     await flushPromises()
 
     expect(runButton.attributes('disabled')).toBeDefined()
@@ -96,18 +123,17 @@ describe('OrchestratorView — Run control', () => {
 
   it('resumes polling for a restored running job and re-enables Run when it completes', async () => {
     vi.useFakeTimers()
-    apiMocks.listJobRuns.mockResolvedValue({ success: true, data: [activeRun] })
+    apiMocks.listJobRuns.mockResolvedValue(confirmed([activeRun]))
     apiMocks.getJobRunProgress
-      .mockResolvedValueOnce({ success: true, data: runningProgress })
-      .mockResolvedValueOnce({
-        success: true,
-        data: {
+      .mockResolvedValueOnce(confirmed(runningProgress))
+      .mockResolvedValueOnce(
+        confirmed({
           ...runningProgress,
           status: 'COMPLETED',
           completedSymbols: 2,
           completedAt: '2026-08-25T10:05:00',
-        },
-      })
+        })
+      )
 
     const wrapper = mountView()
     await flushPromises()
@@ -125,8 +151,8 @@ describe('OrchestratorView — Run control', () => {
     wrapper.unmount()
   })
 
-  it('restores the Run button and surfaces the API error when starting fails', async () => {
-    apiMocks.startJobRun.mockResolvedValue({ success: false, error: 'Backend rejected the run' })
+  it('restores Run and does not invent a current run when start is rejected', async () => {
+    apiMocks.startJobRun.mockRejectedValue(appError('Backend rejected the run'))
     const wrapper = mountView()
     await flushPromises()
 
@@ -137,6 +163,96 @@ describe('OrchestratorView — Run control', () => {
     expect(runButton.text()).toBe('Run')
     expect(runButton.attributes('disabled')).toBeUndefined()
     expect(wrapper.text()).toContain('Backend rejected the run')
+    expect(wrapper.text()).toContain('No active run')
+    expect(wrapper.text()).not.toContain('Pipeline run started')
+    expect(wrapper.find('[data-testid="run-status"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('offers current-status refresh after an ambiguous start without retrying or inventing state', async () => {
+    apiMocks.startJobRun.mockRejectedValue(
+      appError('Connection closed after start request', {
+        kind: 'network',
+        outcomeUnknown: true,
+      })
+    )
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('[aria-label="Run job orchestrator"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toMatch(
+      /run start.*could not be confirmed|run start.*couldn.t be confirmed/i
+    )
+    expect(wrapper.text()).toContain('No active run')
+    expect(wrapper.find('[data-testid="run-status"]').exists()).toBe(false)
+    expect(
+      wrapper.findAll('button').some((candidate) => /retry start/i.test(candidate.text()))
+    ).toBe(false)
+
+    apiMocks.listJobRuns.mockClear()
+    apiMocks.listJobRuns.mockResolvedValue(confirmed([activeRun]))
+    await button(wrapper, 'Refresh current status').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.listJobRuns).toHaveBeenCalled()
+    expect(apiMocks.startJobRun).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[data-testid="run-status"]').text()).toBe('RUNNING')
+    wrapper.unmount()
+  })
+
+  it('retains the confirmed running state after ambiguous cancellation and refreshes status instead', async () => {
+    vi.useFakeTimers()
+    apiMocks.listJobRuns.mockResolvedValue(confirmed([activeRun]))
+    apiMocks.cancelJobRun.mockRejectedValue(
+      appError('Connection closed after cancellation request', {
+        kind: 'network',
+        outcomeUnknown: true,
+      })
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    apiMocks.getJobRunProgress.mockClear()
+
+    await button(wrapper, 'Cancel').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="run-status"]').text()).toBe('RUNNING')
+    expect(wrapper.text()).not.toContain('Run cancelled')
+    expect(wrapper.text()).toMatch(
+      /cancellation.*could not be confirmed|cancellation.*couldn.t be confirmed/i
+    )
+    expect(
+      wrapper.findAll('button').some((candidate) => /retry cancel/i.test(candidate.text()))
+    ).toBe(false)
+
+    await button(wrapper, 'Refresh current status').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.getJobRunProgress).toHaveBeenCalledTimes(1)
+    expect(apiMocks.cancelJobRun).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('shows confirmed cancellation with a stale warning when the status refresh fails', async () => {
+    vi.useFakeTimers()
+    apiMocks.listJobRuns.mockResolvedValue(confirmed([activeRun]))
+    apiMocks.getJobRunProgress.mockResolvedValueOnce(confirmed(runningProgress))
+    const wrapper = mountView()
+    await flushPromises()
+    apiMocks.getJobRunProgress.mockRejectedValue(
+      appError('Current status refresh failed', { kind: 'network' })
+    )
+
+    await button(wrapper, 'Cancel').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.cancelJobRun).toHaveBeenCalledWith(activeRun.runId)
+    expect(wrapper.text()).toContain('Cancellation confirmed')
+    expect(wrapper.text()).toMatch(/current status.*stale|run status.*out of date|refresh failed/i)
+    expect(wrapper.get('[data-testid="run-status"]').text()).toBe('RUNNING')
+    expect(wrapper.text()).not.toContain('CANCELLED')
     wrapper.unmount()
   })
 })

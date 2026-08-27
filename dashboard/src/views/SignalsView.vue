@@ -97,7 +97,7 @@
       </div>
     </div>
 
-    <ErrorBoundary :error="error">
+    <ErrorBoundary :error="Boolean(error)">
       <template #error>
         <div v-if="error" class="flex flex-col items-center justify-center py-20">
           <p class="text-sm text-danger">
@@ -256,11 +256,25 @@
               {{ execResult.success > 0 ? 'Executed' : 'Failed' }}
             </p>
             <p class="mt-1 text-xs text-text-muted">
-              {{ execResult.success }} succeeded, {{ execResult.failed }} failed
-              <span v-if="execResult.errors.length">{{
-                execResult.errors.slice(0, 3).join('; ')
-              }}</span>
+              {{ execResult.success }} succeeded, {{ execResult.failed }} failed<span
+                v-if="execResult.unconfirmed > 0"
+                >, {{ execResult.unconfirmed }} unconfirmed</span
+              >
             </p>
+            <p
+              v-for="reason in execResult.errors"
+              :key="reason"
+              class="mt-1 text-xs text-text-muted"
+            >
+              {{ reason }}
+            </p>
+            <button
+              v-if="execResult.offerPositionRefresh"
+              class="mt-2 text-xs font-medium text-brand hover:underline"
+              @click="refreshPositionsStatus"
+            >
+              Refresh positions
+            </button>
           </div>
           <button class="text-text-muted hover:text-text-primary" @click="execResult = null">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -286,22 +300,29 @@ import {
   clearAllSignals,
   clearSignalsForSymbol,
 } from '../api/signals'
-import { executeTrade } from '../api/positions'
+import { executeTrade, getPositions } from '../api/positions'
 import type { Signal } from '../api/types'
 import SignalCard from '../components/SignalCard.vue'
 import { getSettings } from '../stores/settings'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import { useAsyncData } from '../composables/useAsyncData'
+import { asAppError, safeHumanMessage } from '../errors/appError'
 
-const { loading, error, errorMessage, execute } = useAsyncData()
+const { loading, error, errorMessage, execute } = useAsyncData<void>()
 const generating = ref(false)
 const executing = ref(false)
 const signals = ref<Signal[]>([])
 const directionFilter = ref('ALL')
 const statusFilter = ref('ALL')
 const selectedSignalIds = ref(new Set<string>())
-const execResult = ref<{ success: number; failed: number; errors: string[] } | null>(null)
+const execResult = ref<{
+  success: number
+  failed: number
+  unconfirmed: number
+  errors: string[]
+  offerPositionRefresh: boolean
+} | null>(null)
 const progressMessage = ref('')
 const progressCurrent = ref(0)
 const progressTotal = ref(0)
@@ -354,10 +375,12 @@ const executeSelected = async () => {
   executing.value = true
   const selected = signals.value.filter((s) => selectedSignalIds.value.has(s.id))
   let successCount = 0
+  let failedCount = 0
+  let unconfirmedCount = 0
   const errors: string[] = []
+  const confirmedIds = new Set<string>()
 
   for (const signal of selected) {
-    // Calculate quantity: allocate from settings
     const allocation = getSettings().tradingConfig.allocationPerPosition
     const quantity = Math.max(1, Math.floor(allocation / signal.entryPrice))
 
@@ -372,33 +395,58 @@ const executeSelected = async () => {
         entryReason: `Signal: ${signal.symbol} — ${signal.reason.slice(0, 100)}`,
       })
       successCount++
-    } catch {
-      errors.push(signal.symbol)
+      confirmedIds.add(signal.id)
+    } catch (errorLike: unknown) {
+      const outcomeUnknown =
+        typeof errorLike === 'object' &&
+        errorLike !== null &&
+        'outcomeUnknown' in errorLike &&
+        errorLike.outcomeUnknown === true
+      if (outcomeUnknown) {
+        unconfirmedCount++
+        errors.push(`${signal.symbol}: Order could not be confirmed. Refresh positions.`)
+      } else {
+        failedCount++
+        errors.push(
+          `${signal.symbol}: ${safeHumanMessage(
+            errorLike instanceof Error ? errorLike.message : undefined,
+            'Order execution failed.'
+          )}`
+        )
+      }
     }
   }
 
-  selectedSignalIds.value.clear()
-  selectedSignalIds.value = new Set()
-  execResult.value = { success: successCount, failed: selected.length - successCount, errors }
-
-  // Auto-dismiss after 5s
-  setTimeout(() => {
-    execResult.value = null
-  }, 5000)
+  confirmedIds.forEach((id) => selectedSignalIds.value.delete(id))
+  selectedSignalIds.value = new Set(selectedSignalIds.value)
+  execResult.value = {
+    success: successCount,
+    failed: failedCount,
+    unconfirmed: unconfirmedCount,
+    errors,
+    offerPositionRefresh: unconfirmedCount > 0,
+  }
   executing.value = false
 }
 
-const doRefresh = () => {
-  execute(async () => {
-    const res = await getSignals()
-    if (res.success && res.data) signals.value = res.data
-    if (res.error) throw new Error(res.error)
+async function refreshPositionsStatus() {
+  try {
+    await getPositions()
+    execResult.value = null
+  } catch {
+    // Keep the current outcome summary visible.
+  }
+}
+
+const doRefresh = async () => {
+  await execute(async () => {
+    signals.value = await getSignals()
   })
 }
 
 const generateAll = async () => {
   generating.value = true
-  error.value = false
+  error.value = null
   errorMessage.value = ''
   progressMessage.value = ''
   progressCurrent.value = 0
@@ -435,8 +483,9 @@ const generateAll = async () => {
     }
     console.log(`Signal generation complete: ${allSignals.length} signals`)
   } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Signal generation failed'
-    error.value = true
+    const generationError = asAppError(err, { message: 'Signal generation failed.' })
+    errorMessage.value = generationError.message
+    error.value = generationError
   } finally {
     generating.value = false
     doRefresh()
@@ -446,36 +495,66 @@ const generateAll = async () => {
 const clearAll = async () => {
   if (!confirm('Clear all signals?')) return
   try {
-    const res = await clearAllSignals()
-    if (res.success) {
-      signals.value = []
-      selectedSignalIds.value.clear()
+    await clearAllSignals()
+    signals.value = []
+    selectedSignalIds.value = new Set()
+    execResult.value = {
+      success: 0,
+      failed: 0,
+      unconfirmed: 0,
+      errors: ['All signals cleared.'],
+      offerPositionRefresh: false,
     }
-  } catch {
-    errorMessage.value = 'Failed to clear signals'
-    error.value = true
+  } catch (errorLike: unknown) {
+    execResult.value = {
+      success: 0,
+      failed: 1,
+      unconfirmed: 0,
+      errors: [
+        safeHumanMessage(
+          errorLike instanceof Error ? errorLike.message : undefined,
+          'Signals could not be cleared.'
+        ),
+      ],
+      offerPositionRefresh: false,
+    }
   }
 }
 
 const clearSelected = async () => {
   const selected = signals.value.filter((s) => selectedSignalIds.value.has(s.id))
+  const clearedIds = new Set<string>()
+  const errors: string[] = []
   for (const signal of selected) {
     try {
       await clearSignalsForSymbol(signal.symbol)
-    } catch {
-      // skip
+      clearedIds.add(signal.id)
+    } catch (errorLike: unknown) {
+      errors.push(
+        `${signal.symbol}: ${safeHumanMessage(
+          errorLike instanceof Error ? errorLike.message : undefined,
+          'Signal could not be cleared.'
+        )}`
+      )
     }
   }
-  selectedSignalIds.value.clear()
-  selectedSignalIds.value = new Set()
-  await doRefresh()
+  signals.value = signals.value.filter((signal) => !clearedIds.has(signal.id))
+  clearedIds.forEach((id) => selectedSignalIds.value.delete(id))
+  selectedSignalIds.value = new Set(selectedSignalIds.value)
+  execResult.value = {
+    success: clearedIds.size,
+    failed: errors.length,
+    unconfirmed: 0,
+    errors: [`${clearedIds.size} cleared, ${errors.length} failed`, ...errors],
+    offerPositionRefresh: false,
+  }
 }
 
 const refreshSignals = doRefresh
 
 onMounted(() => {
   // Clear any stale error state from a previous failed load
-  error.value = false
+  error.value = null
   errorMessage.value = ''
   refreshSignals()
 })

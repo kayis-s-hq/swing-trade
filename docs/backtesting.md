@@ -19,8 +19,15 @@ All 4 must hold on a given day for a trade to be entered at the **next** day's o
 
 1. **STOP_LOSS** — day's low touches `entry - atrMultiplierStop × ATR(14)`
 2. **TARGET_HIT** — day's high touches `entry + rewardRiskRatio × (entry - stopLoss)`
-3. **TREND_BREAK** — `close < EMA20` for 2 consecutive days
-4. **TIME_STOP** — held for `maxHoldingDays` bars
+3. **SIGNAL_EXIT** — opt-in via `BacktestConfig.signalExitEnabled` (default `false`, so this is
+   skipped entirely unless explicitly enabled). When enabled, fires on **any 1 of 3** conditions
+   — the same exit confluence the live `PriceActionSignalEngine` uses to produce a SELL signal
+   (see its class-level javadoc), so the two rule sets are never described inconsistently:
+   - `close < EMA20`
+   - `EMA20 < EMA50`
+   - `RSI(14) < 50`
+4. **TREND_BREAK** — `close < EMA20` for 2 consecutive days
+5. **TIME_STOP** — held for `maxHoldingDays` bars
 
 Position size is `floor(capital × riskPerTradePct / (entry - stopLoss))`.
 

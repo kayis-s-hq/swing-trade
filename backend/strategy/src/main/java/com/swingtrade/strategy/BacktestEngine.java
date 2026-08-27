@@ -208,10 +208,18 @@ public class BacktestEngine {
                 BigDecimal high = numToBigDecimal(highPrice.getValue(i));
                 BigDecimal close = numToBigDecimal(closePrice.getValue(i));
                 BigDecimal ema20Val = numToBigDecimal(ema20.getValue(i));
+                BigDecimal ema50Val = numToBigDecimal(ema50.getValue(i));
+                BigDecimal rsiVal = numToBigDecimal(rsi.getValue(i));
 
                 int streak = close.compareTo(ema20Val) < 0 ? open.belowEma20Streak + 1 : 0;
                 BigDecimal exitPrice = null;
                 ExitReason reason = null;
+
+                // Reuses PriceActionSignalEngine.RSI_LOWER_BOUND directly (same "never drift
+                // from the live engine" pattern tryEnter() already uses for entry).
+                boolean signalExitTriggered = close.compareTo(ema20Val) < 0
+                    || ema20Val.compareTo(ema50Val) < 0
+                    || rsiVal.compareTo(PriceActionSignalEngine.RSI_LOWER_BOUND) < 0;
 
                 if (low.compareTo(open.stopLoss()) <= 0) {
                     reason = ExitReason.STOP_LOSS;
@@ -219,6 +227,9 @@ public class BacktestEngine {
                 } else if (high.compareTo(open.target()) >= 0) {
                     reason = ExitReason.TARGET_HIT;
                     exitPrice = open.target();
+                } else if (config.signalExitEnabled() && signalExitTriggered) {
+                    reason = ExitReason.SIGNAL_EXIT;
+                    exitPrice = close;
                 } else if (streak >= 2) {
                     reason = ExitReason.TREND_BREAK;
                     exitPrice = close;
