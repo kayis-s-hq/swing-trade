@@ -11,6 +11,11 @@ package com.swingtrade.strategy;
  * @param atrMultiplierStop     ATR multiple subtracted from entry price to set the stop loss
  * @param rewardRiskRatio       multiple of risk (entry - stop) added to entry price to set the target
  * @param maxHoldingDays        maximum bars a position may stay open before a time-stop exit
+ * @param signalExitEnabled     opt-in flag to also exit on the same trend/RSI confluence used by
+ *                              {@code PriceActionSignalEngine}'s live SELL signal (checked after
+ *                              STOP_LOSS/TARGET_HIT, before TREND_BREAK/TIME_STOP). Defaults to
+ *                              {@code false} so existing backtest behavior is unchanged unless a
+ *                              caller opts in.
  */
 public record BacktestConfig(
     double slippagePct,
@@ -20,14 +25,15 @@ public record BacktestConfig(
     int maxConcurrentPositions,
     double atrMultiplierStop,
     double rewardRiskRatio,
-    int maxHoldingDays
+    int maxHoldingDays,
+    boolean signalExitEnabled
 ) {
 
     public static BacktestConfig defaults() {
         return new BacktestConfig(
                 0.001, 20.0, 0.01,
                 500_000.0, 5, 2.0,
-                2.5, 20
+                2.5, 20, false
         );
     }
 }

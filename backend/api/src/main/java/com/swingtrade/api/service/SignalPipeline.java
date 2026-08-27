@@ -20,6 +20,7 @@ import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.RiskCalculator;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.PositionStore;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
 import org.slf4j.Logger;
@@ -51,15 +52,21 @@ public class SignalPipeline {
     private final PriceActionSignalEngine priceActionEngine;
     private final SignalPersistenceService persistenceService;
     private final SentimentGate sentimentGate;
+    private final PositionStore positionStore;
+    private final PositionService positionService;
 
     public SignalPipeline(CandleStore candleStore,
                           PriceActionSignalEngine priceActionEngine,
                           SignalPersistenceService persistenceService,
-                          SentimentGate sentimentGate) {
+                          SentimentGate sentimentGate,
+                          PositionStore positionStore,
+                          PositionService positionService) {
         this.candleStore = candleStore;
         this.priceActionEngine = priceActionEngine;
         this.persistenceService = persistenceService;
         this.sentimentGate = sentimentGate;
+        this.positionStore = positionStore;
+        this.positionService = positionService;
     }
 
     /**
@@ -97,6 +104,22 @@ public class SignalPipeline {
             return java.util.Optional.empty();
         }
 
+        if (result.type() == Signal.SignalType.SELL) {
+            boolean held = positionStore.findBySymbol(symbol).isPresent();
+            if (held) {
+                try {
+                    positionService.closePosition(symbol, "SIGNAL_EXIT");
+                    logger.info("SELL signal closed held position for {} on {} (reason=SIGNAL_EXIT)", symbol, latestDate);
+                } catch (Exception e) {
+                    logger.warn("SELL signal for {} on {} failed to close held position - signal still "
+                        + "persisted for audit; position remains open: {}", symbol, latestDate, e.getMessage());
+                }
+            } else {
+                logger.debug("SELL signal for {} on {} - no held position; persisting informational "
+                    + "SELL signal only", symbol, latestDate);
+            }
+        }
+
         Signal signal = Signal.create(result.symbol(), result.date(), result.type(),
                 BigDecimal.ONE, result.reasoning());
 
@@ -122,7 +145,7 @@ public class SignalPipeline {
         String warningFlag = warningFlag(result, latestDate, verdict);
         Signal saved = persistenceService.buildAndSaveWithWarning(
                 symbol, latestDate, result.type(), BigDecimal.ONE,
-                indicators, indicators, atr, warningFlag, sentimentScore, sentimentReasoning);
+                result.reasoning(), indicators, atr, warningFlag, sentimentScore, sentimentReasoning);
 
         logger.info("Generated {} signal for {} on {} (reasoning: {})",
                 result.type(), symbol, latestDate, result.reasoning());

@@ -107,10 +107,18 @@ subprojects {
     val integrationTestSourceSet = sourceSets.create("integrationTest") {
         java.srcDir("src/integrationTest/java")
         resources.srcDir("src/integrationTest/resources")
+        // Custom source sets don't automatically see main/test project classes like the
+        // built-in "test" source set does — wire them in explicitly so integration tests can
+        // reference production classes and shared test helpers (e.g. DatabaseTestContainer).
+        compileClasspath += sourceSets["main"].output + sourceSets["test"].output
+        runtimeClasspath += sourceSets["main"].output + sourceSets["test"].output
     }
 
     val integrationTestImplementation = configurations.getByName("integrationTestImplementation")
     integrationTestImplementation.extendsFrom(configurations.getByName("testImplementation"))
+
+    val integrationTestRuntimeOnly = configurations.getByName("integrationTestRuntimeOnly")
+    integrationTestRuntimeOnly.extendsFrom(configurations.getByName("testRuntimeOnly"))
 
     val integrationTestTask = tasks.register<Test>("integrationTest") {
         description = "Runs integration tests"
