@@ -34,33 +34,23 @@
         "
         :title="collapsed ? item.label : undefined"
       >
-        <svg
-          class="h-5 w-5 flex-shrink-0"
-          fill="none"
-          viewBox="0 0 24 24"
-          v-html="item.icon"
-        />
+        <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" v-html="item.icon" />
         <template v-if="!collapsed">
           <span class="flex-1">{{ item.label }}</span>
           <span
             v-if="item.badge"
             class="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand/10 px-1.5 text-[10px] font-semibold text-brand"
-          >{{ item.badge }}</span>
+            >{{ item.badge }}</span
+          >
         </template>
       </router-link>
     </nav>
 
     <!-- Footer -->
     <div class="border-t border-border-subtle p-3">
-      <div
-        v-if="!collapsed"
-        class="rounded-md border border-border-subtle bg-bg-primary/50 p-3"
-      >
+      <div v-if="!collapsed" class="rounded-md border border-border-subtle bg-bg-primary/50 p-3">
         <div class="mb-1 flex items-center gap-2">
-          <span
-            class="inline-block h-2 w-2 rounded-full"
-            :class="healthDotClass"
-          />
+          <span class="inline-block h-2 w-2 rounded-full" :class="healthDotClass" />
           <span class="text-xs font-medium text-text-muted">System Status</span>
         </div>
         <div
@@ -72,9 +62,7 @@
         >
           {{ healthLabel }}
         </div>
-        <div class="mt-0.5 text-[10px] text-text-muted">
-          Sync {{ lastSync }}
-        </div>
+        <div class="mt-0.5 text-[10px] text-text-muted">Sync {{ lastSync }}</div>
         <div class="mt-2 border-t border-border-subtle pt-2 text-[10px] text-text-muted">
           Broker: <span class="font-medium text-text-secondary">{{ brokerLabel }}</span>
         </div>
@@ -84,12 +72,7 @@
         class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary"
         @click="$emit('toggle')"
       >
-        <svg
-          class="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -106,12 +89,7 @@
       class="absolute right-0 top-16 -translate-x-1/2 rounded-l-md border border-border-subtle bg-bg-surface px-1 py-1 text-text-muted transition-colors hover:text-text-primary"
       @click="$emit('toggle')"
     >
-      <svg
-        class="h-3 w-3"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
+      <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
           stroke-linecap="round"
           stroke-linejoin="round"

@@ -6,10 +6,7 @@
     >
       {{ emoji }} {{ score }}
     </span>
-    <span
-      v-if="confidence != null"
-      class="text-[10px] text-text-muted"
-    >
+    <span v-if="confidence != null" class="text-[10px] text-text-muted">
       {{ Math.round(confidence * 100) }}% confidence
     </span>
   </div>

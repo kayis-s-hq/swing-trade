@@ -2,38 +2,25 @@
   <div class="flex flex-col gap-3">
     <div class="grid grid-cols-3 gap-3">
       <div class="rounded-md bg-bg-elevated px-3 py-2">
-        <p class="text-xs text-text-muted">
-          Signal
-        </p>
-        <p
-          class="text-lg font-semibold"
-          :class="signalColor"
-        >
+        <p class="text-xs text-text-muted">Signal</p>
+        <p class="text-lg font-semibold" :class="signalColor">
           {{ signal }}
         </p>
       </div>
       <div class="rounded-md bg-bg-elevated px-3 py-2">
-        <p class="text-xs text-text-muted">
-          Score
-        </p>
+        <p class="text-xs text-text-muted">Score</p>
         <p class="text-lg font-semibold text-text-primary">
           {{ score }}
         </p>
       </div>
       <div class="rounded-md bg-bg-elevated px-3 py-2">
-        <p class="text-xs text-text-muted">
-          Confidence
-        </p>
-        <p class="text-lg font-semibold text-text-primary">
-          {{ (confidence * 100).toFixed(0) }}%
-        </p>
+        <p class="text-xs text-text-muted">Confidence</p>
+        <p class="text-lg font-semibold text-text-primary">{{ (confidence * 100).toFixed(0) }}%</p>
       </div>
     </div>
 
     <div v-if="indicators.length">
-      <p class="mb-1.5 text-xs font-semibold text-text-muted">
-        Indicators
-      </p>
+      <p class="mb-1.5 text-xs font-semibold text-text-muted">Indicators</p>
       <div class="flex flex-col gap-1.5">
         <div
           v-for="indicator in indicators"

@@ -2,12 +2,8 @@
   <div class="p-6 animate-fade-in">
     <div class="mb-6 flex items-start justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">
-          Settings
-        </h1>
-        <p class="mt-1 text-sm text-text-muted">
-          Broker connections and trading configuration
-        </p>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">Settings</h1>
+        <p class="mt-1 text-sm text-text-muted">Broker connections and trading configuration</p>
       </div>
       <button
         :disabled="saving || unconfirmedDefaults"
@@ -20,10 +16,7 @@
     </div>
 
     <!-- Tab bar -->
-    <div
-      role="tablist"
-      class="mb-6 flex gap-1 border-b border-border-subtle"
-    >
+    <div role="tablist" class="mb-6 flex gap-1 border-b border-border-subtle">
       <button
         role="tab"
         aria-label="Broker"
@@ -103,10 +96,7 @@
             ? 'Fyers connected successfully!'
             : 'Fyers authentication failed. Please try again.'
         }}
-        <button
-          class="ml-2 opacity-60 hover:opacity-100"
-          @click="authResultBanner = null"
-        >
+        <button class="ml-2 opacity-60 hover:opacity-100" @click="authResultBanner = null">
           &times;
         </button>
       </div>
@@ -114,9 +104,7 @@
       <!-- Broker Tab -->
       <div v-show="activeTab === 'broker'">
         <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">
-            Broker Connection
-          </h2>
+          <h2 class="mb-4 text-base font-semibold text-text-primary">Broker Connection</h2>
 
           <!-- Broker Selection -->
           <div class="mb-4 flex gap-3">
@@ -147,10 +135,9 @@
           >
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <span
-                  v-if="fyersStatusError"
-                  class="text-sm font-medium text-warning"
-                >Status unavailable</span>
+                <span v-if="fyersStatusError" class="text-sm font-medium text-warning"
+                  >Status unavailable</span
+                >
                 <span
                   v-else
                   class="h-2.5 w-2.5 rounded-full"
@@ -164,10 +151,7 @@
                   {{ fyersConnected ? 'Connected' : 'Disconnected' }}
                 </span>
               </div>
-              <span
-                v-if="fyersConnected && fyersStatus?.clientId"
-                class="text-xs text-text-muted"
-              >
+              <span v-if="fyersConnected && fyersStatus?.clientId" class="text-xs text-text-muted">
                 ID: {{ fyersStatus.clientId }}
               </span>
             </div>
@@ -187,16 +171,13 @@
             </button>
 
             <!-- Manual Auth Code -->
-            <div
-              v-if="showAuthCodeInput"
-              class="flex gap-2"
-            >
+            <div v-if="showAuthCodeInput" class="flex gap-2">
               <input
                 v-model="authCodeInput"
                 placeholder="Paste auth code from browser"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
                 @keydown.enter="submitAuthCode"
-              >
+              />
               <button
                 :disabled="authing"
                 class="rounded-md border border-brand bg-brand-subtle px-4 py-2 text-sm font-medium text-brand transition-colors hover:bg-brand/20 disabled:opacity-50"
@@ -205,19 +186,13 @@
                 Submit
               </button>
             </div>
-            <p
-              v-if="showAuthCodeInput"
-              class="text-xs text-text-muted"
-            >
+            <p v-if="showAuthCodeInput" class="text-xs text-text-muted">
               Complete login on Fyers, then paste the auth code here.
             </p>
           </div>
 
           <!-- Disconnect -->
-          <div
-            v-if="settings.selectedBroker === 'fyers' && fyersConnected"
-            class="mt-4"
-          >
+          <div v-if="settings.selectedBroker === 'fyers' && fyersConnected" class="mt-4">
             <button
               class="rounded-md border border-danger/30 bg-danger-bg px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/10"
               @click="disconnectFyers"
@@ -231,9 +206,7 @@
             v-if="settings.selectedBroker === 'upstox'"
             class="mt-4 rounded-lg border border-border-subtle p-4 text-center"
           >
-            <p class="text-sm text-text-muted">
-              Upstox integration coming soon.
-            </p>
+            <p class="text-sm text-text-muted">Upstox integration coming soon.</p>
           </div>
         </div>
       </div>
@@ -241,15 +214,11 @@
       <!-- LLM Tab -->
       <div v-show="activeTab === 'llm'">
         <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">
-            LLM & Intelligence
-          </h2>
+          <h2 class="mb-4 text-base font-semibold text-text-primary">LLM & Intelligence</h2>
 
           <!-- Backend Selection -->
           <div class="mb-6">
-            <h3 class="text-sm font-medium text-text-secondary mb-3">
-              LLM Backend
-            </h3>
+            <h3 class="text-sm font-medium text-text-secondary mb-3">LLM Backend</h3>
             <div class="flex gap-2 mb-4">
               <button
                 v-for="b in llmBackends"
@@ -268,10 +237,7 @@
 
             <!-- Backend descriptions -->
             <div class="space-y-2 text-xs text-text-muted">
-              <div
-                v-if="llmSettings.llmBackend === 'local'"
-                class="rounded-md bg-bg-primary p-3"
-              >
+              <div v-if="llmSettings.llmBackend === 'local'" class="rounded-md bg-bg-primary p-3">
                 llama.cpp server running on the same machine as this app.
               </div>
               <div
@@ -297,20 +263,15 @@
           </div>
 
           <!-- Local LLM (llama.cpp) -->
-          <div
-            v-show="llmSettings.llmBackend === 'local'"
-            class="space-y-4 mb-6"
-          >
-            <h3 class="text-sm font-medium text-text-secondary">
-              Local LLM (llama.cpp)
-            </h3>
+          <div v-show="llmSettings.llmBackend === 'local'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">Local LLM (llama.cpp)</h3>
 
             <div class="flex gap-2">
               <input
                 v-model="llmSettings.llmBaseUrl"
                 placeholder="http://localhost:8080/v1"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
             </div>
 
             <div class="flex gap-2">
@@ -318,7 +279,7 @@
                 v-model="llmSettings.llamacppModel"
                 placeholder="Path to the GGUF model configured on the server"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
               <span class="self-center text-xs text-text-muted">Model</span>
             </div>
 
@@ -329,13 +290,8 @@
           </div>
 
           <!-- Pi SSH LLM -->
-          <div
-            v-show="llmSettings.llmBackend === 'pi_ssh'"
-            class="space-y-4 mb-6"
-          >
-            <h3 class="text-sm font-medium text-text-secondary">
-              Pi SSH LLM (llama.cpp)
-            </h3>
+          <div v-show="llmSettings.llmBackend === 'pi_ssh'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">Pi SSH LLM (llama.cpp)</h3>
             <p class="text-xs text-text-muted">
               llama.cpp server on Pi 5 (dietpi@piworm). Java starts/stops it via SSH on port 8089.
             </p>
@@ -344,7 +300,7 @@
                 v-model="llmSettings.llamacppModel"
                 placeholder="Path to the GGUF model configured on the server"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
               <span class="self-center text-xs text-text-muted">Model</span>
             </div>
             <p class="text-xs text-text-muted">
@@ -357,10 +313,7 @@
                   class="h-2.5 w-2.5 rounded-full"
                   :class="piServerRunning ? 'bg-success' : 'bg-danger'"
                 />
-                <span
-                  v-if="piStatusError"
-                  class="text-xs text-warning"
-                >Status unavailable</span>
+                <span v-if="piStatusError" class="text-xs text-warning">Status unavailable</span>
                 <span
                   v-else
                   class="text-xs"
@@ -369,10 +322,7 @@
                   {{ piServerRunning ? 'Running' : 'Stopped' }}
                 </span>
               </div>
-              <span
-                v-if="piServerStatusMsg"
-                class="text-xs text-text-muted"
-              >{{
+              <span v-if="piServerStatusMsg" class="text-xs text-text-muted">{{
                 piServerStatusMsg
               }}</span>
             </div>
@@ -421,19 +371,14 @@
           </div>
 
           <!-- OpenAI-compatible LLM (Super Analysis) -->
-          <div
-            v-show="llmSettings.llmBackend === 'openai'"
-            class="space-y-4 mb-6"
-          >
-            <h3 class="text-sm font-medium text-text-secondary">
-              OpenAI-compatible LLM
-            </h3>
+          <div v-show="llmSettings.llmBackend === 'openai'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">OpenAI-compatible LLM</h3>
             <div class="flex gap-2">
               <input
                 v-model="llmSettings.openaiBaseUrl"
                 placeholder="https://api.openai.com/v1"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
             </div>
 
             <div class="flex gap-2">
@@ -443,7 +388,7 @@
                 autocomplete="new-password"
                 placeholder="Leave blank to keep the configured key"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
               <span class="self-center text-xs text-text-muted">API Key</span>
             </div>
 
@@ -452,7 +397,7 @@
                 v-model="llmSettings.openaiModel"
                 placeholder="gpt-4o"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
               <span class="self-center text-xs text-text-muted">Model</span>
             </div>
             <div class="flex items-center justify-between">
@@ -479,19 +424,14 @@
           </div>
 
           <!-- Ollama (Local LLM server) -->
-          <div
-            v-show="llmSettings.llmBackend === 'ollama'"
-            class="space-y-4 mb-6"
-          >
-            <h3 class="text-sm font-medium text-text-secondary">
-              Ollama
-            </h3>
+          <div v-show="llmSettings.llmBackend === 'ollama'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">Ollama</h3>
             <div class="flex gap-2">
               <input
                 v-model="llmSettings.ollamaBaseUrl"
                 placeholder="http://localhost:11434/v1"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
             </div>
 
             <div class="flex gap-2">
@@ -499,7 +439,7 @@
                 v-model="llmSettings.ollamaModel"
                 placeholder="qwen3:4b"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
               <span class="self-center text-xs text-text-muted">Model</span>
             </div>
 
@@ -510,7 +450,7 @@
                 autocomplete="new-password"
                 placeholder="Optional; leave blank to keep the configured key"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
               <span class="self-center text-xs text-text-muted">API Key (optional)</span>
             </div>
             <div class="flex items-center justify-between">
@@ -537,15 +477,13 @@
 
           <!-- PDF Extraction -->
           <div class="space-y-4 mb-6">
-            <h3 class="text-sm font-medium text-text-secondary">
-              PDF Extraction (Pi 5)
-            </h3>
+            <h3 class="text-sm font-medium text-text-secondary">PDF Extraction (Pi 5)</h3>
             <div class="flex gap-2">
               <input
                 v-model="llmSettings.pdfBaseUrl"
                 placeholder="http://pi5-ip:8080"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
               <button
                 :disabled="testingPdf"
                 class="rounded-md border border-brand bg-brand-subtle px-4 py-2 text-sm font-medium text-brand transition-colors hover:bg-brand/20 disabled:opacity-50"
@@ -560,26 +498,20 @@
                 v-model="llmSettings.pdfModel"
                 placeholder="gemma-4-E2B"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
               <span class="self-center text-xs text-text-muted">Model name</span>
             </div>
           </div>
 
           <!-- Discord Configuration -->
           <div class="space-y-4">
-            <h3 class="text-sm font-medium text-text-secondary">
-              Discord Notifications
-            </h3>
+            <h3 class="text-sm font-medium text-text-secondary">Discord Notifications</h3>
             <div
               class="flex items-center justify-between rounded-lg border border-border-subtle p-3"
             >
               <span class="text-sm">Enable Discord</span>
               <label class="relative inline-flex items-center cursor-pointer">
-                <input
-                  v-model="discordSettings.enabled"
-                  type="checkbox"
-                  class="sr-only peer"
-                >
+                <input v-model="discordSettings.enabled" type="checkbox" class="sr-only peer" />
                 <div
                   class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand"
                 />
@@ -590,7 +522,7 @@
                 v-model="discordSettings.webhookUrl"
                 placeholder="https://discord.com/api/webhooks/..."
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-              >
+              />
               <button
                 :disabled="testingDiscord"
                 class="rounded-md border border-brand bg-brand-subtle px-4 py-2 text-sm font-medium text-brand transition-colors hover:bg-brand/20 disabled:opacity-50"
@@ -606,30 +538,20 @@
       <!-- Trading Tab -->
       <div v-show="activeTab === 'trading'">
         <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">
-            Trading Configuration
-          </h2>
+          <h2 class="mb-4 text-base font-semibold text-text-primary">Trading Configuration</h2>
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">
-                Mode
-              </p>
+              <p class="text-xs text-text-muted">Mode</p>
               <select
                 v-model="settings.tradingConfig.mode"
                 class="mt-1 w-full rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
               >
-                <option value="paper">
-                  Paper Trading
-                </option>
-                <option value="live">
-                  Live Trading
-                </option>
+                <option value="paper">Paper Trading</option>
+                <option value="live">Live Trading</option>
               </select>
             </div>
             <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">
-                Max Position Size
-              </p>
+              <p class="text-xs text-text-muted">Max Position Size</p>
               <div class="mt-1 flex items-center gap-1">
                 <input
                   v-model.number="settings.tradingConfig.maxPositionSize"
@@ -637,14 +559,12 @@
                   min="1"
                   max="100"
                   class="w-20 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
-                >
+                />
                 <span class="text-xs text-text-muted">%</span>
               </div>
             </div>
             <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">
-                Stop Loss
-              </p>
+              <p class="text-xs text-text-muted">Stop Loss</p>
               <div class="mt-1 flex items-center gap-1">
                 <input
                   v-model.number="settings.tradingConfig.stopLoss"
@@ -652,14 +572,12 @@
                   min="1"
                   max="50"
                   class="w-20 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
-                >
+                />
                 <span class="text-xs text-text-muted">%</span>
               </div>
             </div>
             <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">
-                Take Profit
-              </p>
+              <p class="text-xs text-text-muted">Take Profit</p>
               <div class="mt-1 flex items-center gap-1">
                 <input
                   v-model.number="settings.tradingConfig.takeProfit"
@@ -667,7 +585,7 @@
                   min="1"
                   max="200"
                   class="w-20 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
-                >
+                />
                 <span class="text-xs text-text-muted">%</span>
               </div>
             </div>
@@ -678,13 +596,8 @@
       <!-- Health Tab -->
       <div v-show="activeTab === 'health'">
         <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">
-            System Health
-          </h2>
-          <div
-            v-if="healthStatus"
-            class="space-y-2"
-          >
+          <h2 class="mb-4 text-base font-semibold text-text-primary">System Health</h2>
+          <div v-if="healthStatus" class="space-y-2">
             <div
               v-for="(comp, key) in healthStatus.components"
               :key="key"
@@ -695,28 +608,16 @@
                 class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
                 :class="healthColor(comp.status)"
               >
-                <span
-                  class="h-1.5 w-1.5 rounded-full"
-                  :class="healthDot(comp.status)"
-                />
+                <span class="h-1.5 w-1.5 rounded-full" :class="healthDot(comp.status)" />
                 {{ comp.status }}
               </span>
             </div>
           </div>
-          <div
-            v-else-if="healthStatusError"
-            class="py-8 text-center text-sm text-warning"
-          >
+          <div v-else-if="healthStatusError" class="py-8 text-center text-sm text-warning">
             Status unavailable
           </div>
-          <div
-            v-else
-            class="flex items-center justify-center py-8"
-          >
-            <LoadingSpinner
-              :message="'Checking system...'"
-              :small="true"
-            />
+          <div v-else class="flex items-center justify-center py-8">
+            <LoadingSpinner :message="'Checking system...'" :small="true" />
           </div>
         </div>
       </div>
@@ -741,12 +642,7 @@
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 translate-y-2"
     >
-      <Toast
-        v-if="toastVisible"
-        :message="toastMessage"
-        :type="toastType"
-        :duration="4000"
-      />
+      <Toast v-if="toastVisible" :message="toastMessage" :type="toastType" :duration="4000" />
     </Transition>
   </div>
 </template>

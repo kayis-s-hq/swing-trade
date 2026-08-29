@@ -7,12 +7,7 @@
         class="rounded-md p-2 text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary"
         @click="$emit('toggle-sidebar')"
       >
-        <svg
-          class="h-5 w-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -24,18 +19,8 @@
 
       <nav class="flex items-center gap-2">
         <span class="text-sm text-text-muted">Home</span>
-        <svg
-          class="h-4 w-4 text-text-muted"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M9 5l7 7-7 7"
-          />
+        <svg class="h-4 w-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
         </svg>
         <span class="text-sm font-semibold text-text-primary">{{ currentPage }}</span>
       </nav>
@@ -75,14 +60,8 @@
 
       <!-- Market Status -->
       <div class="flex items-center gap-2 rounded-full border border-border-subtle px-3 py-1.5">
-        <span
-          class="pulse-dot inline-block h-2 w-2 rounded-full"
-          :class="marketPillClass"
-        />
-        <span
-          class="text-xs font-medium"
-          :class="marketPillClass"
-        >{{
+        <span class="pulse-dot inline-block h-2 w-2 rounded-full" :class="marketPillClass" />
+        <span class="text-xs font-medium" :class="marketPillClass">{{
           marketCountdownState.label || 'Closed'
         }}</span>
       </div>
@@ -108,13 +87,7 @@
           />
         </svg>
         <!-- Moon Icon -->
-        <svg
-          v-else
-          class="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+        <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"

@@ -3,23 +3,14 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">
-          Watchlist
-        </h1>
-        <p class="mt-1 text-sm text-text-muted">
-          {{ watchlist.length }} stocks being monitored
-        </p>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">Watchlist</h1>
+        <p class="mt-1 text-sm text-text-muted">{{ watchlist.length }} stocks being monitored</p>
       </div>
       <button
         class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90"
         @click="showAddForm = !showAddForm"
       >
-        <svg
-          class="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -32,17 +23,9 @@
     </div>
 
     <!-- Add Stock Form -->
-    <div
-      v-if="showAddForm"
-      class="mb-6 card-panel p-5"
-    >
-      <h3 class="mb-3 text-sm font-semibold text-text-primary">
-        Add Stock to Watchlist
-      </h3>
-      <form
-        class="flex flex-col sm:flex-row gap-3"
-        @submit.prevent="handleSubmit"
-      >
+    <div v-if="showAddForm" class="mb-6 card-panel p-5">
+      <h3 class="mb-3 text-sm font-semibold text-text-primary">Add Stock to Watchlist</h3>
+      <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="handleSubmit">
         <div class="flex-1">
           <label class="mb-1 block text-xs font-medium text-text-muted">Symbol</label>
           <input
@@ -51,16 +34,18 @@
             placeholder="e.g. RELIANCE"
             required
             class="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-brand/30"
-          >
+          />
         </div>
         <div class="flex-1">
-          <label class="mb-1 block text-xs font-medium text-text-muted">Company Name (optional)</label>
+          <label class="mb-1 block text-xs font-medium text-text-muted"
+            >Company Name (optional)</label
+          >
           <input
             v-model="newName"
             type="text"
             placeholder="e.g. Reliance Industries"
             class="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-brand/30"
-          >
+          />
         </div>
         <div class="flex items-end gap-2">
           <button
@@ -81,11 +66,7 @@
       </form>
     </div>
 
-    <div
-      v-if="staleWarning"
-      role="status"
-      class="mb-4 text-sm text-warning"
-    >
+    <div v-if="staleWarning" role="status" class="mb-4 text-sm text-warning">
       {{ staleWarning }}
     </div>
 
@@ -111,10 +92,7 @@
           </button>
         </div>
       </template>
-      <div
-        v-if="loading"
-        class="flex items-center justify-center py-20"
-      >
+      <div v-if="loading" class="flex items-center justify-center py-20">
         <LoadingSpinner message="Loading watchlist..." />
       </div>
 
@@ -192,12 +170,7 @@
                     :title="'Remove ' + entry.symbol"
                     @click="removeEntry(entry.symbol)"
                   >
-                    <svg
-                      class="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         stroke-linecap="round"
                         stroke-linejoin="round"
@@ -212,10 +185,7 @@
           </table>
         </div>
 
-        <div
-          v-if="watchlist.length === 0"
-          class="mt-6 text-center text-sm text-text-muted"
-        >
+        <div v-if="watchlist.length === 0" class="mt-6 text-center text-sm text-text-muted">
           No stocks in watchlist. Click "Add Stock" to get started.
         </div>
       </template>

@@ -30,18 +30,12 @@
     </div>
 
     <!-- Loading -->
-    <div
-      v-if="loading"
-      class="flex justify-center py-12"
-    >
+    <div v-if="loading" class="flex justify-center py-12">
       <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
     </div>
 
     <!-- Article list -->
-    <div
-      v-else-if="filteredArticles.length"
-      class="flex flex-col gap-3"
-    >
+    <div v-else-if="filteredArticles.length" class="flex flex-col gap-3">
       <div
         v-for="article in filteredArticles"
         :key="article.link || article.title"
@@ -53,10 +47,7 @@
               <span class="rounded bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
                 {{ article.source }}
               </span>
-              <span
-                v-if="article.publishedDate"
-                class="text-xs text-text-muted"
-              >
+              <span v-if="article.publishedDate" class="text-xs text-text-muted">
                 {{ formatDate(article.publishedDate) }}
               </span>
             </div>
@@ -85,14 +76,8 @@
           </button>
         </div>
 
-        <div
-          v-if="expandedKeys.has(article.link || article.title)"
-          class="mt-3 animate-fade-in"
-        >
-          <p
-            v-if="article.description"
-            class="text-sm text-text-secondary leading-relaxed"
-          >
+        <div v-if="expandedKeys.has(article.link || article.title)" class="mt-3 animate-fade-in">
+          <p v-if="article.description" class="text-sm text-text-secondary leading-relaxed">
             {{ article.description }}
           </p>
           <p
@@ -115,13 +100,8 @@
     </div>
 
     <!-- Empty state -->
-    <div
-      v-else
-      class="card-panel p-5"
-    >
-      <p class="text-sm text-text-muted">
-        No news articles found for this symbol.
-      </p>
+    <div v-else class="card-panel p-5">
+      <p class="text-sm text-text-muted">No news articles found for this symbol.</p>
     </div>
   </div>
 </template>

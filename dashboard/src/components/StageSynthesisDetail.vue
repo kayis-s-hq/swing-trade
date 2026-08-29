@@ -11,15 +11,9 @@
       </p>
     </div>
 
-    <div
-      v-if="synthesisSuccess"
-      class="rounded-md bg-bg-elevated px-3 py-3"
-    >
+    <div v-if="synthesisSuccess" class="rounded-md bg-bg-elevated px-3 py-3">
       <div class="mb-1 flex items-center justify-between">
-        <span
-          class="text-sm font-semibold uppercase tracking-wider"
-          :class="recommendationColor"
-        >{{
+        <span class="text-sm font-semibold uppercase tracking-wider" :class="recommendationColor">{{
           recommendation
         }}</span>
         <span class="text-xs text-text-muted">{{ (confidence * 100).toFixed(0) }}% confidence</span>
@@ -28,61 +22,34 @@
         {{ narrative }}
       </p>
     </div>
-    <div
-      v-else
-      class="rounded-md border border-border-subtle bg-bg-elevated px-3 py-3"
-    >
+    <div v-else class="rounded-md border border-border-subtle bg-bg-elevated px-3 py-3">
       <p class="text-sm text-text-muted">
         LLM was unable to produce this analysis. The data below may not be reliable.
       </p>
     </div>
 
-    <div
-      v-if="keyDrivers.length"
-      class="flex flex-col gap-1"
-    >
-      <p class="text-xs font-semibold text-text-muted">
-        Key Drivers
-      </p>
+    <div v-if="keyDrivers.length" class="flex flex-col gap-1">
+      <p class="text-xs font-semibold text-text-muted">Key Drivers</p>
       <ul class="list-disc pl-4 text-xs text-text-secondary">
-        <li
-          v-for="d in keyDrivers"
-          :key="d"
-        >
+        <li v-for="d in keyDrivers" :key="d">
           {{ d }}
         </li>
       </ul>
     </div>
 
     <div class="grid grid-cols-2 gap-3">
-      <div
-        v-if="bullishFactors.length"
-        class="flex flex-col gap-1"
-      >
-        <p class="text-xs font-semibold text-success">
-          Bullish Factors
-        </p>
+      <div v-if="bullishFactors.length" class="flex flex-col gap-1">
+        <p class="text-xs font-semibold text-success">Bullish Factors</p>
         <ul class="list-disc pl-4 text-xs text-text-secondary">
-          <li
-            v-for="f in bullishFactors"
-            :key="f"
-          >
+          <li v-for="f in bullishFactors" :key="f">
             {{ f }}
           </li>
         </ul>
       </div>
-      <div
-        v-if="bearishFactors.length"
-        class="flex flex-col gap-1"
-      >
-        <p class="text-xs font-semibold text-danger">
-          Bearish Factors
-        </p>
+      <div v-if="bearishFactors.length" class="flex flex-col gap-1">
+        <p class="text-xs font-semibold text-danger">Bearish Factors</p>
         <ul class="list-disc pl-4 text-xs text-text-secondary">
-          <li
-            v-for="f in bearishFactors"
-            :key="f"
-          >
+          <li v-for="f in bearishFactors" :key="f">
             {{ f }}
           </li>
         </ul>

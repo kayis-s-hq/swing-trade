@@ -14,10 +14,7 @@
       v-html="icons[type]"
     />
     <div class="min-w-0 flex-1">
-      <p
-        v-if="title"
-        class="font-semibold"
-      >
+      <p v-if="title" class="font-semibold">
         {{ title }}
       </p>
       <p :class="title ? 'mt-0.5 text-xs' : 'font-medium'">
@@ -46,11 +43,7 @@
         stroke-width="2"
         aria-hidden="true"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M6 18L18 6M6 6l12 12"
-        />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
       </svg>
     </button>
   </article>

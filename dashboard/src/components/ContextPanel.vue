@@ -1,37 +1,24 @@
 <template>
   <div class="card-panel p-5">
-    <h3 class="mb-4 text-sm font-semibold text-text-primary">
-      Analysis Context
-    </h3>
+    <h3 class="mb-4 text-sm font-semibold text-text-primary">Analysis Context</h3>
 
     <!-- Technical Signal Agreement -->
     <div class="mb-4">
       <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
         Technical Signal
       </h4>
-      <div
-        v-if="signal"
-        class="flex items-center gap-3"
-      >
+      <div v-if="signal" class="flex items-center gap-3">
         <span
           class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
           :class="signalBadgeClass"
         >
           {{ signal.direction }}
         </span>
-        <span
-          class="text-xs font-medium"
-          :class="agreementClass"
-        >
+        <span class="text-xs font-medium" :class="agreementClass">
           {{ agreementText }}
         </span>
       </div>
-      <p
-        v-else
-        class="text-xs text-text-muted"
-      >
-        No technical signal available
-      </p>
+      <p v-else class="text-xs text-text-muted">No technical signal available</p>
     </div>
 
     <!-- Confidence Breakdown -->
@@ -41,28 +28,20 @@
       </h4>
       <div class="grid grid-cols-3 gap-3 text-center">
         <div class="rounded-lg bg-bg-primary p-2">
-          <div class="text-lg font-semibold text-text-primary">
-            {{ confidencePct }}%
-          </div>
-          <div class="text-[10px] text-text-muted">
-            Confidence
-          </div>
+          <div class="text-lg font-semibold text-text-primary">{{ confidencePct }}%</div>
+          <div class="text-[10px] text-text-muted">Confidence</div>
         </div>
         <div class="rounded-lg bg-bg-primary p-2">
           <div class="text-lg font-semibold text-text-primary">
             {{ articleCount }}
           </div>
-          <div class="text-[10px] text-text-muted">
-            Articles
-          </div>
+          <div class="text-[10px] text-text-muted">Articles</div>
         </div>
         <div class="rounded-lg bg-bg-primary p-2">
           <div class="text-lg font-semibold text-text-primary">
             {{ (props.sentiment.summary ?? '').length }} chars
           </div>
-          <div class="text-[10px] text-text-muted">
-            Summary
-          </div>
+          <div class="text-[10px] text-text-muted">Summary</div>
         </div>
       </div>
     </div>
@@ -72,10 +51,7 @@
       <h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
         Recent Trend
       </h4>
-      <div
-        v-if="trend.length"
-        class="flex items-center gap-1"
-      >
+      <div v-if="trend.length" class="flex items-center gap-1">
         <div
           v-for="(item, i) in trend"
           :key="i"
@@ -84,12 +60,7 @@
           :title="`${item.date}: ${item.score}`"
         />
       </div>
-      <p
-        v-else
-        class="text-xs text-text-muted"
-      >
-        No historical data
-      </p>
+      <p v-else class="text-xs text-text-muted">No historical data</p>
     </div>
   </div>
 </template>

@@ -3,10 +3,7 @@
     class="group relative overflow-hidden border border-border-subtle bg-bg-surface transition-all duration-200 hover:border-brand/30"
   >
     <!-- Top accent bar colored by status -->
-    <div
-      class="h-[2px] w-full"
-      :class="statusBarColor"
-    />
+    <div class="h-[2px] w-full" :class="statusBarColor" />
 
     <!-- Header: Symbol + Status -->
     <div class="flex items-start justify-between border-b border-border-subtle/50 px-4 py-3">
@@ -22,10 +19,7 @@
         class="inline-flex items-center gap-1.5 rounded-none border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider"
         :class="statusBadgeClass"
       >
-        <span
-          class="h-1 w-1 rounded-none"
-          :class="statusDotColor"
-        />
+        <span class="h-1 w-1 rounded-none" :class="statusDotColor" />
         {{ position.status }}
       </span>
     </div>
@@ -35,33 +29,25 @@
       <!-- Entry Price -->
       <div>
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">Entry</span>
-        <p class="text-sm font-medium text-text-primary">
-          ₹{{ position.entryPrice.toFixed(2) }}
-        </p>
+        <p class="text-sm font-medium text-text-primary">₹{{ position.entryPrice.toFixed(2) }}</p>
       </div>
 
       <!-- Current Price -->
       <div>
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">Current</span>
-        <p class="text-sm font-medium text-text-primary">
-          ₹{{ position.currentPrice.toFixed(2) }}
-        </p>
+        <p class="text-sm font-medium text-text-primary">₹{{ position.currentPrice.toFixed(2) }}</p>
       </div>
 
       <!-- Stop Loss -->
       <div>
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">Stop Loss</span>
-        <p class="text-sm font-medium text-danger">
-          ₹{{ position.stopLoss.toFixed(2) }}
-        </p>
+        <p class="text-sm font-medium text-danger">₹{{ position.stopLoss.toFixed(2) }}</p>
       </div>
 
       <!-- Target -->
       <div>
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">Target</span>
-        <p class="text-sm font-medium text-success">
-          ₹{{ position.target.toFixed(2) }}
-        </p>
+        <p class="text-sm font-medium text-success">₹{{ position.target.toFixed(2) }}</p>
       </div>
     </div>
 
@@ -75,10 +61,7 @@
       </div>
       <div class="text-right">
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">P&L</span>
-        <p
-          class="text-sm font-bold"
-          :class="position.pnl >= 0 ? 'text-success' : 'text-danger'"
-        >
+        <p class="text-sm font-bold" :class="position.pnl >= 0 ? 'text-success' : 'text-danger'">
           {{ position.pnl >= 0 ? '+' : '' }}₹{{ position.pnl.toFixed(2) }}
           <span class="text-[10px] font-normal opacity-70">
             ({{ position.pnlPercent >= 0 ? '+' : '' }}{{ position.pnlPercent.toFixed(2) }}%)

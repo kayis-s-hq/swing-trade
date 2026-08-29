@@ -4,14 +4,8 @@
     <p class="mt-0.5 text-sm font-semibold tracking-tight text-text-primary">
       {{ value }}
     </p>
-    <div
-      v-if="trend"
-      class="mt-0.5 flex items-center gap-1"
-    >
-      <span
-        class="text-[9px]"
-        :class="trend.isPositive ? 'text-success/70' : 'text-danger/70'"
-      >
+    <div v-if="trend" class="mt-0.5 flex items-center gap-1">
+      <span class="text-[9px]" :class="trend.isPositive ? 'text-success/70' : 'text-danger/70'">
         {{ trend.isPositive ? '▲' : '▼' }} {{ trend.value }}
       </span>
     </div>

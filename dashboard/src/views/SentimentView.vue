@@ -3,12 +3,8 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">
-          Sentiment
-        </h1>
-        <p class="mt-1 text-sm text-text-muted">
-          LLM-powered analysis across 9 stages
-        </p>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">Sentiment</h1>
+        <p class="mt-1 text-sm text-text-muted">LLM-powered analysis across 9 stages</p>
       </div>
     </div>
 
@@ -33,13 +29,8 @@
     <div v-if="activeTab === 'overview'">
       <!-- Symbol Selector + Analyze -->
       <div class="mb-6 card-panel p-5">
-        <h3 class="mb-3 text-sm font-semibold text-text-primary">
-          Select Symbol
-        </h3>
-        <form
-          class="flex flex-col sm:flex-row gap-3"
-          @submit.prevent="runAnalysis"
-        >
+        <h3 class="mb-3 text-sm font-semibold text-text-primary">Select Symbol</h3>
+        <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="runAnalysis">
           <div class="flex-1">
             <input
               v-model="symbolInput"
@@ -48,13 +39,9 @@
               list="watchlistSymbols"
               required
               class="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-brand/30"
-            >
+            />
             <datalist id="watchlistSymbols">
-              <option
-                v-for="w in watchlistSymbols"
-                :key="w.symbol"
-                :value="w.symbol"
-              />
+              <option v-for="w in watchlistSymbols" :key="w.symbol" :value="w.symbol" />
             </datalist>
           </div>
           <button
@@ -73,38 +60,23 @@
             {{ loading ? 'Loading...' : 'View Sentiment' }}
           </button>
         </form>
-        <p
-          v-if="error"
-          class="mt-3 text-xs text-danger"
-        >
+        <p v-if="error" class="mt-3 text-xs text-danger">
           {{ error }}
         </p>
       </div>
 
       <!-- Pipeline accordion -->
-      <div
-        v-if="orchestrating || analysisProgress.length"
-        class="animate-fade-in"
-      >
-        <AnalysisAccordion
-          :stages="analysisProgress"
-          :composite="composite"
-        />
+      <div v-if="orchestrating || analysisProgress.length" class="animate-fade-in">
+        <AnalysisAccordion :stages="analysisProgress" :composite="composite" />
       </div>
 
       <!-- Legacy composite loading -->
-      <div
-        v-else-if="compositeLoading"
-        class="flex justify-center py-12"
-      >
+      <div v-else-if="compositeLoading" class="flex justify-center py-12">
         <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
       </div>
 
       <!-- Historical Sentiment -->
-      <div
-        v-if="sentiment"
-        class="mt-6"
-      >
+      <div v-if="sentiment" class="mt-6">
         <button
           class="mb-3 flex items-center gap-2 text-sm font-medium text-text-muted transition-colors hover:text-text-primary"
           @click="showHistoricalSentiment = !showHistoricalSentiment"
@@ -126,10 +98,7 @@
           Historical Sentiment
         </button>
 
-        <div
-          v-if="showHistoricalSentiment"
-          class="animate-fade-in"
-        >
+        <div v-if="showHistoricalSentiment" class="animate-fade-in">
           <div class="card-panel p-5">
             <div class="mb-4 flex items-center justify-between">
               <h4 class="text-sm font-semibold text-text-primary">
@@ -138,10 +107,7 @@
               <span class="text-xs text-text-muted">{{ sentiment.date }}</span>
             </div>
             <div class="mb-4 flex items-center gap-4">
-              <SentimentBadge
-                :score="sentiment.score"
-                :confidence="sentiment.confidence"
-              />
+              <SentimentBadge :score="sentiment.score" :confidence="sentiment.confidence" />
             </div>
             <div class="mb-4">
               <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -151,18 +117,12 @@
                 {{ sentiment.summary }}
               </p>
             </div>
-            <div
-              v-if="sentiment.redFlags.length"
-              class="mb-4"
-            >
+            <div v-if="sentiment.redFlags.length" class="mb-4">
               <h4 class="mb-1 text-xs font-semibold uppercase tracking-wider text-danger">
                 Red Flags
               </h4>
               <ul class="list-disc pl-4 text-sm text-text-secondary">
-                <li
-                  v-for="rf in sentiment.redFlags"
-                  :key="rf"
-                >
+                <li v-for="rf in sentiment.redFlags" :key="rf">
                   {{ rf }}
                 </li>
               </ul>
@@ -172,10 +132,7 @@
                 Catalysts
               </h4>
               <ul class="list-disc pl-4 text-sm text-text-secondary">
-                <li
-                  v-for="c in sentiment.catalysts"
-                  :key="c"
-                >
+                <li v-for="c in sentiment.catalysts" :key="c">
                   {{ c }}
                 </li>
               </ul>
@@ -188,10 +145,10 @@
       <div
         v-if="
           !composite &&
-            !sentiment &&
-            !orchestrating &&
-            !compositeLoading &&
-            analysisProgress.length === 0
+          !sentiment &&
+          !orchestrating &&
+          !compositeLoading &&
+          analysisProgress.length === 0
         "
         class="card-panel p-5"
       >
@@ -204,13 +161,8 @@
     <!-- News Tab -->
     <div v-if="activeTab === 'news'">
       <div class="mb-6 card-panel p-5">
-        <h3 class="mb-3 text-sm font-semibold text-text-primary">
-          Select Symbol
-        </h3>
-        <form
-          class="flex flex-col sm:flex-row gap-3"
-          @submit.prevent="loadNews"
-        >
+        <h3 class="mb-3 text-sm font-semibold text-text-primary">Select Symbol</h3>
+        <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="loadNews">
           <div class="flex-1">
             <input
               v-model="symbolInput"
@@ -219,13 +171,9 @@
               list="watchlistSymbols"
               required
               class="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-brand/30"
-            >
+            />
             <datalist id="watchlistSymbols">
-              <option
-                v-for="w in watchlistSymbols"
-                :key="w.symbol"
-                :value="w.symbol"
-              />
+              <option v-for="w in watchlistSymbols" :key="w.symbol" :value="w.symbol" />
             </datalist>
           </div>
           <button
@@ -236,46 +184,26 @@
             {{ newsLoading ? 'Loading...' : 'Fetch News' }}
           </button>
         </form>
-        <p
-          v-if="error"
-          class="mt-3 text-xs text-danger"
-        >
+        <p v-if="error" class="mt-3 text-xs text-danger">
           {{ error }}
         </p>
       </div>
 
-      <ArticleBrowser
-        :articles="newsArticles"
-        :loading="newsLoading"
-      />
+      <ArticleBrowser :articles="newsArticles" :loading="newsLoading" />
     </div>
 
     <!-- History Tab -->
     <div v-if="activeTab === 'history'">
-      <div
-        v-if="historyLoading"
-        class="flex justify-center py-12"
-      >
+      <div v-if="historyLoading" class="flex justify-center py-12">
         <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
       </div>
-      <SentimentTimeline
-        v-else-if="history.length"
-        :items="history"
-      />
-      <div
-        v-else
-        class="card-panel p-5"
-      >
-        <p class="text-sm text-text-muted">
-          No sentiment history available.
-        </p>
+      <SentimentTimeline v-else-if="history.length" :items="history" />
+      <div v-else class="card-panel p-5">
+        <p class="text-sm text-text-muted">No sentiment history available.</p>
       </div>
 
       <!-- Pagination -->
-      <div
-        v-if="history.length > 0"
-        class="mt-4 flex items-center justify-center gap-2"
-      >
+      <div v-if="history.length > 0" class="mt-4 flex items-center justify-center gap-2">
         <button
           :disabled="historyPage === 0"
           class="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-muted transition-colors hover:bg-bg-hover disabled:opacity-50"

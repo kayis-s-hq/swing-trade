@@ -8,12 +8,7 @@
       stroke="currentColor"
       viewBox="0 0 24 24"
     >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M5 13l4 4L19 7"
-      />
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
     </svg>
     <!-- ERROR: X -->
     <svg
@@ -37,14 +32,7 @@
       viewBox="0 0 24 24"
       fill="none"
     >
-      <circle
-        class="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        stroke-width="4"
-      />
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
       <path
         class="opacity-75"
         fill="currentColor"
@@ -52,10 +40,7 @@
       />
     </svg>
     <!-- PENDING/SKIPPED: dash -->
-    <span
-      v-else
-      class="text-text-muted/40"
-    >—</span>
+    <span v-else class="text-text-muted/40">—</span>
   </span>
 </template>
 

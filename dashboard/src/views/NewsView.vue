@@ -3,24 +3,15 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">
-          News Analysis
-        </h1>
-        <p class="mt-1 text-sm text-text-muted">
-          Stock-specific news from Google News
-        </p>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">News Analysis</h1>
+        <p class="mt-1 text-sm text-text-muted">Stock-specific news from Google News</p>
       </div>
     </div>
 
     <!-- Symbol Selector -->
     <div class="mb-6 card-panel p-5">
-      <h3 class="mb-3 text-sm font-semibold text-text-primary">
-        Select Symbol
-      </h3>
-      <form
-        class="flex flex-col sm:flex-row gap-3"
-        @submit.prevent="fetchNews"
-      >
+      <h3 class="mb-3 text-sm font-semibold text-text-primary">Select Symbol</h3>
+      <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="fetchNews">
         <div class="flex-1">
           <input
             v-model="symbolInput"
@@ -29,13 +20,9 @@
             list="watchlistSymbols"
             required
             class="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-brand/30"
-          >
+          />
           <datalist id="watchlistSymbols">
-            <option
-              v-for="w in watchlistSymbols"
-              :key="w.symbol"
-              :value="w.symbol"
-            />
+            <option v-for="w in watchlistSymbols" :key="w.symbol" :value="w.symbol" />
           </datalist>
         </div>
         <button
@@ -46,27 +33,18 @@
           {{ loading ? 'Loading...' : 'Fetch News' }}
         </button>
       </form>
-      <p
-        v-if="error"
-        class="mt-3 text-xs text-danger"
-      >
+      <p v-if="error" class="mt-3 text-xs text-danger">
         {{ error }}
       </p>
     </div>
 
     <!-- Loading state -->
-    <div
-      v-if="loading"
-      class="flex justify-center py-12"
-    >
+    <div v-if="loading" class="flex justify-center py-12">
       <div class="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
     </div>
 
     <!-- Results -->
-    <div
-      v-else-if="articles.length > 0"
-      class="flex flex-col gap-4"
-    >
+    <div v-else-if="articles.length > 0" class="flex flex-col gap-4">
       <!-- Summary bar -->
       <div class="card-panel p-4">
         <div class="flex items-center gap-4 text-sm">
@@ -95,10 +73,7 @@
                 <span class="rounded bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
                   {{ article.source }}
                 </span>
-                <span
-                  v-if="article.publishedDate"
-                  class="text-xs text-text-muted"
-                >
+                <span v-if="article.publishedDate" class="text-xs text-text-muted">
                   {{ formatDate(article.publishedDate) }}
                 </span>
               </div>
@@ -128,14 +103,8 @@
           </div>
 
           <!-- Expandable content -->
-          <div
-            v-if="expandedArticles.has(index)"
-            class="mt-3 animate-fade-in"
-          >
-            <p
-              v-if="article.description"
-              class="text-sm text-text-secondary leading-relaxed"
-            >
+          <div v-if="expandedArticles.has(index)" class="mt-3 animate-fade-in">
+            <p v-if="article.description" class="text-sm text-text-secondary leading-relaxed">
               {{ article.description }}
             </p>
             <p
@@ -159,10 +128,7 @@
     </div>
 
     <!-- Empty state -->
-    <div
-      v-else
-      class="card-panel p-5"
-    >
+    <div v-else class="card-panel p-5">
       <p class="text-sm text-text-muted">
         No news articles found. Enter a symbol and click Fetch News.
       </p>
