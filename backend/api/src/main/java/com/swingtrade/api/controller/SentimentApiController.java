@@ -103,7 +103,7 @@ public class SentimentApiController {
         long directionalTotal = accuracyService.getDirectionalCount();
         long directionalCorrect = accuracyService.getDirectionalCorrectCount();
         double directionalAccuracy = directionalTotal > 0 ?
-            Math.round((double) directionalCorrect / directionalTotal * 10000.0) / 100.0 : 0.0;
+            Math.round((double) directionalCorrect / directionalTotal * 10000.0) / 10000.0 : 0.0;
 
         Map<String, Object> summary = Map.of(
             "total", stats.total(),

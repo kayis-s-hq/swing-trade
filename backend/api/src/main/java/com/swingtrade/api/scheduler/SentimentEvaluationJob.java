@@ -183,7 +183,7 @@ public class SentimentEvaluationJob {
 
     private boolean wasCorrect(String llmScore, String groundTruth) {
         if (llmScore == null || groundTruth == null) return false;
-        if ("FLAT".equals(groundTruth)) return true; // neutral prediction is always "correct" for flat
+        if ("FLAT".equals(groundTruth)) return "NEUTRAL".equals(llmScore);
         boolean llmUp = "POSITIVE".equals(llmScore);
         boolean llmDown = "NEGATIVE".equals(llmScore);
         boolean actualUp = "UP".equals(groundTruth);

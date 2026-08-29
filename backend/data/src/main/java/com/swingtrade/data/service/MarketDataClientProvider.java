@@ -55,8 +55,10 @@ public class MarketDataClientProvider {
         String broker = activeBroker.get();
         MarketDataClient client = clients.get(broker);
         if (client == null) {
-            throw new IllegalStateException("Market data provider '" + broker + "' is unavailable; "
-                + "authentication/configuration is required and no fallback provider is enabled");
+            throw new IllegalStateException("""
+                Market data provider '%s' is unavailable; authentication/configuration is
+                required and no fallback provider is enabled
+                """.formatted(broker));
         }
         return client;
     }

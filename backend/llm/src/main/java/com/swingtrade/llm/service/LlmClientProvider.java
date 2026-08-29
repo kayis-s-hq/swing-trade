@@ -47,4 +47,8 @@ public class LlmClientProvider {
         ChatClient chatClient = ChatClient.create(model);
         return new SpringAiLlmClient(chatClient, false);
     }
+
+    public LlmBackendSelector.Backend getBackend() {
+        return selector.resolve();
+    }
 }

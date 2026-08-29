@@ -56,9 +56,9 @@
             title="ECE"
             :value="formatPercent(ece?.ece)"
             :color="
-              ece?.ece && ece.ece > 15
+              ece?.ece && ece.ece > 0.25
                 ? 'text-warning'
-                : ece?.ece && ece.ece > 25
+                : ece?.ece && ece.ece > 0.15
                   ? 'text-danger'
                   : 'text-success'
             "
@@ -604,8 +604,8 @@ const formatPercent = (v: number | undefined | null): string => {
 
 const getAccuracyColor = (v: number | undefined | null): string => {
   if (v == null) return 'text-text-muted'
-  if (v >= 55) return 'text-success'
-  if (v >= 52) return 'text-warning'
+  if (v >= 0.55) return 'text-success'
+  if (v >= 0.52) return 'text-warning'
   return 'text-danger'
 }
 

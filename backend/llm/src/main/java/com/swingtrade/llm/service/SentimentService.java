@@ -8,10 +8,13 @@ import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.Stock;
+import com.swingtrade.data.entity.LlmAnalysisAuditEntity;
+import com.swingtrade.data.repository.LlmAnalysisAuditRepository;
 import com.swingtrade.llm.SentimentOutput;
 import com.swingtrade.llm.SentimentType;
 import com.swingtrade.llm.client.LlmClient;
 import com.swingtrade.llm.config.SentimentPromptLoader;
+import com.swingtrade.llm.config.LlmProperties;
 import com.swingtrade.llm.service.LlmClientProvider;
 import com.swingtrade.llm.service.LlmServerManager;
 import org.slf4j.Logger;
@@ -22,6 +25,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.UUID;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
@@ -65,6 +71,8 @@ public class SentimentService {
     private final AppSettingsStore appSettingsStore;
     private final LlmMetrics llmMetrics;
     private final SentimentMetrics sentimentMetrics;
+    private final LlmAnalysisAuditRepository auditRepository;
+    private final LlmProperties llmProperties;
 
     private final double defaultConfidence;
 
@@ -83,6 +91,8 @@ public class SentimentService {
             AppSettingsStore appSettingsStore,
             LlmMetrics llmMetrics,
             SentimentMetrics sentimentMetrics,
+            LlmProperties llmProperties,
+            LlmAnalysisAuditRepository auditRepository,
             @Value("${llm.sentiment.default-confidence:0.75}") double defaultConfidence) {
 
         this.clientProvider = clientProvider;
@@ -95,6 +105,8 @@ public class SentimentService {
         this.appSettingsStore = appSettingsStore;
         this.llmMetrics = llmMetrics;
         this.sentimentMetrics = sentimentMetrics;
+        this.auditRepository = auditRepository;
+        this.llmProperties = llmProperties;
         this.defaultConfidence = defaultConfidence;
 
         // Initialize thread pool with bounded capacity
@@ -152,7 +164,7 @@ public class SentimentService {
             // Perform sentiment analysis
             SentimentOutput analysisResult;
             try {
-                analysisResult = performSentimentAnalysis(stockSymbol, newsContent);
+                analysisResult = performSentimentAnalysis(stockSymbol, date, newsContent);
             } catch (Exception llmEx) {
                 logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", stockSymbol, llmEx.getMessage());
                 // Build a simple result from headlines
@@ -199,6 +211,18 @@ public class SentimentService {
         }
     }
 
+    /** Compatibility constructor for lightweight unit tests. */
+    public SentimentService(
+            LlmClientProvider clientProvider, LlmServerManagerProvider serverManagerProvider,
+            SentimentPromptLoader promptLoader, SentimentAnalyzer sentimentAnalyzer,
+            NewsIngestionService newsIngestionService, SentimentStore sentimentStore,
+            StockStore stockStore, AppSettingsStore appSettingsStore, LlmMetrics llmMetrics,
+            SentimentMetrics sentimentMetrics, double defaultConfidence) {
+        this(clientProvider, serverManagerProvider, promptLoader, sentimentAnalyzer,
+                newsIngestionService, sentimentStore, stockStore, appSettingsStore,
+                llmMetrics, sentimentMetrics, null, null, defaultConfidence);
+    }
+
     /**
      * Performs LLM-based sentiment analysis on news content.
      *
@@ -206,7 +230,8 @@ public class SentimentService {
      * @param newsContent list of cleaned news texts
      * @return sentiment analysis result
      */
-    private SentimentOutput performSentimentAnalysis(String stockSymbol, List<String> newsContent) {
+    private SentimentOutput performSentimentAnalysis(String stockSymbol, LocalDate analysisDate,
+                                                     List<String> newsContent) {
         logger.debug("Performing LLM sentiment analysis for {} with {} articles", stockSymbol, newsContent.size());
 
         if (newsContent.isEmpty()) {
@@ -229,6 +254,13 @@ public class SentimentService {
                 Map.of("role", "user", "content", formattedUser)
         );
 
+        String requestId = UUID.randomUUID().toString();
+        var backend = clientProvider.getBackend();
+        String provider = backend != null ? backend.getKey() : "unknown";
+        String modelVersion = configuredModel(provider);
+        String promptHash = computePromptHash();
+        OffsetDateTime startedAt = OffsetDateTime.now(ZoneOffset.UTC);
+
         // Call LLM for sentiment analysis
         String llmResponse;
         long llmStart = System.currentTimeMillis();
@@ -240,9 +272,26 @@ public class SentimentService {
             LlmClient client = clientProvider.getClient();
             llmResponse = client.generateChatCompletion(messages, 512, 0.3)
                     .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+            long latencyMs = System.currentTimeMillis() - llmStart;
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), true);
             llmMetrics.recordSentimentAnalyzed();
+            if (llmResponse == null || llmResponse.isBlank()) {
+                SentimentOutput empty = new SentimentOutput(SentimentType.NEUTRAL,
+                        "No valid response from LLM", 0.1);
+                persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
+                        promptHash, messages, llmResponse, empty, "SUCCESS", null,
+                        startedAt, latencyMs);
+                return empty;
+            }
+            SentimentOutput parsed = sentimentAnalyzer.parseResponse(llmResponse);
+            persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
+                    promptHash, messages, llmResponse, parsed, "SUCCESS", null,
+                    startedAt, latencyMs);
+            return parsed;
         } catch (Exception e) {
+            persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion, promptHash,
+                    messages, null, null, "FAILED", e.getMessage(), startedAt,
+                    System.currentTimeMillis() - llmStart);
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), false);
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
                 logger.error("Timeout analyzing sentiment for {}: analysis took more than {} seconds",
@@ -257,19 +306,35 @@ public class SentimentService {
             throw e;
         }
 
-        if (llmResponse == null || llmResponse.isBlank()) {
-            logger.warn("Empty LLM response for stock: {}", stockSymbol);
-            return new SentimentOutput(
-                    SentimentType.NEUTRAL,
-                    "No valid response from LLM",
-                    0.1
-            );
+    }
+
+    private void persistAudit(String requestId, String symbol, LocalDate analysisDate,
+                              String provider, String model,
+                              String promptHash, List<Map<String, String>> messages,
+                              String rawResponse, SentimentOutput parsed, String status,
+                              String error, OffsetDateTime startedAt, long latencyMs) {
+        if (auditRepository == null) return;
+        String score = parsed == null ? null : parsed.getSentiment().name();
+        Double confidence = parsed == null ? null : parsed.getConfidence();
+        auditRepository.save(new LlmAnalysisAuditEntity(requestId, symbol, analysisDate,
+                provider, model, promptHash, messages.get(0).get("content"),
+                messages.get(1).get("content"), rawResponse, score, confidence, status,
+                error, false, 512, 0.3, startedAt,
+                OffsetDateTime.now(ZoneOffset.UTC), latencyMs));
+    }
+
+    private String configuredModel(String provider) {
+        if (llmProperties != null) {
+            String configured = switch (provider) {
+                case "pi_ssh" -> llmProperties.getProviders().getPiSsh().getModel();
+                case "openai" -> llmProperties.getProviders().getOpenai().getModel();
+                case "ollama" -> llmProperties.getProviders().getOllama().getModel();
+                default -> llmProperties.getProviders().getLocal().getModel();
+            };
+            if (configured != null && !configured.isBlank()) return configured;
         }
-
-        logger.debug("LLM response for {}: {} chars", stockSymbol, llmResponse.length());
-
-        // Parse LLM response using Jackson
-        return sentimentAnalyzer.parseResponse(llmResponse);
+        Optional<String> legacySetting = appSettingsStore.get("llamacpp.model");
+        return legacySetting != null ? legacySetting.orElse("unknown") : "unknown";
     }
 
     /**

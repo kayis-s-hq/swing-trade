@@ -32,6 +32,23 @@ import java.util.Optional;
 @RequestMapping("/api")
 public class IngestionController {
 
+    private enum OperationStatus {
+        STARTED, COMPLETED, ADDED, REMOVED, UNKNOWN;
+
+        @Override
+        public String toString() {
+            return name().toLowerCase(java.util.Locale.ROOT);
+        }
+
+        static OperationStatus from(String value) {
+            try {
+                return value == null ? UNKNOWN : valueOf(value.toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException ignored) {
+                return UNKNOWN;
+            }
+        }
+    }
+
     private static final Logger logger = LoggerFactory.getLogger(IngestionController.class);
 
     private final DataIngestionService dataIngestionService;
@@ -71,7 +88,7 @@ public class IngestionController {
                 "symbol", symbol,
                 "years", years,
                 "candleCount", count,
-                "status", "completed"
+                "status", OperationStatus.COMPLETED
             );
             return ResponseEntity.ok(ApiResponse.ok(data));
 
@@ -86,14 +103,14 @@ public class IngestionController {
      * Backfill all watchlist stocks.
      */
     @PostMapping("/ingestion/backfill-all")
-    public ResponseEntity<ApiResponse<Map<String, String>>> backfillAll(@RequestParam(defaultValue = "3") int years) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> backfillAll(@RequestParam(defaultValue = "3") int years) {
         logger.info("Manual backfill-all requested ({} years)", years);
 
         try {
             String pullId = watchlistService.startPullAll(years);
             return ResponseEntity.ok(ApiResponse.ok(Map.of(
                 "pullId", pullId,
-                "status", "started"
+                "status", OperationStatus.STARTED
             )));
 
         } catch (Exception e) {
@@ -104,12 +121,12 @@ public class IngestionController {
     }
 
     @PostMapping("/ingestion/range")
-    public ResponseEntity<ApiResponse<Map<String, String>>> ingestRange(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> ingestRange(
             @RequestParam LocalDate from, @RequestParam LocalDate to) {
         logger.info("Manual range pull requested from {} to {}", from, to);
         try {
             String pullId = watchlistService.startPullAll(from, to);
-            return ResponseEntity.ok(ApiResponse.ok(Map.of("pullId", pullId, "status", "started")));
+            return ResponseEntity.ok(ApiResponse.ok(Map.of("pullId", pullId, "status", OperationStatus.STARTED)));
         } catch (Exception e) {
             logger.error("Range pull failed: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(ApiResponse.error("Failed to start range pull: " + e.getMessage()));
@@ -124,7 +141,7 @@ public class IngestionController {
             String normalizedSymbol = symbol.trim().toUpperCase();
             dataIngestionService.processSingleStock(normalizedSymbol, date);
             return ResponseEntity.ok(ApiResponse.ok(Map.of(
-                "symbol", normalizedSymbol, "date", date, "status", "completed")));
+                "symbol", normalizedSymbol, "date", date, "status", OperationStatus.COMPLETED)));
         } catch (Exception e) {
             logger.error("Single-date pull failed for {} on {}: {}", symbol, date, e.getMessage(), e);
             return ResponseEntity.internalServerError()
@@ -148,7 +165,7 @@ public class IngestionController {
             Map<String, Object> data = Map.of(
                 "symbol", symbol,
                 "exchange", exchange,
-                "status", "completed"
+                "status", OperationStatus.COMPLETED
             );
             return ResponseEntity.ok(ApiResponse.ok(data));
 
@@ -183,8 +200,10 @@ public class IngestionController {
         }
         List<Map<String, Object>> reports = watchlistService.getActiveWatchlist().stream()
             .map(w -> dataIngestionService.reconcile(w.getSymbol(), from, to, false)).toList();
-        String status = reports.stream().map(r -> String.valueOf(r.get("status")))
-            .filter(s -> !"COMPLETED".equals(s)).findFirst().orElse("COMPLETED");
+        OperationStatus status = reports.stream()
+            .map(r -> OperationStatus.from(String.valueOf(r.get("status"))))
+            .filter(s -> s != OperationStatus.COMPLETED)
+            .findFirst().orElse(OperationStatus.COMPLETED);
         return ResponseEntity.ok(ApiResponse.ok(Map.of("reports", reports, "status", status)));
     }
 
@@ -280,7 +299,7 @@ public class IngestionController {
                 "date", entity.getHolidayDate().toString(),
                 "occasion", entity.getOccasion(),
                 "type", entity.getHolidayType(),
-                "status", "added"
+                "status", OperationStatus.ADDED
             );
             return ResponseEntity.ok(ApiResponse.ok(data));
         } catch (Exception e) {
@@ -300,7 +319,7 @@ public class IngestionController {
             if (removed) {
                 return ResponseEntity.ok(ApiResponse.ok(Map.of(
                     "date", date.toString(),
-                    "status", "removed"
+                    "status", OperationStatus.REMOVED
                 )));
             }
             return ResponseEntity.badRequest()
