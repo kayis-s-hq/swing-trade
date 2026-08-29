@@ -68,7 +68,9 @@
 
         <!-- Signal Volume -->
         <div class="mt-6 card-panel p-5">
-          <h3 class="mb-4 text-sm font-semibold text-text-primary">Signal Volume</h3>
+          <h3 class="mb-4 text-sm font-semibold text-text-primary">
+            Signal Volume
+          </h3>
           <ErrorMessage
             v-if="signalVolumeError"
             title="Couldn’t load signal volume"
@@ -76,21 +78,30 @@
             action-label="Retry"
             @action="loadSignalVolume"
           />
-          <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div
+            v-else
+            class="grid grid-cols-1 gap-4 md:grid-cols-3"
+          >
             <div>
-              <p class="text-xs text-text-muted">Today</p>
+              <p class="text-xs text-text-muted">
+                Today
+              </p>
               <p class="text-2xl font-bold">
                 {{ signalVolume?.today_count ?? 0 }}
               </p>
             </div>
             <div>
-              <p class="text-xs text-text-muted">7-Day Avg</p>
+              <p class="text-xs text-text-muted">
+                7-Day Avg
+              </p>
               <p class="text-2xl font-bold">
                 {{ signalVolume?.seven_day_avg ?? 0 }}
               </p>
             </div>
             <div>
-              <p class="text-xs text-text-muted">30-Day Avg</p>
+              <p class="text-xs text-text-muted">
+                30-Day Avg
+              </p>
               <p class="text-2xl font-bold">
                 {{ signalVolume?.thirty_day_avg ?? 0 }}
               </p>
@@ -101,11 +112,19 @@
         <!-- By Sentiment -->
         <div class="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
           <div class="card-panel p-5">
-            <h3 class="mb-4 text-sm font-semibold text-text-primary">By Sentiment</h3>
-            <div v-if="!stats?.by_sentiment" class="flex justify-center py-4">
+            <h3 class="mb-4 text-sm font-semibold text-text-primary">
+              By Sentiment
+            </h3>
+            <div
+              v-if="!stats?.by_sentiment"
+              class="flex justify-center py-4"
+            >
               <LoadingSpinner />
             </div>
-            <div v-else class="space-y-3">
+            <div
+              v-else
+              class="space-y-3"
+            >
               <div
                 v-for="(count, sentiment) in stats?.by_sentiment"
                 :key="sentiment"
@@ -131,11 +150,19 @@
           </div>
 
           <div class="card-panel p-5">
-            <h3 class="mb-4 text-sm font-semibold text-text-primary">By Symbol</h3>
-            <div v-if="!stats?.by_symbol" class="flex justify-center py-4">
+            <h3 class="mb-4 text-sm font-semibold text-text-primary">
+              By Symbol
+            </h3>
+            <div
+              v-if="!stats?.by_symbol"
+              class="flex justify-center py-4"
+            >
               <LoadingSpinner />
             </div>
-            <div v-else class="space-y-3">
+            <div
+              v-else
+              class="space-y-3"
+            >
               <div
                 v-for="(count, symbol) in stats?.by_symbol"
                 :key="symbol"
@@ -164,10 +191,16 @@
           <h3 class="mb-4 text-sm font-semibold text-text-primary">
             Accuracy by Evaluation Window
           </h3>
-          <div v-if="!byWindow" class="flex justify-center py-4">
+          <div
+            v-if="!byWindow"
+            class="flex justify-center py-4"
+          >
             <LoadingSpinner />
           </div>
-          <div v-else-if="byWindow.length === 0" class="text-sm text-text-muted">
+          <div
+            v-else-if="byWindow.length === 0"
+            class="text-sm text-text-muted"
+          >
             No data available yet.
           </div>
           <div v-else>
@@ -175,14 +208,26 @@
               <table class="w-full text-sm">
                 <thead>
                   <tr class="text-text-muted">
-                    <th class="pb-3 text-left font-medium">Window</th>
-                    <th class="pb-3 text-left font-medium">Total</th>
-                    <th class="pb-3 text-left font-medium">Accuracy</th>
-                    <th class="pb-3 text-left font-medium">Avg Return</th>
+                    <th class="pb-3 text-left font-medium">
+                      Window
+                    </th>
+                    <th class="pb-3 text-left font-medium">
+                      Total
+                    </th>
+                    <th class="pb-3 text-left font-medium">
+                      Accuracy
+                    </th>
+                    <th class="pb-3 text-left font-medium">
+                      Avg Return
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="text-text-secondary">
-                  <tr v-for="w in byWindow" :key="w.window" class="border-t border-border-subtle">
+                  <tr
+                    v-for="w in byWindow"
+                    :key="w.window"
+                    class="border-t border-border-subtle"
+                  >
                     <td class="py-3">
                       {{ w.window }}
                     </td>
@@ -206,11 +251,19 @@
 
         <!-- Accuracy by Regime -->
         <div class="mb-6 card-panel p-5">
-          <h3 class="mb-4 text-sm font-semibold text-text-primary">Accuracy by Market Regime</h3>
-          <div v-if="!byRegime" class="flex justify-center py-4">
+          <h3 class="mb-4 text-sm font-semibold text-text-primary">
+            Accuracy by Market Regime
+          </h3>
+          <div
+            v-if="!byRegime"
+            class="flex justify-center py-4"
+          >
             <LoadingSpinner />
           </div>
-          <div v-else-if="byRegime.length === 0" class="text-sm text-text-muted">
+          <div
+            v-else-if="byRegime.length === 0"
+            class="text-sm text-text-muted"
+          >
             No data available yet.
           </div>
           <div v-else>
@@ -218,14 +271,26 @@
               <table class="w-full text-sm">
                 <thead>
                   <tr class="text-text-muted">
-                    <th class="pb-3 text-left font-medium">Regime</th>
-                    <th class="pb-3 text-left font-medium">Total</th>
-                    <th class="pb-3 text-left font-medium">Accuracy</th>
-                    <th class="pb-3 text-left font-medium">Avg Confidence</th>
+                    <th class="pb-3 text-left font-medium">
+                      Regime
+                    </th>
+                    <th class="pb-3 text-left font-medium">
+                      Total
+                    </th>
+                    <th class="pb-3 text-left font-medium">
+                      Accuracy
+                    </th>
+                    <th class="pb-3 text-left font-medium">
+                      Avg Confidence
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="text-text-secondary">
-                  <tr v-for="r in byRegime" :key="r.regime" class="border-t border-border-subtle">
+                  <tr
+                    v-for="r in byRegime"
+                    :key="r.regime"
+                    class="border-t border-border-subtle"
+                  >
                     <td class="py-3">
                       <span
                         :class="
@@ -259,11 +324,19 @@
 
         <!-- Accuracy by Symbol -->
         <div class="card-panel p-5">
-          <h3 class="mb-4 text-sm font-semibold text-text-primary">Accuracy by Symbol</h3>
-          <div v-if="!bySymbol" class="flex justify-center py-4">
+          <h3 class="mb-4 text-sm font-semibold text-text-primary">
+            Accuracy by Symbol
+          </h3>
+          <div
+            v-if="!bySymbol"
+            class="flex justify-center py-4"
+          >
             <LoadingSpinner />
           </div>
-          <div v-else-if="bySymbol.length === 0" class="text-sm text-text-muted">
+          <div
+            v-else-if="bySymbol.length === 0"
+            class="text-sm text-text-muted"
+          >
             No data available yet.
           </div>
           <div v-else>
@@ -271,14 +344,26 @@
               <table class="w-full text-sm">
                 <thead>
                   <tr class="text-text-muted">
-                    <th class="pb-3 text-left font-medium">Symbol</th>
-                    <th class="pb-3 text-left font-medium">Signals</th>
-                    <th class="pb-3 text-left font-medium">Accuracy</th>
-                    <th class="pb-3 text-left font-medium">Avg Confidence</th>
+                    <th class="pb-3 text-left font-medium">
+                      Symbol
+                    </th>
+                    <th class="pb-3 text-left font-medium">
+                      Signals
+                    </th>
+                    <th class="pb-3 text-left font-medium">
+                      Accuracy
+                    </th>
+                    <th class="pb-3 text-left font-medium">
+                      Avg Confidence
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="text-text-secondary">
-                  <tr v-for="s in bySymbol" :key="s.symbol" class="border-t border-border-subtle">
+                  <tr
+                    v-for="s in bySymbol"
+                    :key="s.symbol"
+                    class="border-t border-border-subtle"
+                  >
                     <td class="py-3 font-medium">
                       {{ s.symbol }}
                     </td>
@@ -305,7 +390,9 @@
       <div v-if="activeTab === 'calibration'">
         <!-- ECE Display -->
         <div class="mb-6 card-panel p-5">
-          <h3 class="mb-4 text-sm font-semibold text-text-primary">Expected Calibration Error</h3>
+          <h3 class="mb-4 text-sm font-semibold text-text-primary">
+            Expected Calibration Error
+          </h3>
           <div class="flex items-end gap-3">
             <span
               class="text-5xl font-bold"
@@ -326,18 +413,47 @@
 
         <!-- Calibration Curve -->
         <div class="card-panel p-5">
-          <h3 class="mb-4 text-sm font-semibold text-text-primary">Calibration Curve</h3>
-          <div v-if="!calibration" class="flex justify-center py-4">
+          <h3 class="mb-4 text-sm font-semibold text-text-primary">
+            Calibration Curve
+          </h3>
+          <div
+            v-if="!calibration"
+            class="flex justify-center py-4"
+          >
             <LoadingSpinner />
           </div>
-          <div v-else-if="calibration.length === 0" class="text-sm text-text-muted">
+          <div
+            v-else-if="calibration.length === 0"
+            class="text-sm text-text-muted"
+          >
             No data available yet.
           </div>
-          <div v-else class="relative" style="height: 320px">
-            <svg :viewBox="`0 0 400 300`" class="h-full w-full">
+          <div
+            v-else
+            class="relative"
+            style="height: 320px"
+          >
+            <svg
+              :viewBox="`0 0 400 300`"
+              class="h-full w-full"
+            >
               <!-- Grid -->
-              <line x1="40" y1="20" x2="40" y2="260" stroke="currentColor" stroke-opacity="0.1" />
-              <line x1="40" y1="260" x2="380" y2="260" stroke="currentColor" stroke-opacity="0.1" />
+              <line
+                x1="40"
+                y1="20"
+                x2="40"
+                y2="260"
+                stroke="currentColor"
+                stroke-opacity="0.1"
+              />
+              <line
+                x1="40"
+                y1="260"
+                x2="380"
+                y2="260"
+                stroke="currentColor"
+                stroke-opacity="0.1"
+              />
               <line
                 x1="40"
                 y1="140"
@@ -410,11 +526,21 @@
             <table class="w-full text-sm">
               <thead>
                 <tr class="text-text-muted">
-                  <th class="pb-3 text-left font-medium">Bin</th>
-                  <th class="pb-3 text-left font-medium">Predicted</th>
-                  <th class="pb-3 text-left font-medium">Actual</th>
-                  <th class="pb-3 text-left font-medium">Error</th>
-                  <th class="pb-3 text-left font-medium">Count</th>
+                  <th class="pb-3 text-left font-medium">
+                    Bin
+                  </th>
+                  <th class="pb-3 text-left font-medium">
+                    Predicted
+                  </th>
+                  <th class="pb-3 text-left font-medium">
+                    Actual
+                  </th>
+                  <th class="pb-3 text-left font-medium">
+                    Error
+                  </th>
+                  <th class="pb-3 text-left font-medium">
+                    Count
+                  </th>
                 </tr>
               </thead>
               <tbody class="text-text-secondary">
@@ -464,10 +590,16 @@
             Compare accuracy across different prompt versions and model configurations. Data is
             stored in prompt_hash and model_version fields.
           </p>
-          <div v-if="!stats" class="flex justify-center py-8">
+          <div
+            v-if="!stats"
+            class="flex justify-center py-8"
+          >
             <LoadingSpinner />
           </div>
-          <div v-else-if="stats.total === 0" class="text-sm text-text-muted py-4">
+          <div
+            v-else-if="stats.total === 0"
+            class="text-sm text-text-muted py-4"
+          >
             No accuracy data available yet. Run the evaluation job to populate data.
           </div>
           <div v-else>

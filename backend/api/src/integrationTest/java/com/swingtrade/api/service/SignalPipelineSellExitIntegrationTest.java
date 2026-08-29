@@ -19,13 +19,17 @@ package com.swingtrade.api.service;
 import com.swingtrade.api.app.SwingTradeApiApplication;
 import com.swingtrade.api.dto.PositionResponse;
 import com.swingtrade.api.dto.TradeRequest;
+import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.OrderType;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.Trade;
 import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.SignalStore;
+import com.swingtrade.domain.store.TradeStore;
+import com.swingtrade.strategy.ExitReason;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -79,6 +83,9 @@ class SignalPipelineSellExitIntegrationTest {
     @Autowired
     private SignalStore signalStore;
 
+    @Autowired
+    private TradeStore tradeStore;
+
     @Test
     void sellSignal_forHeldPosition_actuallyClosesPositionInDb() {
         // 1. Seed candles that deterministically satisfy the exit confluence for the latest
@@ -111,7 +118,31 @@ class SignalPipelineSellExitIntegrationTest {
         signalPipeline.generatePrimarySignal(SYMBOL);
 
         // 5. Assert the real DB row for the position is now CLOSED.
-        assertThat(positionRepository.findById(positionId).orElseThrow().getStatus()).isEqualTo("CLOSED");
+        PositionEntity closedEntity = positionRepository.findById(positionId).orElseThrow();
+        assertThat(closedEntity.getStatus()).isEqualTo("CLOSED");
+
+        // 5a. Bug 1 (exit reason discarded): the persisted exitReason must be the real
+        // signal-driven reason, not a hardcoded "manual".
+        assertThat(closedEntity.getExitReason()).isEqualTo(ExitReason.SIGNAL_EXIT.name());
+
+        // 5b. Bug 3 (stale exit price): the persisted currentPrice must reflect the real
+        // market close that triggered the exit, not the never-refreshed entry price.
+        BigDecimal expectedExitPrice = candleStore.findLatestBySymbol(SYMBOL).orElseThrow().close();
+        assertThat(closedEntity.getCurrentPrice()).isEqualByComparingTo(expectedExitPrice);
+        assertThat(closedEntity.getCurrentPrice()).isNotEqualByComparingTo(entryPrice);
+
+        // 5c. Bug 2 (no Trade audit record): a closed Trade row must exist for this position,
+        // with matching entry/exit prices and reason.
+        List<Trade> trades = tradeStore.findBySymbol(SYMBOL);
+        assertThat(trades).isNotEmpty();
+        Trade trade = trades.stream()
+            .filter(t -> t.positionId().equals(positionId))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("No Trade record found for position " + positionId));
+        assertThat(trade.tradeStatus()).isNotEqualTo(Trade.TradeStatus.OPEN);
+        assertThat(trade.entryPrice()).isEqualByComparingTo(entryPrice);
+        assertThat(trade.exitPrice()).isEqualByComparingTo(expectedExitPrice);
+        assertThat(trade.exitReason()).isEqualTo(ExitReason.SIGNAL_EXIT.name());
 
         // 6. Assert a SELL signal row was persisted for TESTCO.
         List<Signal> signals = signalStore.findBySymbolOrderByDateDesc(SYMBOL);

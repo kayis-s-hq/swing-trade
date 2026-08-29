@@ -1,6 +1,9 @@
 <template>
   <slot />
-  <div v-if="error && $slots.error" class="error-boundary-error">
+  <div
+    v-if="error && $slots.error"
+    class="error-boundary-error"
+  >
     <slot name="error" />
   </div>
 </template>

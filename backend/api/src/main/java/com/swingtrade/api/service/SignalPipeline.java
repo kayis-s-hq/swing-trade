@@ -21,6 +21,7 @@ import com.swingtrade.domain.RiskCalculator;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PositionStore;
+import com.swingtrade.strategy.ExitReason;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
 import org.slf4j.Logger;
@@ -108,8 +109,9 @@ public class SignalPipeline {
             boolean held = positionStore.findBySymbol(symbol).isPresent();
             if (held) {
                 try {
-                    positionService.closePosition(symbol, "SIGNAL_EXIT");
-                    logger.info("SELL signal closed held position for {} on {} (reason=SIGNAL_EXIT)", symbol, latestDate);
+                    positionService.closePosition(symbol, ExitReason.SIGNAL_EXIT.name());
+                    logger.info("SELL signal closed held position for {} on {} (reason={})", symbol, latestDate,
+                        ExitReason.SIGNAL_EXIT.name());
                 } catch (Exception e) {
                     logger.warn("SELL signal for {} on {} failed to close held position - signal still "
                         + "persisted for audit; position remains open: {}", symbol, latestDate, e.getMessage());

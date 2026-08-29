@@ -7,7 +7,10 @@
       :class="statusColor(comp.status)"
       :title="`${key}: ${comp.status}`"
     />
-    <span class="text-xs font-medium" :class="statusColor(overallStatus)">{{ overallStatus }}</span>
+    <span
+      class="text-xs font-medium"
+      :class="statusColor(overallStatus)"
+    >{{ overallStatus }}</span>
   </div>
 </template>
 

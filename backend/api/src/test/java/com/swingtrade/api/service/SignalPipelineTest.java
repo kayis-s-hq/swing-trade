@@ -21,6 +21,7 @@ import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PositionStore;
+import com.swingtrade.strategy.ExitReason;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
 import com.swingtrade.api.dto.PositionResponse;
@@ -248,7 +249,7 @@ class SignalPipelineTest {
             when(priceActionEngine.analyze(eq(SYMBOL), anyList())).thenReturn(sellResult());
             when(positionStore.findBySymbol(SYMBOL)).thenReturn(
                     Optional.of(Position.createWithRisk(SYMBOL, BigDecimal.valueOf(100), latestDate, 10, BigDecimal.valueOf(2.0), "Entry on breakout")));
-            when(positionService.closePosition(SYMBOL, "SIGNAL_EXIT")).thenReturn(new PositionResponse());
+            when(positionService.closePosition(SYMBOL, ExitReason.SIGNAL_EXIT.name())).thenReturn(new PositionResponse());
             stubSavedSignal(Signal.SignalType.SELL);
 
             pipeline.generatePrimarySignal(SYMBOL);
@@ -272,7 +273,7 @@ class SignalPipelineTest {
             when(priceActionEngine.analyze(eq(SYMBOL), anyList())).thenReturn(sellResult());
             when(positionStore.findBySymbol(SYMBOL)).thenReturn(
                     Optional.of(Position.createWithRisk(SYMBOL, BigDecimal.valueOf(100), latestDate, 10, BigDecimal.valueOf(2.0), "Entry on breakout")));
-            when(positionService.closePosition(SYMBOL, "SIGNAL_EXIT")).thenThrow(new RuntimeException("db down"));
+            when(positionService.closePosition(SYMBOL, ExitReason.SIGNAL_EXIT.name())).thenThrow(new RuntimeException("db down"));
             stubSavedSignal(Signal.SignalType.SELL);
 
             assertThatCode(() -> pipeline.generatePrimarySignal(SYMBOL)).doesNotThrowAnyException();
