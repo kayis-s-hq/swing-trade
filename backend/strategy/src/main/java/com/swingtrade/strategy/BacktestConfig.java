@@ -16,6 +16,11 @@ package com.swingtrade.strategy;
  *                              STOP_LOSS/TARGET_HIT, before TREND_BREAK/TIME_STOP). Defaults to
  *                              {@code false} so existing backtest behavior is unchanged unless a
  *                              caller opts in.
+ * @param trendBreakStreakDays  consecutive closes below EMA20 required to trigger a TREND_BREAK
+ *                              exit (checked after STOP_LOSS/TARGET_HIT/SIGNAL_EXIT, before
+ *                              TIME_STOP). Set higher than {@code maxHoldingDays} to effectively
+ *                              disable it and let positions run to STOP_LOSS/TARGET_HIT/TIME_STOP
+ *                              only.
  */
 public record BacktestConfig(
     double slippagePct,
@@ -26,14 +31,15 @@ public record BacktestConfig(
     double atrMultiplierStop,
     double rewardRiskRatio,
     int maxHoldingDays,
-    boolean signalExitEnabled
+    boolean signalExitEnabled,
+    int trendBreakStreakDays
 ) {
 
     public static BacktestConfig defaults() {
         return new BacktestConfig(
                 0.001, 20.0, 0.01,
                 500_000.0, 5, 2.0,
-                2.5, 20, false
+                2.5, 20, false, 2
         );
     }
 }

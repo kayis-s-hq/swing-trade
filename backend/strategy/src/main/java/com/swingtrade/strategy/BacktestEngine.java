@@ -229,7 +229,7 @@ public class BacktestEngine {
                 } else if (config.signalExitEnabled() && signalExitTriggered) {
                     reason = ExitReason.SIGNAL_EXIT;
                     exitPrice = close;
-                } else if (streak >= 2) {
+                } else if (streak >= config.trendBreakStreakDays()) {
                     reason = ExitReason.TREND_BREAK;
                     exitPrice = close;
                 } else if ((i - open.entryIndex()) >= config.maxHoldingDays()) {

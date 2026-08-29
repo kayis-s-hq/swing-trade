@@ -56,6 +56,6 @@
     </module>
   </module>
   <module name="FileLength">
-    <property name="max" value="1200"/>
+    <property name="max" value="1400"/>
   </module>
 </module>

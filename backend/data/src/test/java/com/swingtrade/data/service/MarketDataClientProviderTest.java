@@ -28,9 +28,9 @@ class MarketDataClientProviderTest {
     }
 
     @Test
-    void defaultsToFyers() {
-        assertThat(provider.getActiveBroker()).isEqualTo("fyers");
-        assertThat(provider.getClient()).isSameAs(fyers);
+    void defaultsToYahoo() {
+        assertThat(provider.getActiveBroker()).isEqualTo("yahoo");
+        assertThat(provider.getClient()).isSameAs(yahoo);
     }
 
     @Test

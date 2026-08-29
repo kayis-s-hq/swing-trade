@@ -197,7 +197,7 @@ class BacktestEngineTest {
             appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
             stub(candles);
 
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 5, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 5, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).isNotEmpty();
@@ -214,7 +214,7 @@ class BacktestEngineTest {
             appendCandle(candles, entry, entry, entry.multiply(BigDecimal.valueOf(0.75)), entry.multiply(BigDecimal.valueOf(0.80)), 1_000_000L);
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).hasSize(1);
@@ -232,7 +232,7 @@ class BacktestEngineTest {
             appendCandle(candles, entry, entry.multiply(BigDecimal.valueOf(1.60)), entry, entry.multiply(BigDecimal.valueOf(1.50)), 1_000_000L);
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).hasSize(1);
@@ -249,7 +249,7 @@ class BacktestEngineTest {
             appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 5, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 5, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).hasSize(1);
@@ -271,7 +271,7 @@ class BacktestEngineTest {
             stub(candles);
             // Huge ATR multiplier pushes the stop far below entry so the down-days can never
             // trip STOP_LOSS first; this isolates the trend-break rule.
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 100.0, 2.5, 20, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 100.0, 2.5, 20, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).hasSize(1);
@@ -290,7 +290,7 @@ class BacktestEngineTest {
             appendFlatCandles(candles, 3, entry, 2_000_000L);
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 3, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 3, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).hasSize(1);
@@ -304,7 +304,7 @@ class BacktestEngineTest {
             appendFlatCandles(candles, 3, entryPrice(candles), 1_000_000L);
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 3, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 3, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             BacktestTrade trade = result.trades().get(0);
@@ -326,7 +326,7 @@ class BacktestEngineTest {
             appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
             stub(candles);
 
-            BacktestConfig config = new BacktestConfig(0.005, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 5, false);
+            BacktestConfig config = new BacktestConfig(0.005, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 5, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).isNotEmpty();
@@ -344,7 +344,7 @@ class BacktestEngineTest {
             appendCandle(candles, entry, entry.multiply(BigDecimal.valueOf(1.60)), entry, entry.multiply(BigDecimal.valueOf(1.50)), 1_000_000L);
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 20.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false);
+            BacktestConfig config = new BacktestConfig(0.0, 20.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).hasSize(1);
@@ -364,7 +364,7 @@ class BacktestEngineTest {
             appendFlatCandles(candles, 1, entry, 1_000_000L);
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).hasSize(1);
@@ -420,7 +420,7 @@ class BacktestEngineTest {
             }
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.totalTrades()).isGreaterThan(2);
@@ -436,7 +436,7 @@ class BacktestEngineTest {
             appendFlatCandles(candles, 10, entryPrice(candles), 1_000_000L);
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 3, false);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 3, false, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).isNotEmpty();
@@ -461,7 +461,7 @@ class BacktestEngineTest {
             stub(candles);
             // Huge atrMultiplierStop/rewardRiskRatio so STOP_LOSS/TARGET_HIT can never preempt —
             // isolates the signal-driven exit rule, same technique as trendBreakExit.
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 100.0, 100.0, 20, true);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 100.0, 100.0, 20, true, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).hasSize(1);
@@ -484,7 +484,7 @@ class BacktestEngineTest {
             }
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 100.0, 100.0, 20, true);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 100.0, 100.0, 20, true, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).isNotEmpty();
@@ -503,7 +503,7 @@ class BacktestEngineTest {
             appendCandle(candles, day1Close, day1Close.multiply(BigDecimal.valueOf(1.001)), day2Close.multiply(BigDecimal.valueOf(0.99)), day2Close, 1_000_000L);
 
             stub(candles);
-            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 100.0, 2.5, 20, true);
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 100.0, 2.5, 20, true, 2);
             BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
 
             assertThat(result.trades()).hasSize(1);

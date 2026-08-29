@@ -242,9 +242,9 @@ public class SentimentAccuracyService {
 
     private boolean isCorrect(String score, String truth) {
         if (score == null || truth == null) return false;
-        return ("POSITIVE".equals(score) && "UP".equals(truth))
-            || ("NEGATIVE".equals(score) && "DOWN".equals(truth))
-            || ("NEUTRAL".equals(score) && "FLAT".equals(truth));
+        return "POSITIVE".equals(score) && "UP".equals(truth)
+            || "NEGATIVE".equals(score) && "DOWN".equals(truth)
+            || "NEUTRAL".equals(score) && "FLAT".equals(truth);
     }
 
     // Inner record types — kept in data module to avoid circular dependency with api module

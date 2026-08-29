@@ -15,8 +15,6 @@ import com.swingtrade.llm.SentimentType;
 import com.swingtrade.llm.client.LlmClient;
 import com.swingtrade.llm.config.SentimentPromptLoader;
 import com.swingtrade.llm.config.LlmProperties;
-import com.swingtrade.llm.service.LlmClientProvider;
-import com.swingtrade.llm.service.LlmServerManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

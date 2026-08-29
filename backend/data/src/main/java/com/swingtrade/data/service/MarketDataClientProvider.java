@@ -30,8 +30,9 @@ public class MarketDataClientProvider {
     public MarketDataClientProvider(Map<String, MarketDataClient> clients, AppSettingsService appSettingsService) {
         this.clients = normalizeClientNames(clients);
         this.appSettingsService = appSettingsService;
-        String configuredBroker = appSettingsService.get(SELECTED_BROKER_SETTING, FYERS);
-        this.activeBroker = new AtomicReference<>(this.clients.containsKey(configuredBroker) ? configuredBroker : FYERS);
+        String configuredBroker = appSettingsService.get(SELECTED_BROKER_SETTING, "yahoo");
+        this.activeBroker = new AtomicReference<>(this.clients.containsKey(configuredBroker)
+            ? configuredBroker : "yahoo");
         logger.info("MarketDataClientProvider initialized with: {}", this.clients.keySet());
         logger.info("Active market data provider: {}", activeBroker.get());
     }
@@ -40,7 +41,7 @@ public class MarketDataClientProvider {
     public MarketDataClientProvider(Map<String, MarketDataClient> clients) {
         this.clients = normalizeClientNames(clients);
         this.appSettingsService = null;
-        this.activeBroker = new AtomicReference<>(this.clients.containsKey(FYERS) ? FYERS : "yahoo");
+        this.activeBroker = new AtomicReference<>(this.clients.containsKey("yahoo") ? "yahoo" : FYERS);
     }
 
     private static Map<String, MarketDataClient> normalizeClientNames(Map<String, MarketDataClient> clients) {
