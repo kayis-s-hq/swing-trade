@@ -1,0 +1,292 @@
+/*
+ * Copyright 2026 Swing Trade
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.swingtrade.api.service;
+
+import com.swingtrade.api.dto.PositionResponse;
+import com.swingtrade.api.dto.TradeRequest;
+import com.swingtrade.data.entity.PositionEntity;
+import com.swingtrade.data.repository.PositionRepository;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.Trade;
+import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.domain.service.OrderService;
+import com.swingtrade.domain.service.TradingService;
+import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.PositionStore;
+import com.swingtrade.domain.store.StockStore;
+import com.swingtrade.domain.store.TradeStore;
+import com.swingtrade.strategy.ExitReason;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/**
+ * Unit tests for PositionService covering the SELL/exit position-close path,
+ * specifically:
+ * <ul>
+ *   <li>closePosition() sources the exit price from the latest OHLCV candle
+ *       rather than trusting a possibly-stale {@code currentPrice} field</li>
+ *   <li>closePosition()/createPosition() persist a {@link Trade} audit record
+ *       for every position open/close</li>
+ * </ul>
+ */
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
+class PositionServiceTest {
+
+    @Mock
+    private PositionStore positionStore;
+
+    @Mock
+    private StockStore stockStore;
+
+    @Mock
+    private PositionRepository positionRepository;
+
+    @Mock
+    private TradingService tradingService;
+
+    @Mock
+    private OrderService orderService;
+
+    @Mock
+    private CandleStore candleStore;
+
+    @Mock
+    private TradeStore tradeStore;
+
+    private PositionService positionService;
+
+    @BeforeEach
+    void setUp() {
+        positionService = new PositionService(positionStore, stockStore, positionRepository,
+                tradingService, orderService, candleStore, tradeStore);
+    }
+
+    private Position makeDomainPosition(Long id, String symbol, BigDecimal entryPrice,
+                                         BigDecimal currentPrice, String positionId) {
+        return new Position(
+                id, "PAPER", symbol, entryPrice, LocalDate.now(), 10,
+                new BigDecimal("430"), new BigDecimal("500"),
+                PositionStatus.OPEN, "Test", currentPrice,
+                positionId, null, null,
+                TradeDirection.LONG, entryPrice,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                LocalDateTime.now(), null, null, null);
+    }
+
+    private PositionEntity makePositionEntity(Long id, String symbol, BigDecimal entryPrice,
+                                               BigDecimal currentPrice, String positionId,
+                                               String entryReason) {
+        PositionEntity e = new PositionEntity();
+        e.setId(id);
+        e.setSymbol(symbol);
+        e.setEntryPrice(entryPrice);
+        e.setEntryDate(LocalDate.now());
+        e.setQuantity(10);
+        e.setStatus("OPEN");
+        e.setEntryReason(entryReason);
+        e.setCurrentPrice(currentPrice);
+        e.setPositionId(positionId);
+        return e;
+    }
+
+    // ==================== closePosition ====================
+
+    @Nested
+    class ClosePosition {
+
+        @Test
+        void usesLatestCandleClose_notStaleCurrentPrice() {
+            // Given: a held WIPRO position whose DB currentPrice is stale (still == entryPrice),
+            // but the real market has since moved: the latest OHLCV candle closed at 585.
+            Position domainPos = makeDomainPosition(10L, "WIPRO", new BigDecimal("450"),
+                    new BigDecimal("450"), "POS_00000010");
+            when(positionStore.findBySymbol("WIPRO")).thenReturn(Optional.of(domainPos));
+
+            PositionEntity entity = makePositionEntity(10L, "WIPRO", new BigDecimal("450"),
+                    new BigDecimal("450"), "POS_00000010", "Test");
+            when(positionRepository.findById(10L)).thenReturn(Optional.of(entity));
+            when(positionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            OhlcvCandle latestCandle = OhlcvCandle.of("WIPRO", LocalDate.now(),
+                    new BigDecimal("580"), new BigDecimal("590"),
+                    new BigDecimal("575"), new BigDecimal("585"), 100000L);
+            when(candleStore.findLatestBySymbol("WIPRO")).thenReturn(Optional.of(latestCandle));
+
+            when(tradingService.findOpenPositionBySymbol("WIPRO")).thenReturn(domainPos);
+            when(tradeStore.findOpenByPositionId(10L)).thenReturn(Optional.empty());
+
+            // When
+            PositionResponse response = positionService.closePosition("WIPRO", ExitReason.SIGNAL_EXIT.name());
+
+            // Then: the engine close and the persisted entity both use the fresh candle
+            // close (585), not the stale currentPrice field (450)
+            verify(tradingService).closePosition(eq(10L), eq(new BigDecimal("585")), eq(ExitReason.SIGNAL_EXIT.name()));
+            verify(positionRepository).save(argThat(e ->
+                    e.getCurrentPrice().compareTo(new BigDecimal("585")) == 0));
+            assertThat(response).isNotNull();
+        }
+
+        @Test
+        void fallsBackToCurrentPrice_whenNoCandleAvailable() {
+            // Given: no candle in the store — fall back to the existing behavior
+            Position domainPos = makeDomainPosition(11L, "TCS", new BigDecimal("3500"),
+                    new BigDecimal("3550"), "POS_00000011");
+            when(positionStore.findBySymbol("TCS")).thenReturn(Optional.of(domainPos));
+
+            PositionEntity entity = makePositionEntity(11L, "TCS", new BigDecimal("3500"),
+                    new BigDecimal("3550"), "POS_00000011", "Test");
+            when(positionRepository.findById(11L)).thenReturn(Optional.of(entity));
+            when(positionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(candleStore.findLatestBySymbol("TCS")).thenReturn(Optional.empty());
+            when(tradingService.findOpenPositionBySymbol("TCS")).thenReturn(domainPos);
+            when(tradeStore.findOpenByPositionId(11L)).thenReturn(Optional.empty());
+
+            // When
+            positionService.closePosition("TCS", ExitReason.MANUAL.name());
+
+            // Then: falls back to entity.getCurrentPrice()
+            verify(positionRepository).save(argThat(e ->
+                    e.getCurrentPrice().compareTo(new BigDecimal("3550")) == 0));
+        }
+
+        @Test
+        void persistsClosedTradeRecord_whenOpenTradeExists() {
+            // Given
+            Position domainPos = makeDomainPosition(10L, "WIPRO", new BigDecimal("450"),
+                    new BigDecimal("450"), "POS_00000010");
+            when(positionStore.findBySymbol("WIPRO")).thenReturn(Optional.of(domainPos));
+
+            PositionEntity entity = makePositionEntity(10L, "WIPRO", new BigDecimal("450"),
+                    new BigDecimal("450"), "POS_00000010", "Test");
+            when(positionRepository.findById(10L)).thenReturn(Optional.of(entity));
+            when(positionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            OhlcvCandle latestCandle = OhlcvCandle.of("WIPRO", LocalDate.now(),
+                    new BigDecimal("580"), new BigDecimal("590"),
+                    new BigDecimal("575"), new BigDecimal("585"), 100000L);
+            when(candleStore.findLatestBySymbol("WIPRO")).thenReturn(Optional.of(latestCandle));
+            when(tradingService.findOpenPositionBySymbol("WIPRO")).thenReturn(domainPos);
+
+            Trade openTrade = Trade.open(10L, "WIPRO", LocalDate.now().minusDays(3),
+                    new BigDecimal("450"), 10, "Test", BigDecimal.ZERO, TradeDirection.LONG);
+            when(tradeStore.findOpenByPositionId(10L)).thenReturn(Optional.of(openTrade));
+            when(tradeStore.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            // When
+            positionService.closePosition("WIPRO", ExitReason.SIGNAL_EXIT.name());
+
+            // Then: a Trade audit record is closed out with the real exit price/reason
+            verify(tradeStore).save(argThat(t ->
+                    t.tradeStatus() != Trade.TradeStatus.OPEN
+                    && t.exitPrice() != null
+                    && t.exitPrice().compareTo(new BigDecimal("585")) == 0
+                    && ExitReason.SIGNAL_EXIT.name().equals(t.exitReason())
+                    && t.positionId().equals(10L)));
+        }
+
+        @Test
+        void positionNotFound_returnsNullWithoutTouchingTradeStore() {
+            // Given
+            when(positionStore.findBySymbol("NOSUCH")).thenReturn(Optional.empty());
+
+            // When
+            PositionResponse response = positionService.closePosition("NOSUCH", ExitReason.MANUAL.name());
+
+            // Then
+            assertThat(response).isNull();
+            verify(tradeStore, never()).save(any());
+        }
+    }
+
+    // ==================== createPosition ====================
+
+    @Nested
+    class CreatePosition {
+
+        @Test
+        void persistsOpenTradeRecord() {
+            // Given
+            TradeRequest request = new TradeRequest("WIPRO", 10, TradeDirection.LONG, OrderType.MARKET);
+            request.setPrice(new BigDecimal("450"));
+            request.setEntryReason("Test entry");
+
+            when(stockStore.existsBySymbol("WIPRO")).thenReturn(true);
+
+            Position enginePos = makeDomainPosition(99L, "WIPRO", new BigDecimal("450"),
+                    new BigDecimal("450"), "POS_00000010");
+            // First call is the duplicate-position guard (no open position yet);
+            // subsequent calls occur after the order fills.
+            when(tradingService.findOpenPositionBySymbol("WIPRO"))
+                    .thenReturn(null, enginePos, enginePos);
+
+            Order pendingOrder = new Order();
+            pendingOrder.setOrderId("ORD1");
+            pendingOrder.setSymbol("WIPRO");
+            pendingOrder.setStatus(OrderStatus.PENDING);
+            when(orderService.createBuyOrder(eq("WIPRO"), eq(10), any(BigDecimal.class))).thenReturn(pendingOrder);
+
+            Order filledOrder = new Order();
+            filledOrder.setOrderId("ORD1");
+            filledOrder.setSymbol("WIPRO");
+            filledOrder.setStatus(OrderStatus.FILLED);
+            when(tradingService.executePendingOrder(eq("ORD1"), any(BigDecimal.class))).thenReturn(filledOrder);
+
+            PositionEntity entity = makePositionEntity(99L, "WIPRO", new BigDecimal("450"),
+                    new BigDecimal("450"), "POS_00000010", "Test entry");
+            when(positionRepository.findByPositionId("POS_00000010")).thenReturn(Optional.of(entity));
+            when(positionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(tradeStore.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            // When
+            positionService.createPosition(request);
+
+            // Then: an open Trade audit record is created alongside the position
+            verify(tradeStore).save(argThat(t ->
+                    t.tradeStatus() == Trade.TradeStatus.OPEN
+                    && t.positionId().equals(99L)
+                    && "WIPRO".equals(t.symbol())
+                    && t.entryPrice().compareTo(new BigDecimal("450")) == 0
+                    && t.quantity() == 10
+                    && t.direction() == TradeDirection.LONG));
+        }
+    }
+}

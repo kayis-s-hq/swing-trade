@@ -16,6 +16,7 @@ import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.broker.util.OptimisticLockRetryHelper;
+import com.swingtrade.strategy.ExitReason;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -229,7 +230,7 @@ public class PaperTradingStateService {
                     entity.setUnrealizedPnL(closedPos.unrealizedPnL());
                     entity.setRealizedPnL(closedPos.realizedPnL());
                     entity.setExitTime(LocalDateTime.now());
-                    entity.setExitReason("manual");
+                    entity.setExitReason(closedPos.exitReason() != null ? closedPos.exitReason() : ExitReason.MANUAL.name());
                     unifiedPositionRepo.save(entity);
                     logger.info("Closed position {} updated in unified table", positionId);
                 }

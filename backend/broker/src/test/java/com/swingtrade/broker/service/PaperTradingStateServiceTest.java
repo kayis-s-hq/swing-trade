@@ -33,6 +33,7 @@ import com.swingtrade.domain.OrderType;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.strategy.ExitReason;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -457,7 +458,7 @@ class PaperTradingStateServiceTest {
                     "POS_00000001", null, null,
                     TradeDirection.LONG, new BigDecimal("2500"),
                     BigDecimal.ZERO, new BigDecimal("1000"), BigDecimal.ZERO,
-                    LocalDateTime.now(), LocalDateTime.now(), "manual", null);
+                    LocalDateTime.now(), LocalDateTime.now(), ExitReason.MANUAL.name(), null);
 
             // When
             stateService.closePosition("POS_00000001", closedPos);
@@ -487,7 +488,7 @@ class PaperTradingStateServiceTest {
                     "POS_00000001", null, null,
                     TradeDirection.LONG, new BigDecimal("2500"),
                     BigDecimal.ZERO, new BigDecimal("1000"), BigDecimal.ZERO,
-                    LocalDateTime.now(), LocalDateTime.now(), "manual", null);
+                    LocalDateTime.now(), LocalDateTime.now(), ExitReason.MANUAL.name(), null);
 
             // When
             stateService.closePosition("POS_00000001", closedPos);
@@ -495,7 +496,39 @@ class PaperTradingStateServiceTest {
             // Then
             verify(unifiedPositionRepo).save(argThat(entity ->
                     "CLOSED".equals(entity.getStatus())
-                    && "manual".equals(entity.getExitReason())
+                    && ExitReason.MANUAL.name().equals(entity.getExitReason())
+            ));
+        }
+
+        @Test
+        void usesActualExitReason_notHardcodedManual() {
+            // Given: Existing position, closed with a real signal-driven reason
+            PositionEntity existing = makePositionEntity(
+                    1L, "WIPRO", "PAPER",
+                    new BigDecimal("450"), LocalDate.now(), 10,
+                    new BigDecimal("430"), new BigDecimal("500"), "OPEN",
+                    "Test", new BigDecimal("450"), "POS_00000001", null,
+                    "NSE", "LONG", new BigDecimal("450"),
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    LocalDateTime.now(), null, null);
+            when(unifiedPositionRepo.findByPositionId("POS_00000001")).thenReturn(Optional.of(existing));
+
+            Position closedPos = new Position(
+                    1L, "PAPER", "WIPRO",
+                    new BigDecimal("450"), LocalDate.now(), 10,
+                    new BigDecimal("430"), new BigDecimal("500"),
+                    PositionStatus.CLOSED, "Test", new BigDecimal("600"),
+                    "POS_00000001", null, null,
+                    TradeDirection.LONG, new BigDecimal("450"),
+                    BigDecimal.ZERO, new BigDecimal("1500"), BigDecimal.ZERO,
+                    LocalDateTime.now(), LocalDateTime.now(), ExitReason.SIGNAL_EXIT.name(), null);
+
+            // When
+            stateService.closePosition("POS_00000001", closedPos);
+
+            // Then: exitReason persisted is the real reason passed in, not a hardcoded "manual"
+            verify(unifiedPositionRepo).save(argThat(entity ->
+                    ExitReason.SIGNAL_EXIT.name().equals(entity.getExitReason())
             ));
         }
 
@@ -512,7 +545,7 @@ class PaperTradingStateServiceTest {
                     "POS_NONEXIST", null, null,
                     TradeDirection.LONG, new BigDecimal("2500"),
                     BigDecimal.ZERO, new BigDecimal("1000"), BigDecimal.ZERO,
-                    LocalDateTime.now(), LocalDateTime.now(), "manual", null);
+                    LocalDateTime.now(), LocalDateTime.now(), ExitReason.MANUAL.name(), null);
 
             // When
             stateService.closePosition("POS_NONEXIST", closedPos);
@@ -543,7 +576,7 @@ class PaperTradingStateServiceTest {
                     "POS_00000001", null, null,
                     TradeDirection.LONG, new BigDecimal("2500"),
                     BigDecimal.ZERO, new BigDecimal("1000"), BigDecimal.ZERO,
-                    LocalDateTime.now(), LocalDateTime.now(), "manual", null);
+                    LocalDateTime.now(), LocalDateTime.now(), ExitReason.MANUAL.name(), null);
 
             // When / Then
             assertThatThrownBy(() -> stateService.closePosition("POS_00000001", closedPos))
@@ -1049,7 +1082,7 @@ class PaperTradingStateServiceTest {
                     "POS_00000001", null, null,
                     TradeDirection.LONG, new BigDecimal("2500"),
                     BigDecimal.ZERO, new BigDecimal("1000"), BigDecimal.ZERO,
-                    LocalDateTime.now(), LocalDateTime.now(), "manual", null);
+                    LocalDateTime.now(), LocalDateTime.now(), ExitReason.MANUAL.name(), null);
 
             // When / Then
             assertThatThrownBy(() -> stateService.closePosition("POS_00000001", closedPos))

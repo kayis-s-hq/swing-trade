@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Repository interface for Trade operations.
@@ -75,6 +76,15 @@ public interface TradeRepository extends JpaRepository<TradeEntity, Long> {
      */
     @Query("SELECT t FROM TradeEntity t WHERE t.tradeStatus = 'OPEN'")
     List<TradeEntity> findAllOpenTrades();
+
+    /**
+     * Finds the open trade for a position, if one exists.
+     *
+     * @param positionId the position ID
+     * @return the open trade for the position, if any
+     */
+    @Query("SELECT t FROM TradeEntity t WHERE t.positionId = :positionId AND t.tradeStatus = 'OPEN'")
+    Optional<TradeEntity> findOpenByPositionId(@Param("positionId") Long positionId);
 
     /**
      * Finds closed trades.

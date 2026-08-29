@@ -59,17 +59,20 @@ import java.util.Map;
  * tunable there), which is why this duplication was necessary for the analysis.
  *
  * <p>Reads candles directly (read-only {@code SELECT}) from the shared dev Postgres instance
- * ({@code 192.168.0.100:5435/swingtrade_db} — same DB the live app/backtests use) for the fixed
- * 14-symbol list that appeared in {@code backend/api/reports/backtest_20260823_020004.json}, using
- * the exact same {@code BacktestConfig.defaults()} the API's {@code /api/backtest/run-all} uses, so
- * results are apples-to-apples comparable with that saved report at the 1.5x baseline. Requires
- * network access to the pi-node dev DB; will fail fast if unreachable.
+ * (same DB the live app/backtests use, via the {@code SPRING_DATASOURCE_URL} /
+ * {@code SPRING_DATASOURCE_USERNAME} / {@code SPRING_DATASOURCE_PASSWORD} environment variables —
+ * see {@code infra/env/.env} for the dev values) for the fixed 14-symbol list that appeared in
+ * {@code backend/api/reports/backtest_20260823_020004.json}, using the exact same
+ * {@code BacktestConfig.defaults()} the API's {@code /api/backtest/run-all} uses, so results are
+ * apples-to-apples comparable with that saved report at the 1.5x baseline. Requires network access
+ * to the pi-node dev DB and the three env vars above to be set; will fail fast (self-skipping via
+ * {@link Assumptions#assumeTrue}) if either is missing, or if the DB is unreachable.
  */
 class VolumeThresholdCalibrationExploration {
 
-    private static final String JDBC_URL = "jdbc:postgresql://192.168.0.100:5435/swingtrade_db";
-    private static final String JDBC_USER = "swingtrade_user";
-    private static final String JDBC_PASSWORD = "swingtrade_password";
+    private static final String JDBC_URL = System.getenv("SPRING_DATASOURCE_URL");
+    private static final String JDBC_USER = System.getenv("SPRING_DATASOURCE_USERNAME");
+    private static final String JDBC_PASSWORD = System.getenv("SPRING_DATASOURCE_PASSWORD");
 
     // Same 14 symbols as backend/api/reports/backtest_20260823_020004.json.
     private static final List<String> SYMBOLS = List.of(
@@ -90,6 +93,9 @@ class VolumeThresholdCalibrationExploration {
         Assumptions.assumeTrue(System.getenv("RUN_VOLUME_CALIBRATION") != null,
                 "Skipped by default — set RUN_VOLUME_CALIBRATION=1 to run this exploratory, "
                         + "live-DB-dependent analysis manually. See class Javadoc.");
+        Assumptions.assumeTrue(isNotBlank(JDBC_URL), "Skipped — SPRING_DATASOURCE_URL is not set.");
+        Assumptions.assumeTrue(isNotBlank(JDBC_USER), "Skipped — SPRING_DATASOURCE_USERNAME is not set.");
+        Assumptions.assumeTrue(isNotBlank(JDBC_PASSWORD), "Skipped — SPRING_DATASOURCE_PASSWORD is not set.");
 
         Map<String, List<OhlcvCandle>> candlesBySymbol = new LinkedHashMap<>();
         try (Connection conn = DriverManager.getConnection(JDBC_URL, JDBC_USER, JDBC_PASSWORD)) {
@@ -417,6 +423,10 @@ class VolumeThresholdCalibrationExploration {
 
     private static BigDecimal numToBigDecimal(Num value) {
         return (BigDecimal) value.getDelegate();
+    }
+
+    private static boolean isNotBlank(String value) {
+        return value != null && !value.isBlank();
     }
 
     private record OpenPosition(int entryIndex,

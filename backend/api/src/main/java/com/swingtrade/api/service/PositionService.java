@@ -6,17 +6,22 @@ import com.swingtrade.api.dto.RiskSummary;
 import com.swingtrade.api.dto.SectorAllocation;
 import com.swingtrade.api.dto.TradeRequest;
 import com.swingtrade.api.dto.TradeResponse;
+import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.Trade;
 import com.swingtrade.domain.service.OrderService;
 import com.swingtrade.domain.service.TradingService;
+import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PositionStore;
 import com.swingtrade.domain.store.StockStore;
+import com.swingtrade.domain.store.TradeStore;
 import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.repository.PositionRepository;
+import com.swingtrade.strategy.ExitReason;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,15 +51,20 @@ public class PositionService {
     private final PositionRepository positionRepository;
     private final TradingService tradingService;
     private final OrderService orderService;
+    private final CandleStore candleStore;
+    private final TradeStore tradeStore;
 
     public PositionService(PositionStore positionStore, StockStore stockStore,
                            PositionRepository positionRepository,
-                           TradingService tradingService, OrderService orderService) {
+                           TradingService tradingService, OrderService orderService,
+                           CandleStore candleStore, TradeStore tradeStore) {
         this.positionStore = positionStore;
         this.stockStore = stockStore;
         this.positionRepository = positionRepository;
         this.tradingService = tradingService;
         this.orderService = orderService;
+        this.candleStore = candleStore;
+        this.tradeStore = tradeStore;
     }
 
     /**
@@ -223,8 +233,14 @@ public class PositionService {
         }
 
         PositionEntity entity = entityOpt.get();
-        BigDecimal exitPrice = entity.getCurrentPrice() != null ? entity.getCurrentPrice() : entity.getEntryPrice();
-        String reason = exitReason != null ? exitReason : "manual_close";
+        // Prefer the latest ingested OHLCV close as the exit price: entity.getCurrentPrice()
+        // is only refreshed by PaperTradingMonitorService's EOD (15:30 IST) cron, so a
+        // signal-triggered close at any other time would otherwise persist a stale price
+        // (in the worst case, the never-updated entry price) instead of the real market price.
+        BigDecimal exitPrice = candleStore.findLatestBySymbol(symbol)
+            .map(OhlcvCandle::close)
+            .orElseGet(() -> entity.getCurrentPrice() != null ? entity.getCurrentPrice() : entity.getEntryPrice());
+        String reason = exitReason != null ? exitReason : ExitReason.MANUAL.name();
 
         // Close in engine first (updates portfolio capital, calculates P&L)
         try {
@@ -245,6 +261,13 @@ public class PositionService {
         entity.setCurrentPrice(exitPrice);
         entity.setUpdatedAt(LocalDateTime.now());
         PositionEntity savedEntity = positionRepository.save(entity);
+
+        // Close out the audit-trail Trade record opened at entry, if one exists.
+        tradeStore.findOpenByPositionId(entity.getId()).ifPresentOrElse(
+            openTrade -> tradeStore.save(Trade.close(openTrade, LocalDate.now(), exitPrice, reason)),
+            () -> logger.warn("No open Trade record found for position {} ({}) — skipping trade audit close",
+                entity.getId(), symbol)
+        );
 
         return convertToResponse(savedEntity);
     }
@@ -342,6 +365,18 @@ public class PositionService {
         PositionEntity savedEntity = positionRepository.save(entity);
         logger.info("Position for symbol: {} at price: {} (engine position: {})",
             request.getSymbol(), entryPrice, positionId[0]);
+
+        // Open an audit-trail Trade record for this position (closed out later in closePosition()).
+        tradeStore.save(Trade.open(
+            savedEntity.getId(),
+            savedEntity.getSymbol(),
+            savedEntity.getEntryDate(),
+            savedEntity.getEntryPrice(),
+            savedEntity.getQuantity(),
+            savedEntity.getEntryReason(),
+            BigDecimal.ZERO,
+            request.getDirection()
+        ));
 
         return convertToResponse(savedEntity);
     }
