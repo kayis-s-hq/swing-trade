@@ -23,7 +23,7 @@ public class AppSettingEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(nullable = false, length = 64, unique = true)
     private String key;

@@ -9,7 +9,6 @@ import io.github.resilience4j.timelimiter.TimeLimiter;
 import io.github.resilience4j.bulkhead.BulkheadRegistry;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
-import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

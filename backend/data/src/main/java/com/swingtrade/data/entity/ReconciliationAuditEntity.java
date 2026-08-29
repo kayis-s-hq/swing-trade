@@ -1,6 +1,12 @@
 package com.swingtrade.data.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -21,8 +27,12 @@ public class ReconciliationAuditEntity {
     protected ReconciliationAuditEntity() {}
     public ReconciliationAuditEntity(String symbol, LocalDate fromDate, LocalDate toDate, String status,
                                      int missingCount, int insertedCount, int invalidStoredRemovedCount) {
-        this.symbol = symbol; this.fromDate = fromDate; this.toDate = toDate; this.status = status;
-        this.missingCount = missingCount; this.insertedCount = insertedCount;
+        this.symbol = symbol;
+        this.fromDate = fromDate;
+        this.toDate = toDate;
+        this.status = status;
+        this.missingCount = missingCount;
+        this.insertedCount = insertedCount;
         this.invalidStoredRemovedCount = invalidStoredRemovedCount;
     }
 

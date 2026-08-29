@@ -25,7 +25,7 @@ public class OhlcvCandleEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(nullable = false, length = 10)
     private String symbol;

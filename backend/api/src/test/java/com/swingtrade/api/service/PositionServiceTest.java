@@ -224,6 +224,45 @@ class PositionServiceTest {
         }
 
         @Test
+        void engineMissingFallback_stillPersistsRealizedPnLAndExitReason() {
+            // Given: no engine-side position (e.g. persisted without engine linkage) -
+            // tradingService.closePosition() is never called, so nothing else computes
+            // realizedPnL/exitReason/exitTime. The DB-only fallback must compute them
+            // itself, or this close silently persists with realizedPnL=0.00 and no
+            // exit reason (the exact bad state seen in production).
+            Position domainPos = makeDomainPosition(12L, "INFY", new BigDecimal("1500"),
+                    new BigDecimal("1500"), "POS_00000012");
+            when(positionStore.findBySymbol("INFY")).thenReturn(Optional.of(domainPos));
+
+            PositionEntity entity = makePositionEntity(12L, "INFY", new BigDecimal("1500"),
+                    new BigDecimal("1500"), "POS_00000012", "Test");
+            entity.setDirection("LONG");
+            when(positionRepository.findById(12L)).thenReturn(Optional.of(entity));
+            when(positionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            OhlcvCandle latestCandle = OhlcvCandle.of("INFY", LocalDate.now(),
+                    new BigDecimal("1520"), new BigDecimal("1540"),
+                    new BigDecimal("1510"), new BigDecimal("1530"), 50000L);
+            when(candleStore.findLatestBySymbol("INFY")).thenReturn(Optional.of(latestCandle));
+
+            when(tradingService.findOpenPositionBySymbol("INFY")).thenReturn(null); // no engine position
+            when(tradeStore.findOpenByPositionId(12L)).thenReturn(Optional.empty());
+
+            // When
+            positionService.closePosition("INFY", ExitReason.MANUAL.name());
+
+            // Then: engine.closePosition() was never called...
+            verify(tradingService, never()).closePosition(any(), any(), any());
+            // ...but the DB entity still carries a real P&L and exit reason:
+            // (1530 - 1500) * 10 = 300
+            verify(positionRepository).save(argThat(e ->
+                    e.getRealizedPnL() != null
+                    && e.getRealizedPnL().compareTo(new BigDecimal("300")) == 0
+                    && ExitReason.MANUAL.name().equals(e.getExitReason())
+                    && e.getExitTime() != null));
+        }
+
+        @Test
         void positionNotFound_returnsNullWithoutTouchingTradeStore() {
             // Given
             when(positionStore.findBySymbol("NOSUCH")).thenReturn(Optional.empty());
@@ -257,6 +296,7 @@ class PositionServiceTest {
             // subsequent calls occur after the order fills.
             when(tradingService.findOpenPositionBySymbol("WIPRO"))
                     .thenReturn(null, enginePos, enginePos);
+            when(tradingService.calculateEntryCommission(10)).thenReturn(new BigDecimal("0.50"));
 
             Order pendingOrder = new Order();
             pendingOrder.setOrderId("ORD1");
@@ -286,7 +326,50 @@ class PositionServiceTest {
                     && "WIPRO".equals(t.symbol())
                     && t.entryPrice().compareTo(new BigDecimal("450")) == 0
                     && t.quantity() == 10
-                    && t.direction() == TradeDirection.LONG));
+                    && t.direction() == TradeDirection.LONG
+                    // Regression: entry commission used to be hardcoded to ZERO instead
+                    // of coming from the engine's own rate.
+                    && t.fees().compareTo(new BigDecimal("0.50")) == 0));
+        }
+    }
+
+    // ==================== getPositionStats ====================
+
+    @Nested
+    class GetPositionStats {
+
+        private Position closedPosition(PositionStatus status, BigDecimal realizedPnL) {
+            return new Position(
+                    1L, "PAPER", "TEST", new BigDecimal("100"), LocalDate.now(), 10,
+                    new BigDecimal("90"), new BigDecimal("120"),
+                    status, "Test", new BigDecimal("100"),
+                    "POS_X", null, null,
+                    TradeDirection.LONG, new BigDecimal("100"),
+                    BigDecimal.ZERO, realizedPnL, BigDecimal.ZERO,
+                    LocalDateTime.now(), LocalDateTime.now(), "reason", null);
+        }
+
+        @Test
+        void countsStoppedOutAndTargetHit_bySameStatusItAlreadyQueries() {
+            // Regression: getPositionStats() used to hardcode setStoppedOut(0) /
+            // setTargetHit(0) despite already fetching positions by exactly these
+            // statuses a few lines above - the counts must reflect what was queried.
+            when(positionStore.findAllOpen()).thenReturn(java.util.List.of());
+            when(positionStore.findByStatus(PositionStatus.CLOSED)).thenReturn(java.util.List.of(
+                    closedPosition(PositionStatus.CLOSED, new BigDecimal("50"))));
+            when(positionStore.findByStatus(PositionStatus.STOPPED)).thenReturn(java.util.List.of(
+                    closedPosition(PositionStatus.STOPPED, new BigDecimal("-30")),
+                    closedPosition(PositionStatus.STOPPED, new BigDecimal("-10"))));
+            when(positionStore.findByStatus(PositionStatus.TARGET_HIT)).thenReturn(java.util.List.of(
+                    closedPosition(PositionStatus.TARGET_HIT, new BigDecimal("80"))));
+            when(tradingService.getTotalUnrealizedPnL()).thenReturn(BigDecimal.ZERO);
+            when(tradingService.getTotalRealizedPnL()).thenReturn(BigDecimal.ZERO);
+
+            var stats = positionService.getPositionStats();
+
+            assertThat(stats.getStoppedOut()).isEqualTo(2);
+            assertThat(stats.getTargetHit()).isEqualTo(1);
+            assertThat(stats.getClosedPositions()).isEqualTo(4);
         }
     }
 }

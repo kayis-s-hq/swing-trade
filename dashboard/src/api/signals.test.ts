@@ -193,6 +193,28 @@ describe('generateAllSignalsStream', () => {
     expect(error.message).not.toContain('SyntaxError')
   })
 
+  it('accepts null signal fields on non-signal progress events', async () => {
+    fetchMock.mockResolvedValueOnce(
+      sseResponse(
+        [
+          'event: progress',
+          'data: {"eventType":"STARTED","status":"PROCESSING","message":"Starting","symbol":null,"signal":null,"current":0,"total":1}',
+          '',
+          'event: progress',
+          'data: {"eventType":"COMPLETE","status":"DONE","message":"Done","symbol":null,"signal":null,"current":1,"total":1}',
+          '',
+          '',
+        ].join('\n')
+      )
+    )
+
+    const events = await collect<SignalGenerationProgress>(generateAllSignalsStream())
+
+    expect(events).toHaveLength(2)
+    expect(events[0]?.eventType).toBe('STARTED')
+    expect(events[1]?.eventType).toBe('COMPLETE')
+  })
+
   it('rejects a stream that closes before the COMPLETE terminal payload', async () => {
     fetchMock.mockResolvedValueOnce(
       sseResponse(

@@ -45,6 +45,120 @@ class BacktestEngineTest {
             new ObjectMapper(), "target/test-reports");
     }
 
+    // -----------------------------------------------------------------------
+    // Test fixtures
+    // -----------------------------------------------------------------------
+
+    private void stub(List<OhlcvCandle> chronologicalCandles) {
+        List<OhlcvCandle> descending = new ArrayList<>(chronologicalCandles);
+        Collections.reverse(descending);
+        when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 1000)).thenReturn(descending);
+    }
+
+    /**
+     * Builds a 301-candle chronological series: a 2-up/1-down zigzag uptrend (keeps RSI in the
+     * 50-65 band) whose volume is constant everywhere except a final volume+high-proximity bump,
+     * which is the only day meeting all 4 entry rules, followed by one more "entry execution"
+     * day whose open equals the bump's close (used with slippagePct=0.0 in tests as the exact
+     * entry price).
+     */
+    private List<OhlcvCandle> buildEntrySetupCandles() {
+        List<OhlcvCandle> candles = buildZigzagUptrendCandles(299, 100.0, 0.5, 0.75, 1_000_000L);
+        OhlcvCandle lastZigzag = candles.get(candles.size() - 1);
+        OhlcvCandle bump = buildFinalCandle(lastZigzag, 1.005, 2_000_000L);
+        candles.add(bump);
+
+        BigDecimal bumpClose = bump.close();
+        appendCandle(candles, bumpClose, bumpClose.multiply(BigDecimal.valueOf(1.001)),
+            bumpClose.multiply(BigDecimal.valueOf(0.999)), bumpClose, 1_000_000L);
+        return candles;
+    }
+
+    /** The next-day-open entry price used with slippagePct=0.0 (equal to the entry day's open). */
+    private BigDecimal entryPrice(List<OhlcvCandle> candlesFromBuildEntrySetup) {
+        return candlesFromBuildEntrySetup.get(300).open();
+    }
+
+    private void appendFlatCandles(List<OhlcvCandle> candles, int count, BigDecimal price, long volume) {
+        for (int i = 0; i < count; i++) {
+            appendCandle(candles, price, price, price, price, volume);
+        }
+    }
+
+    private void appendCandle(List<OhlcvCandle> candles, BigDecimal open, BigDecimal high,
+                               BigDecimal low, BigDecimal close, long volume) {
+        OhlcvCandle previous = candles.get(candles.size() - 1);
+        OhlcvCandle candle = OhlcvCandle.of(SYMBOL, previous.date().plusDays(1), open, high, low, close, volume);
+        candles.add(candle);
+    }
+
+    private List<OhlcvCandle> buildTrendingCandles(int count, double startPrice, double dailyDriftPercent, long volume) {
+        List<OhlcvCandle> candles = new ArrayList<>();
+        double price = startPrice;
+        LocalDate date = LocalDate.of(2024, 1, 1);
+        for (int i = 0; i < count; i++) {
+            double close = price * (1 + dailyDriftPercent / 100.0);
+            double open = price;
+            double high = Math.max(open, close) * 1.001;
+            double low = Math.min(open, close) * 0.999;
+
+            OhlcvCandle candle = OhlcvCandle.of(SYMBOL, date,
+                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
+                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
+
+            candles.add(candle);
+            price = close;
+            date = date.plusDays(1);
+        }
+        return candles;
+    }
+
+    private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
+                                                               double upPercent, double downPercent, long volume) {
+        return buildZigzagUptrendCandles(count, startPrice, upPercent, downPercent, volume, LocalDate.of(2024, 1, 1));
+    }
+
+    /**
+     * Overload accepting an explicit start date, so callers that chain multiple zigzag blocks
+     * into one chronological series (e.g. one per backtest cycle) can keep dates strictly
+     * increasing across blocks instead of every block restarting at the same hardcoded date
+     * (which ta4j's {@code BaseBarSeries} rejects as an out-of-order bar).
+     */
+    private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
+                                                               double upPercent, double downPercent, long volume,
+                                                               LocalDate startDate) {
+        List<OhlcvCandle> candles = new ArrayList<>();
+        double price = startPrice;
+        LocalDate date = startDate;
+        for (int i = 0; i < count; i++) {
+            double changePercent = (i % 3 == 2) ? -downPercent : upPercent;
+            double open = price;
+            double close = price * (1 + changePercent / 100.0);
+            double high = Math.max(open, close) * 1.001;
+            double low = Math.min(open, close) * 0.999;
+
+            OhlcvCandle candle = OhlcvCandle.of(SYMBOL, date,
+                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
+                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
+
+            candles.add(candle);
+            price = close;
+            date = date.plusDays(1);
+        }
+        return candles;
+    }
+
+    private OhlcvCandle buildFinalCandle(OhlcvCandle previous, double closeMultiplier, long volume) {
+        BigDecimal previousClose = previous.close();
+        BigDecimal close = previousClose.multiply(BigDecimal.valueOf(closeMultiplier));
+        BigDecimal high = close.multiply(BigDecimal.valueOf(1.001));
+        BigDecimal low = previousClose.multiply(BigDecimal.valueOf(0.999));
+
+        OhlcvCandle candle = OhlcvCandle.of(SYMBOL, previous.date().plusDays(1),
+            previousClose, high, low, close, volume);
+        return candle;
+    }
+
     @Nested
     class InputValidation {
 
@@ -417,117 +531,4 @@ class BacktestEngineTest {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Test fixtures
-    // -----------------------------------------------------------------------
-
-    private void stub(List<OhlcvCandle> chronologicalCandles) {
-        List<OhlcvCandle> descending = new ArrayList<>(chronologicalCandles);
-        Collections.reverse(descending);
-        when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 1000)).thenReturn(descending);
-    }
-
-    /**
-     * Builds a 301-candle chronological series: a 2-up/1-down zigzag uptrend (keeps RSI in the
-     * 50-65 band) whose volume is constant everywhere except a final volume+high-proximity bump,
-     * which is the only day meeting all 4 entry rules, followed by one more "entry execution"
-     * day whose open equals the bump's close (used with slippagePct=0.0 in tests as the exact
-     * entry price).
-     */
-    private List<OhlcvCandle> buildEntrySetupCandles() {
-        List<OhlcvCandle> candles = buildZigzagUptrendCandles(299, 100.0, 0.5, 0.75, 1_000_000L);
-        OhlcvCandle lastZigzag = candles.get(candles.size() - 1);
-        OhlcvCandle bump = buildFinalCandle(lastZigzag, 1.005, 2_000_000L);
-        candles.add(bump);
-
-        BigDecimal bumpClose = bump.close();
-        appendCandle(candles, bumpClose, bumpClose.multiply(BigDecimal.valueOf(1.001)),
-            bumpClose.multiply(BigDecimal.valueOf(0.999)), bumpClose, 1_000_000L);
-        return candles;
-    }
-
-    /** The next-day-open entry price used with slippagePct=0.0 (equal to the entry day's open). */
-    private BigDecimal entryPrice(List<OhlcvCandle> candlesFromBuildEntrySetup) {
-        return candlesFromBuildEntrySetup.get(300).open();
-    }
-
-    private void appendFlatCandles(List<OhlcvCandle> candles, int count, BigDecimal price, long volume) {
-        for (int i = 0; i < count; i++) {
-            appendCandle(candles, price, price, price, price, volume);
-        }
-    }
-
-    private void appendCandle(List<OhlcvCandle> candles, BigDecimal open, BigDecimal high,
-                               BigDecimal low, BigDecimal close, long volume) {
-        OhlcvCandle previous = candles.get(candles.size() - 1);
-        OhlcvCandle candle = OhlcvCandle.of(SYMBOL, previous.date().plusDays(1), open, high, low, close, volume);
-        candles.add(candle);
-    }
-
-    private List<OhlcvCandle> buildTrendingCandles(int count, double startPrice, double dailyDriftPercent, long volume) {
-        List<OhlcvCandle> candles = new ArrayList<>();
-        double price = startPrice;
-        LocalDate date = LocalDate.of(2024, 1, 1);
-        for (int i = 0; i < count; i++) {
-            double close = price * (1 + dailyDriftPercent / 100.0);
-            double open = price;
-            double high = Math.max(open, close) * 1.001;
-            double low = Math.min(open, close) * 0.999;
-
-            OhlcvCandle candle = OhlcvCandle.of(SYMBOL, date,
-                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
-                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
-
-            candles.add(candle);
-            price = close;
-            date = date.plusDays(1);
-        }
-        return candles;
-    }
-
-    private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
-                                                               double upPercent, double downPercent, long volume) {
-        return buildZigzagUptrendCandles(count, startPrice, upPercent, downPercent, volume, LocalDate.of(2024, 1, 1));
-    }
-
-    /**
-     * Overload accepting an explicit start date, so callers that chain multiple zigzag blocks
-     * into one chronological series (e.g. one per backtest cycle) can keep dates strictly
-     * increasing across blocks instead of every block restarting at the same hardcoded date
-     * (which ta4j's {@code BaseBarSeries} rejects as an out-of-order bar).
-     */
-    private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
-                                                               double upPercent, double downPercent, long volume,
-                                                               LocalDate startDate) {
-        List<OhlcvCandle> candles = new ArrayList<>();
-        double price = startPrice;
-        LocalDate date = startDate;
-        for (int i = 0; i < count; i++) {
-            double changePercent = (i % 3 == 2) ? -downPercent : upPercent;
-            double open = price;
-            double close = price * (1 + changePercent / 100.0);
-            double high = Math.max(open, close) * 1.001;
-            double low = Math.min(open, close) * 0.999;
-
-            OhlcvCandle candle = OhlcvCandle.of(SYMBOL, date,
-                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
-                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
-
-            candles.add(candle);
-            price = close;
-            date = date.plusDays(1);
-        }
-        return candles;
-    }
-
-    private OhlcvCandle buildFinalCandle(OhlcvCandle previous, double closeMultiplier, long volume) {
-        BigDecimal previousClose = previous.close();
-        BigDecimal close = previousClose.multiply(BigDecimal.valueOf(closeMultiplier));
-        BigDecimal high = close.multiply(BigDecimal.valueOf(1.001));
-        BigDecimal low = previousClose.multiply(BigDecimal.valueOf(0.999));
-
-        OhlcvCandle candle = OhlcvCandle.of(SYMBOL, previous.date().plusDays(1),
-            previousClose, high, low, close, volume);
-        return candle;
-    }
 }

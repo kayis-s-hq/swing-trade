@@ -4,7 +4,14 @@ import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.model.Portfolio;
-import com.swingtrade.domain.*;
+import com.swingtrade.domain.Exchange;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.OrderStatus;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.broker.service.PaperTradingStateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -24,7 +31,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 
 /**
  * Unit tests for PaperTradingEngine covering signal execution, position capacity,
@@ -1166,6 +1179,15 @@ class PaperTradingEngineTest {
 
             // Then
             assertThat(commission).isEqualByComparingTo(BigDecimal.ZERO);
+        }
+
+        @Test
+        void calculateEntryCommission_matchesPerShareRate() {
+            // Same rate as calculateCommission(Order) - used to book a real entry
+            // commission on the Trade audit record instead of a hardcoded ZERO.
+            BigDecimal commission = engine.calculateEntryCommission(100);
+
+            assertThat(commission).isEqualByComparingTo(new BigDecimal("5.00"));
         }
 
         @Test

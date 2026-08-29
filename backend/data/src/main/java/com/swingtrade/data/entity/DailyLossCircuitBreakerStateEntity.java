@@ -21,7 +21,7 @@ public class DailyLossCircuitBreakerStateEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(name = "circuit_open")
     private boolean circuitOpen = false;

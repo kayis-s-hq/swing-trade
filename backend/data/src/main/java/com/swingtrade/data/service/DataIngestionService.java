@@ -117,7 +117,11 @@ public class DataIngestionService {
             if (isNseTradingSession(candle.date()) && CandleValidator.isValid(candle)) {
                 Integer insertedResult = txTemplate.execute(status -> saveCandle(symbol, candle));
                 int inserted = insertedResult == null ? 1 : insertedResult;
-                if (inserted == 1) saved++; else skipped++;
+                if (inserted == 1) {
+                    saved++;
+                } else {
+                    skipped++;
+                }
             } else {
                 skipped++;
             }
@@ -155,6 +159,48 @@ public class DataIngestionService {
             logger.debug("Rejected invalid candle for {} on {}: {}", symbol, date, candle);
             ingestionMetrics.recordFetchFailure("unknown");
         }
+    }
+
+    /**
+     * Pull the latest completed date and repair missing sessions inside the
+     * symbol's existing history. This is intentionally separate from the
+     * multi-year backfill so the daily orchestration can close data gaps
+     * without re-downloading every historical candle on every run.
+     */
+    public String fetchLatestAndRepairGaps(String symbol, LocalDate latestDate) {
+        processSingleStock(symbol, latestDate);
+
+        Optional<OhlcvCandleEntity> earliest = candleRepository.findEarliestBySymbol(symbol);
+        if (earliest.isEmpty() || earliest.get().getDate() == null
+            || earliest.get().getDate().isAfter(latestDate)) {
+            return "latest date pulled; no historical range available for gap repair";
+        }
+
+        LocalDate fromDate = earliest.get().getDate();
+        List<LocalDate> expectedDates = getTradingDays(fromDate, latestDate);
+        if (expectedDates.isEmpty()) {
+            return "latest date pulled; no trading sessions in range";
+        }
+
+        List<OhlcvCandleEntity> existing = candleRepository.findBySymbolAndDateRange(
+            symbol, fromDate, latestDate,
+            org.springframework.data.domain.Pageable.unpaged());
+        Set<LocalDate> existingDates = existing.stream()
+            .map(OhlcvCandleEntity::getDate)
+            .filter(java.util.Objects::nonNull)
+            .collect(Collectors.toSet());
+        List<LocalDate> missingDates = expectedDates.stream()
+            .filter(date -> !existingDates.contains(date))
+            .toList();
+
+        if (missingDates.isEmpty()) {
+            return "latest date pulled; no gaps found";
+        }
+
+        // One bounded range request lets the active client repair all gaps in
+        // one call while insertIfAbsent preserves already stored candles.
+        processStockData(symbol, fromDate, latestDate);
+        return "latest date pulled; requested gap repair for " + missingDates.size() + " sessions";
     }
 
     // Upstox is unconfigured — this ingestion path is commented out (kept for future re-enablement).
@@ -382,7 +428,10 @@ public class DataIngestionService {
                 int inserts = missing.stream().mapToInt(d -> saveCandle(symbol, fetched.get(d))).sum();
                 return new int[]{inserts, deletes};
             });
-            if (counts != null) { inserted = counts[0]; removed = counts[1]; }
+            if (counts != null) {
+                inserted = counts[0];
+                removed = counts[1];
+            }
         }
         Map<String, Object> result = new HashMap<>();
         Map<LocalDate, List<OhlcvCandleEntity>> byDate = stored.stream()
@@ -392,12 +441,18 @@ public class DataIngestionService {
             .map(e -> Map.<String, Object>of("date", e.getKey(), "ids",
                 e.getValue().stream().map(OhlcvCandleEntity::getId).toList(), "count", e.getValue().size()))
             .toList();
-        result.put("symbol", symbol); result.put("from", fromDate); result.put("to", toDate);
-        result.put("expected", expected); result.put("storedDates", storedDates);
-        result.put("missing", missing); result.put("nonTradingDayDates", invalidStored);
-        result.put("invalidStored", invalidStored); result.put("duplicateGroups", duplicates);
+        result.put("symbol", symbol);
+        result.put("from", fromDate);
+        result.put("to", toDate);
+        result.put("expected", expected);
+        result.put("storedDates", storedDates);
+        result.put("missing", missing);
+        result.put("nonTradingDayDates", invalidStored);
+        result.put("invalidStored", invalidStored);
+        result.put("duplicateGroups", duplicates);
         result.put("sourceIncomplete", sourceIncomplete);
-        result.put("inserted", inserted); result.put("invalidStoredRemoved", removed);
+        result.put("inserted", inserted);
+        result.put("invalidStoredRemoved", removed);
         String quality = !duplicates.isEmpty() ? "DUPLICATE"
             : !invalidStored.isEmpty() ? "INVALID_DATE"
             : !missing.isEmpty() ? "MISSING" : "GOOD";

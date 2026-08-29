@@ -23,7 +23,7 @@ public class TradeLabel {
     private UUID id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(name = "trade_id", nullable = false)
     private Long tradeId;

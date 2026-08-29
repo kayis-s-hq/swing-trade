@@ -356,9 +356,15 @@ public class FyersServiceClient implements MarketDataClient {
         }
         return mono
             .onErrorResume(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class,
-                e -> { logger.warn("Circuit breaker open for fyers"); return Mono.empty(); })
+                e -> {
+                    logger.warn("Circuit breaker open for fyers");
+                    return Mono.empty();
+                })
             .onErrorResume(io.github.resilience4j.bulkhead.BulkheadFullException.class,
-                e -> { logger.warn("Bulkhead full for fyers"); return Mono.empty(); })
+                e -> {
+                    logger.warn("Bulkhead full for fyers");
+                    return Mono.empty();
+                })
             .block();
     }
 

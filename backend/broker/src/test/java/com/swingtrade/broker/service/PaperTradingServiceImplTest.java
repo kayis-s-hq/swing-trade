@@ -4,7 +4,6 @@ import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
-import com.swingtrade.broker.model.*;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.OrderType;

@@ -572,16 +572,6 @@ public class SentimentService {
                 uniqueCatalysts.isEmpty() ? List.of() : uniqueCatalysts);
     }
 
-    /** Headline classification result. */
-    private enum Classification { POSITIVE, NEGATIVE, NEUTRAL }
-
-    /**
-     * Result of classifying a single headline, including extracted signals.
-     */
-    private record HeadlineResult(Classification classification, List<String> extractedCatalysts, List<String> extractedFlags) {
-        static HeadlineResult of(Classification c) { return new HeadlineResult(c, List.of(), List.of()); }
-    }
-
     /**
      * Classifies a lowercase headline into POSITIVE, NEGATIVE, or NEUTRAL.
      * Uses multi-word phrases for accuracy, not just single keywords.
@@ -996,5 +986,15 @@ public class SentimentService {
      */
     NewsIngestionService getNewsIngestionService() {
         return newsIngestionService;
+    }
+
+    /** Headline classification result. */
+    private enum Classification { POSITIVE, NEGATIVE, NEUTRAL }
+
+    /**
+     * Result of classifying a single headline, including extracted signals.
+     */
+    private record HeadlineResult(Classification classification, List<String> extractedCatalysts, List<String> extractedFlags) {
+        static HeadlineResult of(Classification c) { return new HeadlineResult(c, List.of(), List.of()); }
     }
 }

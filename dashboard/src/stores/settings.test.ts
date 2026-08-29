@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const apiMocks = vi.hoisted(() => ({
+  getSettings: vi.fn(),
   getLlmSettings: vi.fn(),
   setLlmSettings: vi.fn(),
   getDiscordSettings: vi.fn(),
@@ -17,6 +18,9 @@ beforeEach(() => {
   vi.clearAllMocks()
 
   apiMocks.getLlmSettings.mockResolvedValue({ success: true, data: {} })
+  // getSettings() has responseContract: 'envelope', so apiRequest already
+  // unwraps it - the resolved value is the plain data, never {success, data}.
+  apiMocks.getSettings.mockResolvedValue({ selectedBroker: 'fyers' })
   apiMocks.getDiscordSettings.mockResolvedValue({
     success: true,
     data: { 'discord.webhook.enabled': 'false' },
@@ -105,6 +109,53 @@ describe('settings store — LLM configuration', () => {
     )
     expect(llmSettings.openaiApiKey).toBe('')
     expect(llmSettings.ollamaApiKey).toBe('')
+  })
+})
+
+describe('settings store — individual save updates', () => {
+  it('loads and saves the selected broker in the combined settings payload', async () => {
+    apiMocks.getSettings.mockResolvedValue({ selectedBroker: 'upstox' })
+    const { getSettings, loadSettings, saveSettings } = await import('./settings')
+
+    await loadSettings()
+    getSettings().discordSettings.enabled = true
+    await expect(saveSettings()).resolves.toBe(true)
+
+    expect(apiMocks.saveAllSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ broker: 'upstox' })
+    )
+  })
+
+  it('saves the complete trading configuration, including allocation', async () => {
+    const { getSettings, saveTradingConfig } = await import('./settings')
+    Object.assign(getSettings().tradingConfig, {
+      mode: 'live',
+      maxPositionSize: 25,
+      stopLoss: 4,
+      takeProfit: 20,
+      allocationPerPosition: 75000,
+    })
+
+    await expect(saveTradingConfig()).resolves.toBe(true)
+    expect(apiMocks.setTradingSettings).toHaveBeenCalledWith({
+      'trading.mode': 'live',
+      'trading.max_position_size': '25',
+      'trading.stop_loss': '4',
+      'trading.take_profit': '20',
+      'trading.allocation_per_position': '75000',
+    })
+  })
+
+  it('saves Discord updates with the enabled flag', async () => {
+    const { getSettings, saveDiscordSettings } = await import('./settings')
+    getSettings().discordSettings.webhookUrl = 'https://discord.example/webhook'
+    getSettings().discordSettings.enabled = true
+
+    await expect(saveDiscordSettings()).resolves.toBe(true)
+    expect(apiMocks.setDiscordSettings).toHaveBeenCalledWith({
+      'discord.webhook.url': 'https://discord.example/webhook',
+      'discord.webhook.enabled': 'true',
+    })
   })
 })
 

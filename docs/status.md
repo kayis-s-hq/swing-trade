@@ -4,6 +4,10 @@ Last checked: 2026-08-29 (development verification)
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
+## Current development state
+
+The development database was intentionally reset on 2026-08-29 for a clean verification run, then repopulated the same day: 10 active watchlist symbols, each backfilled with 3yr/738 candles, and one full `/api/backtest/run-all` pass (see Strategy section). Positions, trades, orders, and signals are still empty — only watchlist and candle data has been repopulated so far. The API is running in local paper-trading mode with Yahoo Finance as the active market-data client. Historical verification claims below the Strategy section still describe the earlier (now-reset) dataset and are not claims about current state.
+
 ## Data-integrity remediation
 
 - Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
@@ -20,9 +24,9 @@ Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infr
 
 ## Strategy
 
-- [ ] Backtest run on all 14 active stocks
-- [ ] Win rate > 45% on at least 8 of 14 active stocks
-- [ ] Max drawdown < 20% on portfolio
+- [x] Backtest run on all 10 active stocks — run 2026-08-29 via `POST /api/backtest/run-all?exchange=NSE` against a freshly reset dev DB, backfilled 3yr/738 candles per symbol via `POST /api/ingestion/backfill?symbol=X&years=3`. Note: the watchlist currently holds 10 active symbols, not 14 — this checklist's original "14" figure is stale relative to the current watchlist state, not a claim that 4 stocks were skipped.
+- [ ] Win rate > 45% on at least 8 of 14 active stocks — **FAIL.** Only 5 of 10 active stocks clear 45%: AXISBANK 50%, BHARTIARTL 80%, ITC 50%, SBIN 50%, WIPRO 50%. The other 5 don't: HDFCBANK 40%, ICICIBANK 37.5%, TCS 25%, INFY 20%, RELIANCE 0% (0 of 4 trades won). `overallWinRate` across all trades: 39.5%. `overallSharpeRatio`: -0.02 (essentially flat-to-negative). This is a real result on a freshly backfilled 3yr window, not a stale/partial run — the strategy does not currently clear its own bar.
+- [ ] Max drawdown < 20% on portfolio — not directly measurable from this report: `/api/backtest/run-all` returns *per-symbol* `maxDrawdownPct` (highest: RELIANCE 3.23%, ICICIBANK 2.49%, TCS 2.62%), not a portfolio-level equity-curve drawdown across concurrent positions. Every individual symbol's max drawdown is well under 20%, but that does not establish the portfolio-level number this checkbox actually asks for — no endpoint currently computes it. Needs either a dedicated portfolio-level backtest aggregation or treating this as N/A until one exists.
 - [x] Signal scanner ran today - check /api/signals/latest. Note: there is no `GET /api/scan` endpoint (doc drift) — the real live triggers are `POST /api/signals/generate-all` (price-action, dashboard-facing) and `POST /api/signals/generate` / the JobOrchestrator SIGNAL stage (`SignalPipeline.generatePrimarySignal`, the actual pilot path). Ran 2026-08-29: `/api/signals/latest` returns today's signals for all 14 active watchlist stocks.
 - [x] Manually verify 1 signal against TradingView chart — substituted a direct cross-check of computed indicators against raw `ohlcv_candles` (no BUY signal available to check, see note below): ICICIBANK's HOLD near-miss (RSI=58.20, EMA20=1424.32, EMA50=1402.63) matches the real 2-week uptrend in the candle data; only the volume-confirmation rule (11.5M vs 14.5M threshold) failed. Technicals are sane — legitimate near-miss, not a computation bug.
 - [x] Strategy consolidated: SwingTradingStrategy deprecated, PriceActionSignalEngine is the single engine (uses TA4j + DecimalNum precision)

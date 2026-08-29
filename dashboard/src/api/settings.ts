@@ -67,6 +67,7 @@ export async function testOpenAiConnection(): Promise<{ success: boolean; messag
 export async function testOllamaConnection(): Promise<{ success: boolean; message: string }> {
   return apiRequest<{ success: boolean; message: string }>('/settings/test/ollama', {
     method: 'POST',
+    timeoutMs: 130_000,
     responseContract: 'envelope',
   })
 }

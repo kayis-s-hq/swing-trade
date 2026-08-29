@@ -2,7 +2,7 @@ import { reactive } from 'vue'
 import { RuntimeAppError } from '../errors/errorClasses'
 import type { AppError } from '../errors/appError'
 
-export type RuntimeErrorSource = 'vue' | 'router' | 'boundary'
+export type RuntimeErrorSource = 'vue' | 'router' | 'boundary' | 'bootstrap'
 
 export interface RuntimeErrorContext {
   source: RuntimeErrorSource

@@ -207,9 +207,10 @@ public class PaperTradingStateService {
                     entity.setUnrealizedPnL(position.unrealizedPnL());
                     entity.setRealizedPnL(position.realizedPnL());
                     entity.setStatus(position.status() != null ? position.status().name() : "OPEN");
-                    if (position.status() != PositionStatus.OPEN) {
+                    if (position.status() != PositionStatus.OPEN && entity.getExitTime() == null) {
                         entity.setExitTime(LocalDateTime.now());
-                        entity.setExitReason("auto");
+                        entity.setExitReason(position.exitReason() != null
+                            ? position.exitReason() : ExitReason.MANUAL.name());
                     }
                 }
                 unifiedPositionRepo.save(entity);

@@ -73,17 +73,28 @@ subprojects {
     }
 
     // JaCoCo coverage threshold (80% line coverage)
-    tasks.named<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>("jacocoTestCoverageVerification") {
-        dependsOn("test")
-        violationRules {
-            rule {
-                limit {
-                    counter = "LINE"
-                    value = "COVEREDRATIO"
-                    minimum = BigDecimal("0.80")
+    val jacocoTestCoverageVerification =
+        tasks.named<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+            dependsOn("test")
+            violationRules {
+                rule {
+                    limit {
+                        counter = "LINE"
+                        value = "COVEREDRATIO"
+                        minimum = BigDecimal("0.80")
+                    }
                 }
             }
         }
+
+    // Wire the gate into `check` so it's actually enforced, not just configured.
+    // Current measured line coverage (2026-08-29) is well under 80% in every
+    // module (core 39.5%, data 22.0%, strategy 71.3%, llm 31.2%, broker 71.3%,
+    // gpuhub 2.6%, api 31.8%) - `check` fails on this today, deliberately: the
+    // gap is now visible in CI output instead of a configured-but-unenforced
+    // threshold silently doing nothing.
+    tasks.named("check") {
+        dependsOn(jacocoTestCoverageVerification)
     }
 
     // Checkstyle configuration

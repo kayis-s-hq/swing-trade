@@ -14,8 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -24,7 +22,13 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
 
 /**
  * Unit tests for PaperTradingMonitorService covering position monitoring,
@@ -106,7 +110,6 @@ class PaperTradingMonitorServiceTest {
             verify(ohlcvCandleRepository).findLatestBySymbol("RELIANCE-EQ");
             verify(ohlcvCandleRepository).save(any(OhlcvCandleEntity.class));
             verify(engine).updatePositionsFromDomain(candle);
-            verify(stateService).savePosition(position);
             verify(stateService).saveSnapshot();
             verify(stateService).savePortfolio();
         }
@@ -136,7 +139,6 @@ class PaperTradingMonitorServiceTest {
             verify(ohlcvCandleRepository, times(2)).findLatestBySymbol(anyString());
             verify(ohlcvCandleRepository, times(2)).save(any(OhlcvCandleEntity.class));
             verify(engine, times(2)).updatePositionsFromDomain(any(OhlcvCandle.class));
-            verify(stateService, times(2)).savePosition(any(Position.class));
             verify(stateService).saveSnapshot();
             verify(stateService).savePortfolio();
         }
@@ -203,8 +205,11 @@ class PaperTradingMonitorServiceTest {
         }
 
         @Test
-        void stateServiceSavesPosition() {
-            // Given: An open position
+        void doesNotDuplicatePersistence_delegatesSolelyToEngine() {
+            // Given: An open position. engine.updatePositionsFromDomain() is responsible
+            // for persisting the resulting state (open or closed) internally; the monitor
+            // must not additionally call stateService.savePosition() with its own
+            // pre-update snapshot, which would overwrite whatever the engine just wrote.
             Position position = makePosition("SBIN-EQ", PositionStatus.OPEN, new BigDecimal("700.00"));
             when(engine.getOpenPositions()).thenReturn(List.of(position));
 
@@ -217,7 +222,8 @@ class PaperTradingMonitorServiceTest {
             monitorService.monitorPositions();
 
             // Then
-            verify(stateService).savePosition(position);
+            verify(engine).updatePositionsFromDomain(candle);
+            verify(stateService, never()).savePosition(any());
         }
 
         @Test
@@ -237,7 +243,6 @@ class PaperTradingMonitorServiceTest {
 
             // Then
             verify(engine).updatePositionsFromDomain(candle);
-            verify(stateService).savePosition(position);
         }
     }
 
@@ -268,7 +273,6 @@ class PaperTradingMonitorServiceTest {
             verify(ohlcvCandleRepository, times(2)).findLatestBySymbol(anyString());
             verify(ohlcvCandleRepository, times(1)).save(any(OhlcvCandleEntity.class));
             verify(engine, times(1)).updatePositionsFromDomain(any(OhlcvCandle.class));
-            verify(stateService, times(1)).savePosition(any(Position.class));
             verify(stateService).saveSnapshot();
             verify(stateService).savePortfolio();
         }
@@ -301,8 +305,10 @@ class PaperTradingMonitorServiceTest {
         }
 
         @Test
-        void stateServiceSaveThrows_continues() {
-            // Given: One open position, stateService throws on savePosition
+        void enginePersistenceThrows_continuesToSnapshot() {
+            // Given: One open position, the engine's own persistence step fails
+            // (engine.updatePositionsFromDomain is responsible for calling
+            // stateService internally; the monitor no longer calls it directly)
             Position position = makePosition("RELIANCE-EQ", PositionStatus.OPEN, new BigDecimal("100.00"));
             when(engine.getOpenPositions()).thenReturn(List.of(position));
 
@@ -310,7 +316,7 @@ class PaperTradingMonitorServiceTest {
             OhlcvCandleEntity entity = mock(OhlcvCandleEntity.class);
             when(entity.toDomain()).thenReturn(candle);
             when(ohlcvCandleRepository.findLatestBySymbol("RELIANCE-EQ")).thenReturn(Optional.of(entity));
-            doThrow(new RuntimeException("DB error")).when(stateService).savePosition(any(Position.class));
+            doThrow(new RuntimeException("DB error")).when(engine).updatePositionsFromDomain(candle);
 
             // When
             monitorService.monitorPositions();

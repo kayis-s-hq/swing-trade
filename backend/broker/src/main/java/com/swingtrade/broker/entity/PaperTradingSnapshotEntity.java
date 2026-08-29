@@ -21,7 +21,7 @@ public class PaperTradingSnapshotEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(name = "snapshot_time")
     private LocalDateTime snapshotTime;

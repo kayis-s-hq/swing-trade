@@ -2,6 +2,7 @@ package com.swingtrade.domain;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Locale;
 
 /**
  * Represents a complete trade lifecycle from entry to exit.
@@ -155,11 +156,39 @@ public record Trade(
             trade.direction(),
             totalPnL,
             durationDays,
-            isProfit(totalPnL) ? TradeStatus.CLOSED : TradeStatus.STOPPED,
+            resolveStatus(exitReason, totalPnL),
             trade.entryReason(),
             exitReason,
             trade.fees()
         );
+    }
+
+    /**
+     * Resolves the closed trade's status from the actual exit reason where the
+     * reason names a specific mechanism (a stop-loss/target/time-stop trigger),
+     * falling back to a profit/loss split only for reasons that don't (a manual
+     * or signal-driven close has no fixed trigger to report). Without this, a
+     * losing manual close was mislabeled STOPPED and a winning stop-loss exit
+     * was mislabeled CLOSED, regardless of what actually happened - {@code core}
+     * cannot depend on {@code strategy}'s {@code ExitReason} enum, so this
+     * matches on the reason text callers pass (which includes both
+     * {@code ExitReason.name()} values and PositionManager's human-readable
+     * trigger messages).
+     */
+    private static TradeStatus resolveStatus(String exitReason, BigDecimal totalPnL) {
+        if (exitReason != null) {
+            String upper = exitReason.toUpperCase(Locale.ROOT);
+            if (upper.contains("TARGET")) {
+                return TradeStatus.TARGET_HIT;
+            }
+            if (upper.contains("TIME_STOP") || upper.contains("TIME STOP")) {
+                return TradeStatus.TIME_STOP;
+            }
+            if (upper.contains("STOP")) {
+                return TradeStatus.STOPPED;
+            }
+        }
+        return isProfit(totalPnL) ? TradeStatus.CLOSED : TradeStatus.STOPPED;
     }
 
     private static boolean isProfit(BigDecimal pnl) {

@@ -19,6 +19,8 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.eq;
 
 class DataIngestionServiceTest {
 
@@ -103,5 +105,35 @@ class DataIngestionServiceTest {
         // Then: Candles are returned
         assert result != null;
         assert result.size() == 1;
+    }
+
+    @Test
+    @DisplayName("orchestration pulls latest data and repairs gaps in existing history")
+    void fetchLatestAndRepairGapsRepairsExistingHistory() {
+        LocalDate latestDate = LocalDate.of(2026, 8, 28);
+        OhlcvCandleEntity earliest = candle("RELIANCE", LocalDate.of(2026, 8, 24));
+        List<OhlcvCandleEntity> existing = List.of(
+            earliest,
+            candle("RELIANCE", LocalDate.of(2026, 8, 26)),
+            candle("RELIANCE", latestDate));
+
+        when(candleRepository.existsBySymbolAndDate(eq("RELIANCE"), eq(latestDate))).thenReturn(true);
+        when(candleRepository.findEarliestBySymbol("RELIANCE")).thenReturn(Optional.of(earliest));
+        when(candleRepository.findBySymbolAndDateRange(eq("RELIANCE"), eq(earliest.getDate()),
+            eq(latestDate), any())).thenReturn(existing);
+        when(mockClient.fetchCandles("RELIANCE", earliest.getDate(), latestDate))
+            .thenReturn(List.of());
+
+        String summary = dataIngestionService.fetchLatestAndRepairGaps("RELIANCE", latestDate);
+
+        verify(mockClient).fetchCandles("RELIANCE", earliest.getDate(), latestDate);
+        assert summary.contains("requested gap repair for 2 sessions");
+    }
+
+    private OhlcvCandleEntity candle(String symbol, LocalDate date) {
+        OhlcvCandleEntity candle = new OhlcvCandleEntity();
+        candle.setSymbol(symbol);
+        candle.setDate(date);
+        return candle;
     }
 }

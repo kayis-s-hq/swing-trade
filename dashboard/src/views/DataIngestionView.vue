@@ -349,7 +349,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import { useAsyncData } from '../composables/useAsyncData'
 import { safeHumanMessage } from '../errors/appError'
-import { getSettings } from '../stores/settings'
+import { getSettings, loadSettings } from '../stores/settings'
 
 const settings = getSettings()
 const backendBroker = ref(settings.selectedBroker)
@@ -426,18 +426,22 @@ const syncBroker = async () => {
 const loadStatus = async () => {
   await execute(async () => {
     await syncBroker()
-    const [statusResult, fyersResult, progressResult] = await Promise.all([
+    const [statusResult, progressResult] = await Promise.all([
       getIngestionStatus(),
-      getFyersStatus(),
       getPullProgress(),
     ])
     status.value = statusResult
-    const fyersData =
-      typeof fyersResult === 'object' && fyersResult !== null && 'data' in fyersResult
-        ? fyersResult.data
-        : fyersResult
-    if (typeof fyersData === 'object' && fyersData !== null && 'connected' in fyersData) {
-      fyersConnected.value = fyersData.connected === true
+    if (needsAuth.value) {
+      const fyersResult = await getFyersStatus()
+      const fyersData =
+        typeof fyersResult === 'object' && fyersResult !== null && 'data' in fyersResult
+          ? fyersResult.data
+          : fyersResult
+      if (typeof fyersData === 'object' && fyersData !== null && 'connected' in fyersData) {
+        fyersConnected.value = fyersData.connected === true
+      }
+    } else {
+      fyersConnected.value = false
     }
     if (progressResult.status === 'running') {
       pulling.value = true
@@ -597,8 +601,9 @@ const formatDate = (dateStr: string): string => {
   }
 }
 
-onMounted(() => {
-  loadStatus()
+onMounted(async () => {
+  await loadSettings()
+  await loadStatus()
 })
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)

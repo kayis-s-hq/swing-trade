@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-import com.swingtrade.domain.TradeDirection;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,6 +21,42 @@ class TradeTest {
     private static final Integer QUANTITY = 100;
     private static final String ENTRY_REASON = "Technical breakout pattern detected";
     private static final BigDecimal FEES = BigDecimal.valueOf(10.00);
+
+    // Helper methods for test data generation
+    private Trade createTestOpenTrade(Long positionId, String symbol, BigDecimal entryPrice,
+                                      Integer quantity, String entryReason) {
+        return Trade.open(
+            positionId,
+            symbol,
+            ENTRY_DATE,
+            entryPrice,
+            quantity,
+            entryReason,
+            BigDecimal.valueOf(10.00)
+        );
+    }
+
+    private Trade createTestClosedTrade(Long id, Long positionId, String symbol, BigDecimal entryPrice,
+                                        BigDecimal exitPrice, Integer quantity, BigDecimal pnl,
+                                        int durationDays, Trade.TradeStatus status, String exitReason) {
+        return new Trade(
+            id,
+            positionId,
+            symbol,
+            ENTRY_DATE,
+            LocalDate.of(2024, 1, 20),
+            entryPrice,
+            exitPrice,
+            quantity,
+            TradeDirection.LONG,
+            pnl,
+            durationDays,
+            status,
+            ENTRY_REASON,
+            exitReason,
+            FEES
+        );
+    }
 
     @Nested
     class RequiredFields {
@@ -267,7 +302,9 @@ class TradeTest {
             assertThat(closedTrade.exitPrice()).isEqualTo(exitPrice);
             assertThat(closedTrade.quantity()).isEqualTo(QUANTITY);
             assertThat(closedTrade.totalPnL()).isEqualTo(BigDecimal.valueOf(1000.00));
-            assertThat(closedTrade.tradeStatus()).isEqualTo(Trade.TradeStatus.CLOSED);
+            // "Target reached" names the actual exit mechanism, so the status
+            // reflects that rather than a bare profit/loss split.
+            assertThat(closedTrade.tradeStatus()).isEqualTo(Trade.TradeStatus.TARGET_HIT);
             assertThat(closedTrade.entryReason()).isEqualTo(ENTRY_REASON);
             assertThat(closedTrade.exitReason()).isEqualTo("Target reached");
             assertThat(closedTrade.fees()).isEqualTo(FEES);
@@ -291,6 +328,25 @@ class TradeTest {
 
             assertThat(closedTrade.exitPrice()).isEqualTo(exitPrice);
             assertThat(closedTrade.totalPnL()).isEqualTo(BigDecimal.valueOf(-1000.00));
+            assertThat(closedTrade.tradeStatus()).isEqualTo(Trade.TradeStatus.STOPPED);
+        }
+
+        // Regression: a short position's stop-loss can trigger on a favorable price
+        // move (short covered at a profit). Status must reflect the actual trigger
+        // (STOPPED), not be inferred from the P&L sign - the old code labeled every
+        // profitable close CLOSED regardless of what actually happened.
+        @Test
+        void shouldReportStoppedStatus_forProfitableStopLossExit_onShortPosition() {
+            Trade openTrade = Trade.open(
+                POSITION_ID, "TCS", ENTRY_DATE, BigDecimal.valueOf(100.00),
+                QUANTITY, ENTRY_REASON, FEES, TradeDirection.SHORT
+            );
+
+            LocalDate exitDate = LocalDate.of(2024, 1, 20);
+            BigDecimal exitPrice = BigDecimal.valueOf(90.00); // price fell -> short profits
+            Trade closedTrade = Trade.close(openTrade, exitDate, exitPrice, "Stop Loss Hit - Price dropped to 90");
+
+            assertThat(closedTrade.totalPnL()).isPositive();
             assertThat(closedTrade.tradeStatus()).isEqualTo(Trade.TradeStatus.STOPPED);
         }
 
@@ -985,7 +1041,7 @@ class TradeTest {
             assertThat(toString).contains("110.0");
             assertThat(toString).contains(QUANTITY.toString());
             assertThat(toString).contains("1000.0");
-            assertThat(toString).contains(Trade.TradeStatus.CLOSED.toString());
+            assertThat(toString).contains(Trade.TradeStatus.TARGET_HIT.toString());
         }
 
         @Test
@@ -1017,43 +1073,7 @@ class TradeTest {
 
             String toString = trade.toString();
 
-            assertThat(toString).contains("CLOSED");
+            assertThat(toString).contains("TARGET_HIT");
         }
-    }
-
-    // Helper methods for test data generation
-    private Trade createTestOpenTrade(Long positionId, String symbol, BigDecimal entryPrice,
-                                      Integer quantity, String entryReason) {
-        return Trade.open(
-            positionId,
-            symbol,
-            ENTRY_DATE,
-            entryPrice,
-            quantity,
-            entryReason,
-            BigDecimal.valueOf(10.00)
-        );
-    }
-
-    private Trade createTestClosedTrade(Long id, Long positionId, String symbol, BigDecimal entryPrice,
-                                        BigDecimal exitPrice, Integer quantity, BigDecimal pnl,
-                                        int durationDays, Trade.TradeStatus status, String exitReason) {
-        return new Trade(
-            id,
-            positionId,
-            symbol,
-            ENTRY_DATE,
-            LocalDate.of(2024, 1, 20),
-            entryPrice,
-            exitPrice,
-            quantity,
-            TradeDirection.LONG,
-            pnl,
-            durationDays,
-            status,
-            ENTRY_REASON,
-            exitReason,
-            FEES
-        );
     }
 }

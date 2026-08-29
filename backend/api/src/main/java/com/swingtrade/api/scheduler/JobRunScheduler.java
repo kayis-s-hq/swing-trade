@@ -43,6 +43,13 @@ public class JobRunScheduler {
         }
 
         logger.info("Starting scheduled pipeline run");
-        orchestratorService.startRun(JobRun.TriggerType.SCHEDULED);
+        try {
+            // The pre-check above is a fast path only; startRun() itself is the
+            // atomic guard against a run that started in the window between that
+            // check and this call (e.g. a manual trigger firing concurrently).
+            orchestratorService.startRun(JobRun.TriggerType.SCHEDULED);
+        } catch (JobOrchestratorService.ConcurrentRunException e) {
+            logger.info("Skipping scheduled run: {}", e.getMessage());
+        }
     }
 }

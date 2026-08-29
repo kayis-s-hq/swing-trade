@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
 
 @DisplayName("BacktestEngineIntegration")
 class BacktestEngineIntegration {
@@ -29,6 +28,45 @@ class BacktestEngineIntegration {
 
     @TempDir
     Path tempDir;
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Loads OHLCV fixture CSV from classpath and parses into OhlcvCandle list.
+     * Format: date,open,high,low,close,volume
+     */
+    private List<OhlcvCandle> loadFixture(String filename) {
+        List<OhlcvCandle> candles = new ArrayList<>();
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream("fixtures/" + filename)) {
+            if (is == null) return candles;
+            List<String> lines = Files.readAllLines(Path.of(getClass().getResource("/fixtures/" + filename).toURI()));
+            for (int i = 1; i < lines.size(); i++) { // skip header
+                String line = lines.get(i).trim();
+                if (line.isEmpty()) continue;
+                String[] parts = line.split(",");
+                if (parts.length < 6) continue;
+                LocalDate date = LocalDate.parse(parts[0]);
+                BigDecimal open = new BigDecimal(parts[1]);
+                BigDecimal high = new BigDecimal(parts[2]);
+                BigDecimal low = new BigDecimal(parts[3]);
+                BigDecimal close = new BigDecimal(parts[4]);
+                Long volume = Long.parseLong(parts[5]);
+                candles.add(new OhlcvCandle("RELIANCE", date, open, high, low, close, volume, close));
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load fixture: " + filename, e);
+        }
+        return candles;
+    }
+
+    private void loadFixtureAndSave(String filename, String symbol) {
+        List<OhlcvCandle> candles = loadFixture(filename);
+        for (OhlcvCandle c : candles) {
+            candleStore.save(new OhlcvCandle(symbol, c.date(), c.open(), c.high(), c.low(), c.close(), c.volume(), c.adjClose()));
+        }
+    }
 
     @Nested
     @DisplayName("Single-symbol backtest with real fixture data")
@@ -133,44 +171,6 @@ class BacktestEngineIntegration {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
-
-    /**
-     * Loads OHLCV fixture CSV from classpath and parses into OhlcvCandle list.
-     * Format: date,open,high,low,close,volume
-     */
-    private List<OhlcvCandle> loadFixture(String filename) {
-        List<OhlcvCandle> candles = new ArrayList<>();
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream("fixtures/" + filename)) {
-            if (is == null) return candles;
-            List<String> lines = Files.readAllLines(Path.of(getClass().getResource("/fixtures/" + filename).toURI()));
-            for (int i = 1; i < lines.size(); i++) { // skip header
-                String line = lines.get(i).trim();
-                if (line.isEmpty()) continue;
-                String[] parts = line.split(",");
-                if (parts.length < 6) continue;
-                LocalDate date = LocalDate.parse(parts[0]);
-                BigDecimal open = new BigDecimal(parts[1]);
-                BigDecimal high = new BigDecimal(parts[2]);
-                BigDecimal low = new BigDecimal(parts[3]);
-                BigDecimal close = new BigDecimal(parts[4]);
-                Long volume = Long.parseLong(parts[5]);
-                candles.add(new OhlcvCandle("RELIANCE", date, open, high, low, close, volume, close));
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load fixture: " + filename, e);
-        }
-        return candles;
-    }
-
-    private void loadFixtureAndSave(String filename, String symbol) {
-        List<OhlcvCandle> candles = loadFixture(filename);
-        for (OhlcvCandle c : candles) {
-            candleStore.save(new OhlcvCandle(symbol, c.date(), c.open(), c.high(), c.low(), c.close(), c.volume(), c.adjClose()));
-        }
-    }
 
     /**
      * In-memory CandleStore implementation for integration tests.

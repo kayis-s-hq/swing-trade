@@ -19,7 +19,7 @@ public class PaperTradingPortfolioEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(name = "portfolio_id", length = 32)
     private String portfolioId;

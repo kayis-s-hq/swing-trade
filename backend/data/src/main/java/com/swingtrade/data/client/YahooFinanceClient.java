@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 import reactor.netty.http.client.HttpClient;
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -66,6 +67,8 @@ public class YahooFinanceClient implements MarketDataClient {
 
     private final AtomicLong lastRequestTime = new AtomicLong(0);
     private static final long RATE_LIMIT_MS = 1000;
+    private static final int MAX_RETRIES = 3;
+    private static final Duration RETRY_BACKOFF = Duration.ofSeconds(1);
 
     // Resilience4j fields (set by constructor with Resilience4j support)
     private CircuitBreaker yahooCircuitBreaker;
@@ -140,23 +143,46 @@ public class YahooFinanceClient implements MarketDataClient {
      * Caller builds the full request (get().uri().onStatus().bodyToMono()) and this applies resilience.
      */
     private String executeWithResilience(Function<WebClient, Mono<String>> fetchFn) {
-        Mono<String> mono = fetchFn.apply(webClient);
+        // Defer both throttling and request creation so every retry is rate-limited too.
+        Mono<String> mono = Mono.defer(() -> {
+            enforceRateLimit();
+            return fetchFn.apply(webClient);
+        });
+        // Circuit breaker and bulkhead wrap EACH individual attempt, not the whole
+        // retry burst: retryWhen is applied last (outermost) so a retry re-enters
+        // both operators as a fresh call. Wrapping them the other way around (as
+        // this used to) makes a 4-attempt retry burst look like a single slow call
+        // to the circuit breaker - it opens far later than configured - and holds
+        // one bulkhead permit for the whole ~7s backoff window instead of only
+        // during each attempt.
         if (yahooCircuitBreaker != null) {
             mono = mono.transformDeferred(CircuitBreakerOperator.of(yahooCircuitBreaker));
         }
         if (yahooBulkhead != null) {
             mono = mono.transformDeferred(BulkheadOperator.of(yahooBulkhead));
         }
+        mono = mono.retryWhen(Retry.backoff(MAX_RETRIES, RETRY_BACKOFF)
+                .scheduler(reactor.core.scheduler.Schedulers.boundedElastic())
+                .filter(error -> error instanceof YahooHttpException yahoo && yahoo.isRetryable()));
         if (yahooTimeout != null) {
             mono = mono.timeout(yahooTimeout);
         }
         return mono
                 .onErrorResume(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class,
-                        e -> { logger.warn("Circuit breaker open for yahoo"); return Mono.empty(); })
+                        e -> {
+                            logger.warn("Circuit breaker open for yahoo");
+                            return Mono.empty();
+                        })
                 .onErrorResume(java.util.concurrent.TimeoutException.class,
-                        e -> { logger.warn("Time limit exceeded for yahoo"); return Mono.empty(); })
+                        e -> {
+                            logger.warn("Time limit exceeded for yahoo");
+                            return Mono.empty();
+                        })
                 .onErrorResume(io.github.resilience4j.bulkhead.BulkheadFullException.class,
-                        e -> { logger.warn("Bulkhead full for yahoo"); return Mono.empty(); })
+                        e -> {
+                            logger.warn("Bulkhead full for yahoo");
+                            return Mono.empty();
+                        })
                 .block();
     }
 
@@ -182,7 +208,8 @@ public class YahooFinanceClient implements MarketDataClient {
                     client.get().uri(uri)
                         .retrieve()
                         .onStatus(s -> s.value() == 404, r -> Mono.empty())
-                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        .onStatus(s -> s.value() >= 400,
+                                r -> Mono.error(new YahooHttpException(r.statusCode().value())))
                         .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return null;
@@ -240,7 +267,14 @@ public class YahooFinanceClient implements MarketDataClient {
             String response = executeWithResilience(client ->
                     client.get().uri(uri)
                         .retrieve()
-                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        // A 404 means Yahoo has no data for this symbol (delisted, unknown,
+                        // or wrong exchange suffix) - treat it the same as fetchCandle() does:
+                        // an empty result, not a failure. Without this, an unknown symbol
+                        // went from "empty candle list" to a thrown YahooDataUnavailableException,
+                        // which IngestionController turns into a 500 instead of 200-with-zero.
+                        .onStatus(s -> s.value() == 404, r -> Mono.empty())
+                        .onStatus(s -> s.value() >= 400,
+                                r -> Mono.error(new YahooHttpException(r.statusCode().value())))
                         .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return candles;
@@ -289,6 +323,7 @@ public class YahooFinanceClient implements MarketDataClient {
 
         } catch (Exception e) {
             logger.error("Error fetching candles for {}: {}", symbol, e.getMessage());
+            throw new YahooDataUnavailableException("Yahoo historical data unavailable for " + symbol, e);
         }
         return candles;
     }
@@ -361,7 +396,8 @@ public class YahooFinanceClient implements MarketDataClient {
             String response = executeWithResilience(client ->
                     client.get().uri(uri)
                         .retrieve()
-                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        .onStatus(s -> s.value() >= 400,
+                                r -> Mono.error(new YahooHttpException(r.statusCode().value())))
                         .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return null;
@@ -425,7 +461,7 @@ public class YahooFinanceClient implements MarketDataClient {
      * Enforces rate limiting between requests to avoid Yahoo blocking.
      * Sleeps if the last request was less than RATE_LIMIT_MS ago.
      */
-    private void enforceRateLimit() {
+    private synchronized void enforceRateLimit() {
         long now = clock.millis();
         long elapsed = now - lastRequestTime.get();
         if (elapsed < RATE_LIMIT_MS && lastRequestTime.get() > 0) {
@@ -467,14 +503,13 @@ public class YahooFinanceClient implements MarketDataClient {
                     .map(this::formatSymbolForYahoo)
                     .collect(java.util.stream.Collectors.joining(","));
 
-            enforceRateLimit();
-
             String uri = String.format(QUOTE_URI_FMT, yahooSymbols);
 
             String response = executeWithResilience(client ->
                     client.get().uri(uri)
                         .retrieve()
-                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        .onStatus(s -> s.value() >= 400,
+                                r -> Mono.error(new YahooHttpException(r.statusCode().value())))
                         .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return Collections.emptyList();
@@ -533,14 +568,13 @@ public class YahooFinanceClient implements MarketDataClient {
         }
 
         try {
-            enforceRateLimit();
-
             String uri = String.format(SEARCH_URI_FMT, query.trim());
 
             String response = executeWithResilience(client ->
                     client.get().uri(uri)
                         .retrieve()
-                        .onStatus(s -> s.value() >= 400, r -> Mono.empty())
+                        .onStatus(s -> s.value() >= 400,
+                                r -> Mono.error(new YahooHttpException(r.statusCode().value())))
                         .bodyToMono(String.class));
 
             if (response == null || response.isEmpty()) return Collections.emptyList();
@@ -584,5 +618,24 @@ public class YahooFinanceClient implements MarketDataClient {
         if (node == null || node.isNull() || !node.isNumber()) return null;
         try { return new BigDecimal(node.asText()); }
         catch (Exception e) { return null; }
+    }
+
+    static final class YahooHttpException extends RuntimeException {
+        private final int statusCode;
+
+        YahooHttpException(int statusCode) {
+            super("Yahoo Finance returned HTTP " + statusCode);
+            this.statusCode = statusCode;
+        }
+
+        boolean isRetryable() {
+            return statusCode == 429 || statusCode >= 500;
+        }
+    }
+
+    static final class YahooDataUnavailableException extends RuntimeException {
+        YahooDataUnavailableException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

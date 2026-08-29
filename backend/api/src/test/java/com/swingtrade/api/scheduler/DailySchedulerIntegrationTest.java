@@ -15,12 +15,14 @@ import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.data.repository.WatchlistRepository;
 import com.swingtrade.domain.JobRun;
 import com.swingtrade.domain.SentimentResult;
-import com.swingtrade.domain.Signal;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.data.service.DataIngestionService;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
@@ -73,54 +75,6 @@ import static org.mockito.Mockito.when;
 @DisplayName("Daily scheduler integration tests")
 class DailySchedulerIntegrationTest {
 
-    /**
-     * Provides DataSource, EntityManagerFactory, JdbcTemplate, and TransactionManager
-     * for the full application context to work with H2 in-memory database.
-     */
-    @Configuration
-    static class TestBeans {
-
-        @Bean
-        DataSource dataSource() {
-            org.springframework.jdbc.datasource.DriverManagerDataSource ds =
-                    new org.springframework.jdbc.datasource.DriverManagerDataSource();
-            ds.setDriverClassName("org.h2.Driver");
-            ds.setUrl("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
-            ds.setUsername("sa");
-            ds.setPassword("");
-            return ds;
-        }
-
-        @Bean
-        LocalContainerEntityManagerFactoryBean entityManagerFactory(DataSource dataSource) {
-            LocalContainerEntityManagerFactoryBean em = new LocalContainerEntityManagerFactoryBean();
-            em.setDataSource(dataSource);
-            em.setPackagesToScan(
-                    "com.swingtrade.data.entity",
-                    "com.swingtrade.broker.entity",
-                    "com.swingtrade.domain"
-            );
-            em.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
-
-            Properties jpaProps = new Properties();
-            jpaProps.put("hibernate.hbm2ddl.auto", "update");
-            jpaProps.put("hibernate.show_sql", "false");
-            jpaProps.put("hibernate.format_sql", "false");
-            em.setJpaProperties(jpaProps);
-
-            return em;
-        }
-
-        @Bean
-        JdbcTemplate jdbcTemplate(DataSource dataSource) {
-            return new JdbcTemplate(dataSource);
-        }
-
-        @Bean
-        PlatformTransactionManager transactionManager(LocalContainerEntityManagerFactoryBean entityManagerFactory) {
-            return new JpaTransactionManager(entityManagerFactory.getObject());
-        }
-    }
 
     @MockitoBean
     private NewsIngestionService newsIngestionService;
@@ -270,5 +224,54 @@ class DailySchedulerIntegrationTest {
             current = current.plusDays(1);
         }
         return days.toArray(new LocalDate[0]);
+    }
+
+    /**
+     * Provides DataSource, EntityManagerFactory, JdbcTemplate, and TransactionManager
+     * for the full application context to work with H2 in-memory database.
+     */
+    @Configuration
+    static class TestBeans {
+
+        @Bean
+        DataSource dataSource() {
+            org.springframework.jdbc.datasource.DriverManagerDataSource ds =
+                    new org.springframework.jdbc.datasource.DriverManagerDataSource();
+            ds.setDriverClassName("org.h2.Driver");
+            ds.setUrl("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
+            ds.setUsername("sa");
+            ds.setPassword("");
+            return ds;
+        }
+
+        @Bean
+        LocalContainerEntityManagerFactoryBean entityManagerFactory(DataSource dataSource) {
+            LocalContainerEntityManagerFactoryBean em = new LocalContainerEntityManagerFactoryBean();
+            em.setDataSource(dataSource);
+            em.setPackagesToScan(
+                    "com.swingtrade.data.entity",
+                    "com.swingtrade.broker.entity",
+                    "com.swingtrade.domain"
+            );
+            em.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
+
+            Properties jpaProps = new Properties();
+            jpaProps.put("hibernate.hbm2ddl.auto", "update");
+            jpaProps.put("hibernate.show_sql", "false");
+            jpaProps.put("hibernate.format_sql", "false");
+            em.setJpaProperties(jpaProps);
+
+            return em;
+        }
+
+        @Bean
+        JdbcTemplate jdbcTemplate(DataSource dataSource) {
+            return new JdbcTemplate(dataSource);
+        }
+
+        @Bean
+        PlatformTransactionManager transactionManager(LocalContainerEntityManagerFactoryBean entityManagerFactory) {
+            return new JpaTransactionManager(entityManagerFactory.getObject());
+        }
     }
 }

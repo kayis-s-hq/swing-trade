@@ -24,7 +24,7 @@ public class SentimentAccuracyEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(nullable = false, length = 20)
     private String symbol;

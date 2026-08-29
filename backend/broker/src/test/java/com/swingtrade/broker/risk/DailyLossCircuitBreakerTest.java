@@ -1,7 +1,6 @@
 package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.manager.PositionManager;
-import com.swingtrade.data.repository.DailyLossCircuitBreakerStateRepository;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;

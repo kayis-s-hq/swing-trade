@@ -103,7 +103,11 @@ class PiLlamaServerManagerIdleTest {
             manager.setIdleCheckTime(fixedTime);
 
             // Act: wait a moment
-            try { Thread.sleep(100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
 
             // Assert: idle time should be ~2.1s (2s + 100ms sleep)
             long idleSeconds = manager.getIdleSeconds();

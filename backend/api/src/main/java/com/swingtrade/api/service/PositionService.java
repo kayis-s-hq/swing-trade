@@ -189,15 +189,22 @@ public class PositionService {
         stats.setUnrealizedPnL(unrealizedPnL);
 
         long winCount = 0;
+        long stoppedOut = 0;
+        long targetHit = 0;
         for (Position p : closedPositions) {
             if (p.realizedPnL() != null && p.realizedPnL().compareTo(BigDecimal.ZERO) > 0) {
                 winCount++;
             }
+            if (p.status() == PositionStatus.STOPPED) {
+                stoppedOut++;
+            } else if (p.status() == PositionStatus.TARGET_HIT) {
+                targetHit++;
+            }
         }
         int closedCount = closedPositions.size();
         stats.setWinRate(closedCount > 0 ? (double) winCount / closedCount * 100.0 : 0.0);
-        stats.setStoppedOut(0);
-        stats.setTargetHit(0);
+        stats.setStoppedOut((int) stoppedOut);
+        stats.setTargetHit((int) targetHit);
 
         return stats;
     }
@@ -242,12 +249,20 @@ public class PositionService {
             .orElseGet(() -> entity.getCurrentPrice() != null ? entity.getCurrentPrice() : entity.getEntryPrice());
         String reason = exitReason != null ? exitReason : ExitReason.MANUAL.name();
 
-        // Close in engine first (updates portfolio capital, calculates P&L)
+        // Close in engine first (updates portfolio capital, calculates P&L). When this
+        // succeeds, PaperTradingStateService.closePosition() already sets realizedPnL,
+        // exitReason and exitTime on this same managed entity (shared persistence
+        // context, same transaction) - so the fields below are redundant but harmless
+        // in that case. When it does NOT run (no engine-side position, or the engine
+        // call throws), nothing else sets those fields, so we must compute and set
+        // them ourselves - otherwise this close persists with a null P&L and reason.
+        boolean closedInEngine = false;
         try {
             com.swingtrade.domain.Position enginePos =
                 tradingService.findOpenPositionBySymbol(symbol);
             if (enginePos != null) {
                 tradingService.closePosition(entity.getId(), exitPrice, reason);
+                closedInEngine = true;
             } else {
                 logger.warn("Engine position missing for symbol {} — skipping engine close, will only update DB", symbol);
             }
@@ -260,6 +275,11 @@ public class PositionService {
         entity.setStatus("CLOSED");
         entity.setCurrentPrice(exitPrice);
         entity.setUpdatedAt(LocalDateTime.now());
+        if (!closedInEngine) {
+            entity.setRealizedPnL(calculateRealizedPnL(entity, exitPrice));
+            entity.setExitReason(reason);
+            entity.setExitTime(LocalDateTime.now());
+        }
         PositionEntity savedEntity = positionRepository.save(entity);
 
         // Close out the audit-trail Trade record opened at entry, if one exists.
@@ -367,6 +387,10 @@ public class PositionService {
             request.getSymbol(), entryPrice, positionId[0]);
 
         // Open an audit-trail Trade record for this position (closed out later in closePosition()).
+        // Entry commission comes from the engine's own rate so the audit trail agrees
+        // with what actually gets deducted from portfolio cash - it was previously
+        // hardcoded to ZERO, silently dropping entry-side fees from the trade record.
+        BigDecimal entryCommission = tradingService.calculateEntryCommission(savedEntity.getQuantity());
         tradeStore.save(Trade.open(
             savedEntity.getId(),
             savedEntity.getSymbol(),
@@ -374,7 +398,7 @@ public class PositionService {
             savedEntity.getEntryPrice(),
             savedEntity.getQuantity(),
             savedEntity.getEntryReason(),
-            BigDecimal.ZERO,
+            entryCommission,
             request.getDirection()
         ));
 
@@ -441,6 +465,25 @@ public class PositionService {
     }
 
     /**
+     * Computes realized P&amp;L for a DB-only close (the engine did not run, so
+     * nothing else calculated it). Mirrors PositionManager.calculatePositionPnL.
+     */
+    private BigDecimal calculateRealizedPnL(PositionEntity entity, BigDecimal exitPrice) {
+        BigDecimal entryPrice = entity.getEntryPrice();
+        Integer quantity = entity.getQuantity();
+        if (entryPrice == null || exitPrice == null || quantity == null) {
+            return BigDecimal.ZERO;
+        }
+        com.swingtrade.domain.TradeDirection direction = entity.getDirection() != null
+            ? com.swingtrade.domain.TradeDirection.valueOf(entity.getDirection())
+            : com.swingtrade.domain.TradeDirection.LONG;
+        BigDecimal priceDifference = direction == com.swingtrade.domain.TradeDirection.LONG
+            ? exitPrice.subtract(entryPrice)
+            : entryPrice.subtract(exitPrice);
+        return priceDifference.multiply(BigDecimal.valueOf(quantity));
+    }
+
+    /**
      * Convert PositionEntity to TradeResponse DTO.
      */
     private TradeResponse convertToTradeResponse(PositionEntity entity) {
@@ -449,8 +492,10 @@ public class PositionService {
         response.setEntryPrice(entity.getEntryPrice());
         response.setEntryDate(entity.getEntryDate());
         response.setQuantity(entity.getQuantity());
-        response.setExitReason(null);
+        response.setExitPrice(entity.getCurrentPrice());
+        response.setExitDate(entity.getExitTime() != null ? entity.getExitTime().toLocalDate() : null);
+        response.setTotalPnL(entity.getRealizedPnL());
+        response.setExitReason(entity.getExitReason());
         return response;
     }
-
-    }
+}

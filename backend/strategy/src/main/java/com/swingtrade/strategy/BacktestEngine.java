@@ -20,7 +20,6 @@ import org.ta4j.core.indicators.helpers.HighestValueIndicator;
 import org.ta4j.core.indicators.helpers.LowPriceIndicator;
 import org.ta4j.core.indicators.helpers.OpenPriceIndicator;
 import org.ta4j.core.indicators.helpers.VolumeIndicator;
-import org.ta4j.core.num.DecimalNum;
 import org.ta4j.core.num.Num;
 
 import java.io.IOException;

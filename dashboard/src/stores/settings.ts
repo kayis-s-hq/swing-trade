@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import {
+  getSettings as getBrokerSettings,
   getLlmSettings,
   setLlmSettings,
   getDiscordSettings,
@@ -46,7 +47,9 @@ interface SettingsState {
 }
 
 const defaults: SettingsState = {
-  selectedBroker: 'fyers',
+  // Match the backend's broker default so the shell never probes Fyers before
+  // persisted settings have finished loading.
+  selectedBroker: 'yahoo',
   tradingConfig: {
     mode: 'paper',
     maxPositionSize: 10,
@@ -124,6 +127,25 @@ function readData<T>(value: T | { success: boolean; data?: T }): T | undefined {
 async function loadAll(): Promise<LoadAllResult> {
   const state = createDefaultState()
   const failedSections: string[] = []
+
+  // Load broker selection
+  try {
+    const brokerRes = await getBrokerSettings()
+    const brokerData = readData(brokerRes)
+    if (
+      brokerData?.selectedBroker &&
+      ['fyers', 'upstox', 'yahoo', 'none'].includes(brokerData.selectedBroker)
+    ) {
+      state.selectedBroker = brokerData.selectedBroker as SettingsState['selectedBroker']
+    } else {
+      // Either the response was missing entirely, or it came back without a
+      // recognized selectedBroker - both mean we're falling back to the
+      // in-memory default, so both must be reported like every other section.
+      failedSections.push('Broker settings')
+    }
+  } catch {
+    failedSections.push('Broker settings')
+  }
 
   // Load LLM settings
   try {
@@ -276,6 +298,7 @@ export async function saveTradingConfig(): Promise<boolean> {
     'trading.max_position_size': String(state.tradingConfig.maxPositionSize),
     'trading.stop_loss': String(state.tradingConfig.stopLoss),
     'trading.take_profit': String(state.tradingConfig.takeProfit),
+    'trading.allocation_per_position': String(state.tradingConfig.allocationPerPosition),
   }
   const res = await setTradingSettings(settings)
   if (!readData(res)) {

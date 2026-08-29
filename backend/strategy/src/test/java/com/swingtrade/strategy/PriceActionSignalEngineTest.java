@@ -30,7 +30,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,6 +48,76 @@ class PriceActionSignalEngineTest {
     @BeforeEach
     void setUp() {
         engine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class));
+    }
+
+    /**
+     * Builds a chronologically-ordered (oldest first) synthetic candle series with a
+     * constant daily drift percentage, used to control EMA/RSI/trend behavior deterministically.
+     */
+    private List<OhlcvCandle> buildTrendingCandles(int count, double startPrice, double dailyDriftPercent, long volume) {
+        List<OhlcvCandle> candles = new ArrayList<>();
+        double price = startPrice;
+        LocalDate date = LocalDate.of(2024, 1, 1);
+        for (int i = 0; i < count; i++) {
+            double close = price * (1 + dailyDriftPercent / 100.0);
+            double open = price;
+            double high = Math.max(open, close) * 1.001;
+            double low = Math.min(open, close) * 0.999;
+
+            OhlcvCandle candle = OhlcvCandle.of("RELIANCE", date,
+                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
+                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
+
+            candles.add(candle);
+            price = close;
+            date = date.plusDays(1);
+        }
+        return candles;
+    }
+
+    /**
+     * Builds a chronologically-ordered zigzag uptrend: two up days followed by one down
+     * day, repeating. This keeps Wilder's RSI oscillating around a mid-range steady state
+     * (roughly 55-60 for the up/down magnitudes used in these tests) instead of pegging
+     * near 100 like a monotonic rise would.
+     */
+    private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
+                                                               double upPercent, double downPercent, long volume) {
+        List<OhlcvCandle> candles = new ArrayList<>();
+        double price = startPrice;
+        LocalDate date = LocalDate.of(2024, 1, 1);
+        for (int i = 0; i < count; i++) {
+            double changePercent = (i % 3 == 2) ? -downPercent : upPercent;
+            double open = price;
+            double close = price * (1 + changePercent / 100.0);
+            double high = Math.max(open, close) * 1.001;
+            double low = Math.min(open, close) * 0.999;
+
+            OhlcvCandle candle = OhlcvCandle.of("RELIANCE", date,
+                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
+                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
+
+            candles.add(candle);
+            price = close;
+            date = date.plusDays(1);
+        }
+        return candles;
+    }
+
+    /**
+     * Builds a single final candle that closes {@code closeMultiplier}x above (or below, if
+     * {@code closeMultiplier < 1.0}) the previous candle's close, on the given volume, dated
+     * the day after it.
+     */
+    private OhlcvCandle buildFinalCandle(OhlcvCandle previous, double closeMultiplier, long volume) {
+        BigDecimal previousClose = previous.close();
+        BigDecimal close = previousClose.multiply(BigDecimal.valueOf(closeMultiplier));
+        BigDecimal high = previousClose.max(close).multiply(BigDecimal.valueOf(1.001));
+        BigDecimal low = previousClose.min(close).multiply(BigDecimal.valueOf(0.999));
+
+        OhlcvCandle candle = OhlcvCandle.of("RELIANCE", previous.date().plusDays(1),
+            previousClose, high, low, close, volume);
+        return candle;
     }
 
     @Nested
@@ -168,73 +237,4 @@ class PriceActionSignalEngineTest {
         }
     }
 
-    /**
-     * Builds a chronologically-ordered (oldest first) synthetic candle series with a
-     * constant daily drift percentage, used to control EMA/RSI/trend behavior deterministically.
-     */
-    private List<OhlcvCandle> buildTrendingCandles(int count, double startPrice, double dailyDriftPercent, long volume) {
-        List<OhlcvCandle> candles = new ArrayList<>();
-        double price = startPrice;
-        LocalDate date = LocalDate.of(2024, 1, 1);
-        for (int i = 0; i < count; i++) {
-            double close = price * (1 + dailyDriftPercent / 100.0);
-            double open = price;
-            double high = Math.max(open, close) * 1.001;
-            double low = Math.min(open, close) * 0.999;
-
-            OhlcvCandle candle = OhlcvCandle.of("RELIANCE", date,
-                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
-                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
-
-            candles.add(candle);
-            price = close;
-            date = date.plusDays(1);
-        }
-        return candles;
-    }
-
-    /**
-     * Builds a chronologically-ordered zigzag uptrend: two up days followed by one down
-     * day, repeating. This keeps Wilder's RSI oscillating around a mid-range steady state
-     * (roughly 55-60 for the up/down magnitudes used in these tests) instead of pegging
-     * near 100 like a monotonic rise would.
-     */
-    private List<OhlcvCandle> buildZigzagUptrendCandles(int count, double startPrice,
-                                                               double upPercent, double downPercent, long volume) {
-        List<OhlcvCandle> candles = new ArrayList<>();
-        double price = startPrice;
-        LocalDate date = LocalDate.of(2024, 1, 1);
-        for (int i = 0; i < count; i++) {
-            double changePercent = (i % 3 == 2) ? -downPercent : upPercent;
-            double open = price;
-            double close = price * (1 + changePercent / 100.0);
-            double high = Math.max(open, close) * 1.001;
-            double low = Math.min(open, close) * 0.999;
-
-            OhlcvCandle candle = OhlcvCandle.of("RELIANCE", date,
-                BigDecimal.valueOf(open), BigDecimal.valueOf(high),
-                BigDecimal.valueOf(low), BigDecimal.valueOf(close), volume);
-
-            candles.add(candle);
-            price = close;
-            date = date.plusDays(1);
-        }
-        return candles;
-    }
-
-    /**
-     * Builds a single final candle that closes {@code closeMultiplier}x above (or below, if
-     * {@code closeMultiplier < 1.0}) the previous candle's close, on the given volume, dated
-     * the day after it.
-     */
-    private OhlcvCandle buildFinalCandle(OhlcvCandle previous, double closeMultiplier, long volume) {
-        BigDecimal previousClose = previous.close();
-        BigDecimal close = previousClose.multiply(BigDecimal.valueOf(closeMultiplier));
-        BigDecimal high = previousClose.max(close).multiply(BigDecimal.valueOf(1.001));
-        BigDecimal low = previousClose.min(close).multiply(BigDecimal.valueOf(0.999));
-
-        OhlcvCandle candle = OhlcvCandle.of("RELIANCE", previous.date().plusDays(1),
-            previousClose, high, low, close, volume);
-        return candle;
-    }
 }

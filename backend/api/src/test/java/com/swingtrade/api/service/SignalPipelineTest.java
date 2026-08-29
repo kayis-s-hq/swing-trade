@@ -282,4 +282,51 @@ class SignalPipelineTest {
                     eq(SYMBOL), any(), eq(Signal.SignalType.SELL), any(), anyString(), anyString(), any(), anyString(), any(), any());
         }
     }
+
+    @Nested
+    @DisplayName("generatePriceActionSignal - SELL closes held position")
+    class GeneratePriceActionSignalSellClose {
+
+        private final LocalDate today = LocalDate.now();
+
+        private SignalResult sellResult() {
+            return new SignalResult(
+                    SYMBOL, today, Signal.SignalType.SELL,
+                    45.0, 98.0, 100.0, 2.1, "Exit rule triggered (1 of 3): RSI < 50 (rsi=45.00)");
+        }
+
+        private void stubSavedSignal() {
+            Signal savedSignal = Signal.create(SYMBOL, today, Signal.SignalType.SELL, BigDecimal.ONE, "reasoning");
+            when(persistenceService.buildAndSave(any(), any(), any(), any(), any(), anyString(), any(), any()))
+                    .thenReturn(savedSignal);
+        }
+
+        // Bug: /api/signals/generate-all (the dashboard's bulk trigger) routes here,
+        // via generatePriceActionSignal - which historically had no position-close
+        // logic at all, unlike generatePrimarySignal. A SELL signal from this path
+        // was persisted but never acted on a held position.
+        @Test
+        void sellSignal_symbolHeld_closesPositionViaPositionService() {
+            when(priceActionEngine.generateSignal(SYMBOL)).thenReturn(sellResult());
+            when(positionStore.findBySymbol(SYMBOL)).thenReturn(
+                    Optional.of(Position.createWithRisk(SYMBOL, BigDecimal.valueOf(100), today, 10, BigDecimal.valueOf(2.0), "Entry on breakout")));
+            when(positionService.closePosition(SYMBOL, ExitReason.SIGNAL_EXIT.name())).thenReturn(new PositionResponse());
+            stubSavedSignal();
+
+            pipeline.generatePriceActionSignal(SYMBOL);
+
+            verify(positionService).closePosition(SYMBOL, "SIGNAL_EXIT");
+        }
+
+        @Test
+        void sellSignal_symbolNotHeld_neverCallsPositionServiceClose() {
+            when(priceActionEngine.generateSignal(SYMBOL)).thenReturn(sellResult());
+            when(positionStore.findBySymbol(SYMBOL)).thenReturn(Optional.empty());
+            stubSavedSignal();
+
+            pipeline.generatePriceActionSignal(SYMBOL);
+
+            verifyNoInteractions(positionService);
+        }
+    }
 }

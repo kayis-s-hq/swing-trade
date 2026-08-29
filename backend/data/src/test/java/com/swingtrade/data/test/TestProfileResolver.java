@@ -1,7 +1,5 @@
 package com.swingtrade.data.test;
 
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.env.Environment;
 import org.springframework.test.context.ActiveProfilesResolver;
 
 /**

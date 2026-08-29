@@ -24,7 +24,7 @@ public class FyersSymbolEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(name = "fy_token", nullable = false, unique = true, length = 32)
     private String fyToken;

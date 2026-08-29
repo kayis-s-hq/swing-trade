@@ -177,9 +177,12 @@ public class PositionManager {
 
             if (position.symbol().equals(symbol) && position.status() == PositionStatus.OPEN) {
                 Position updated = updatePositionPrice(entry.getKey(), candleData.close());
-                updatedPositions.add(updated);
-
                 checkPositionTriggers(updated, candleData);
+
+                // Re-read from the map: checkPositionTriggers may have replaced this
+                // entry with a closed instance (stop-loss/target hit). Callers branch
+                // on status(), so they must see the final state, not the pre-trigger one.
+                updatedPositions.add(positions.get(entry.getKey()));
             }
         }
 
@@ -202,15 +205,15 @@ public class PositionManager {
 
         if (direction == TradeDirection.LONG) {
             if (low.compareTo(stopLoss) <= 0) {
-                closePosition(position.positionId(), PositionStatus.STOPPED, "Stop Loss Hit - Price dropped to " + low);
+                closePosition(position.positionId(), PositionStatus.STOPPED, "Stop Loss Hit - Price dropped to " + low, stopLoss);
             } else if (high.compareTo(target) >= 0) {
-                closePosition(position.positionId(), PositionStatus.TARGET_HIT, "Target Hit - Price rose to " + high);
+                closePosition(position.positionId(), PositionStatus.TARGET_HIT, "Target Hit - Price rose to " + high, target);
             }
         } else {
             if (high.compareTo(stopLoss) >= 0) {
-                closePosition(position.positionId(), PositionStatus.STOPPED, "Stop Loss Hit - Price rose to " + high);
+                closePosition(position.positionId(), PositionStatus.STOPPED, "Stop Loss Hit - Price rose to " + high, stopLoss);
             } else if (low.compareTo(target) <= 0) {
-                closePosition(position.positionId(), PositionStatus.TARGET_HIT, "Target Hit - Price dropped to " + low);
+                closePosition(position.positionId(), PositionStatus.TARGET_HIT, "Target Hit - Price dropped to " + low, target);
             }
         }
     }
@@ -373,11 +376,29 @@ public class PositionManager {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
 
-        return closePosition(position, PositionStatus.CLOSED, reason);
+        return closePosition(position, PositionStatus.CLOSED, reason, exitPrice);
     }
 
     /**
-     * Closes a position by ID with a specific status (STOPPED, TARGET_HIT, etc.).
+     * Closes a position by ID with a specific status (STOPPED, TARGET_HIT, etc.),
+     * booking realized P&amp;L at the given exit price.
+     *
+     * <p>Intentionally NOT {@code @Transactional} — see
+     * {@link #closePosition(String, BigDecimal, String)} for rationale.
+     */
+    public Position closePosition(String positionId, PositionStatus status, String reason, BigDecimal exitPrice) {
+        Position position = getPosition(positionId);
+        if (position == null) {
+            throw new IllegalArgumentException("Position not found: " + positionId);
+        }
+        return closePosition(position, status, reason, exitPrice);
+    }
+
+    /**
+     * Closes a position by ID with a specific status, booking realized P&amp;L at
+     * the position's last-known current price. Prefer
+     * {@link #closePosition(String, PositionStatus, String, BigDecimal)} when the
+     * actual fill/trigger price is known.
      *
      * <p>Intentionally NOT {@code @Transactional} — see
      * {@link #closePosition(String, BigDecimal, String)} for rationale.
@@ -387,16 +408,29 @@ public class PositionManager {
         if (position == null) {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
-        return closePosition(position, status, reason);
+        return closePosition(position, status, reason, position.currentPrice());
     }
 
     /**
-     * Internal method to close a position with specific status. Returns a new Position.
+     * Closes a position with a specific status at the position's current price.
+     * Prefer {@link #closePosition(Position, PositionStatus, String, BigDecimal)}
+     * when the actual fill/trigger price is known.
      *
      * <p>Intentionally NOT {@code @Transactional} — see
      * {@link #closePosition(String, BigDecimal, String)} for rationale.
      */
     Position closePosition(Position position, PositionStatus status, String reason) {
+        return closePosition(position, status, reason, position.currentPrice());
+    }
+
+    /**
+     * Internal method to close a position with specific status at a given exit
+     * price. Returns a new Position.
+     *
+     * <p>Intentionally NOT {@code @Transactional} — see
+     * {@link #closePosition(String, BigDecimal, String)} for rationale.
+     */
+    Position closePosition(Position position, PositionStatus status, String reason, BigDecimal exitPrice) {
         if (position.status() == PositionStatus.CLOSED ||
             position.status() == PositionStatus.STOPPED ||
             position.status() == PositionStatus.TARGET_HIT) {
@@ -404,7 +438,6 @@ public class PositionManager {
             return position;
         }
 
-        BigDecimal exitPrice = position.currentPrice();
         BigDecimal realizedPnL = calculatePositionPnL(position, exitPrice);
 
         Position updated = new Position(

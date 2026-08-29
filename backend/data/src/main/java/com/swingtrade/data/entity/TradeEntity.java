@@ -31,7 +31,7 @@ public class TradeEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(name = "position_id", nullable = false)
     private Long positionId;
@@ -101,6 +101,8 @@ public class TradeEntity {
         this.exitReason = trade.exitReason();
         this.fees = trade.fees();
         this.direction = trade.direction() != null ? trade.direction().name() : TradeDirection.LONG.name();
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = this.createdAt;
     }
 
     public static TradeEntity fromDomain(Trade trade) {

@@ -97,6 +97,17 @@ public class JobOrchestratorService {
      */
     private final Set<UUID> cancelledRunIds = ConcurrentHashMap.newKeySet();
 
+    /**
+     * Guards the "is a run already active?" check and the creation of a new RUNNING
+     * row in {@link #startRun(JobRun.TriggerType)} so the two happen atomically.
+     * Without this, two near-simultaneous callers (the manual trigger racing the
+     * scheduled cron, or a double-click) can both pass {@link #findActiveRun()}
+     * before either has persisted its RUNNING row, and both proceed to double-run
+     * the pipeline over the same watchlist. A single JVM-local lock is sufficient
+     * here: this is a self-hosted, single-instance deployment, not a clustered one.
+     */
+    private final Object runStartLock = new Object();
+
     private final DataIngestionService dataIngestionService;
     private final NewsIngestionService newsIngestionService;
     private final SentimentService sentimentService;
@@ -146,55 +157,33 @@ public class JobOrchestratorService {
         this.jobMetrics = jobMetrics;
     }
 
-    // ---- DTOs ----
-
-    public record JobRunProgress(
-        UUID runId,
-        String status,
-        int totalSymbols,
-        int completedSymbols,
-        int failedSymbols,
-        List<JobRunStageEntity> stages
-    ) {}
-
-    public record JobRunSummary(
-        UUID runId,
-        String status,
-        int totalSymbols,
-        int completedSymbols,
-        int failedSymbols,
-        long totalDurationMs,
-        java.util.Map<String, StageStats> stageStats,
-        List<SymbolDetail> symbolDetails
-    ) {}
-
-    public record StageStats(
-        int total,
-        int completed,
-        int errors,
-        long totalDurationMs
-    ) {}
-
-    public record SymbolDetail(
-        String symbol,
-        List<String> stageStatuses
-    ) {}
-
     /**
      * Starts a new pipeline run for all active watchlist symbols.
      * Returns immediately with the run record; processing is async.
+     *
+     * @throws ConcurrentRunException if another run is already active. The
+     *     check-and-create is done under {@link #runStartLock} so two
+     *     near-simultaneous callers cannot both slip past {@link #findActiveRun()}
+     *     before either has persisted its RUNNING row.
      */
     public JobRun startRun(JobRun.TriggerType triggerType) {
         LocalDate today = LocalDate.now(IST);
+        JobRun run;
+        synchronized (runStartLock) {
+            Optional<JobRun> activeRun = findActiveRun();
+            if (activeRun.isPresent()) {
+                throw new ConcurrentRunException(activeRun.get());
+            }
 
-        JobRun run = new JobRun(
-            UUID.randomUUID(),
-            triggerType,
-            JobRun.Status.RUNNING,
-            java.time.LocalDateTime.now(IST),
-            null, 0, 0, 0, null
-        );
-        jobRunRepository.save(JobRunEntity.fromDomain(run));
+            run = new JobRun(
+                UUID.randomUUID(),
+                triggerType,
+                JobRun.Status.RUNNING,
+                java.time.LocalDateTime.now(IST),
+                null, 0, 0, 0, null
+            );
+            jobRunRepository.save(JobRunEntity.fromDomain(run));
+        }
         jobMetrics.recordRunStarted();
 
         List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
@@ -258,7 +247,9 @@ public class JobOrchestratorService {
                         .map(JobRunStageEntity::getSymbol)
                         .distinct()
                         .toList();
-                    if (!symbolsWithErrors.isEmpty() && symbolsWithErrors.size() > symbols.size() / 2) {
+                    // >= half, not > half: a run where exactly half the symbols failed
+                    // every stage is not a success and must not report COMPLETED.
+                    if (!symbolsWithErrors.isEmpty() && symbolsWithErrors.size() * 2 >= symbols.size()) {
                         completeRun(finalRun.runId(), JobRun.Status.FAILED,
                             symbolsWithErrors.size() + " symbols failed");
                     } else {
@@ -276,20 +267,6 @@ public class JobOrchestratorService {
             });
 
         return run;
-    }
-
-    /** Ordered stage definition used to drive processSymbol and its failure-gating. */
-    private record StageDef(JobRunStage.StageName name, StageExecutor executor, long timeoutSec) {}
-
-    /** A stage can complete normally or skip without being treated as an operational error. */
-    private record StageExecutionResult(JobRunStage.Status status, String summary) {
-        private static StageExecutionResult completed(String summary) {
-            return new StageExecutionResult(JobRunStage.Status.COMPLETED, summary);
-        }
-
-        private static StageExecutionResult skipped(String summary) {
-            return new StageExecutionResult(JobRunStage.Status.SKIPPED, summary);
-        }
     }
 
     private void processSymbol(UUID runId, String symbol, LocalDate today) {
@@ -360,11 +337,6 @@ public class JobOrchestratorService {
 
     private static String inFlightKey(UUID runId, String symbol) {
         return runId + "::" + symbol;
-    }
-
-    @FunctionalInterface
-    private interface StageExecutor {
-        StageExecutionResult execute() throws Exception;
     }
 
     /**
@@ -457,9 +429,9 @@ public class JobOrchestratorService {
     private String stageDataFetch(String symbol) {
         LocalDate today = LocalDate.now(IST);
         LocalDate yesterday = today.minusDays(1);
-        dataIngestionService.processSingleStock(symbol, yesterday);
+        String ingestionSummary = dataIngestionService.fetchLatestAndRepairGaps(symbol, yesterday);
         List<OhlcvCandle> candles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 100);
-        return candles.size() + " candles available";
+        return candles.size() + " candles available; " + ingestionSummary;
     }
 
     private String stageNews(String symbol) {
@@ -891,4 +863,69 @@ public class JobOrchestratorService {
             .map(JobRunEntity::toDomain)
             .toList();
     }
+
+    // ---- DTOs ----
+
+    public record JobRunProgress(
+        UUID runId,
+        String status,
+        int totalSymbols,
+        int completedSymbols,
+        int failedSymbols,
+        List<JobRunStageEntity> stages
+    ) {}
+
+    public record JobRunSummary(
+        UUID runId,
+        String status,
+        int totalSymbols,
+        int completedSymbols,
+        int failedSymbols,
+        long totalDurationMs,
+        java.util.Map<String, StageStats> stageStats,
+        List<SymbolDetail> symbolDetails
+    ) {}
+
+    public record StageStats(
+        int total,
+        int completed,
+        int errors,
+        long totalDurationMs
+    ) {}
+
+    public record SymbolDetail(
+        String symbol,
+        List<String> stageStatuses
+    ) {}
+
+    /**
+     * Thrown when {@link #startRun(JobRun.TriggerType)} is rejected because another
+     * run is already active. Callers (the manual-trigger controller, the scheduled
+     * cron) should catch this and back off rather than treating it as a fatal error.
+     */
+    public static final class ConcurrentRunException extends IllegalStateException {
+        public ConcurrentRunException(JobRun activeRun) {
+            super("A job run is already in progress: " + activeRun.runId());
+        }
+    }
+
+    @FunctionalInterface
+    private interface StageExecutor {
+        StageExecutionResult execute() throws Exception;
+    }
+
+    /** Ordered stage definition used to drive processSymbol and its failure-gating. */
+    private record StageDef(JobRunStage.StageName name, StageExecutor executor, long timeoutSec) {}
+
+    /** A stage can complete normally or skip without being treated as an operational error. */
+    private record StageExecutionResult(JobRunStage.Status status, String summary) {
+        private static StageExecutionResult completed(String summary) {
+            return new StageExecutionResult(JobRunStage.Status.COMPLETED, summary);
+        }
+
+        private static StageExecutionResult skipped(String summary) {
+            return new StageExecutionResult(JobRunStage.Status.SKIPPED, summary);
+        }
+    }
+
 }

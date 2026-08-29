@@ -44,4 +44,12 @@ public interface TradingService {
     BigDecimal getTotalPnL();
 
     BigDecimal getTotalValue();
+
+    /**
+     * The entry-side commission the engine would charge for a position of this
+     * quantity, at the engine's own commission rate. Used to record a real fee
+     * on the {@code Trade} audit record at entry, so the audit trail agrees
+     * with what the engine actually deducts from portfolio cash.
+     */
+    BigDecimal calculateEntryCommission(int quantity);
 }

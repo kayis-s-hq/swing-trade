@@ -1,7 +1,10 @@
 package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.risk.CapitalTracker.CapitalSummary;
-import com.swingtrade.domain.*;
+import com.swingtrade.domain.Exchange;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

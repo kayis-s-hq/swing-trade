@@ -1,6 +1,11 @@
 package com.swingtrade.domain.fixtures;
 
-import com.swingtrade.domain.*;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.Stock;
+import com.swingtrade.domain.Trade;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -9,6 +14,9 @@ import java.time.LocalDate;
  * Factory class for creating domain objects for testing.
  */
 public class DomainObjectFactory {
+
+    private DomainObjectFactory() {
+    }
 
     // Stock fixtures
     public static Stock createStock(String symbol, Stock.Exchange exchange, Stock.Sector sector) {

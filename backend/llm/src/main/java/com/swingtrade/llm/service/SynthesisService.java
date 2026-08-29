@@ -207,13 +207,19 @@ public class SynthesisService {
         return -1;
     }
 
+    private SynthesisResult fallbackSynthesis(CompositeAnalysis c) {
+        return new SynthesisResult(
+            null, null, 0.0, List.of(), List.of(), List.of(), false
+        );
+    }
+
     private static class LlmResponseDTO {
-        String narrative;
-        String recommendation;
-        double confidence;
-        List<String> keyDrivers;
-        List<String> bullishFactors;
-        List<String> bearishFactors;
+        private String narrative;
+        private String recommendation;
+        private double confidence;
+        private List<String> keyDrivers;
+        private List<String> bullishFactors;
+        private List<String> bearishFactors;
 
         public String getNarrative() { return narrative; }
         public String getRecommendation() { return recommendation; }
@@ -221,11 +227,5 @@ public class SynthesisService {
         public List<String> getKeyDrivers() { return keyDrivers; }
         public List<String> getBullishFactors() { return bullishFactors; }
         public List<String> getBearishFactors() { return bearishFactors; }
-    }
-
-    private SynthesisResult fallbackSynthesis(CompositeAnalysis c) {
-        return new SynthesisResult(
-            null, null, 0.0, List.of(), List.of(), List.of(), false
-        );
     }
 }

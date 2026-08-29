@@ -173,7 +173,7 @@ function signalProgressFromWire(payload: unknown): SignalGenerationProgress {
     typeof event.status !== 'string' ||
     !SIGNAL_EVENT_STATUSES.has(event.status as SignalGenerationProgress['status']) ||
     typeof event.message !== 'string' ||
-    (event.symbol !== undefined && typeof event.symbol !== 'string') ||
+    (event.symbol !== undefined && event.symbol !== null && typeof event.symbol !== 'string') ||
     (event.current !== undefined && typeof event.current !== 'number') ||
     (event.total !== undefined && typeof event.total !== 'number') ||
     (event.eventType === 'COMPLETE' && event.status !== 'DONE')
@@ -189,7 +189,9 @@ function signalProgressFromWire(payload: unknown): SignalGenerationProgress {
       typeof event.symbol === 'string' ? event.symbol : undefined
     ),
   } as unknown as SignalGenerationProgress
-  if (event.signal !== undefined) {
+  // Progress events intentionally carry signal: null; only validate/map an
+  // actual signal payload.
+  if (event.signal !== undefined && event.signal !== null) {
     if (!isBackendSignal(event.signal)) {
       throw invalidSignalEvent('The signal stream contained an invalid signal.')
     }

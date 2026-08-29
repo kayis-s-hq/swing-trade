@@ -1,5 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
 import type { IngestionStatus, PullProgress } from '../api/types'
 import { AppError, type AppErrorKind } from '../errors/appError'
 import DataIngestionView from './DataIngestionView.vue'
@@ -16,6 +17,7 @@ const apiMocks = vi.hoisted(() => ({
 
 const settingsMocks = vi.hoisted(() => ({
   getSettings: vi.fn(() => ({ selectedBroker: 'yahoo' })),
+  loadSettings: vi.fn(),
 }))
 
 vi.mock('../api/client', () => apiMocks)
@@ -89,6 +91,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.useFakeTimers()
   vi.stubGlobal('alert', vi.fn())
+  settingsMocks.getSettings.mockReturnValue({ selectedBroker: 'yahoo' })
   apiMocks.getIngestionStatus.mockResolvedValue([ingestionStatus])
   apiMocks.getFyersStatus.mockResolvedValue({ connected: false, clientId: '' })
   apiMocks.getPullProgress.mockResolvedValue(runningProgress)
@@ -98,6 +101,7 @@ beforeEach(() => {
     message: 'Data pull started',
   })
   apiMocks.setBroker.mockResolvedValue({ selectedBroker: 'yahoo' })
+  settingsMocks.loadSettings.mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -198,6 +202,29 @@ describe('DataIngestionView — pull cancellation and polling', () => {
     expect(apiMocks.getPullProgress).toHaveBeenCalledTimes(4)
     expect(wrapper.text()).toContain('60%')
     expect(wrapper.text()).not.toMatch(/progress.*stale|last progress.*out of date/i)
+    wrapper.unmount()
+  })
+})
+
+describe('DataIngestionView — persisted broker selection', () => {
+  it('loads settings before showing the connection and pull source', async () => {
+    const state = reactive({ selectedBroker: 'fyers' })
+    settingsMocks.getSettings.mockReturnValue(state)
+    settingsMocks.loadSettings.mockImplementation(async () => {
+      state.selectedBroker = 'yahoo'
+      return []
+    })
+    apiMocks.getPullProgress.mockResolvedValue({ status: 'idle' })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(settingsMocks.loadSettings).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('Yahoo Finance')
+    expect(wrapper.text()).toContain('Free data — no authentication required')
+    expect(wrapper.text()).not.toContain('Fyers Connection')
+    expect(wrapper.text()).not.toContain('Not connected — authenticate to pull data')
+    expect(apiMocks.setBroker).toHaveBeenCalledWith('yahoo')
     wrapper.unmount()
   })
 })

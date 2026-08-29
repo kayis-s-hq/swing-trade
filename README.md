@@ -49,6 +49,8 @@ core → (none)
 
 ## Quick Start
 
+Agent guidance: [`AGENTS.md`](AGENTS.md) is shared by Codex and Claude Code. [`CLAUDE.md`](CLAUDE.md) contains Claude Code-specific routing and skills.
+
 ### 1. Start Infrastructure
 
 ```bash
@@ -86,14 +88,17 @@ API: http://localhost:8080
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/health` | GET | System health (DB/Upstox states) |
-| `/api/signals` | GET | Latest signals |
-| `/api/signals/{symbol}` | GET | Signal for specific stock |
-| `/api/scan` | GET | Scan stocks (`?days=30&marketCap=min`) |
-| `/api/trade` | POST | Execute market order (paper) |
+| `/api/health` | GET | System health and component checks |
+| `/api/signals/latest` | GET | Latest signal per symbol |
+| `/api/signals/symbol/{symbol}` | GET | Signals for one symbol |
+| `/api/signals/generate-all` | POST | Generate price-action signals for the active watchlist |
+| `/api/signals/generate-all/stream` | POST | Stream signal-generation progress |
+| `/api/positions` | POST | Open a paper-trading position |
 | `/api/positions` | GET | View positions |
 | `/api/positions/{symbol}/close` | POST | Close position |
-| `/api/performance` | GET | P&L, win rate, trade stats |
+| `/api/positions/performance` | GET | P&L and trade performance |
+| `/api/watchlist` | GET/POST | Read or add active watchlist symbols |
+| `/api/data/pull` | POST | Pull historical data for active watchlist symbols |
 
 ## Trading Strategy
 

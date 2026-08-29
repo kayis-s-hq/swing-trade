@@ -37,6 +37,9 @@ public class SwingTradeApiApplication {
         Locale.setDefault(Locale.ROOT);
     }
 
+    private SwingTradeApiApplication() {
+    }
+
     public static void main(String[] args) {
         SpringApplication.run(SwingTradeApiApplication.class, args);
     }

@@ -22,7 +22,7 @@ public class NseHolidayEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(name = "holiday_date", nullable = false, unique = true)
     private LocalDate holidayDate;

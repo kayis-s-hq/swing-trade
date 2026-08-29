@@ -1,7 +1,9 @@
 package com.swingtrade.broker.model;
 
-import com.swingtrade.domain.*;
-import org.junit.jupiter.api.BeforeEach;
+import com.swingtrade.domain.Exchange;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -11,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for Portfolio covering construction, position management,
@@ -700,7 +701,11 @@ class PortfolioTest {
             java.time.LocalDateTime initialUpdate = portfolio.getLastUpdated();
 
             // Wait a moment to ensure time difference
-            try { Thread.sleep(10); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
 
             // When
             portfolio.addPosition(makePosition("RELIANCE-EQ", PositionStatus.OPEN,
@@ -718,7 +723,11 @@ class PortfolioTest {
                 new BigDecimal("2500.00"), new BigDecimal("2500.00"), 10, TradeDirection.LONG, BigDecimal.ZERO));
             java.time.LocalDateTime initialUpdate = portfolio.getLastUpdated();
 
-            try { Thread.sleep(10); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
 
             // When
             portfolio.removePosition("POS_RELIANCE-EQ");
@@ -733,7 +742,11 @@ class PortfolioTest {
             portfolio = new Portfolio("test-portfolio", new BigDecimal("1000000"));
             java.time.LocalDateTime initialUpdate = portfolio.getLastUpdated();
 
-            try { Thread.sleep(10); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
 
             // When
             portfolio.setCurrentCapital(new BigDecimal("950000"));

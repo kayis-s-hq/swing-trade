@@ -4,7 +4,6 @@ import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.broker.engine.PaperTradingEngine;
 import com.swingtrade.broker.manager.OrderManager;
 import com.swingtrade.broker.manager.PositionManager;
-import com.swingtrade.broker.model.*;
 import com.swingtrade.broker.service.PaperTradingServiceImpl;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
@@ -13,7 +12,6 @@ import com.swingtrade.domain.Position;
 import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.Exchange;
-import com.swingtrade.broker.service.PaperTradingStateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,7 +19,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.math.BigDecimal;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 @org.junit.jupiter.api.Disabled("Integration test - can be run separately with full Spring context")

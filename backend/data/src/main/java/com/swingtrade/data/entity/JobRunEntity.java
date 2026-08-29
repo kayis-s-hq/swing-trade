@@ -28,7 +28,7 @@ public class JobRunEntity {
     private Long id;
 
     @Version
-    protected Integer version = 0;
+    private Integer version = 0;
 
     @Column(name = "run_id", nullable = false, unique = true)
     private UUID runId;

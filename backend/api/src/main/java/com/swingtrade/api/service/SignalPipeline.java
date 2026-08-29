@@ -106,20 +106,7 @@ public class SignalPipeline {
         }
 
         if (result.type() == Signal.SignalType.SELL) {
-            boolean held = positionStore.findBySymbol(symbol).isPresent();
-            if (held) {
-                try {
-                    positionService.closePosition(symbol, ExitReason.SIGNAL_EXIT.name());
-                    logger.info("SELL signal closed held position for {} on {} (reason={})", symbol, latestDate,
-                        ExitReason.SIGNAL_EXIT.name());
-                } catch (Exception e) {
-                    logger.warn("SELL signal for {} on {} failed to close held position - signal still "
-                        + "persisted for audit; position remains open: {}", symbol, latestDate, e.getMessage());
-                }
-            } else {
-                logger.debug("SELL signal for {} on {} - no held position; persisting informational "
-                    + "SELL signal only", symbol, latestDate);
-            }
+            closeHeldPositionOnSell(symbol, latestDate);
         }
 
         Signal signal = Signal.create(result.symbol(), result.date(), result.type(),
@@ -161,6 +148,7 @@ public class SignalPipeline {
      * @param symbol the stock symbol
      * @return the saved signal, or empty if skipped
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public java.util.Optional<Signal> generatePriceActionSignal(String symbol) {
         logger.debug("Generating price-action signal for {}", symbol);
 
@@ -170,6 +158,10 @@ public class SignalPipeline {
         } catch (IllegalStateException e) {
             logger.debug("Not enough candles for price-action signal on {}: {}", symbol, e.getMessage());
             return java.util.Optional.empty();
+        }
+
+        if (result.type() == Signal.SignalType.SELL) {
+            closeHeldPositionOnSell(symbol, result.date());
         }
 
         SentimentGate.SentimentVerdict verdict = SentimentGate.SentimentVerdict.allow();
@@ -216,6 +208,28 @@ public class SignalPipeline {
     }
 
     // ---- Private helpers ----
+
+    /**
+     * Closes any held position for {@code symbol} on a SELL signal. Shared by
+     * both the primary and price-action pipelines so a SELL from either
+     * strategy actually exits a live position, not just one of them.
+     */
+    private void closeHeldPositionOnSell(String symbol, LocalDate date) {
+        boolean held = positionStore.findBySymbol(symbol).isPresent();
+        if (held) {
+            try {
+                positionService.closePosition(symbol, ExitReason.SIGNAL_EXIT.name());
+                logger.info("SELL signal closed held position for {} on {} (reason={})", symbol, date,
+                    ExitReason.SIGNAL_EXIT.name());
+            } catch (Exception e) {
+                logger.warn("SELL signal for {} on {} failed to close held position - signal still "
+                    + "persisted for audit; position remains open: {}", symbol, date, e.getMessage());
+            }
+        } else {
+            logger.debug("SELL signal for {} on {} - no held position; persisting informational "
+                + "SELL signal only", symbol, date);
+        }
+    }
 
     private String buildPriceActionIndicators(SignalResult result) {
         return String.format(

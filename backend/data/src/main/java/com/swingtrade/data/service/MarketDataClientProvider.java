@@ -1,5 +1,6 @@
 package com.swingtrade.data.service;
 
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +50,23 @@ public class MarketDataClientProvider {
             normalized.putIfAbsent(FYERS, fyersClient);
         }
         return normalized;
+    }
+
+    /**
+     * Rehydrates the active broker from the persisted setting at startup. Without
+     * this, a restart always resets to "yahoo" in memory while the DB still says
+     * (e.g.) "fyers" - GET /settings then reports the wrong broker, and the
+     * dashboard's next save writes "yahoo" back over the user's real selection.
+     */
+    @PostConstruct
+    void restorePersistedBroker() {
+        if (appSettingsService == null) {
+            return;
+        }
+        String persisted = appSettingsService.get(SELECTED_BROKER_SETTING, null);
+        if (persisted != null && !persisted.equals(activeBroker.get())) {
+            setActiveBroker(persisted);
+        }
     }
 
     public MarketDataClient getClient() {

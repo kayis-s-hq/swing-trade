@@ -13,7 +13,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,7 +55,17 @@ public class JobRunController {
             ? JobRun.TriggerType.SCHEDULED
             : JobRun.TriggerType.MANUAL;
 
-        JobRun run = orchestratorService.startRun(type);
+        JobRun run;
+        try {
+            // The pre-check above is a fast path only; startRun() itself is the
+            // atomic guard against a run that started in the window between that
+            // check and this call (e.g. the scheduled cron firing concurrently).
+            run = orchestratorService.startRun(type);
+        } catch (JobOrchestratorService.ConcurrentRunException e) {
+            logger.info("Rejecting {} job run trigger — {}", triggerType, e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.conflict(e.getMessage()));
+        }
         JobRunEntity entity = new JobRunEntity();
         entity.setRunId(run.runId());
         entity.setTriggerType(run.triggerType().name());

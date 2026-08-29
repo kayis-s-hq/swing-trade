@@ -1,7 +1,12 @@
 package com.swingtrade.broker.manager;
 
 import com.swingtrade.broker.config.PaperTradingProperties;
-import com.swingtrade.domain.*;
+import com.swingtrade.domain.Exchange;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.Order;
+import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -418,6 +423,29 @@ class PositionManagerTest {
             // Then
             assertThat(updated).isEmpty();
         }
+
+        @Test
+        void updatePositionsWithCandleData_stopLossHit_returnsClosedStatus() {
+            // Given: A long position, entry 100, ATR 5 -> stopLoss 90, target 125
+            String positionId = "POS_00000001";
+            positionManager.createPosition(positionId, "RELIANCE-EQ", TradeDirection.LONG, 10,
+                    new BigDecimal("100.00"), new BigDecimal("5.00"), "Test");
+
+            // Candle low (85) breaches the stop loss (90)
+            OhlcvCandle candle = new OhlcvCandle("RELIANCE-EQ", LocalDate.now(),
+                    new BigDecimal("92"), new BigDecimal("95"), new BigDecimal("85"),
+                    new BigDecimal("88"), 100000L, new BigDecimal("88"));
+
+            // When
+            List<Position> updated = positionManager.updatePositionsWithCandleData("RELIANCE-EQ", candle);
+
+            // Then: the caller must see the final (closed) status, not the pre-trigger
+            // OPEN snapshot - PaperTradingEngine.updatePositionsFromDomain branches on
+            // this to decide whether to persist a close and credit portfolio cash.
+            assertThat(updated).hasSize(1);
+            assertThat(updated.get(0).status()).isEqualTo(PositionStatus.STOPPED);
+            assertThat(updated.get(0).realizedPnL()).isEqualByComparingTo(new BigDecimal("-100.00"));
+        }
     }
 
     // ==================== SL/TP Triggers ====================
@@ -451,6 +479,9 @@ class PositionManagerTest {
             // The manager stores the updated position returned by closePosition
             Position stored = positionManager.getPosition("POS_00000001");
             assertThat(stored.status()).isEqualTo(PositionStatus.STOPPED);
+            // Realized P&L must be booked at the stop-loss level (90), not the
+            // candle's low (88) or the stale currentPrice (100).
+            assertThat(stored.realizedPnL()).isEqualByComparingTo(new BigDecimal("-100.00"));
         }
 
         @Test

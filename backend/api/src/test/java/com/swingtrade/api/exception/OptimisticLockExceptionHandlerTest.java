@@ -1,7 +1,6 @@
 package com.swingtrade.api.exception;
 
 import com.swingtrade.api.dto.ErrorResponse;
-import org.hibernate.StaleObjectStateException;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.OptimisticLockingFailureException;

@@ -400,6 +400,11 @@ public class PaperTradingEngine implements TradingService {
         return quantity.multiply(commissionRate);
     }
 
+    @Override
+    public BigDecimal calculateEntryCommission(int quantity) {
+        return BigDecimal.valueOf(quantity).multiply(commissionRate);
+    }
+
     /**
      * Performs partial exit of a position.
      *
@@ -538,7 +543,7 @@ public class PaperTradingEngine implements TradingService {
         portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(netProceeds));
 
         logger.info("Position {} closed: P&L={}, Reason={}",
-            positionId, position.unrealizedPnL(), reason);
+            positionId, position.realizedPnL(), reason);
 
         // Persist
         if (stateService != null) {

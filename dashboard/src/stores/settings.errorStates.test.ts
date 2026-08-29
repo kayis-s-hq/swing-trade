@@ -6,6 +6,7 @@ function legacySuccess<T>(data: T) {
 }
 
 const apiMocks = vi.hoisted(() => ({
+  getSettings: vi.fn(),
   getLlmSettings: vi.fn(),
   setLlmSettings: vi.fn(),
   getDiscordSettings: vi.fn(),
@@ -21,6 +22,10 @@ vi.mock('../api/settings', () => apiMocks)
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
+
+  // getSettings() has responseContract: 'envelope', so apiRequest already
+  // unwraps it - the resolved value is the plain data, never {success, data}.
+  apiMocks.getSettings.mockResolvedValue({ selectedBroker: 'fyers' })
 
   apiMocks.getDiscordSettings.mockResolvedValue(
     legacySuccess({
@@ -68,5 +73,19 @@ describe('settings store — unconfirmed defaults', () => {
 
     await expect(saveSettings()).resolves.toBe(false)
     expect(apiMocks.saveAllSettings).not.toHaveBeenCalled()
+  })
+
+  it('reports a malformed broker payload as a failed section, not a silent default', async () => {
+    // Regression: a response that arrives but omits selectedBroker (or sends an
+    // unrecognized value) used to fall through both branches - no state update,
+    // and nothing pushed to failedSections. The store silently kept the default
+    // broker with no "unconfirmed defaults" warning shown to the user.
+    apiMocks.getSettings.mockResolvedValue({ selectedBroker: 'not-a-real-broker' })
+    apiMocks.getLlmSettings.mockResolvedValue(legacySuccess({}))
+
+    const { getSettings, loadSettings } = await import('./settings')
+
+    await expect(loadSettings()).resolves.toEqual(['Broker settings'])
+    expect(getSettings().selectedBroker).toBe('yahoo') // unchanged from the in-memory default
   })
 })

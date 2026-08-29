@@ -3,7 +3,6 @@ package com.swingtrade.api.service;
 import com.swingtrade.api.service.JobOrchestratorService.JobRunProgress;
 import com.swingtrade.api.service.JobOrchestratorService.JobRunSummary;
 import com.swingtrade.api.service.JobOrchestratorService.StageStats;
-import com.swingtrade.api.service.JobOrchestratorService.SymbolDetail;
 import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.core.metrics.JobOrchestratorMetrics;
 import com.swingtrade.data.entity.JobRunEntity;
@@ -49,8 +48,21 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.STRICT_STUBS)
@@ -235,7 +247,7 @@ class JobOrchestratorServiceTest {
                 dataFetchStarted.countDown();
                 releaseDataFetch.await(5, TimeUnit.SECONDS);
                 return null;
-            }).when(dataIngestionService).processSingleStock(anyString(), any(LocalDate.class));
+            }).when(dataIngestionService).fetchLatestAndRepairGaps(anyString(), any(LocalDate.class));
 
             ExecutorService requestExecutor = Executors.newSingleThreadExecutor();
             try {
@@ -420,6 +432,60 @@ class JobOrchestratorServiceTest {
             assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
             assertThat(runState.get().getStatus()).isEqualTo(JobRun.Status.COMPLETED.name());
             assertThat(runState.get().getErrorMessage()).isNull();
+        }
+
+        @Test
+        @DisplayName("Exactly half of symbols with an ERROR stage still marks the run FAILED")
+        void shouldMarkRunFailedWhenExactlyHalfOfSymbolsHaveErrorStage() throws InterruptedException {
+            // Regression: the threshold used to be "> half", so a run where exactly
+            // half the symbols failed every stage was reported COMPLETED.
+            AtomicReference<JobRunEntity> runState = new AtomicReference<>();
+            CountDownLatch runCompleted = new CountDownLatch(1);
+            UUID stageRunId = UUID.randomUUID();
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("A", "B"));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                if (!JobRun.Status.RUNNING.name().equals(entity.getStatus())) {
+                    runCompleted.countDown();
+                }
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
+                .thenReturn(List.of(
+                    makeStageEntity(stageRunId, "A", JobRunStage.StageName.SIGNAL,
+                        JobRunStage.Status.ERROR.name(), 10L, null),
+                    makeStageEntity(stageRunId, "B", JobRunStage.StageName.SIGNAL,
+                        JobRunStage.Status.COMPLETED.name(), 10L, "ok")
+                ));
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(runState.get().getStatus()).isEqualTo(JobRun.Status.FAILED.name());
+            assertThat(runState.get().getErrorMessage()).contains("1 symbols failed");
+        }
+
+        @Test
+        @DisplayName("startRun rejects a second run while one is already active")
+        void shouldRejectConcurrentStartWhenARunIsAlreadyActive() {
+            JobRunEntity activeRun = new JobRunEntity();
+            activeRun.setRunId(UUID.randomUUID());
+            activeRun.setStatus(JobRun.Status.RUNNING.name());
+            activeRun.setTriggerType(JobRun.TriggerType.MANUAL.name());
+            activeRun.setStartedAt(java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata")));
+            activeRun.setSymbolsCount(1);
+            when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
+                .thenReturn(List.of(activeRun));
+
+            assertThatThrownBy(() -> service.startRun(JobRun.TriggerType.MANUAL))
+                .isInstanceOf(JobOrchestratorService.ConcurrentRunException.class)
+                .hasMessageContaining(activeRun.getRunId().toString());
+
+            verify(watchlistStore, never()).getActiveWatchlistSymbols();
         }
     }
 
@@ -1163,7 +1229,7 @@ class JobOrchestratorServiceTest {
                 .isTrue();
 
             verify(dataIngestionService, never())
-                .processSingleStock(eq(queuedSymbol), any(LocalDate.class));
+                .fetchLatestAndRepairGaps(eq(queuedSymbol), any(LocalDate.class));
 
             JobRunStageEntity queuedDataFetch =
                 stageState.get(queuedSymbol + "::" + JobRunStage.StageName.DATA_FETCH.name());

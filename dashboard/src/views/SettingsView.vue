@@ -836,6 +836,11 @@ const healthDot = (status: string) => {
 }
 
 const refreshFyersStatus = async () => {
+  if (settings.selectedBroker !== 'fyers') {
+    fyersStatus.value = null
+    fyersStatusError.value = false
+    return
+  }
   fyersStatusError.value = false
   try {
     const res = await getFyersStatus()
@@ -1321,9 +1326,6 @@ onMounted(async () => {
     authResultBanner.value = authParam
     router.replace({ query: {} })
   }
-  refreshFyersStatus()
-  refreshHealth()
-  refreshPiStatus()
   const failedSections = await loadSettings()
   unconfirmedDefaults.value = failedSections.length > 0
   if (failedSections.length > 0) {
@@ -1334,6 +1336,9 @@ onMounted(async () => {
       toastVisible.value = false
     }, 6000)
   }
+  await refreshFyersStatus()
+  refreshHealth()
+  refreshPiStatus()
   window.addEventListener('message', handleMessage)
 })
 
