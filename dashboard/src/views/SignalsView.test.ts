@@ -101,8 +101,10 @@ function mountView(): VueWrapper {
         },
         LoadingSpinner: true,
         SignalCard: {
-          props: ['signal'],
-          template: '<article :data-symbol="signal.symbol">{{ signal.symbol }}</article>',
+          props: ['signal', 'selected'],
+          emits: ['toggle-selection'],
+          template:
+            '<article :data-symbol="signal.symbol">{{ signal.symbol }}<input type="checkbox" :checked="selected" @change="$emit(\'toggle-selection\')" /></article>',
         },
       },
     },
@@ -188,7 +190,7 @@ describe('SignalsView — partial batch outcomes', () => {
     await flushPromises()
     await selectSignalIndexes(wrapper, [0, 1])
 
-    await button(wrapper, 'Clear 2').trigger('click')
+    await button(wrapper, 'Clear selected (2)').trigger('click')
     await flushPromises()
 
     expect(signalApiMocks.clearSignalsForSymbol).toHaveBeenCalledTimes(2)
@@ -202,15 +204,13 @@ describe('SignalsView — partial batch outcomes', () => {
     wrapper.unmount()
   })
 
-  it('preserves every signal and selection when clearing all fails without using native alert', async () => {
+  it('preserves every signal when clearing all fails without using native alert', async () => {
     signalApiMocks.clearAllSignals.mockRejectedValue(
       appError('Signals changed on the server', { kind: 'conflict' })
     )
     const wrapper = mountView()
     await flushPromises()
-    await selectSignalIndexes(wrapper, [0])
-
-    await button(wrapper, 'Clear All').trigger('click')
+    await button(wrapper, 'Clear all').trigger('click')
     await flushPromises()
 
     expect(wrapper.findAll('[data-symbol]').map((card) => card.attributes('data-symbol'))).toEqual([
@@ -218,7 +218,7 @@ describe('SignalsView — partial batch outcomes', () => {
       'TCS',
       'INFY',
     ])
-    expect(wrapper.text()).toContain('1 selected')
+    expect(wrapper.text()).not.toContain('selected')
     expect(wrapper.text()).toContain('Signals changed on the server')
     expect(globalThis.alert).not.toHaveBeenCalled()
     wrapper.unmount()

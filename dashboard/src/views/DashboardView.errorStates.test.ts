@@ -8,6 +8,10 @@ const apiMocks = vi.hoisted(() => ({
   getPositions: vi.fn(),
   getPortfolioSummary: vi.fn(),
   getHealthStatus: vi.fn(),
+  getEquityCurve: vi.fn(),
+  getRiskSummary: vi.fn(),
+  getSignals: vi.fn(),
+  getWatchlist: vi.fn(),
 }))
 
 vi.mock('../api/client', () => apiMocks)
@@ -94,6 +98,18 @@ describe('DashboardView — independent section failures', () => {
     apiMocks.getMarketOverview.mockResolvedValue(legacySuccess(overview))
     apiMocks.getPortfolioSummary.mockResolvedValue(legacySuccess(portfolio))
     apiMocks.getHealthStatus.mockResolvedValue(legacySuccess({ status: 'UP', components: {} }))
+    apiMocks.getRiskSummary.mockResolvedValue(
+      legacySuccess({
+        totalExposure: 28000,
+        availableCapital: 222000,
+        usedCapital: 28000,
+        stopLossExposure: 1000,
+        numberOfPositions: 1,
+      })
+    )
+    apiMocks.getSignals.mockResolvedValue([])
+    apiMocks.getWatchlist.mockResolvedValue([])
+    apiMocks.getEquityCurve.mockResolvedValue({ data: [] })
   })
 
   it('keeps successful cards visible and retries only the failed positions section', async () => {

@@ -32,7 +32,7 @@ echo ""
 # PID tracking for local processes
 save_pid() {
     mkdir -p "$PROJECT_ROOT"
-    echo "$2" >> "$PIDFILE"
+    echo "$1" >> "$PIDFILE"
 }
 
 cleanup_pids() {
@@ -43,8 +43,6 @@ cleanup_pids() {
         rm -f "$PIDFILE"
     fi
 }
-trap cleanup_pids EXIT
-
 do_stage_monitoring() {
     local cmd="${2:-up}"
     docker compose -f "$INFRA_DIR/docker-compose.monitoring-stage.yml" "$cmd"
@@ -95,9 +93,13 @@ case "${1:-help}" in
         echo "✓ Loaded environment from $INFRA_DIR/env/.env"
     fi
     export LOG_FILE="$BACKEND_DIR/logs/swing-trade-local.log"
+    mkdir -p "$BACKEND_DIR/logs"
     cd "$BACKEND_DIR"
-    ./gradlew :api:bootJar -q
-    java -Duser.timezone=Asia/Kolkata -jar api/build/libs/api.jar --spring.profiles.active=local &
+    ./gradlew :api:jar :api:copyRuntimeDeps -q
+    nohup java -Duser.timezone=Asia/Kolkata \
+        -cp "api/build/libs/api-plain.jar:api/build/runtimeDeps/*" \
+        com.swingtrade.api.app.SwingTradeApiApplication \
+        --spring.profiles.active=local > "$BACKEND_DIR/logs/dev-stack-api-console.log" 2>&1 < /dev/null &
     BACKEND_PID=$!
     save_pid "$BACKEND_PID"
     echo "✓ Backend PID: $BACKEND_PID"
@@ -106,7 +108,7 @@ case "${1:-help}" in
     # Start Vue dev server locally
     echo "🖥️  Starting Vue dev server locally..."
     cd "$DASHBOARD_DIR"
-    yarn dev &
+    nohup yarn dev > "$BACKEND_DIR/logs/dev-stack-frontend-console.log" 2>&1 < /dev/null &
     FRONTEND_PID=$!
     save_pid "$FRONTEND_PID"
     echo "✓ Frontend PID: $FRONTEND_PID"
@@ -134,7 +136,7 @@ case "${1:-help}" in
     echo ""
 
     # Fallback: kill by pattern
-    pkill -f "java.*-jar.*api/build/libs/api.jar" 2>/dev/null || true
+    pkill -f "com.swingtrade.api.app.SwingTradeApiApplication" 2>/dev/null || true
     pkill -f "vite" 2>/dev/null || true
     echo "✓ Stopped local Spring Boot app and Vue dev server"
     echo ""
@@ -170,7 +172,8 @@ case "${1:-help}" in
 
     echo "Local Spring Boot:"
     docker context use desktop-linux
-    pgrep -f "java.*-jar.*api/build/libs/api.jar" && echo "✓ Running" || echo "✗ Not running"
+    pgrep -f "com.swingtrade.api.app.SwingTradeApiApplication" > /dev/null 2>&1 \
+      && echo "✓ Running" || echo "✗ Not running"
     echo ""
 
     echo "Local Vue Dev Server:"

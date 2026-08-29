@@ -10,6 +10,8 @@ public class PositionStats {
     private Integer targetHit;
     private BigDecimal totalPnL;
     private BigDecimal unrealizedPnL;
+    private BigDecimal todayPnL;
+    private BigDecimal todayPnLPercent;
     private Double winRate;
     private Double averageHoldingPeriod;
     private String message;
@@ -53,6 +55,12 @@ public class PositionStats {
 
     public BigDecimal getUnrealizedPnL() { return unrealizedPnL; }
     public void setUnrealizedPnL(BigDecimal unrealizedPnL) { this.unrealizedPnL = unrealizedPnL; }
+
+    public BigDecimal getTodayPnL() { return todayPnL; }
+    public void setTodayPnL(BigDecimal todayPnL) { this.todayPnL = todayPnL; }
+
+    public BigDecimal getTodayPnLPercent() { return todayPnLPercent; }
+    public void setTodayPnLPercent(BigDecimal todayPnLPercent) { this.todayPnLPercent = todayPnLPercent; }
 
     public Double getWinRate() { return winRate; }
     public void setWinRate(Double winRate) { this.winRate = winRate; }

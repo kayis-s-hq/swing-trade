@@ -1,3 +1,5 @@
+/* These inline component probes intentionally share one test file. */
+/* eslint-disable vue/one-component-per-file */
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick, onMounted, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'

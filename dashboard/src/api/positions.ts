@@ -1,5 +1,5 @@
 import { apiRequest, toNum } from './shared'
-import type { Position, PortfolioSummary, MarketOverview, EquityPoint } from './types'
+import type { Position, PortfolioSummary, MarketOverview, EquityPoint, RiskSummary } from './types'
 
 interface BackendPosition {
   id: number
@@ -49,6 +49,8 @@ interface BackendPositionStats {
   closedPositions: number
   totalValue: number
   totalPnL: number
+  todayPnL?: number | string | null
+  todayPnLPercent?: number | string | null
 }
 
 const mapPosition = (p: BackendPosition): Position => ({
@@ -98,9 +100,16 @@ export async function getMarketOverview(): Promise<MarketOverview> {
   return {
     totalPositions: stats.totalPositions,
     openPositions: stats.openPositions,
-    todayPnl: toNum(stats.totalPnL),
-    todayPnlPercent: 0,
+    todayPnl: toNum(stats.todayPnL ?? stats.totalPnL),
+    todayPnlPercent: toNum(stats.todayPnLPercent),
+    todayPnLSource: stats.todayPnL != null ? 'DAILY' : 'FALLBACK_TOTAL',
   }
+}
+
+export async function getRiskSummary(): Promise<RiskSummary> {
+  return apiRequest<RiskSummary>('/positions/risk-summary', {
+    responseContract: 'direct',
+  })
 }
 
 export async function getPositions(): Promise<Position[]> {

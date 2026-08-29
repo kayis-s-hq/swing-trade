@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent } from 'vue'
 import PositionCard from '../../../src/components/PositionCard.vue'
-
-const TestComponent = defineComponent({
-  components: { PositionCard },
-  props: ['props'],
-  template: '<PositionCard v-bind="props" />',
-})
 
 describe('PositionCard', () => {
   const samplePosition = {

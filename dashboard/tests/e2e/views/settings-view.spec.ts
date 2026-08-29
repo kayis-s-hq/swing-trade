@@ -16,12 +16,6 @@ test.describe('Settings View', () => {
   test('shows loading state then resolves', async ({ page }) => {
     await page.goto(`${DASHBOARD}/settings`)
 
-    // Loading spinner should appear briefly
-    const loadingVisible = await page
-      .locator('text=Checking system')
-      .isVisible()
-      .catch(() => false)
-
     await page.waitForLoadState('networkidle')
 
     // Loading should be gone after networkidle

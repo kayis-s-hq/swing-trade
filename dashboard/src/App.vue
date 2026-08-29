@@ -27,7 +27,9 @@
             :reset-key="route.fullPath"
             :route="route.fullPath"
           >
-            <component :is="Component" />
+            <Transition name="route" mode="out-in">
+              <component :is="Component" />
+            </Transition>
           </RuntimeErrorBoundary>
         </router-view>
       </main>

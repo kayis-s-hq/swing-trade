@@ -16,6 +16,7 @@ export interface MarketOverview {
   openPositions: number
   todayPnl: number
   todayPnlPercent: number
+  todayPnLSource?: 'DAILY' | 'FALLBACK_TOTAL'
 }
 
 export interface Position {
@@ -72,6 +73,15 @@ export interface EquityPoint {
 export interface HealthStatus {
   status: string
   components: Record<string, HealthComponent>
+}
+
+export interface RiskSummary {
+  totalExposure: number
+  availableCapital: number
+  usedCapital: number
+  stopLossExposure: number
+  numberOfPositions: number
+  sectorExposure?: Record<string, number>
 }
 
 export interface HealthComponent {

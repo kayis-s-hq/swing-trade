@@ -1,12 +1,22 @@
 <template>
-  <div class="p-6 animate-fade-in">
+  <div class="view-shell signals-view p-6 animate-fade-in">
     <!-- Page Header -->
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">Signals</h1>
-        <p class="mt-1 text-sm text-text-muted">Active scanning and signal generation</p>
+        <div
+          class="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-brand pulse-dot" aria-hidden="true" />
+          Market intelligence
+        </div>
+        <h1 class="font-display text-2xl font-semibold tracking-tight text-text-primary">
+          Signals
+        </h1>
+        <p class="mt-1 max-w-xl text-sm text-text-muted">
+          Review fresh opportunities, compare conviction, and execute only when the setup is clear.
+        </p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <button
           :disabled="generating"
           class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
@@ -49,24 +59,9 @@
           Refresh
         </button>
         <button
-          v-if="selectedCount > 0"
-          class="flex items-center gap-2 rounded-md border border-danger/50 bg-bg-surface px-3 py-2 text-sm font-medium text-danger transition-colors hover:border-danger hover:bg-danger/10"
-          @click="clearSelected"
-        >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
-          </svg>
-          Clear {{ selectedCount }}
-        </button>
-        <button
           v-if="signals.length > 0"
           class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-danger hover:text-danger"
-          @click="clearAll"
+          @click="clearSignals"
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -76,7 +71,7 @@
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
             />
           </svg>
-          Clear All
+          {{ selectedCount > 0 ? `Clear selected (${selectedCount})` : 'Clear all' }}
         </button>
         <button
           v-if="selectedCount > 0"
@@ -94,6 +89,29 @@
           </svg>
           {{ executing ? 'Executing...' : `Execute ${selectedCount}` }}
         </button>
+      </div>
+    </div>
+
+    <div class="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div class="signal-stat">
+        <span class="signal-stat-label">Visible</span>
+        <span class="signal-stat-value">{{ filteredSignals.length }}</span>
+        <span class="signal-stat-meta">of {{ signals.length }} signals</span>
+      </div>
+      <div class="signal-stat">
+        <span class="signal-stat-label">Active</span>
+        <span class="signal-stat-value">{{ activeSignalCount }}</span>
+        <span class="signal-stat-meta">ready to review</span>
+      </div>
+      <div class="signal-stat">
+        <span class="signal-stat-label text-success">Buy bias</span>
+        <span class="signal-stat-value">{{ buySignalCount }}</span>
+        <span class="signal-stat-meta">bullish setups</span>
+      </div>
+      <div class="signal-stat">
+        <span class="signal-stat-label text-danger">Sell bias</span>
+        <span class="signal-stat-value">{{ sellSignalCount }}</span>
+        <span class="signal-stat-meta">bearish setups</span>
       </div>
     </div>
 
@@ -117,14 +135,21 @@
 
       <template v-else>
         <!-- Generation progress -->
-        <div v-if="generating" class="mb-4 card-panel p-4">
+        <div v-if="generating" class="mb-4 card-panel signal-progress-panel p-4">
           <div class="mb-2 flex items-center justify-between">
             <span class="text-sm font-medium text-text-primary">Signal Generation</span>
             <span class="text-xs text-text-muted">{{ progressCurrent }}/{{ progressTotal }}</span>
           </div>
-          <div class="h-2 rounded-full bg-bg-primary/50">
+          <div
+            class="h-2 overflow-hidden rounded-full bg-bg-primary/50"
+            role="progressbar"
+            :aria-valuenow="progressCurrent"
+            :aria-valuemin="0"
+            :aria-valuemax="progressTotal || 1"
+            aria-label="Signal generation progress"
+          >
             <div
-              class="h-full rounded-full bg-brand transition-all duration-300"
+              class="h-full rounded-full bg-brand transition-[width] duration-300 ease-out"
               :style="{
                 width: progressTotal > 0 ? (progressCurrent / progressTotal) * 100 + '%' : '0%',
               }"
@@ -136,7 +161,7 @@
         </div>
 
         <!-- Generation summary -->
-        <div v-if="generationSummary" class="mb-4 card-panel p-4">
+        <div v-if="generationSummary" class="mb-4 card-panel signal-summary-panel p-4">
           <div class="mb-2 flex items-center justify-between">
             <span class="text-sm font-medium text-text-primary">Generation Complete</span>
             <span class="text-xs text-text-muted">
@@ -165,8 +190,10 @@
         </div>
 
         <!-- Filters -->
-        <div class="mb-4 flex items-center justify-between">
-          <div class="flex items-center gap-3">
+        <div
+          class="mb-4 flex flex-col gap-3 rounded-lg border border-border-subtle bg-bg-surface/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div class="flex flex-wrap items-center gap-3">
             <label class="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -178,11 +205,14 @@
                 >Select all ({{ filteredSignals.length }})</span
               >
             </label>
-            <div class="flex rounded-md border border-border-subtle">
+            <div
+              class="signal-filter-group flex rounded-md border border-border-subtle bg-bg-primary/40 p-0.5"
+              aria-label="Direction filter"
+            >
               <button
                 v-for="dir in ['ALL', 'BUY', 'SELL']"
                 :key="dir"
-                class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
+                class="rounded px-3 py-1.5 text-xs font-medium transition-colors"
                 :class="
                   directionFilter === dir
                     ? 'bg-brand-subtle text-brand'
@@ -193,11 +223,14 @@
                 {{ dir }}
               </button>
             </div>
-            <div class="flex rounded-md border border-border-subtle">
+            <div
+              class="signal-filter-group flex rounded-md border border-border-subtle bg-bg-primary/40 p-0.5"
+              aria-label="Status filter"
+            >
               <button
                 v-for="st in ['ALL', 'ACTIVE', 'PENDING']"
                 :key="st"
-                class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
+                class="rounded px-3 py-1.5 text-xs font-medium transition-colors"
                 :class="
                   statusFilter === st
                     ? 'bg-brand-subtle text-brand'
@@ -215,34 +248,44 @@
         </div>
 
         <!-- Signal Grid -->
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <TransitionGroup
+          name="signal-card"
+          tag="div"
+          class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3"
+        >
           <div
             v-for="signal in filteredSignals"
             :key="signal.id"
-            class="relative transition-all"
+            class="signal-card-wrapper relative"
             :class="isSelected(signal.id) ? 'ring-2 ring-brand/50 rounded-lg' : ''"
           >
-            <div class="absolute top-2 left-2 z-10">
-              <label class="flex items-center gap-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  :checked="isSelected(signal.id)"
-                  class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
-                  @change="toggleSignal(signal.id)"
-                />
-              </label>
-            </div>
-            <div class="ml-7">
-              <SignalCard :signal="signal" />
-            </div>
+            <SignalCard
+              :signal="signal"
+              :selected="isSelected(signal.id)"
+              @toggle-selection="toggleSignal(signal.id)"
+            />
           </div>
-        </div>
+        </TransitionGroup>
 
         <div
           v-if="filteredSignals.length === 0"
-          class="flex flex-col items-center justify-center py-16"
+          class="signal-empty-state flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default py-16"
         >
-          <p class="text-sm text-text-muted">No signals matching filter</p>
+          <div
+            class="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-brand-subtle text-brand"
+            aria-hidden="true"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.7"
+                d="M4 19l5-5 3 3 8-9M16 8h4v4"
+              />
+            </svg>
+          </div>
+          <p class="text-sm font-medium text-text-primary">No signals match this view</p>
+          <p class="mt-1 text-xs text-text-muted">Try another filter or generate a fresh scan.</p>
         </div>
       </template>
     </ErrorBoundary>
@@ -340,6 +383,16 @@ const filteredSignals = computed(() => {
 })
 
 const selectedCount = computed(() => selectedSignalIds.value.size)
+
+const activeSignalCount = computed(
+  () => signals.value.filter((signal) => signal.status === 'ACTIVE').length
+)
+const buySignalCount = computed(
+  () => signals.value.filter((signal) => signal.direction === 'BUY').length
+)
+const sellSignalCount = computed(
+  () => signals.value.filter((signal) => signal.direction === 'SELL').length
+)
 
 const isSelectAll = computed(() => {
   if (filteredSignals.value.length === 0) return false
@@ -481,7 +534,6 @@ const generateAll = async () => {
         }
       }
     }
-    console.log(`Signal generation complete: ${allSignals.length} signals`)
   } catch (err: unknown) {
     const generationError = asAppError(err, { message: 'Signal generation failed.' })
     errorMessage.value = generationError.message
@@ -549,6 +601,8 @@ const clearSelected = async () => {
     offerPositionRefresh: false,
   }
 }
+
+const clearSignals = () => (selectedCount.value > 0 ? clearSelected() : clearAll())
 
 const refreshSignals = doRefresh
 

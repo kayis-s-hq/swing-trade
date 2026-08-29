@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 animate-fade-in">
+  <div class="view-shell p-6 animate-fade-in">
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
@@ -333,7 +333,7 @@ const runAnalysis = async () => {
   analysisError.value = null
   try {
     for await (const data of runFullAnalysis(symbolInput.value)) {
-      const evt = (data as any)._eventType
+      const evt = (data as { _eventType?: string })._eventType
       if (evt === 'complete') {
         const result = data as FullAnalysisResult
         composite.value = result.composite
@@ -393,7 +393,7 @@ const loadNews = async () => {
     } else {
       error.value = 'Couldn’t fetch news. Try again.'
     }
-  } catch (e) {
+  } catch {
     error.value = 'Couldn’t fetch news. Try again.'
   } finally {
     newsLoading.value = false

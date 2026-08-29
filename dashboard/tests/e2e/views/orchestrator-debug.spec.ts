@@ -1,3 +1,5 @@
+/* This exploratory spec intentionally logs diagnostics and inspects dynamic API data. */
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { test, expect } from '@playwright/test'
 
 test('orchestrator page — full feature check', async ({ page }) => {

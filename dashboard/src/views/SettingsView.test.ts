@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
+import type { Component } from 'vue'
 
 function createRouterMock() {
   return createRouter({
@@ -9,7 +10,7 @@ function createRouterMock() {
   })
 }
 
-function mountSettings(SettingsView: any) {
+function mountSettings(SettingsView: Component) {
   const router = createRouterMock()
   return mount(SettingsView, {
     global: {

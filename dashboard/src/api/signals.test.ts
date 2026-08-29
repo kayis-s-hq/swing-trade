@@ -266,7 +266,10 @@ describe('generateAllSignalsStream', () => {
       new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
     )
 
-    for await (const _event of generateAllSignalsStream()) break
+    for await (const event of generateAllSignalsStream()) {
+      expect(event).toBeDefined()
+      break
+    }
 
     expect(cancel).toHaveBeenCalledTimes(1)
   })

@@ -1,3 +1,5 @@
+/* This diagnostic script intentionally prints browser diagnostics. */
+/* eslint-disable no-console */
 import { chromium } from 'playwright'
 
 const browser = await chromium.launch({ headless: true })
@@ -12,7 +14,6 @@ const cards = await page.locator('.grid > *').all()
 console.log(`Cards count: ${cards.length}`)
 for (let i = 0; i < cards.length; i++) {
   const card = cards[i]
-  const box = await card.boundingBox()
   const bg = await card.evaluate((el) => getComputedStyle(el).backgroundColor)
   const height = await card.evaluate((el) => el.clientHeight)
   const width = await card.evaluate((el) => el.clientWidth)

@@ -43,6 +43,7 @@ export type { SignalGenerationProgress, SignalStreamOptions } from './signals'
 export {
   getPortfolioSummary,
   getMarketOverview,
+  getRiskSummary,
   getPositions,
   getClosedPositions,
   getTradeHistory,

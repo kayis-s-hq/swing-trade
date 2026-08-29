@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,7 +65,7 @@ public class FyersSymbolMasterService {
      */
     public FyersSymbolMasterService(WebClient.Builder webClientBuilder,
                                     FyersSymbolRepository repository,
-                                    MarketDataClientProvider marketDataClientProvider) {
+                                    @Lazy MarketDataClientProvider marketDataClientProvider) {
         ExchangeStrategies strategies = ExchangeStrategies.builder()
             .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
             .build();

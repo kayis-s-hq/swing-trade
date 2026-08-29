@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 animate-fade-in">
+  <div class="view-shell p-6 animate-fade-in">
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
@@ -393,14 +393,6 @@ function rebuildLookup() {
       durationMs: row.durationMs ?? null,
     }
   }
-  console.log(
-    '[Orchestrator] rebuildLookup: rows=',
-    stageRows.value.length,
-    'lookup keys=',
-    Object.keys(stageLookup).length,
-    'sample=',
-    stageLookup['AXISBANK::DATA_FETCH']
-  )
 }
 
 function getStageStatus(symbol: string, stageName: string): string {

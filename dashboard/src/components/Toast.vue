@@ -1,10 +1,12 @@
 <template>
+  <!-- eslint-disable vue/no-v-html -->
   <article
     :role="type === 'error' ? 'alert' : 'status'"
     :aria-live="type === 'error' ? 'assertive' : 'polite'"
     class="flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm shadow-2xl backdrop-blur-sm"
     :class="typeStyles[type]"
   >
+    <!-- icons is a static internal map; notification messages are rendered as text below. -->
     <svg
       class="mt-0.5 h-4 w-4 flex-shrink-0"
       viewBox="0 0 24 24"

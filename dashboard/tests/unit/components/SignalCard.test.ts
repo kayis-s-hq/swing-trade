@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SignalCard from '../../../src/components/SignalCard.vue'
 
@@ -10,8 +10,6 @@ vi.mock('vue-router', async () => {
     useRouter: () => mockRouter,
   }
 })
-
-import { useRouter } from 'vue-router'
 
 const sampleSignal = {
   symbol: 'HDFCBANK',

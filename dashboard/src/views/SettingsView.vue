@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-shell p-4 sm:p-6 animate-fade-in">
+  <div class="view-shell settings-shell p-4 sm:p-6 animate-fade-in">
     <div
       class="settings-header mb-6 flex flex-col gap-5 rounded-2xl border border-border-subtle p-5 sm:flex-row sm:items-end sm:justify-between sm:p-7"
     >
@@ -141,15 +141,26 @@
 
       <!-- Broker Tab -->
       <div v-show="activeTab === 'broker'">
-        <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">Broker Connection</h2>
+        <div class="broker-card card-panel p-5 sm:p-6">
+          <div class="broker-card-heading">
+            <div>
+              <p class="settings-section-kicker">Execution access</p>
+              <h2 class="mt-2 text-xl font-semibold tracking-tight text-text-primary">
+                Broker Connection
+              </h2>
+              <p class="mt-1 max-w-lg text-sm leading-6 text-text-muted">
+                Choose the account used for market data and order execution.
+              </p>
+            </div>
+            <span class="broker-card-mark">01</span>
+          </div>
 
           <!-- Broker Selection -->
-          <div class="mb-4 flex gap-3">
+          <div class="broker-options mt-6">
             <button
               v-for="b in brokers"
               :key="b.value"
-              class="flex-1 rounded-lg border p-3 text-sm font-medium transition-all"
+              class="broker-option rounded-xl border p-4 text-left text-sm font-medium transition-all"
               :class="
                 settings.selectedBroker === b.value
                   ? 'border-brand bg-brand-subtle text-brand'
@@ -157,22 +168,34 @@
               "
               @click="settings.selectedBroker = b.value"
             >
-              {{ b.label }}
+              <span class="flex items-center justify-between gap-3">
+                <span>{{ b.label }}</span>
+                <span
+                  v-if="settings.selectedBroker === b.value"
+                  class="broker-option-check"
+                  aria-hidden="true"
+                >
+                  ✓
+                </span>
+              </span>
+              <span class="mt-1 block text-xs font-normal text-text-muted">
+                {{ b.value === 'fyers' ? 'Market data and trading' : 'Integration coming soon' }}
+              </span>
             </button>
           </div>
 
           <!-- Connection Status -->
           <div
             v-if="settings.selectedBroker === 'fyers'"
-            class="rounded-lg border p-4"
+            class="broker-status mt-4 rounded-xl border p-4"
             :class="
               fyersConnected
                 ? 'border-success/50 bg-success-bg'
                 : 'border-border-subtle bg-bg-primary/50'
             "
           >
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex min-w-0 items-center gap-3">
                 <span v-if="fyersStatusError" class="text-sm font-medium text-warning"
                   >Status unavailable</span
                 >
@@ -183,22 +206,30 @@
                 />
                 <span
                   v-if="!fyersStatusError"
-                  class="text-sm font-medium"
+                  class="text-sm font-semibold"
                   :class="fyersConnected ? 'text-success' : 'text-text-muted'"
                 >
                   {{ fyersConnected ? 'Connected' : 'Disconnected' }}
                 </span>
               </div>
-              <span v-if="fyersConnected && fyersStatus?.clientId" class="text-xs text-text-muted">
-                ID: {{ fyersStatus.clientId }}
+              <span
+                v-if="fyersConnected && fyersStatus?.clientId"
+                class="truncate font-mono text-[11px] text-text-muted"
+              >
+                {{ fyersStatus.clientId }}
               </span>
             </div>
+            <p class="mt-2 text-xs text-text-muted">
+              {{
+                fyersConnected ? 'Ready for authenticated requests.' : 'Authentication required.'
+              }}
+            </p>
           </div>
 
           <!-- Connect Button -->
           <div
             v-if="settings.selectedBroker === 'fyers' && !fyersConnected && !fyersStatusError"
-            class="mt-4 space-y-3"
+            class="broker-actions mt-4 space-y-3"
           >
             <button
               :disabled="authing"
@@ -251,17 +282,28 @@
 
       <!-- LLM Tab -->
       <div v-show="activeTab === 'llm'">
-        <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">LLM & Intelligence</h2>
+        <div class="llm-card card-panel p-5 sm:p-6">
+          <div class="settings-panel-heading">
+            <div>
+              <p class="settings-section-kicker">Decision support</p>
+              <h2 class="mt-2 text-xl font-semibold tracking-tight text-text-primary">
+                LLM & Intelligence
+              </h2>
+              <p class="mt-1 max-w-lg text-sm leading-6 text-text-muted">
+                Configure the services that enrich signals with sentiment and research.
+              </p>
+            </div>
+            <span class="settings-panel-mark">02</span>
+          </div>
 
           <!-- Backend Selection -->
-          <div class="mb-6">
-            <h3 class="text-sm font-medium text-text-secondary mb-3">LLM Backend</h3>
-            <div class="flex gap-2 mb-4">
+          <div class="llm-backend-section mt-6 mb-6">
+            <h3 class="mb-3 text-sm font-semibold text-text-primary">LLM Backend</h3>
+            <div class="llm-backend-options">
               <button
                 v-for="b in llmBackends"
                 :key="b.value"
-                class="flex-1 rounded-lg border p-3 text-sm font-medium transition-all"
+                class="llm-backend-option rounded-xl border p-4 text-left text-sm font-medium transition-all"
                 :class="
                   llmSettings.llmBackend === b.value
                     ? 'border-brand bg-brand-subtle text-brand'
@@ -269,7 +311,16 @@
                 "
                 @click="llmSettings.llmBackend = b.value"
               >
-                {{ b.label }}
+                <span class="flex items-center justify-between gap-3">
+                  <span>{{ b.label }}</span>
+                  <span
+                    v-if="llmSettings.llmBackend === b.value"
+                    class="broker-option-check"
+                    aria-hidden="true"
+                  >
+                    ✓
+                  </span>
+                </span>
               </button>
             </div>
 
@@ -575,7 +626,7 @@
 
       <!-- Trading Tab -->
       <div v-show="activeTab === 'trading'">
-        <div class="settings-panel card-panel p-5 sm:p-6">
+        <div class="settings-panel trading-card card-panel p-5 sm:p-6">
           <div class="settings-panel-heading">
             <div>
               <p class="settings-section-kicker">Execution guardrails</p>
@@ -653,7 +704,7 @@
 
       <!-- Health Tab -->
       <div v-show="activeTab === 'health'">
-        <div class="settings-panel card-panel p-5 sm:p-6">
+        <div class="settings-panel health-card card-panel p-5 sm:p-6">
           <div class="settings-panel-heading">
             <div>
               <p class="settings-section-kicker">Operational pulse</p>
@@ -919,7 +970,7 @@ const startFyersAuth = async () => {
         pollTimer = null
       }
     })
-  } catch (err: unknown) {
+  } catch {
     authResultBanner.value = 'error'
   } finally {
     authing.value = false
@@ -936,7 +987,7 @@ const submitAuthCode = async () => {
     fyersStatus.value = data
     showAuthCodeInput.value = false
     authCodeInput.value = ''
-  } catch (err: unknown) {
+  } catch {
     authResultBanner.value = 'error'
     toastMessage.value = 'Fyers authentication failed. Please try again.'
     toastType.value = 'error'
@@ -1438,6 +1489,153 @@ onUnmounted(() => {
 
 .settings-panel {
   background: color-mix(in srgb, var(--color-bg-surface) 88%, transparent);
+}
+
+.broker-card {
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      color-mix(in srgb, var(--color-brand) 7%, transparent),
+      transparent 34%
+    ),
+    color-mix(in srgb, var(--color-bg-surface) 92%, transparent);
+}
+
+.broker-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.broker-card-mark {
+  color: color-mix(in srgb, var(--color-brand) 70%, var(--color-text-muted));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.broker-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.broker-option {
+  min-height: 4.75rem;
+  text-align: left;
+  transition:
+    transform 160ms var(--settings-ease),
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.broker-option:active {
+  transform: scale(0.98);
+}
+
+.broker-option-check {
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--color-brand);
+  color: var(--color-text-inverse);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.broker-status {
+  background: color-mix(in srgb, var(--color-bg-primary) 42%, transparent);
+}
+
+.broker-actions button {
+  min-height: 2.75rem;
+}
+
+.llm-card {
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      color-mix(in srgb, var(--color-info) 8%, transparent),
+      transparent 34%
+    ),
+    color-mix(in srgb, var(--color-bg-surface) 92%, transparent);
+}
+
+.llm-backend-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.llm-backend-option {
+  min-height: 3.75rem;
+  text-align: left;
+  transition:
+    transform 160ms var(--settings-ease),
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.llm-backend-option:active {
+  transform: scale(0.98);
+}
+
+.llm-backend-section > .space-y-2 > div {
+  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 70%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--color-bg-primary) 42%, transparent);
+  padding: 0.75rem 1rem;
+}
+
+.trading-card,
+.health-card {
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      color-mix(in srgb, var(--color-brand) 6%, transparent),
+      transparent 34%
+    ),
+    color-mix(in srgb, var(--color-bg-surface) 92%, transparent);
+}
+
+.trading-card .settings-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.trading-card .settings-field {
+  background: color-mix(in srgb, var(--color-bg-primary) 34%, transparent);
+}
+
+.health-card .settings-health-list {
+  border-top: 1px solid color-mix(in srgb, var(--color-border-subtle) 70%, transparent);
+  padding-top: 1rem;
+}
+
+.health-card .settings-health-row {
+  min-height: 4.5rem;
+}
+
+@media (max-width: 480px) {
+  .broker-options,
+  .llm-backend-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) and (min-width: 481px) {
+  .llm-backend-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .settings-panel-heading {

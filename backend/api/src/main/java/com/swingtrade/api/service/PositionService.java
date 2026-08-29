@@ -183,10 +183,21 @@ public class PositionService {
 
         BigDecimal unrealizedPnL = tradingService.getTotalUnrealizedPnL();
         BigDecimal realizedPnL = tradingService.getTotalRealizedPnL();
+        if (unrealizedPnL == null) unrealizedPnL = BigDecimal.ZERO;
+        if (realizedPnL == null) realizedPnL = BigDecimal.ZERO;
         BigDecimal totalPnL = realizedPnL.add(unrealizedPnL);
 
         stats.setTotalPnL(totalPnL);
         stats.setUnrealizedPnL(unrealizedPnL);
+
+        BigDecimal todayPnL = calculateTodayPnL(openPositions, closedPositions);
+        stats.setTodayPnL(todayPnL);
+        BigDecimal initialCapital = tradingService.getInitialCapital();
+        if (initialCapital == null) initialCapital = BigDecimal.ZERO;
+        stats.setTodayPnLPercent(initialCapital.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO
+                : todayPnL.multiply(BigDecimal.valueOf(100))
+                        .divide(initialCapital, 4, java.math.RoundingMode.HALF_UP));
 
         long winCount = 0;
         long stoppedOut = 0;
@@ -207,6 +218,19 @@ public class PositionService {
         stats.setTargetHit((int) targetHit);
 
         return stats;
+    }
+
+    private BigDecimal calculateTodayPnL(List<Position> openPositions, List<Position> closedPositions) {
+        LocalDate today = LocalDate.now();
+        BigDecimal openToday = openPositions.stream()
+                .filter(p -> today.equals(p.entryDate()))
+                .map(p -> p.unrealizedPnL() != null ? p.unrealizedPnL() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal closedToday = closedPositions.stream()
+                .filter(p -> p.exitTime() != null && today.equals(p.exitTime().toLocalDate()))
+                .map(p -> p.realizedPnL() != null ? p.realizedPnL() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return openToday.add(closedToday);
     }
 
     /**

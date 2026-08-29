@@ -20,7 +20,7 @@ export default defineConfig({
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
             proxyReq.setHeader('Origin', 'http://localhost:3003')
-            console.log('[VITE PROXY]', req.method, req.url, '->', proxyReq.path)
+            console.warn('[VITE PROXY]', req.method, req.url, '->', proxyReq.path)
           })
           proxy.on('proxyRes', (proxyRes, req, res) => {
             const isSSE =
@@ -34,7 +34,7 @@ export default defineConfig({
               res.removeHeader('Content-Length')
               res.flushHeaders()
             }
-            console.log('[VITE PROXY]', req.method, req.url, '->', proxyRes.statusCode)
+            console.warn('[VITE PROXY]', req.method, req.url, '->', proxyRes.statusCode)
           })
           proxy.on('error', (err, req) => {
             console.error('[VITE PROXY ERROR]', req.method, req.url, err.message)

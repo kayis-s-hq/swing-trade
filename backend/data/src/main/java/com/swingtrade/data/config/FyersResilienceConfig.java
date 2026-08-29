@@ -11,6 +11,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClient.Builder;
 
@@ -37,7 +38,7 @@ public class FyersResilienceConfig {
     @Bean
     public FyersSymbolMasterService fyersSymbolMasterService(WebClient.Builder webClientBuilder,
                                                              FyersSymbolRepository symbolRepository,
-                                                             MarketDataClientProvider marketDataClientProvider) {
+                                                             @Lazy MarketDataClientProvider marketDataClientProvider) {
         return new FyersSymbolMasterService(webClientBuilder, symbolRepository, marketDataClientProvider);
     }
 

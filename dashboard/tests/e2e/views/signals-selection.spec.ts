@@ -46,7 +46,8 @@ test.describe('Signals View Selection', () => {
     // Mock signals by evaluating JS to populate signals
     await page.evaluate(() => {
       // Simulate signals being loaded
-      ;(window as any).__mockSignals = [
+      const testWindow = window as unknown as { __mockSignals: unknown[] }
+      testWindow.__mockSignals = [
         {
           id: '1',
           symbol: 'RELIANCE',

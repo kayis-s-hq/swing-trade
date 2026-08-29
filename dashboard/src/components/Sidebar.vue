@@ -34,6 +34,8 @@
         "
         :title="collapsed ? item.label : undefined"
       >
+        <!-- iconPaths is a static, internal SVG path map; no user input reaches v-html. -->
+        <!-- eslint-disable-next-line vue/no-v-html -->
         <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" v-html="item.icon" />
         <template v-if="!collapsed">
           <span class="flex-1">{{ item.label }}</span>

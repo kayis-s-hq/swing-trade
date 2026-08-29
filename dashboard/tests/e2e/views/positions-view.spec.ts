@@ -16,12 +16,6 @@ test.describe('Positions View', () => {
   test('shows loading state then resolves', async ({ page }) => {
     await page.goto(`${DASHBOARD}/positions`)
 
-    // Loading spinner should appear briefly
-    const loadingVisible = await page
-      .locator('text=Loading positions')
-      .isVisible()
-      .catch(() => false)
-
     await page.waitForLoadState('networkidle')
 
     // Loading should be gone after networkidle
