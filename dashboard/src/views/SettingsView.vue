@@ -1,13 +1,22 @@
 <template>
-  <div class="p-6 animate-fade-in">
-    <div class="mb-6 flex items-start justify-between">
+  <div class="settings-shell p-4 sm:p-6 animate-fade-in">
+    <div
+      class="settings-header mb-6 flex flex-col gap-5 rounded-2xl border border-border-subtle p-5 sm:flex-row sm:items-end sm:justify-between sm:p-7"
+    >
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">Settings</h1>
-        <p class="mt-1 text-sm text-text-muted">Broker connections and trading configuration</p>
+        <p class="settings-kicker">
+          Control centre <span aria-hidden="true">/</span> Workspace preferences
+        </p>
+        <h1 class="mt-2 font-display text-3xl font-semibold tracking-tight text-text-primary">
+          Settings
+        </h1>
+        <p class="mt-2 max-w-xl text-sm leading-6 text-text-muted">
+          Configure how SwingTrade connects, thinks, trades, and reports back to you.
+        </p>
       </div>
       <button
         :disabled="saving || unconfirmedDefaults"
-        class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
+        class="settings-save rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-text transition-all hover:-translate-y-0.5 hover:bg-brand-hover disabled:opacity-50"
         :class="saved ? 'bg-success' : ''"
         @click="handleSave"
       >
@@ -15,13 +24,38 @@
       </button>
     </div>
 
-    <!-- Tab bar -->
-    <div role="tablist" class="mb-6 flex gap-1 border-b border-border-subtle">
+    <div class="settings-overview mb-6 grid gap-3 sm:grid-cols-3">
+      <div class="settings-status-card rounded-xl border border-border-subtle p-4">
+        <span class="settings-card-label">Active broker</span>
+        <span class="settings-card-value">{{
+          brokers.find((b) => b.value === settings.selectedBroker)?.label
+        }}</span>
+      </div>
+      <div class="settings-status-card rounded-xl border border-border-subtle p-4">
+        <span class="settings-card-label">Intelligence</span>
+        <span class="settings-card-value">{{
+          llmBackends.find((b) => b.value === llmSettings.llmBackend)?.label
+        }}</span>
+      </div>
+      <div class="settings-status-card rounded-xl border border-border-subtle p-4">
+        <span class="settings-card-label">Trading mode</span>
+        <span class="settings-card-value">{{
+          settings.tradingConfig.mode === 'paper' ? 'Paper Trading' : 'Live Trading'
+        }}</span>
+      </div>
+    </div>
+
+    <!-- Section navigation -->
+    <div
+      role="tablist"
+      aria-label="Settings sections"
+      class="settings-nav mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-border-subtle p-2 sm:grid-cols-4"
+    >
       <button
         role="tab"
         aria-label="Broker"
         :aria-selected="activeTab === 'broker'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
         :class="
           activeTab === 'broker'
             ? 'border-b-2 border-brand text-brand'
@@ -29,13 +63,14 @@
         "
         @click="activeTab = 'broker'"
       >
-        Broker
+        <span class="settings-tab-index">01</span><span>Broker</span
+        ><span class="settings-tab-detail">Connection</span>
       </button>
       <button
         role="tab"
         aria-label="AI/LLM"
         :aria-selected="activeTab === 'llm'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
         :class="
           activeTab === 'llm'
             ? 'border-b-2 border-brand text-brand'
@@ -43,13 +78,14 @@
         "
         @click="activeTab = 'llm'"
       >
-        AI/LLM
+        <span class="settings-tab-index">02</span><span>AI / LLM</span
+        ><span class="settings-tab-detail">Intelligence</span>
       </button>
       <button
         role="tab"
         aria-label="Trading"
         :aria-selected="activeTab === 'trading'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
         :class="
           activeTab === 'trading'
             ? 'border-b-2 border-brand text-brand'
@@ -57,13 +93,14 @@
         "
         @click="activeTab = 'trading'"
       >
-        Trading
+        <span class="settings-tab-index">03</span><span>Trading</span
+        ><span class="settings-tab-detail">Risk & limits</span>
       </button>
       <button
         role="tab"
         aria-label="Health"
         :aria-selected="activeTab === 'health'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
         :class="
           activeTab === 'health'
             ? 'border-b-2 border-brand text-brand'
@@ -71,11 +108,12 @@
         "
         @click="activeTab = 'health'"
       >
-        Health
+        <span class="settings-tab-index">04</span><span>Health</span
+        ><span class="settings-tab-detail">Diagnostics</span>
       </button>
     </div>
 
-    <div class="max-w-2xl">
+    <div class="max-w-4xl">
       <div
         v-if="unconfirmedDefaults"
         role="status"
@@ -537,86 +575,134 @@
 
       <!-- Trading Tab -->
       <div v-show="activeTab === 'trading'">
-        <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">Trading Configuration</h2>
-          <div class="grid grid-cols-2 gap-4 text-sm">
-            <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">Mode</p>
-              <select
-                v-model="settings.tradingConfig.mode"
-                class="mt-1 w-full rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
-              >
-                <option value="paper">Paper Trading</option>
-                <option value="live">Live Trading</option>
-              </select>
+        <div class="settings-panel card-panel p-5 sm:p-6">
+          <div class="settings-panel-heading">
+            <div>
+              <p class="settings-section-kicker">Execution guardrails</p>
+              <h2 class="mt-1 text-lg font-semibold text-text-primary">Trading Configuration</h2>
+              <p class="mt-1 text-sm text-text-muted">
+                Set the rules that keep every paper trade within your plan.
+              </p>
             </div>
-            <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">Max Position Size</p>
-              <div class="mt-1 flex items-center gap-1">
+            <span class="settings-panel-mark">03</span>
+          </div>
+
+          <div class="settings-mode-row mt-6 rounded-xl border border-border-subtle p-4">
+            <div>
+              <p class="text-sm font-semibold text-text-primary">Trading mode</p>
+              <p class="mt-1 text-xs text-text-muted">
+                Live trading stays opt-in until you deliberately switch modes.
+              </p>
+            </div>
+            <select
+              v-model="settings.tradingConfig.mode"
+              aria-label="Trading mode"
+              class="settings-input mt-3 w-full sm:mt-0 sm:w-52"
+            >
+              <option value="paper">Paper Trading</option>
+              <option value="live">Live Trading</option>
+            </select>
+          </div>
+
+          <div class="mt-5 grid gap-3 sm:grid-cols-3">
+            <label class="settings-field rounded-xl border border-border-subtle p-4">
+              <span class="settings-field-label">Max Position Size</span>
+              <span class="settings-field-help">Portfolio allocation limit</span>
+              <span class="settings-input-wrap">
                 <input
                   v-model.number="settings.tradingConfig.maxPositionSize"
                   type="number"
                   min="1"
                   max="100"
-                  class="w-20 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
+                  class="settings-input"
                 />
-                <span class="text-xs text-text-muted">%</span>
-              </div>
-            </div>
-            <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">Stop Loss</p>
-              <div class="mt-1 flex items-center gap-1">
+                <span>%</span>
+              </span>
+            </label>
+            <label class="settings-field rounded-xl border border-border-subtle p-4">
+              <span class="settings-field-label">Stop Loss</span>
+              <span class="settings-field-help">Exit when risk threshold hits</span>
+              <span class="settings-input-wrap">
                 <input
                   v-model.number="settings.tradingConfig.stopLoss"
                   type="number"
                   min="1"
                   max="50"
-                  class="w-20 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
+                  class="settings-input"
                 />
-                <span class="text-xs text-text-muted">%</span>
-              </div>
-            </div>
-            <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">Take Profit</p>
-              <div class="mt-1 flex items-center gap-1">
+                <span>%</span>
+              </span>
+            </label>
+            <label class="settings-field rounded-xl border border-border-subtle p-4">
+              <span class="settings-field-label">Take Profit</span>
+              <span class="settings-field-help">Target gain before exit</span>
+              <span class="settings-input-wrap">
                 <input
                   v-model.number="settings.tradingConfig.takeProfit"
                   type="number"
                   min="1"
                   max="200"
-                  class="w-20 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
+                  class="settings-input"
                 />
-                <span class="text-xs text-text-muted">%</span>
-              </div>
-            </div>
+                <span>%</span>
+              </span>
+            </label>
           </div>
         </div>
       </div>
 
       <!-- Health Tab -->
       <div v-show="activeTab === 'health'">
-        <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">System Health</h2>
-          <div v-if="healthStatus" class="space-y-2">
+        <div class="settings-panel card-panel p-5 sm:p-6">
+          <div class="settings-panel-heading">
+            <div>
+              <p class="settings-section-kicker">Operational pulse</p>
+              <h2 class="mt-1 text-lg font-semibold text-text-primary">System Health</h2>
+              <p class="mt-1 text-sm text-text-muted">
+                A quick read on the services supporting your workspace.
+              </p>
+            </div>
+            <span class="settings-panel-mark">04</span>
+          </div>
+          <div v-if="healthStatus" class="settings-health-list mt-6 space-y-2">
             <div
               v-for="(comp, key) in healthStatus.components"
               :key="key"
-              class="flex items-center justify-between rounded-lg border border-border-subtle/50 p-3"
+              class="settings-health-row flex items-center justify-between rounded-xl border border-border-subtle/50 p-4"
             >
-              <span class="text-sm font-medium text-text-secondary">{{ key }}</span>
+              <div class="flex items-center gap-3">
+                <span
+                  class="settings-health-icon"
+                  :class="healthDot(comp.status)"
+                  aria-hidden="true"
+                />
+                <div>
+                  <span class="block text-sm font-semibold capitalize text-text-primary">{{
+                    key
+                  }}</span>
+                  <span class="mt-0.5 block text-xs text-text-muted">Service availability</span>
+                </div>
+              </div>
               <span
                 class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
                 :class="healthColor(comp.status)"
               >
-                <span class="h-1.5 w-1.5 rounded-full" :class="healthDot(comp.status)" />
                 {{ comp.status }}
               </span>
             </div>
           </div>
-          <div v-else-if="healthStatusError" class="py-8 text-center text-sm text-warning">
-            Status unavailable
+          <div
+            v-else-if="healthStatusError"
+            role="status"
+            class="settings-health-empty mt-6 rounded-xl border border-warning/30 bg-warning-bg p-5 text-sm text-warning"
+          >
+            <span class="font-semibold">Status unavailable.</span> We couldn't confirm every service
+            right now.
           </div>
-          <div v-else class="flex items-center justify-center py-8">
+          <div
+            v-else
+            class="flex items-center justify-center rounded-xl border border-border-subtle p-8"
+          >
             <LoadingSpinner :message="'Checking system...'" :small="true" />
           </div>
         </div>
@@ -1259,3 +1345,256 @@ onUnmounted(() => {
   window.removeEventListener('message', handleMessage)
 })
 </script>
+
+<style scoped>
+.settings-shell {
+  --settings-ease: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.settings-header {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      color-mix(in srgb, var(--color-brand) 12%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-bg-surface) 96%, white),
+      var(--color-bg-primary)
+    );
+}
+
+.settings-header::after {
+  position: absolute;
+  right: 2rem;
+  bottom: -4rem;
+  width: 12rem;
+  height: 12rem;
+  border: 1px solid color-mix(in srgb, var(--color-brand) 18%, transparent);
+  border-radius: 999px;
+  content: '';
+  pointer-events: none;
+}
+
+.settings-kicker,
+.settings-card-label,
+.settings-tab-index,
+.settings-tab-detail {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.settings-kicker span {
+  color: var(--color-brand);
+  margin: 0 0.35rem;
+}
+
+.settings-save,
+.settings-tab,
+.settings-status-card {
+  position: relative;
+  transition:
+    transform 160ms var(--settings-ease),
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.settings-save:active,
+.settings-tab:active {
+  transform: scale(0.97);
+}
+
+.settings-status-card {
+  display: flex;
+  min-height: 5.25rem;
+  flex-direction: column;
+  justify-content: space-between;
+  background: color-mix(in srgb, var(--color-bg-surface) 72%, transparent);
+}
+
+.settings-status-card:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 38%, var(--color-border-subtle));
+  transform: translateY(-2px);
+}
+
+.settings-card-value {
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.settings-panel {
+  background: color-mix(in srgb, var(--color-bg-surface) 88%, transparent);
+}
+
+.settings-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.settings-section-kicker {
+  color: var(--color-brand);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settings-panel-mark {
+  color: color-mix(in srgb, var(--color-brand) 70%, var(--color-text-muted));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.settings-mode-row {
+  background: color-mix(in srgb, var(--color-bg-primary) 45%, transparent);
+}
+
+.settings-field {
+  display: flex;
+  min-height: 9.5rem;
+  flex-direction: column;
+  cursor: text;
+  transition:
+    border-color 160ms ease,
+    transform 160ms var(--settings-ease);
+}
+
+.settings-field:focus-within {
+  border-color: color-mix(in srgb, var(--color-brand) 60%, var(--color-border-subtle));
+  transform: translateY(-2px);
+}
+
+.settings-field-label {
+  color: var(--color-text-primary);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.settings-field-help {
+  margin-top: 0.35rem;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.settings-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.settings-input {
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.65rem;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: 0.86rem;
+  outline: none;
+  padding: 0.55rem 0.7rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.settings-input:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-subtle);
+}
+
+.settings-input-wrap .settings-input {
+  width: 100%;
+}
+
+.settings-health-row {
+  background: color-mix(in srgb, var(--color-bg-primary) 35%, transparent);
+  transition:
+    border-color 160ms ease,
+    transform 160ms var(--settings-ease);
+}
+
+.settings-health-row:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 30%, var(--color-border-subtle));
+  transform: translateX(2px);
+}
+
+.settings-health-icon {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.settings-health-empty {
+  line-height: 1.5;
+}
+
+.settings-tab {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.55rem;
+  row-gap: 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+}
+
+.settings-tab-index {
+  grid-row: span 2;
+  padding-top: 0.1rem;
+  color: color-mix(in srgb, var(--color-brand) 72%, var(--color-text-muted));
+}
+
+.settings-tab-detail {
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: none;
+}
+
+.settings-tab[aria-selected='true'] {
+  border-color: color-mix(in srgb, var(--color-brand) 28%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 9%, var(--color-bg-surface));
+  box-shadow: inset 0 -2px 0 var(--color-brand);
+}
+
+@media (max-width: 640px) {
+  .settings-tab-detail {
+    display: none;
+  }
+
+  .settings-tab {
+    grid-template-columns: auto 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-save,
+  .settings-tab,
+  .settings-status-card {
+    transition: none;
+  }
+
+  .settings-field,
+  .settings-health-row,
+  .settings-input {
+    transition: none;
+  }
+}
+</style>

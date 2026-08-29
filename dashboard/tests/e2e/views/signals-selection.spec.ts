@@ -20,8 +20,6 @@ test.describe('Signals View Selection', () => {
     const bodyText = await page.locator('body').textContent()
     const errorMatch = bodyText?.match(/Unexpected error|TypeError|Cannot read/)
     expect(errorMatch).toBeNull()
-
-    await page.screenshot({ path: 'tests/e2e/screenshots/signals-view.png', fullPage: true })
   })
 
   test('select all checkbox renders in filter area', async ({ page }) => {
@@ -85,6 +83,9 @@ test.describe('Signals View Selection', () => {
     // Reload to get clean state
     await page.reload()
     await page.waitForLoadState('networkidle')
+
+    await expect(page.getByRole('button', { name: 'Generate All' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible()
   })
 
   test('filter buttons render correctly', async ({ page }) => {
