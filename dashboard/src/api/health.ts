@@ -15,6 +15,8 @@ export async function checkHealth(): Promise<BackendHealthResponse> {
 
 export async function getHealthStatus(): Promise<HealthStatus> {
   return apiRequest<HealthStatus>('/health/full', {
-    responseContract: 'envelope',
+    // HealthController.fullHealth returns HealthStatus directly, unlike the
+    // application endpoints that use the { success, data } envelope.
+    responseContract: 'direct',
   })
 }
