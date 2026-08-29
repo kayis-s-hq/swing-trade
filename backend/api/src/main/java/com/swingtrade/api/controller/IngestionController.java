@@ -103,6 +103,35 @@ public class IngestionController {
         }
     }
 
+    @PostMapping("/ingestion/range")
+    public ResponseEntity<ApiResponse<Map<String, String>>> ingestRange(
+            @RequestParam LocalDate from, @RequestParam LocalDate to) {
+        logger.info("Manual range pull requested from {} to {}", from, to);
+        try {
+            String pullId = watchlistService.startPullAll(from, to);
+            return ResponseEntity.ok(ApiResponse.ok(Map.of("pullId", pullId, "status", "started")));
+        } catch (Exception e) {
+            logger.error("Range pull failed: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(ApiResponse.error("Failed to start range pull: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/ingestion/date")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> ingestDate(
+            @RequestParam String symbol, @RequestParam LocalDate date) {
+        logger.info("Manual single-date pull requested for {} on {}", symbol, date);
+        try {
+            String normalizedSymbol = symbol.trim().toUpperCase();
+            dataIngestionService.processSingleStock(normalizedSymbol, date);
+            return ResponseEntity.ok(ApiResponse.ok(Map.of(
+                "symbol", normalizedSymbol, "date", date, "status", "completed")));
+        } catch (Exception e) {
+            logger.error("Single-date pull failed for {} on {}: {}", symbol, date, e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                .body(ApiResponse.error("Failed to pull selected date: " + e.getMessage()));
+        }
+    }
+
     /**
      * Ingest only the latest candle for a stock.
      */

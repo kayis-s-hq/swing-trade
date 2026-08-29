@@ -2,9 +2,11 @@ package com.swingtrade.data.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -16,24 +18,45 @@ import java.util.concurrent.atomic.AtomicReference;
 public class MarketDataClientProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(MarketDataClientProvider.class);
+    private static final String FYERS = "fyers";
+    private static final String SELECTED_BROKER_SETTING = "selectedBroker";
 
     private final Map<String, MarketDataClient> clients;
-    private final AtomicReference<String> activeBroker = new AtomicReference<>("yahoo");
+    private final AppSettingsService appSettingsService;
+    private final AtomicReference<String> activeBroker;
 
+    @Autowired
+    public MarketDataClientProvider(Map<String, MarketDataClient> clients, AppSettingsService appSettingsService) {
+        this.clients = normalizeClientNames(clients);
+        this.appSettingsService = appSettingsService;
+        String configuredBroker = appSettingsService.get(SELECTED_BROKER_SETTING, FYERS);
+        this.activeBroker = new AtomicReference<>(this.clients.containsKey(configuredBroker) ? configuredBroker : FYERS);
+        logger.info("MarketDataClientProvider initialized with: {}", this.clients.keySet());
+        logger.info("Active market data provider: {}", activeBroker.get());
+    }
+
+    /** Compatibility constructor for lightweight tests. */
     public MarketDataClientProvider(Map<String, MarketDataClient> clients) {
-        this.clients = clients;
-        logger.info("MarketDataClientProvider initialized with: {}", clients.keySet());
+        this.clients = normalizeClientNames(clients);
+        this.appSettingsService = null;
+        this.activeBroker = new AtomicReference<>(this.clients.containsKey(FYERS) ? FYERS : "yahoo");
+    }
+
+    private static Map<String, MarketDataClient> normalizeClientNames(Map<String, MarketDataClient> clients) {
+        Map<String, MarketDataClient> normalized = new HashMap<>(clients);
+        MarketDataClient fyersClient = normalized.get("fyersServiceClient");
+        if (fyersClient != null) {
+            normalized.putIfAbsent(FYERS, fyersClient);
+        }
+        return normalized;
     }
 
     public MarketDataClient getClient() {
         String broker = activeBroker.get();
         MarketDataClient client = clients.get(broker);
         if (client == null) {
-            logger.warn("No MarketDataClient for broker '{}', falling back to yahoo", broker);
-            client = clients.get("yahoo");
-        }
-        if (client == null) {
-            throw new IllegalStateException("No MarketDataClient available");
+            throw new IllegalStateException("Market data provider '" + broker + "' is unavailable; "
+                + "authentication/configuration is required and no fallback provider is enabled");
         }
         return client;
     }
@@ -49,5 +72,8 @@ public class MarketDataClientProvider {
         }
         logger.info("Switched data source to '{}'", broker);
         activeBroker.set(broker);
+        if (appSettingsService != null) {
+            appSettingsService.set(SELECTED_BROKER_SETTING, broker);
+        }
     }
 }

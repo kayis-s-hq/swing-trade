@@ -1,6 +1,6 @@
 # Market Data Client Configuration
 market-data:
-  client-type: ${MARKET_DATA_CLIENT:yahoo-finance}
+  client-type: ${MARKET_DATA_CLIENT:fyers}
 
 yahoo-finance:
   enabled: true

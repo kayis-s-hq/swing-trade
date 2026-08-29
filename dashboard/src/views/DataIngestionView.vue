@@ -64,6 +64,58 @@
       </div>
     </div>
 
+    <div class="mb-6 card-panel p-5">
+      <div class="mb-3 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-text-primary">Data pull options</p>
+          <p class="text-xs text-text-muted">
+            Use a full range to repair historical gaps or pull one date.
+          </p>
+        </div>
+        <select
+          v-model="pullMode"
+          class="rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary"
+        >
+          <option value="history">Default history</option>
+          <option value="range">Custom date range</option>
+          <option value="date">Single date</option>
+        </select>
+      </div>
+      <div v-if="pullMode === 'range'" class="grid gap-3 sm:grid-cols-2">
+        <label class="text-xs text-text-muted"
+          >From
+          <input
+            v-model="rangeFrom"
+            type="date"
+            class="mt-1 block w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary"
+        /></label>
+        <label class="text-xs text-text-muted"
+          >To
+          <input
+            v-model="rangeTo"
+            type="date"
+            class="mt-1 block w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary"
+        /></label>
+      </div>
+      <div v-if="pullMode === 'date'" class="grid gap-3 sm:grid-cols-2">
+        <label class="text-xs text-text-muted"
+          >Symbol
+          <input
+            v-model="selectedSymbol"
+            placeholder="e.g. RELIANCE"
+            class="mt-1 block w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm uppercase text-text-primary"
+        /></label>
+        <label class="text-xs text-text-muted"
+          >Date
+          <input
+            v-model="selectedDate"
+            type="date"
+            class="mt-1 block w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary"
+        /></label>
+      </div>
+      <p v-if="pullValidation" class="mt-2 text-xs text-danger">{{ pullValidation }}</p>
+    </div>
+
     <!-- Broker Connection Status -->
     <div class="mb-6 card-panel p-5">
       <div class="flex items-center justify-between">
@@ -288,6 +340,8 @@ import {
   triggerDataPull,
   getPullProgress,
   cancelDataPull,
+  triggerDataPullRange,
+  ingestSelectedDate,
 } from '../api/ingestion'
 import { getFyersStatus, getFyersLoginUrl, setBroker as apiSetBroker } from '../api/client'
 import type { IngestionStatus, PullProgress } from '../api/types'
@@ -305,6 +359,21 @@ const fyersConnected = ref(false)
 const operationNotice = ref('')
 const offerPullStatusRefresh = ref(false)
 const pollingWarning = ref(false)
+const pullMode = ref<'history' | 'range' | 'date'>('history')
+const rangeFrom = ref('')
+const rangeTo = ref('')
+const selectedSymbol = ref('')
+const selectedDate = ref('')
+
+const pullValidation = computed(() => {
+  if (pullMode.value === 'range' && (!rangeFrom.value || !rangeTo.value))
+    return 'Select both dates.'
+  if (pullMode.value === 'range' && rangeFrom.value > rangeTo.value)
+    return 'The start date must be before the end date.'
+  if (pullMode.value === 'date' && (!selectedSymbol.value.trim() || !selectedDate.value))
+    return 'Select a symbol and date.'
+  return ''
+})
 
 const pulling = ref(false)
 const pullProgress = ref<PullProgress | null>(null)
@@ -383,13 +452,23 @@ const refreshStatus = () => {
 }
 
 const startPull = async () => {
+  if (pullValidation.value) return
   pulling.value = true
   pullComplete.value = false
   pullProgress.value = null
   operationNotice.value = ''
   try {
-    const result = await triggerDataPull(1)
-    startPolling(result.pullId)
+    if (pullMode.value === 'date') {
+      await ingestSelectedDate(selectedSymbol.value.trim(), selectedDate.value)
+      pulling.value = false
+      await loadStatus()
+    } else {
+      const result =
+        pullMode.value === 'range'
+          ? await triggerDataPullRange(rangeFrom.value, rangeTo.value)
+          : await triggerDataPull(3)
+      startPolling(result.pullId)
+    }
   } catch (err: unknown) {
     pulling.value = false
     operationNotice.value = safeHumanMessage(

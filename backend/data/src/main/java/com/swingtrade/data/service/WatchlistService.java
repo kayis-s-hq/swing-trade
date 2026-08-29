@@ -157,6 +157,15 @@ public class WatchlistService {
 
     @Transactional
     public String startPullAll(int yearsBack) {
+        LocalDate toDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        return startPullAll(toDate.minusYears(yearsBack), toDate);
+    }
+
+    @Transactional
+    public String startPullAll(LocalDate fromDate, LocalDate toDate) {
+        if (fromDate == null || toDate == null || fromDate.isAfter(toDate)) {
+            throw new IllegalArgumentException("fromDate must be on or before toDate");
+        }
         String pullId = "pull-" + System.currentTimeMillis();
         activePullId.set(pullId);
 
@@ -165,34 +174,25 @@ public class WatchlistService {
         pullProgressMap.put(pullId, progress);
 
         // Run in a separate thread to not block the HTTP request
-        Thread pullThread = new Thread(() -> executePull(pullId, watchlist, yearsBack));
+        Thread pullThread = new Thread(() -> executePull(pullId, watchlist, fromDate, toDate));
         pullThread.setDaemon(true);
         pullThread.start();
 
         return pullId;
     }
 
-    private void executePull(String pullId, List<WatchlistEntity> watchlist, int yearsBack) {
+    private void executePull(String pullId, List<WatchlistEntity> watchlist,
+                             LocalDate fromDate, LocalDate toDate) {
         PullProgress progress = pullProgressMap.get(pullId);
         if (progress == null) return;
-
-        LocalDate toDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
-        LocalDate backfillFromDate = toDate.minusYears(yearsBack);
 
         for (WatchlistEntity entry : watchlist) {
             progress.updateCurrent(entry.getSymbol());
             try {
-                // Only fetch what's missing since the last pull — full range is just for
-                // symbols that have never been pulled before.
-                Optional<com.swingtrade.data.entity.OhlcvCandleEntity> latest =
-                        candleRepository.findLatestBySymbol(entry.getSymbol());
-                LocalDate fromDate = latest.map(c -> c.getDate().plusDays(1)).orElse(backfillFromDate);
-
-                if (!fromDate.isAfter(toDate)) {
-                    dataIngestionService.processStockData(entry.getSymbol(), fromDate, toDate);
-                } else {
-                    logger.info("Skipping {}: already up to date (latest candle {})", entry.getSymbol(), latest.get().getDate());
-                }
+                // Request the complete configured range in one provider call. The database
+                // upsert makes this idempotent while allowing the provider response to repair
+                // internal gaps, not just append after the latest stored candle.
+                dataIngestionService.processStockData(entry.getSymbol(), fromDate, toDate);
 
                 // Update watchlist entry
                 entry.setLastSyncedAt(LocalDateTime.now());
