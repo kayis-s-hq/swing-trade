@@ -28,6 +28,17 @@ import java.util.concurrent.Executors;
 @EnableConfigurationProperties(LlmProperties.class)
 public class LlmConfig {
 
+    private enum ApiKeySetting {
+        OPENAI("openai.api_key"),
+        OLLAMA("ollama.api_key");
+
+        private final String key;
+
+        ApiKeySetting(String key) {
+            this.key = key;
+        }
+    }
+
     /**
      * Spring AI's {@code AbstractOpenAiOptions.DEFAULT_TIMEOUT} is 60 seconds with
      * {@code DEFAULT_MAX_RETRIES} of 3 (i.e. up to 4 total HTTP attempts) when a
@@ -69,7 +80,7 @@ public class LlmConfig {
             LlmProperties properties,
             @Value("${spring.ai.openai.api-key:none}") String apiKey) {
         return createChatModel(appSettingsStore, "llm.base_url", "openai.model",
-                properties.getProviders().getLocal(), "openai.api_key", apiKey);
+                properties.getProviders().getLocal(), ApiKeySetting.OPENAI, apiKey);
     }
 
     @Bean
@@ -78,7 +89,7 @@ public class LlmConfig {
             LlmProperties properties,
             @Value("${spring.ai.openai.api-key:none}") String apiKey) {
         return createChatModel(appSettingsStore, "llm.base_url", "openai.model",
-                properties.getProviders().getPiSsh(), "openai.api_key", apiKey);
+                properties.getProviders().getPiSsh(), ApiKeySetting.OPENAI, apiKey);
     }
 
     @Bean
@@ -87,7 +98,7 @@ public class LlmConfig {
             LlmProperties properties,
             @Value("${spring.ai.openai.api-key:none}") String apiKey) {
         return createChatModel(appSettingsStore, "openai.base_url", "openai.model",
-                properties.getProviders().getOpenai(), "openai.api_key", apiKey);
+                properties.getProviders().getOpenai(), ApiKeySetting.OPENAI, apiKey);
     }
 
     @Bean
@@ -99,19 +110,19 @@ public class LlmConfig {
         // OLLAMA_TIMEOUT/OLLAMA_MAX_RETRIES javadoc above) — a slow-but-working
         // request should be given time to finish rather than be replayed.
         return createChatModel(appSettingsStore, "ollama.base_url", "ollama.model",
-                properties.getProviders().getOllama(), "ollama.api_key", apiKey,
+                properties.getProviders().getOllama(), ApiKeySetting.OLLAMA, apiKey,
                 OLLAMA_TIMEOUT, OLLAMA_MAX_RETRIES);
     }
 
     private OpenAiChatModel createChatModel(AppSettingsStore settings, String urlKey,
                                             String modelKey, LlmProperties.Provider defaults,
-                                            String apiKeySetting, String apiKey) {
+                                            ApiKeySetting apiKeySetting, String apiKey) {
         return createChatModel(settings, urlKey, modelKey, defaults, apiKeySetting, apiKey, null, null);
     }
 
     private OpenAiChatModel createChatModel(AppSettingsStore settings, String urlKey,
                                             String modelKey, LlmProperties.Provider defaults,
-                                            String apiKeySetting, String springDefaultApiKey,
+                                            ApiKeySetting apiKeySetting, String springDefaultApiKey,
                                             Duration timeout, Integer maxRetries) {
         String baseUrl = settings.get(urlKey)
                 .orElseGet(() -> defaults.getBaseUrl().toString());
@@ -135,9 +146,9 @@ public class LlmConfig {
             .build();
     }
 
-    private String resolveApiKey(AppSettingsStore settings, String settingKey, String springDefault) {
-        String key = settings.get(settingKey).orElse(springDefault);
-        if ("openai.api_key".equals(settingKey) && ("none".equals(key) || key.isBlank())) {
+    private String resolveApiKey(AppSettingsStore settings, ApiKeySetting setting, String springDefault) {
+        String key = settings.get(setting.key).orElse(springDefault);
+        if (setting == ApiKeySetting.OPENAI && ("none".equals(key) || key.isBlank())) {
             key = settings.get("gpuhub.api_key").orElse(key);
         }
         if ("none".equals(key) || key.isBlank()) {
