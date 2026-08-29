@@ -4,7 +4,7 @@ import type { WatchlistEntry } from './types'
 export async function getWatchlist(): Promise<WatchlistEntry[]> {
   return apiRequest<WatchlistEntry[]>('/watchlist', {
     method: 'GET',
-    responseContract: 'direct',
+    responseContract: 'envelope',
   })
 }
 
