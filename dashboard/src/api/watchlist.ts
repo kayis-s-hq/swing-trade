@@ -18,14 +18,14 @@ export async function addToWatchlist(
   if (exchange) params.set('exchange', exchange)
   return apiRequest<WatchlistEntry>(`/watchlist?${params}`, {
     method: 'POST',
-    responseContract: 'direct',
+    responseContract: 'envelope',
   })
 }
 
 export async function removeFromWatchlist(symbol: string): Promise<string> {
   return apiRequest<string>(`/watchlist/${symbol}`, {
     method: 'DELETE',
-    responseContract: 'direct',
+    responseContract: 'envelope',
   })
 }
 
@@ -35,6 +35,6 @@ export async function toggleWatchlistActive(
 ): Promise<WatchlistEntry> {
   return apiRequest<WatchlistEntry>(`/watchlist/${symbol}/toggle?activate=${activate}`, {
     method: 'PATCH',
-    responseContract: 'direct',
+    responseContract: 'envelope',
   })
 }

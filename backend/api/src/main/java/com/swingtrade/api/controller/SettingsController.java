@@ -44,6 +44,7 @@ public class SettingsController {
 
     private static final Logger logger = LoggerFactory.getLogger(SettingsController.class);
     private static final int TEST_INFERENCE_MAX_TOKENS = 512;
+    private static final Duration OLLAMA_TEST_TIMEOUT = Duration.ofSeconds(120);
     private static final Pattern OK_PATTERN = Pattern.compile("(?i)\\bok\\b");
     private static final Set<String> SECRET_SETTING_KEYS = Set.of(
         "openai.api_key",
@@ -254,10 +255,14 @@ public class SettingsController {
     // Reasoning-capable local models spend part of the token budget on internal reasoning
     // before emitting content. This budget leaves enough headroom for a short health-check reply.
     private boolean testInference(URI baseUrl, String model) {
-        return testInference(baseUrl, model, "");
+        return testInference(baseUrl, model, "", Duration.ofSeconds(30));
     }
 
     private boolean testInference(URI baseUrl, String model, String apiKey) {
+        return testInference(baseUrl, model, apiKey, Duration.ofSeconds(30));
+    }
+
+    private boolean testInference(URI baseUrl, String model, String apiKey, Duration timeout) {
         try {
             String payload = """
                 {"model":"%s","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":%d,"temperature":0.2}"""
@@ -266,7 +271,7 @@ public class SettingsController {
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(chatCompletionsUri(baseUrl))
                 .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(30));
+                .timeout(timeout);
             if (apiKey != null && !apiKey.isBlank()) {
                 requestBuilder.header("Authorization", "Bearer " + apiKey);
             }
@@ -361,7 +366,7 @@ public class SettingsController {
             String model = appSettingsService.get("ollama.model", ollamaDefaults.getModel());
             String apiKey = appSettingsService.get("ollama.api_key", "");
 
-            boolean inferenceOk = testInference(baseUrl, model, apiKey);
+            boolean inferenceOk = testInference(baseUrl, model, apiKey, OLLAMA_TEST_TIMEOUT);
             result.put("success", inferenceOk);
             result.put("message", inferenceOk
                 ? "Ollama responded successfully"
