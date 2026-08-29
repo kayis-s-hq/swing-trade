@@ -16,21 +16,21 @@
                 ? 'bg-danger-bg text-danger'
                 : 'bg-info-bg text-info'
           "
-          >{{ signal.direction }}</span
-        >
+        >{{ signal.direction }}</span>
         <span
           v-if="sentimentBadge"
           class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
           :class="sentimentBadge.class"
-          >{{ sentimentBadge.text }}</span
-        >
+        >{{ sentimentBadge.text }}</span>
         <span
           v-if="strategyLabel"
           class="inline-flex items-center rounded-full bg-brand-subtle px-2 py-0.5 text-xs font-medium text-brand"
-          >{{ strategyLabel }}</span
-        >
+        >{{ strategyLabel }}</span>
       </div>
-      <span class="text-xs font-medium" :class="statusColor">{{ signal.status }}</span>
+      <span
+        class="text-xs font-medium"
+        :class="statusColor"
+      >{{ signal.status }}</span>
     </div>
 
     <!-- Body -->
@@ -39,7 +39,10 @@
       <div class="mb-3 flex items-center gap-2">
         <span class="text-xs font-medium text-text-muted">Confidence</span>
         <div class="h-1.5 flex-1 rounded-full bg-bg-primary/50">
-          <div class="h-full rounded-full bg-brand" :style="{ width: signal.confidence + '%' }" />
+          <div
+            class="h-full rounded-full bg-brand"
+            :style="{ width: signal.confidence + '%' }"
+          />
         </div>
         <span class="text-xs font-semibold text-text-primary">{{ signal.confidence }}%</span>
       </div>
@@ -47,19 +50,25 @@
       <!-- Price Data -->
       <div class="grid grid-cols-3 gap-3 text-xs">
         <div>
-          <p class="text-text-muted">Entry</p>
+          <p class="text-text-muted">
+            Entry
+          </p>
           <p class="mt-0.5 font-semibold text-text-primary">
             {{ signal.entryPrice ? '₹' + signal.entryPrice : '—' }}
           </p>
         </div>
         <div>
-          <p class="text-text-muted">Stop Loss</p>
+          <p class="text-text-muted">
+            Stop Loss
+          </p>
           <p class="mt-0.5 font-semibold text-danger">
             {{ signal.stopLoss ? '₹' + signal.stopLoss : '—' }}
           </p>
         </div>
         <div>
-          <p class="text-text-muted">Target</p>
+          <p class="text-text-muted">
+            Target
+          </p>
           <p class="mt-0.5 font-semibold text-success">
             {{ signal.target ? '₹' + signal.target : '—' }}
           </p>
@@ -72,8 +81,7 @@
         <span
           class="text-sm font-bold"
           :class="signal.riskReward >= 2 ? 'text-brand' : 'text-text-primary'"
-          >{{ signal.riskReward ? '1:' + signal.riskReward.toFixed(2) : '—' }}</span
-        >
+        >{{ signal.riskReward ? '1:' + signal.riskReward.toFixed(2) : '—' }}</span>
       </div>
     </div>
 
@@ -86,8 +94,7 @@
         v-for="indicator in signal.indicators"
         :key="indicator"
         class="rounded bg-bg-primary/50 px-1.5 py-0.5 text-[11px] font-medium text-text-muted"
-        >{{ indicator }}</span
-      >
+      >{{ indicator }}</span>
     </div>
 
     <!-- Technical Reason -->
@@ -98,8 +105,13 @@
     </div>
 
     <!-- Sentiment Reasoning -->
-    <div v-if="signal.sentimentReasoning" class="border-t border-border-subtle/50 px-4 py-3">
-      <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">Sentiment</p>
+    <div
+      v-if="signal.sentimentReasoning"
+      class="border-t border-border-subtle/50 px-4 py-3"
+    >
+      <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
+        Sentiment
+      </p>
       <p class="text-xs leading-relaxed text-text-secondary">
         {{ signal.sentimentReasoning }}
       </p>
@@ -107,7 +119,9 @@
 
     <!-- Click hint -->
     <div class="border-t border-border-subtle/50 px-4 py-2">
-      <p class="text-[10px] text-text-muted/60 text-center">Click for full sentiment analysis</p>
+      <p class="text-[10px] text-text-muted/60 text-center">
+        Click for full sentiment analysis
+      </p>
     </div>
   </div>
 </template>

@@ -1,6 +1,12 @@
 <template>
-  <div v-if="failed" role="alert" class="m-6 rounded-lg border border-danger/30 bg-danger-bg p-5">
-    <h2 class="text-base font-semibold text-text-primary">This page couldn’t be displayed</h2>
+  <div
+    v-if="failed"
+    role="alert"
+    class="m-6 rounded-lg border border-danger/30 bg-danger-bg p-5"
+  >
+    <h2 class="text-base font-semibold text-text-primary">
+      This page couldn’t be displayed
+    </h2>
     <p class="mt-1 text-sm text-text-secondary">
       An unexpected dashboard error occurred. Try this page again or reload the dashboard.
     </p>
@@ -21,7 +27,11 @@
       </button>
     </div>
   </div>
-  <div v-else :key="generation" class="contents">
+  <div
+    v-else
+    :key="generation"
+    class="contents"
+  >
     <slot />
   </div>
 </template>

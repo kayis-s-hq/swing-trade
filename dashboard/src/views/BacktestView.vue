@@ -3,7 +3,9 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">Backtest</h1>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">
+          Backtest
+        </h1>
         <p class="mt-1 text-sm text-text-muted">
           Replay the price-action strategy against historical candles
         </p>
@@ -12,8 +14,13 @@
 
     <!-- Run Form -->
     <div class="mb-6 card-panel p-5">
-      <h3 class="mb-3 text-sm font-semibold text-text-primary">Run Backtest</h3>
-      <form class="flex flex-col sm:flex-row gap-3" @submit.prevent="handleRunSingle">
+      <h3 class="mb-3 text-sm font-semibold text-text-primary">
+        Run Backtest
+      </h3>
+      <form
+        class="flex flex-col sm:flex-row gap-3"
+        @submit.prevent="handleRunSingle"
+      >
         <div class="flex-1">
           <label class="mb-1 block text-xs font-medium text-text-muted">Symbol</label>
           <input
@@ -22,7 +29,7 @@
             placeholder="e.g. RELIANCE"
             required
             class="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-brand/30"
-          />
+          >
         </div>
         <div class="flex-1">
           <label class="mb-1 block text-xs font-medium text-text-muted">Exchange</label>
@@ -30,8 +37,12 @@
             v-model="exchange"
             class="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand/30"
           >
-            <option value="NSE">NSE</option>
-            <option value="BSE">BSE</option>
+            <option value="NSE">
+              NSE
+            </option>
+            <option value="BSE">
+              BSE
+            </option>
           </select>
         </div>
         <div class="flex items-end gap-2">
@@ -52,25 +63,57 @@
           </button>
         </div>
       </form>
-      <p v-if="runError" class="mt-3 text-xs text-danger">
+      <p
+        v-if="runError"
+        class="mt-3 text-xs text-danger"
+      >
         {{ runError }}
       </p>
     </div>
 
     <!-- Single Result -->
-    <div v-if="result" class="mb-6 card-panel p-5">
+    <div
+      v-if="result"
+      class="mb-6 card-panel p-5"
+    >
       <div class="mb-4 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-text-primary">{{ result.symbol }} — Result</h3>
+        <h3 class="text-sm font-semibold text-text-primary">
+          {{ result.symbol }} — Result
+        </h3>
       </div>
       <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <MetricCard title="Total Trades" :value="result.totalTrades" />
-        <MetricCard title="Win Rate" :value="result.winRate.toFixed(1) + '%'" />
-        <MetricCard title="Total Return" :value="result.totalReturn.toFixed(2) + '%'" />
-        <MetricCard title="Sharpe Ratio" :value="result.sharpeRatio.toFixed(2)" />
-        <MetricCard title="Avg Gain" :value="result.avgGainPct.toFixed(2) + '%'" />
-        <MetricCard title="Avg Loss" :value="result.avgLossPct.toFixed(2) + '%'" />
-        <MetricCard title="Max Drawdown" :value="result.maxDrawdownPct.toFixed(2) + '%'" />
-        <MetricCard title="Expectancy" :value="result.expectancy.toFixed(2) + '%'" />
+        <MetricCard
+          title="Total Trades"
+          :value="result.totalTrades"
+        />
+        <MetricCard
+          title="Win Rate"
+          :value="result.winRate.toFixed(1) + '%'"
+        />
+        <MetricCard
+          title="Total Return"
+          :value="result.totalReturn.toFixed(2) + '%'"
+        />
+        <MetricCard
+          title="Sharpe Ratio"
+          :value="result.sharpeRatio.toFixed(2)"
+        />
+        <MetricCard
+          title="Avg Gain"
+          :value="result.avgGainPct.toFixed(2) + '%'"
+        />
+        <MetricCard
+          title="Avg Loss"
+          :value="result.avgLossPct.toFixed(2) + '%'"
+        />
+        <MetricCard
+          title="Max Drawdown"
+          :value="result.maxDrawdownPct.toFixed(2) + '%'"
+        />
+        <MetricCard
+          title="Expectancy"
+          :value="result.expectancy.toFixed(2) + '%'"
+        />
       </div>
 
       <div class="mt-5 overflow-x-auto">
@@ -158,21 +201,36 @@
             </tr>
           </tbody>
         </table>
-        <div v-if="result.trades.length === 0" class="py-6 text-center text-sm text-text-muted">
+        <div
+          v-if="result.trades.length === 0"
+          class="py-6 text-center text-sm text-text-muted"
+        >
           No trades triggered by the entry rules over the available history.
         </div>
       </div>
     </div>
 
     <!-- Watchlist Summary -->
-    <div v-if="summary" class="mb-6 card-panel p-5">
+    <div
+      v-if="summary"
+      class="mb-6 card-panel p-5"
+    >
       <h3 class="mb-4 text-sm font-semibold text-text-primary">
         Watchlist Run — {{ summary.symbolsBacktested }} symbols
       </h3>
       <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <MetricCard title="Overall Win Rate" :value="summary.overallWinRate.toFixed(1) + '%'" />
-        <MetricCard title="Overall Sharpe" :value="summary.overallSharpeRatio.toFixed(2)" />
-        <MetricCard title="Generated" :value="new Date(summary.generatedAt).toLocaleString()" />
+        <MetricCard
+          title="Overall Win Rate"
+          :value="summary.overallWinRate.toFixed(1) + '%'"
+        />
+        <MetricCard
+          title="Overall Sharpe"
+          :value="summary.overallSharpeRatio.toFixed(2)"
+        />
+        <MetricCard
+          title="Generated"
+          :value="new Date(summary.generatedAt).toLocaleString()"
+        />
       </div>
 
       <div class="mt-5 overflow-x-auto">
@@ -239,7 +297,9 @@
     <!-- Saved Reports -->
     <div class="card-panel p-5">
       <div class="mb-3 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-text-primary">Saved Reports</h3>
+        <h3 class="text-sm font-semibold text-text-primary">
+          Saved Reports
+        </h3>
         <button
           class="text-xs font-medium text-text-muted hover:text-text-primary"
           @click="loadReports"

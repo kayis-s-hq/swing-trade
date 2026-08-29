@@ -4,19 +4,26 @@
       <!-- News fetch details -->
       <div class="grid grid-cols-2 gap-3">
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Articles</p>
+          <p class="text-xs text-text-muted">
+            Articles
+          </p>
           <p class="text-lg font-semibold text-text-primary">
             {{ details.payload.articleCount }}
           </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Sources</p>
+          <p class="text-xs text-text-muted">
+            Sources
+          </p>
           <p class="text-lg font-semibold text-text-primary">
             {{ details.payload.sourceCount }}
           </p>
         </div>
       </div>
-      <div v-if="sources.length" class="flex flex-wrap gap-1.5">
+      <div
+        v-if="sources.length"
+        class="flex flex-wrap gap-1.5"
+      >
         <span
           v-for="source in sources"
           :key="source"
@@ -31,19 +38,28 @@
       <!-- Sentiment analysis details -->
       <div class="grid grid-cols-3 gap-3">
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Score</p>
-          <p class="text-lg font-semibold" :class="scoreColor">
+          <p class="text-xs text-text-muted">
+            Score
+          </p>
+          <p
+            class="text-lg font-semibold"
+            :class="scoreColor"
+          >
             {{ scoreLabel }}
           </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Confidence</p>
+          <p class="text-xs text-text-muted">
+            Confidence
+          </p>
           <p class="text-lg font-semibold text-text-primary">
             {{ (confidence * 100).toFixed(0) }}%
           </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Articles</p>
+          <p class="text-xs text-text-muted">
+            Articles
+          </p>
           <p class="text-lg font-semibold text-text-primary">
             {{ articleCount }}
           </p>
@@ -56,19 +72,35 @@
         </p>
       </div>
 
-      <div v-if="catalysts.length" class="flex flex-col gap-1">
-        <p class="text-xs font-semibold text-success">Catalysts</p>
+      <div
+        v-if="catalysts.length"
+        class="flex flex-col gap-1"
+      >
+        <p class="text-xs font-semibold text-success">
+          Catalysts
+        </p>
         <ul class="list-disc pl-4 text-xs text-text-secondary">
-          <li v-for="c in catalysts" :key="c">
+          <li
+            v-for="c in catalysts"
+            :key="c"
+          >
             {{ c }}
           </li>
         </ul>
       </div>
 
-      <div v-if="redFlags.length" class="flex flex-col gap-1">
-        <p class="text-xs font-semibold text-danger">Red Flags</p>
+      <div
+        v-if="redFlags.length"
+        class="flex flex-col gap-1"
+      >
+        <p class="text-xs font-semibold text-danger">
+          Red Flags
+        </p>
         <ul class="list-disc pl-4 text-xs text-text-secondary">
-          <li v-for="rf in redFlags" :key="rf">
+          <li
+            v-for="rf in redFlags"
+            :key="rf"
+          >
             {{ rf }}
           </li>
         </ul>

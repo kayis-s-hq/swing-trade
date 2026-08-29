@@ -3,8 +3,12 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">Signals</h1>
-        <p class="mt-1 text-sm text-text-muted">Active scanning and signal generation</p>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">
+          Signals
+        </h1>
+        <p class="mt-1 text-sm text-text-muted">
+          Active scanning and signal generation
+        </p>
       </div>
       <div class="flex gap-2">
         <button
@@ -12,7 +16,12 @@
           class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
           @click="generateAll"
         >
-          <svg v-if="generating" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+          <svg
+            v-if="generating"
+            class="h-4 w-4 animate-spin"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
             <circle
               class="opacity-25"
               cx="12"
@@ -53,7 +62,12 @@
           class="flex items-center gap-2 rounded-md border border-danger/50 bg-bg-surface px-3 py-2 text-sm font-medium text-danger transition-colors hover:border-danger hover:bg-danger/10"
           @click="clearSelected"
         >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -68,7 +82,12 @@
           class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-danger hover:text-danger"
           @click="clearAll"
         >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -84,7 +103,12 @@
           class="flex items-center gap-2 rounded-md bg-success px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-success/90 disabled:opacity-50"
           @click="executeSelected"
         >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -99,7 +123,10 @@
 
     <ErrorBoundary :error="Boolean(error)">
       <template #error>
-        <div v-if="error" class="flex flex-col items-center justify-center py-20">
+        <div
+          v-if="error"
+          class="flex flex-col items-center justify-center py-20"
+        >
           <p class="text-sm text-danger">
             {{ errorMessage }}
           </p>
@@ -111,13 +138,19 @@
           </button>
         </div>
       </template>
-      <div v-if="loading" class="flex items-center justify-center py-20">
+      <div
+        v-if="loading"
+        class="flex items-center justify-center py-20"
+      >
         <LoadingSpinner message="Scanning for signals..." />
       </div>
 
       <template v-else>
         <!-- Generation progress -->
-        <div v-if="generating" class="mb-4 card-panel p-4">
+        <div
+          v-if="generating"
+          class="mb-4 card-panel p-4"
+        >
           <div class="mb-2 flex items-center justify-between">
             <span class="text-sm font-medium text-text-primary">Signal Generation</span>
             <span class="text-xs text-text-muted">{{ progressCurrent }}/{{ progressTotal }}</span>
@@ -136,7 +169,10 @@
         </div>
 
         <!-- Generation summary -->
-        <div v-if="generationSummary" class="mb-4 card-panel p-4">
+        <div
+          v-if="generationSummary"
+          class="mb-4 card-panel p-4"
+        >
           <div class="mb-2 flex items-center justify-between">
             <span class="text-sm font-medium text-text-primary">Generation Complete</span>
             <span class="text-xs text-text-muted">
@@ -173,10 +209,8 @@
                 :checked="isSelectAll"
                 class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
                 @change="toggleSelectAll"
-              />
-              <span class="text-xs font-medium text-text-muted"
-                >Select all ({{ filteredSignals.length }})</span
               >
+              <span class="text-xs font-medium text-text-muted">Select all ({{ filteredSignals.length }})</span>
             </label>
             <div class="flex rounded-md border border-border-subtle">
               <button
@@ -209,9 +243,10 @@
               </button>
             </div>
           </div>
-          <span v-if="selectedCount > 0" class="text-xs font-medium text-brand"
-            >{{ selectedCount }} selected</span
-          >
+          <span
+            v-if="selectedCount > 0"
+            class="text-xs font-medium text-brand"
+          >{{ selectedCount }} selected</span>
         </div>
 
         <!-- Signal Grid -->
@@ -229,7 +264,7 @@
                   :checked="isSelected(signal.id)"
                   class="h-4 w-4 rounded border-border-subtle text-brand focus:ring-brand bg-bg-surface"
                   @change="toggleSignal(signal.id)"
-                />
+                >
               </label>
             </div>
             <div class="ml-7">
@@ -242,13 +277,18 @@
           v-if="filteredSignals.length === 0"
           class="flex flex-col items-center justify-center py-16"
         >
-          <p class="text-sm text-text-muted">No signals matching filter</p>
+          <p class="text-sm text-text-muted">
+            No signals matching filter
+          </p>
         </div>
       </template>
     </ErrorBoundary>
 
     <!-- Execution results toast -->
-    <div v-if="execResult" class="fixed bottom-4 right-4 z-50 max-w-md">
+    <div
+      v-if="execResult"
+      class="fixed bottom-4 right-4 z-50 max-w-md"
+    >
       <div class="rounded-lg border border-border-subtle bg-bg-surface p-4 shadow-lg">
         <div class="flex items-start justify-between gap-3">
           <div>
@@ -258,8 +298,7 @@
             <p class="mt-1 text-xs text-text-muted">
               {{ execResult.success }} succeeded, {{ execResult.failed }} failed<span
                 v-if="execResult.unconfirmed > 0"
-                >, {{ execResult.unconfirmed }} unconfirmed</span
-              >
+              >, {{ execResult.unconfirmed }} unconfirmed</span>
             </p>
             <p
               v-for="reason in execResult.errors"
@@ -276,8 +315,16 @@
               Refresh positions
             </button>
           </div>
-          <button class="text-text-muted hover:text-text-primary" @click="execResult = null">
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button
+            class="text-text-muted hover:text-text-primary"
+            @click="execResult = null"
+          >
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"

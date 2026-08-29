@@ -38,7 +38,10 @@
       >
         <div class="flex items-center gap-3">
           <span class="flex items-center gap-1.5">
-            <span class="inline-block h-1.5 w-1.5 rounded-full" :class="healthDotClass" />
+            <span
+              class="inline-block h-1.5 w-1.5 rounded-full"
+              :class="healthDotClass"
+            />
             <span :class="healthTextClass">{{ healthLabel }}</span>
           </span>
           <span class="text-border-subtle">│</span>

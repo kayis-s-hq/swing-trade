@@ -3,7 +3,9 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">Data Ingestion</h1>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">
+          Data Ingestion
+        </h1>
         <p class="mt-1 text-sm text-text-muted">
           Monitor data quality and pull historical market data
         </p>
@@ -36,7 +38,12 @@
           class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
           @click="startPull"
         >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -51,7 +58,12 @@
           class="flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/20"
           @click="cancelPull"
         >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -98,15 +110,22 @@
     </div>
 
     <!-- Pull Progress -->
-    <div v-if="pulling" class="mb-6 card-panel p-5">
+    <div
+      v-if="pulling"
+      class="mb-6 card-panel p-5"
+    >
       <div class="flex items-center justify-between mb-2">
         <div>
-          <p class="text-sm font-medium text-text-primary">Pulling Historical Data</p>
+          <p class="text-sm font-medium text-text-primary">
+            Pulling Historical Data
+          </p>
           <p class="text-xs text-text-muted">
             Processing: {{ pullProgress?.currentSymbol || '...' }}
           </p>
         </div>
-        <p class="text-sm font-bold text-brand">{{ pullProgress?.percentComplete || 0 }}%</p>
+        <p class="text-sm font-bold text-brand">
+          {{ pullProgress?.percentComplete || 0 }}%
+        </p>
       </div>
       <div class="mb-2 h-2 overflow-hidden rounded-full bg-bg-primary">
         <div
@@ -120,8 +139,13 @@
     </div>
 
     <!-- Pull Complete -->
-    <div v-if="pullComplete" class="mb-6 rounded-md bg-success-bg p-4">
-      <p class="text-sm font-medium text-success">Data pull completed!</p>
+    <div
+      v-if="pullComplete"
+      class="mb-6 rounded-md bg-success-bg p-4"
+    >
+      <p class="text-sm font-medium text-success">
+        Data pull completed!
+      </p>
       <p class="text-xs text-text-muted mt-1">
         {{ pullCompleted?.completed || 0 }} succeeded, {{ pullCompleted?.failed || 0 }} failed
       </p>
@@ -148,7 +172,12 @@
       class="mb-4 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning"
     >
       <p>Progress refresh failed. The last progress may be stale.</p>
-      <button class="mt-2 text-xs font-medium underline" @click="retryPollNow">Retry now</button>
+      <button
+        class="mt-2 text-xs font-medium underline"
+        @click="retryPollNow"
+      >
+        Retry now
+      </button>
     </div>
 
     <ErrorBoundary :error="Boolean(error)">
@@ -167,7 +196,10 @@
       </template>
 
       <!-- Loading -->
-      <div v-if="loading && !status.length" class="flex items-center justify-center py-20">
+      <div
+        v-if="loading && !status.length"
+        class="flex items-center justify-center py-20"
+      >
         <LoadingSpinner message="Loading ingestion status..." />
       </div>
 
@@ -175,25 +207,33 @@
       <template v-else>
         <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div class="card-panel p-4">
-            <p class="text-xs font-medium text-text-muted">Total Stocks</p>
+            <p class="text-xs font-medium text-text-muted">
+              Total Stocks
+            </p>
             <p class="mt-1 text-xl font-bold text-text-primary">
               {{ status.length }}
             </p>
           </div>
           <div class="card-panel p-4">
-            <p class="text-xs font-medium text-text-muted">With Data</p>
+            <p class="text-xs font-medium text-text-muted">
+              With Data
+            </p>
             <p class="mt-1 text-xl font-bold text-success">
               {{ status.filter((s) => s.hasData).length }}
             </p>
           </div>
           <div class="card-panel p-4">
-            <p class="text-xs font-medium text-text-muted">Missing Data</p>
+            <p class="text-xs font-medium text-text-muted">
+              Missing Data
+            </p>
             <p class="mt-1 text-xl font-bold text-danger">
               {{ status.filter((s) => !s.hasData).length }}
             </p>
           </div>
           <div class="card-panel p-4">
-            <p class="text-xs font-medium text-text-muted">Total Candles</p>
+            <p class="text-xs font-medium text-text-muted">
+              Total Candles
+            </p>
             <p class="mt-1 text-xl font-bold text-text-primary">
               {{ formatNumber(status.reduce((sum, s) => sum + s.candleCount, 0)) }}
             </p>
@@ -256,13 +296,17 @@
                   <template v-if="entry.hasData">
                     {{ entry.earliestCandleDate }} → {{ entry.lastCandleDate }}
                   </template>
-                  <template v-else> — </template>
+                  <template v-else>
+                    —
+                  </template>
                 </td>
                 <td class="px-5 py-4 text-sm text-text-muted">
                   <template v-if="entry.lastSyncedAt">
                     {{ formatDate(entry.lastSyncedAt) }}
                   </template>
-                  <template v-else> — </template>
+                  <template v-else>
+                    —
+                  </template>
                 </td>
                 <td class="px-5 py-4 text-center">
                   <span

@@ -3,8 +3,12 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">Dashboard</h1>
-        <p class="mt-1 text-sm text-text-muted">Market overview and active positions</p>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">
+          Dashboard
+        </h1>
+        <p class="mt-1 text-sm text-text-muted">
+          Market overview and active positions
+        </p>
       </div>
       <button
         class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary"
@@ -28,7 +32,10 @@
     </div>
 
     <ErrorBoundary :error="false">
-      <div v-if="loading" class="flex items-center justify-center py-20">
+      <div
+        v-if="loading"
+        class="flex items-center justify-center py-20"
+      >
         <LoadingSpinner message="Loading market data..." />
       </div>
 
@@ -37,7 +44,9 @@
         <div class="mb-6 card-panel p-5">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-text-muted">Today's P&L</p>
+              <p class="text-sm font-medium text-text-muted">
+                Today's P&L
+              </p>
               <div class="mt-2 flex items-baseline gap-3">
                 <span
                   class="text-3xl font-bold tracking-tight"
@@ -58,7 +67,10 @@
               </div>
             </div>
             <div class="flex items-center gap-4">
-              <HealthStatus v-if="healthData" :health="healthData" />
+              <HealthStatus
+                v-if="healthData"
+                :health="healthData"
+              />
               <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-brand/10">
                 <svg
                   class="h-6 w-6 text-brand"
@@ -80,14 +92,21 @@
 
         <!-- Metrics Grid -->
         <div class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
-          <div v-for="metric in metrics" :key="metric.title" class="card-panel p-4">
+          <div
+            v-for="metric in metrics"
+            :key="metric.title"
+            class="card-panel p-4"
+          >
             <p class="text-xs font-medium text-text-muted">
               {{ metric.title }}
             </p>
             <p class="mt-1 text-xl font-bold text-text-primary">
               {{ metric.value }}
             </p>
-            <div v-if="metric.trend" class="mt-1 flex items-center gap-1">
+            <div
+              v-if="metric.trend"
+              class="mt-1 flex items-center gap-1"
+            >
               <span
                 class="text-xs font-medium"
                 :class="metric.trend.isPositive ? 'text-success' : 'text-danger'"
@@ -102,12 +121,20 @@
         <div class="card-panel">
           <div class="flex items-center justify-between border-b border-border-subtle px-5 py-3">
             <div>
-              <h2 class="text-sm font-semibold text-text-primary">Active Positions</h2>
-              <p v-if="!positionsError" class="text-xs text-text-muted">
+              <h2 class="text-sm font-semibold text-text-primary">
+                Active Positions
+              </h2>
+              <p
+                v-if="!positionsError"
+                class="text-xs text-text-muted"
+              >
                 {{ positions.length }} positions
               </p>
             </div>
-            <router-link to="/positions" class="text-sm font-medium text-brand hover:underline">
+            <router-link
+              to="/positions"
+              class="text-sm font-medium text-brand hover:underline"
+            >
               View All →
             </router-link>
           </div>
@@ -118,7 +145,10 @@
             action-label="Retry"
             @action="loadPositions"
           />
-          <div v-else class="w-full overflow-x-auto">
+          <div
+            v-else
+            class="w-full overflow-x-auto"
+          >
             <table class="min-w-full">
               <thead>
                 <tr class="border-b border-border-subtle bg-bg-primary/50">
@@ -163,7 +193,9 @@
                   <td class="px-5 py-4 text-sm font-semibold text-text-primary">
                     {{ pos.symbol }}
                   </td>
-                  <td class="px-5 py-4 text-sm text-text-secondary">Rs.{{ pos.entryPrice }}</td>
+                  <td class="px-5 py-4 text-sm text-text-secondary">
+                    Rs.{{ pos.entryPrice }}
+                  </td>
                   <td class="px-5 py-4 text-right text-sm text-text-secondary">
                     {{ pos.quantity }}
                   </td>
@@ -178,17 +210,14 @@
                           ? 'bg-success-bg text-success'
                           : 'bg-danger-bg text-danger'
                       "
-                      >{{ pos.status }}</span
-                    >
+                    >{{ pos.status }}</span>
                   </td>
                   <td
                     class="px-5 py-4 text-right text-sm font-semibold"
                     :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
                   >
                     {{ pos.pnl >= 0 ? '+' : '' }}Rs.{{ pos.pnl }}
-                    <span class="ml-1 text-xs font-normal opacity-70"
-                      >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
-                    >
+                    <span class="ml-1 text-xs font-normal opacity-70">({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span>
                   </td>
                 </tr>
               </tbody>

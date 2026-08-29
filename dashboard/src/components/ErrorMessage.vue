@@ -31,10 +31,18 @@
       </div>
     </div>
 
-    <details v-if="details?.length" class="text-xs text-text-muted">
-      <summary class="cursor-pointer font-medium text-text-secondary">Details</summary>
+    <details
+      v-if="details?.length"
+      class="text-xs text-text-muted"
+    >
+      <summary class="cursor-pointer font-medium text-text-secondary">
+        Details
+      </summary>
       <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-        <template v-for="detail in details" :key="`${detail.label}:${detail.value}`">
+        <template
+          v-for="detail in details"
+          :key="`${detail.label}:${detail.value}`"
+        >
           <dt class="font-medium text-text-secondary">
             {{ detail.label }}
           </dt>

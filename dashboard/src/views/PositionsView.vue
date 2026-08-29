@@ -3,8 +3,12 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">Positions</h1>
-        <p class="mt-1 text-sm text-text-muted">Active and closed paper trading positions</p>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">
+          Positions
+        </h1>
+        <p class="mt-1 text-sm text-text-muted">
+          Active and closed paper trading positions
+        </p>
       </div>
       <div class="flex items-center gap-3">
         <button
@@ -30,7 +34,12 @@
           class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90"
           @click="showNewPositionModal = true"
         >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -43,10 +52,18 @@
       </div>
     </div>
 
-    <div v-if="successNotice" role="status" class="mb-3 text-sm text-success">
+    <div
+      v-if="successNotice"
+      role="status"
+      class="mb-3 text-sm text-success"
+    >
       {{ successNotice }}
     </div>
-    <div v-if="staleWarning" role="status" class="mb-3 text-sm text-warning">
+    <div
+      v-if="staleWarning"
+      role="status"
+      class="mb-3 text-sm text-warning"
+    >
       {{ staleWarning }}
     </div>
 
@@ -60,7 +77,10 @@
       :busy="loading"
       @action="refreshPositions"
     />
-    <div v-else-if="loading" class="flex items-center justify-center py-20">
+    <div
+      v-else-if="loading"
+      class="flex items-center justify-center py-20"
+    >
       <LoadingSpinner message="Loading positions..." />
     </div>
 
@@ -71,7 +91,7 @@
           v-model="searchQuery"
           placeholder="Search symbol..."
           class="w-56 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 transition-colors focus:border-brand/50 focus:outline-none"
-        />
+        >
         <div class="flex rounded-md border border-border-subtle">
           <button
             v-for="filter in ['ALL', 'OPEN', 'CLOSED']"
@@ -151,7 +171,9 @@
                 <td class="px-5 py-4 text-sm font-semibold text-text-primary">
                   {{ pos.symbol }}
                 </td>
-                <td class="px-5 py-4 text-sm text-text-secondary">₹{{ pos.entryPrice }}</td>
+                <td class="px-5 py-4 text-sm text-text-secondary">
+                  ₹{{ pos.entryPrice }}
+                </td>
                 <td class="px-5 py-4 text-right text-sm text-text-secondary">
                   {{ pos.quantity }}
                 </td>
@@ -172,17 +194,14 @@
                         ? 'bg-success-bg text-success'
                         : 'bg-danger-bg text-danger'
                     "
-                    >{{ pos.status }}</span
-                  >
+                  >{{ pos.status }}</span>
                 </td>
                 <td
                   class="px-5 py-4 text-right text-sm font-semibold"
                   :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
                 >
                   {{ pos.pnl >= 0 ? '+' : '' }}₹{{ pos.pnl }}
-                  <span class="ml-1 text-xs font-normal opacity-70"
-                    >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
-                  >
+                  <span class="ml-1 text-xs font-normal opacity-70">({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span>
                 </td>
                 <td class="px-5 py-4 text-center">
                   <button
@@ -192,11 +211,17 @@
                   >
                     Close
                   </button>
-                  <span v-else class="text-xs text-text-muted">—</span>
+                  <span
+                    v-else
+                    class="text-xs text-text-muted"
+                  >—</span>
                 </td>
               </tr>
               <tr v-if="filteredPositions.length === 0">
-                <td colspan="9" class="px-5 py-12 text-center text-sm text-text-muted">
+                <td
+                  colspan="9"
+                  class="px-5 py-12 text-center text-sm text-text-muted"
+                >
                   No positions found
                 </td>
               </tr>
@@ -217,12 +242,19 @@
       <div class="absolute inset-0 bg-black/50" />
       <div class="relative w-full max-w-md rounded-xl bg-bg-primary p-6 shadow-xl">
         <div class="mb-4 flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-text-primary">New Position</h2>
+          <h2 class="text-lg font-semibold text-text-primary">
+            New Position
+          </h2>
           <button
             class="text-text-muted hover:text-text-primary"
             @click="showNewPositionModal = false"
           >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -241,7 +273,10 @@
           @action="refreshAfterUnknownMutation"
         />
 
-        <form class="space-y-4" @submit.prevent="submitNewPosition">
+        <form
+          class="space-y-4"
+          @submit.prevent="submitNewPosition"
+        >
           <div>
             <label class="mb-1 block text-xs font-medium text-text-muted">Symbol</label>
             <input
@@ -249,7 +284,7 @@
               required
               placeholder="e.g. RELIANCE"
               class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-            />
+            >
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -259,8 +294,12 @@
                 v-model="newPos.direction"
                 class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-brand/50 focus:outline-none"
               >
-                <option value="LONG">Long</option>
-                <option value="SHORT">Short</option>
+                <option value="LONG">
+                  Long
+                </option>
+                <option value="SHORT">
+                  Short
+                </option>
               </select>
             </div>
             <div>
@@ -269,8 +308,12 @@
                 v-model="newPos.orderType"
                 class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-brand/50 focus:outline-none"
               >
-                <option value="MARKET">Market</option>
-                <option value="LIMIT">Limit</option>
+                <option value="MARKET">
+                  Market
+                </option>
+                <option value="LIMIT">
+                  Limit
+                </option>
               </select>
             </div>
           </div>
@@ -284,7 +327,7 @@
                 min="1"
                 required
                 class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-              />
+              >
             </div>
             <div>
               <label class="mb-1 block text-xs font-medium text-text-muted">Entry Price</label>
@@ -295,11 +338,14 @@
                 min="0.01"
                 required
                 class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-              />
+              >
             </div>
           </div>
 
-          <div v-if="newPos.orderType === 'LIMIT'" class="grid grid-cols-2 gap-3">
+          <div
+            v-if="newPos.orderType === 'LIMIT'"
+            class="grid grid-cols-2 gap-3"
+          >
             <div>
               <label class="mb-1 block text-xs font-medium text-text-muted">Limit Price</label>
               <input
@@ -309,7 +355,7 @@
                 min="0.01"
                 required
                 class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-              />
+              >
             </div>
           </div>
 
@@ -323,7 +369,7 @@
                 min="0.01"
                 placeholder="Optional"
                 class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-              />
+              >
             </div>
             <div>
               <label class="mb-1 block text-xs font-medium text-text-muted">Target</label>
@@ -334,14 +380,12 @@
                 min="0.01"
                 placeholder="Optional"
                 class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-              />
+              >
             </div>
           </div>
 
           <div>
-            <label class="mb-1 block text-xs font-medium text-text-muted"
-              >Entry Reason (Optional)</label
-            >
+            <label class="mb-1 block text-xs font-medium text-text-muted">Entry Reason (Optional)</label>
             <textarea
               v-model="newPos.entryReason"
               rows="2"
@@ -381,12 +425,19 @@
       <div class="absolute inset-0 bg-black/50" />
       <div class="relative w-full max-w-sm rounded-xl bg-bg-primary p-6 shadow-xl">
         <div class="mb-4 flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-text-primary">Close Position</h2>
+          <h2 class="text-lg font-semibold text-text-primary">
+            Close Position
+          </h2>
           <button
             class="text-text-muted hover:text-text-primary"
             @click="showClosePositionModal = false"
           >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -408,9 +459,7 @@
         <div class="mb-4 rounded-lg bg-bg-surface p-4">
           <div class="flex items-center justify-between">
             <span class="text-sm font-semibold text-text-primary">{{ closeTarget.symbol }}</span>
-            <span class="text-xs text-text-muted"
-              >{{ closeTarget.quantity }} shares @ ₹{{ closeTarget.entryPrice }}</span
-            >
+            <span class="text-xs text-text-muted">{{ closeTarget.quantity }} shares @ ₹{{ closeTarget.entryPrice }}</span>
           </div>
           <div class="mt-2 text-right">
             <span
@@ -424,16 +473,17 @@
           </div>
         </div>
 
-        <form class="space-y-4" @submit.prevent="submitClosePosition">
+        <form
+          class="space-y-4"
+          @submit.prevent="submitClosePosition"
+        >
           <div>
-            <label class="mb-1 block text-xs font-medium text-text-muted"
-              >Exit Reason (Optional)</label
-            >
+            <label class="mb-1 block text-xs font-medium text-text-muted">Exit Reason (Optional)</label>
             <input
               v-model="closeReason"
               placeholder="e.g. Stop loss hit, target reached"
               class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-brand/50 focus:outline-none"
-            />
+            >
           </div>
 
           <div class="flex gap-3">

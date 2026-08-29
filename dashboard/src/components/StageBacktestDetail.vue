@@ -1,24 +1,41 @@
 <template>
   <div class="flex flex-col gap-3">
-    <div v-if="!hasEnoughData" class="rounded-md bg-warning-bg px-3 py-2 text-xs text-warning">
+    <div
+      v-if="!hasEnoughData"
+      class="rounded-md bg-warning-bg px-3 py-2 text-xs text-warning"
+    >
       Insufficient data for backtest. Need more historical candles.
     </div>
 
     <template v-else>
       <div class="grid grid-cols-3 gap-3">
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Trades</p>
+          <p class="text-xs text-text-muted">
+            Trades
+          </p>
           <p class="text-lg font-semibold text-text-primary">
             {{ totalTrades }}
           </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Win Rate</p>
-          <p class="text-lg font-semibold" :class="winRateColor">{{ winRate.toFixed(1) }}%</p>
+          <p class="text-xs text-text-muted">
+            Win Rate
+          </p>
+          <p
+            class="text-lg font-semibold"
+            :class="winRateColor"
+          >
+            {{ winRate.toFixed(1) }}%
+          </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Profit Factor</p>
-          <p class="text-lg font-semibold" :class="pfColor">
+          <p class="text-xs text-text-muted">
+            Profit Factor
+          </p>
+          <p
+            class="text-lg font-semibold"
+            :class="pfColor"
+          >
             {{ profitFactor.toFixed(2) }}
           </p>
         </div>
@@ -26,16 +43,34 @@
 
       <div class="grid grid-cols-3 gap-3">
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Return</p>
-          <p class="text-lg font-semibold" :class="returnColor">{{ totalReturn.toFixed(1) }}%</p>
+          <p class="text-xs text-text-muted">
+            Return
+          </p>
+          <p
+            class="text-lg font-semibold"
+            :class="returnColor"
+          >
+            {{ totalReturn.toFixed(1) }}%
+          </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Drawdown</p>
-          <p class="text-lg font-semibold text-danger">{{ maxDrawdown.toFixed(1) }}%</p>
+          <p class="text-xs text-text-muted">
+            Drawdown
+          </p>
+          <p class="text-lg font-semibold text-danger">
+            {{ maxDrawdown.toFixed(1) }}%
+          </p>
         </div>
         <div class="rounded-md bg-bg-elevated px-3 py-2">
-          <p class="text-xs text-text-muted">Expectancy</p>
-          <p class="text-lg font-semibold" :class="expectancyColor">{{ expectancy.toFixed(1) }}%</p>
+          <p class="text-xs text-text-muted">
+            Expectancy
+          </p>
+          <p
+            class="text-lg font-semibold"
+            :class="expectancyColor"
+          >
+            {{ expectancy.toFixed(1) }}%
+          </p>
         </div>
       </div>
     </template>

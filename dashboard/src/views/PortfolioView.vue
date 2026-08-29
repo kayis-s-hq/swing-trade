@@ -3,8 +3,12 @@
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">Portfolio</h1>
-        <p class="mt-1 text-sm text-text-muted">Performance analytics and trade history</p>
+        <h1 class="font-display text-2xl font-semibold text-text-primary">
+          Portfolio
+        </h1>
+        <p class="mt-1 text-sm text-text-muted">
+          Performance analytics and trade history
+        </p>
       </div>
       <button
         class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary"
@@ -28,7 +32,10 @@
     </div>
 
     <ErrorBoundary :error="false">
-      <div v-if="loading" class="flex items-center justify-center py-20">
+      <div
+        v-if="loading"
+        class="flex items-center justify-center py-20"
+      >
         <LoadingSpinner message="Loading portfolio data..." />
       </div>
 
@@ -45,7 +52,10 @@
           action-label="Retry"
           @action="refreshPerformance"
         />
-        <p v-if="lastPerformanceUpdate" class="mt-2 text-xs text-text-muted">
+        <p
+          v-if="lastPerformanceUpdate"
+          class="mt-2 text-xs text-text-muted"
+        >
           Last updated
           <time :datetime="lastPerformanceUpdate.toISOString()">
             {{ lastPerformanceUpdate.toLocaleTimeString() }}
@@ -56,8 +66,13 @@
         <div class="mt-6 card-panel">
           <div class="flex items-center justify-between border-b border-border-subtle px-5 py-3">
             <div>
-              <h2 class="text-sm font-semibold text-text-primary">Trade History</h2>
-              <p v-if="!tradeHistoryError" class="text-xs text-text-muted">
+              <h2 class="text-sm font-semibold text-text-primary">
+                Trade History
+              </h2>
+              <p
+                v-if="!tradeHistoryError"
+                class="text-xs text-text-muted"
+              >
                 {{ recentTrades.length }} records
               </p>
             </div>
@@ -65,12 +80,24 @@
               v-model="timeRange"
               class="rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-xs font-medium text-text-primary transition-colors focus:border-brand/50 focus:outline-none"
             >
-              <option value="1W">1 Week</option>
-              <option value="1M">1 Month</option>
-              <option value="3M">3 Months</option>
-              <option value="6M">6 Months</option>
-              <option value="1Y">1 Year</option>
-              <option value="ALL">All Time</option>
+              <option value="1W">
+                1 Week
+              </option>
+              <option value="1M">
+                1 Month
+              </option>
+              <option value="3M">
+                3 Months
+              </option>
+              <option value="6M">
+                6 Months
+              </option>
+              <option value="1Y">
+                1 Year
+              </option>
+              <option value="ALL">
+                All Time
+              </option>
             </select>
           </div>
           <ErrorMessage
@@ -80,7 +107,10 @@
             action-label="Retry"
             @action="loadTradeHistory"
           />
-          <div v-else class="w-full overflow-x-auto">
+          <div
+            v-else
+            class="w-full overflow-x-auto"
+          >
             <table class="min-w-full">
               <thead>
                 <tr class="border-b border-border-subtle bg-bg-primary/50">
@@ -141,10 +171,11 @@
                           ? 'bg-success-bg text-success'
                           : 'bg-danger-bg text-danger'
                       "
-                      >{{ trade.status }}</span
-                    >
+                    >{{ trade.status }}</span>
                   </td>
-                  <td class="px-5 py-4 text-sm text-text-secondary">₹{{ trade.entryPrice }}</td>
+                  <td class="px-5 py-4 text-sm text-text-secondary">
+                    ₹{{ trade.entryPrice }}
+                  </td>
                   <td class="px-5 py-4 text-sm text-text-secondary">
                     {{ trade.currentPrice ? 'Rs.' + trade.currentPrice : '—' }}
                   </td>
@@ -159,7 +190,10 @@
                   </td>
                 </tr>
                 <tr v-if="recentTrades.length === 0">
-                  <td colspan="7" class="px-5 py-12 text-center text-sm text-text-muted">
+                  <td
+                    colspan="7"
+                    class="px-5 py-12 text-center text-sm text-text-muted"
+                  >
                     No trade history
                   </td>
                 </tr>
