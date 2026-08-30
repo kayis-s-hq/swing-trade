@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "SwingTrade monitoring dashboard — trades, signals, portfolio, jobs, LLM, data ingestion",
+  "description": "Swing Trade monitoring — trades, signals, portfolio, jobs, LLM, data ingestion",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -238,7 +238,7 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "asia/kolkata",
-  "title": "SwingTrade",
+  "title": "Swing Trade",
   "uid": "swingtrade",
   "version": 1
 }

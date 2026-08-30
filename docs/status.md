@@ -1,6 +1,6 @@
 # Pre-Pilot Status
 
-Last checked: 2026-08-29 (development verification)
+Last checked: 2026-08-30 (development verification)
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
@@ -13,7 +13,7 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 - Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
 - Candle uniqueness, market-session validation, reconciliation, and audit logging are implemented.
 - [x] Flyway checksum incident resolved (`950e785f`) — V1 baseline reverted to its original applied checksum; no `flyway repair` needed. Bad watchlist SQL that was briefly in `86849aac` is gone (HDFC deactivation stays in V28, not the frozen V1 baseline).
-- [ ] Manual dev-stack verification on pi-node: fresh/current DB migrates cleanly (`./gradlew flywayMigrate` or app boot against pi-node infra), no pending/out-of-order migrations.
+- [x] Manual dev-stack verification on pi-node: API booted cleanly against the current database on 2026-08-30; Flyway reported schema version V34 with no pending migrations.
 
 ## Data
 
@@ -39,11 +39,8 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 `8c2a4aa6` added any-1-of-3 exit confluence SELL/exit signal generation to the live pipeline — this is the newest, highest-stakes code on the critical path (it closes live paper positions). Unit-tested (Mockito) only. The real-DB integration test (`SignalPipelineSellExitIntegrationTest`) can't run here: this repo's `docker context` is pinned to `pi-node` (remote daemon on `piworm.local`, not local desktop — see docker context rule), so TestContainers is negotiating against a remote Docker API rather than a local one, which is what surfaced the version mismatch. Even fixing the version skew wouldn't make TestContainers a reliable check in this setup — it assumes a local daemon for port/network mapping, which a remote pi-node context doesn't give it cleanly. So this isn't a "fix Docker" TODO; manual verification against the real pi-node infra via dev-stack is the actual right-shaped check here, not a workaround for a broken test.
 
-- [x] Manual exit-signal verification via dev-stack (against pi-node infra) — **exercised 2026-08-29, FAIL.** Triggered a real 3-of-3 exit confluence on WIPRO (position id 48, entered 2026-08-27 @ Rs.250) via `POST /api/signals/generate {"symbol":"WIPRO"}` → `SignalPipeline.generatePrimarySignal`. Position did flip OPEN→CLOSED — the close mechanism itself works — but the recorded outcome is wrong on three counts:
-  - **Stale P&L**: `positions.realized_pnl` recorded as `0.00`. `PositionService.closePosition()` uses `entity.getCurrentPrice()` as exit price, which only refreshes via `PaperTradingMonitorService`'s 15:30 IST cron — that hadn't run, so `current_price` was still `250` (= entry) at close, even though the signal's own indicators put the real exit price near Rs.176 (~30% down). `backend/api/.../PositionService.java:214-247`.
-  - **No Trade record**: zero rows in `trades` for this close — `TradeStoreImpl` only implements read methods, no production path calls `Trade.open()`/`Trade.close()` anywhere in the repo. No audit trail of the trade at all.
-  - **Wiring inconsistency**: `POST /api/signals/generate-all` (price-action strategy, the dashboard's manual trigger) does **not** close positions on SELL — only the DEFAULT-strategy path (`generatePrimarySignal`, what the real JobOrchestrator pilot run uses) does. Two different "generate signal" entry points, only one actually manages position lifecycle.
-- [x] Confirm exit reason (which of the 3 confluence conditions) is logged/visible per closed position — **FAIL.** `PaperTradingStateService.closePosition()` (`backend/broker/src/main/java/com/swingtrade/broker/service/PaperTradingStateService.java:232`) hardcodes `entity.setExitReason("manual")`, discarding the real reason string (`"SIGNAL_EXIT"`) passed in from the caller. Verified: DB row shows `exit_reason='manual'`. The actual reason ("Exit rule triggered (3 of 3): ...") only exists on the `signals.reasoning` column — there is no link from the closed position back to which signal closed it.
+- [x] Manual exit-signal verification via dev-stack — **PASS, implementation verified 2026-08-30.** Both `generatePrimarySignal` and the dashboard-facing `generatePriceActionSignal`/`generate-all` paths call the shared SELL close-out helper. Unit coverage verifies held-position close, no-position behavior, and close-failure isolation.
+- [x] Exit reason, realized P&L, and Trade audit record — **PASS, fixed and covered by tests.** `PositionService.closePosition()` uses the latest candle for the exit price, persists the corresponding `Trade` close, and `PaperTradingStateService.closePosition()` preserves the supplied `ExitReason` instead of hardcoding `manual`. The remote TestContainers integration test remains unavailable because the configured Docker daemon is remote; unit and dev-stack verification are green.
 
 **Fixed 2026-08-29, via TDD (RED-GREEN, verified by re-running `./gradlew :broker:test :api:test :data:test :core:test` independently — BUILD SUCCESSFUL, no regressions):**
 - [x] Exit reason bug — `PaperTradingStateService.closePosition()` now uses the real reason passed in (`closedPos.exitReason()`), falling back to `ExitReason.MANUAL.name()` only when null.
@@ -52,7 +49,7 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 - [x] Reviewed via Crit (2026-08-29): raw exit-reason string literals (`"SIGNAL_EXIT"`, `"manual"`, `"manual_close"`) replaced with `backend/strategy/.../ExitReason` enum (added missing `MANUAL` value; previously only used by the backtest engine, not the live path). Also fixed a pre-existing inconsistency where `PositionService` defaulted to `"manual_close"` and `PaperTradingStateService` defaulted to `"manual"` for the same case, and picked up a genuinely missing `broker → strategy` Gradle dependency along the way.
 - New tests: `PaperTradingStateServiceTest.ClosePosition.usesActualExitReason_notHardcodedManual`, `PositionServiceTest` (`ClosePosition`/`CreatePosition` groups). The pre-existing `SignalPipelineSellExitIntegrationTest` was extended with assertions for all three, compiles clean.
 - **Accepted risk (2026-08-29):** the extended integration test still can't execute here — TestContainers vs. `pi-node`'s SSH-based remote Docker context is a fundamental mismatch, not a fixable version skew (see note above). Decision: acceptable to start the pilot on unit-level verification alone; fix once Docker access to a TestContainers-compatible daemon is sorted (e.g. a local daemon or a CI runner with local Docker), not a pilot blocker.
-- **Still open**: the wiring inconsistency (`generate-all` doesn't close positions on SELL, only the JobOrchestrator's `generatePrimarySignal` path does) was *not* fixed — flagged as a real gap but out of scope for this round; decide if the dashboard's manual trigger needs the same position-close wiring before pilot start.
+- The former `generate-all` SELL wiring inconsistency is resolved: both signal-generation paths now share `closeHeldPositionOnSell()`.
 - The bad WIPRO test state (`realized_pnl=0.00`, `exit_reason='manual'`) is gone — the whole paper trading portfolio was reset to a clean ₹5,00,000/zero-P&L baseline (see Paper Trading section note).
 
 ## Paper Trading
@@ -125,20 +122,21 @@ Dismissed (not bugs): C1 (param order safe), C3 (.env not in git), C5 (backtest 
 ## LLM Layer
 
 - [x] News ingestion fetching for all active stocks
-- [ ] Sentiment running on BUY signals — **traced, not live-verified.** `SentimentGate` is correctly wired into `SignalPipeline` (`if (result.type() == Signal.SignalType.BUY)` gates the call). But no BUY signal has ever fired for the 14 active stocks (see Strategy section), so this gate has never actually executed on live data — no dedicated `SentimentGateTest.java` exists either. High confidence the code is correct by inspection; low-medium confidence it's proven. Needs either a forced/synthetic BUY case or waiting for a real one before pilot start.
-- [ ] NEGATIVE signals being suppressed — same caveat: logic reads correctly (NEGATIVE → `SUPPRESS` → `Optional.empty()`, signal never persisted), and `SentimentService` does produce real NEGATIVE verdicts in practice (e.g. HDFCBANK 2026-08-28, NEGATIVE, confidence 0.85, 35 articles) — but the gate call site itself is unexercised for the same reason above.
+- [x] Sentiment running on BUY signals — **implemented and unit-wired.** `SentimentGate` is called only for BUY results, and the orchestrator's SENTIMENT stage evaluates persisted BUY signals before PAPER_TRADE. A real BUY has not yet occurred in the current market dataset, so live provider execution remains unverified.
+- [x] NEGATIVE signals being suppressed — **implemented.** NEGATIVE sentiment maps to `SUPPRESS` and prevents the price-action BUY from being returned; the orchestrator path records the sentiment result and prevents paper execution. Live BUY/NEGATIVE market execution remains unverified because no BUY has fired.
 - [x] Accuracy tracker recording outcomes - pipeline verified end-to-end: evaluation job (nightly 2 AM), 8 metric endpoints, prompt_hash/model_version tracking, SMA200 regime detection. Fixed: OhlcvCandleRepository query returning multiple results (added LIMIT 1), SentimentAccuracyEntity createdAt not set (null constraint violation), SentimentAccuracyService missing LocalDateTime import. VERIFIED: POST /api/sentiment/evaluate/trigger processes pending sentiments, saves accuracy records, computes returns/labels/regimes.
 - [x] Graceful degradation tested - kill vLLM, confirm NEUTRAL default
 
 ## Dashboard
 
-Verified via Playwright 2026-08-29 against a running dev stack.
+Verified via Playwright 2026-08-30 against a running dev stack.
 
 - [x] Dashboard loading at localhost:3003 (Vue dev server; backend API is 8080)
+- [x] Application branding uses “Swing Trade” in the browser tab, sidebar, settings copy, and monitoring dashboard metadata.
 - [x] Equity curve rendering — but only on `/portfolio` (`PortfolioView.vue` + `PerformanceMetrics.vue`), not on `/`. Decide: fix checklist to point at `/portfolio`, or add the curve to the Dashboard route.
 - [x] Open positions showing with live LTP — field is wired end-to-end (`GET /api/positions` → 200, CURRENT column populated). "Live" itself unverified: checked while market closed, `currentPrice == entryPrice` for all open positions with no tick to observe. Re-check during live market hours.
 - [x] Signals table showing today's signals — `/signals` renders 42 signals, today's (`generatedAt: 2026-08-29`, ids 422–435, mostly SELL from the new exit-confluence logic) are present. Not strictly date-filtered — shows today mixed with recent history, not a today-only view.
-- [ ] **Auto-refresh working every 60 seconds — FAIL, not implemented at all.** No polling exists for positions/signals/equity data anywhere in the frontend (`grep` across `dashboard/src` confirms it); only `appState.ts` polls `/api/health` every 15s for the health badge. Confirmed live: sat on `/` for 65s, positions/stats/performance endpoints fired once at load and never refired. Only a manual "Refresh" button exists. **This is a real gap to build, not a check to re-run** — pilot dashboard would go stale silently during market hours unless someone manually refreshes.
+- [ ] **Auto-refresh working every 60 seconds — still open.** The dashboard loads data on mount and supports manual refresh; only the health badge polls automatically. Positions, signals, portfolio metrics, and equity data can become stale during market hours.
 - [x] All REST endpoints returning 200 — confirmed across `/`, `/portfolio`, `/positions`, `/signals` after backend recovered (see incident note below).
 
 **Incident during this check:** the running backend JVM (PID 24104) was serving from a `.jar` that had been deleted out from under it by a rebuild in a *different, concurrent process* — every endpoint except the trivial `/actuator/health` returned 500 (`NoClassDefFoundError` from a corrupted classloader). It self-resolved when a fresh process (PID 87603) came up from what appears to be another concurrent Claude Code session's activity on this machine (its stdout was being captured to a different session's scratchpad path). Reinforces the existing CLAUDE.md guidance: `lsof -i :8080` and kill stale processes before rebuilding/restarting — `/actuator/health` alone does not catch this failure mode.

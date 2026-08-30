@@ -24,6 +24,14 @@ INFRA_DIR="$PROJECT_ROOT/infra"
 PIDFILE="$PROJECT_ROOT/.swing-trade-pids"
 PI_NODE_HOST="piworm.local"
 
+docker_compose() {
+    if docker compose version >/dev/null 2>&1; then
+        docker compose "$@"
+    else
+        docker-compose "$@"
+    fi
+}
+
 echo "=========================================="
 echo "  Swing Trade - Dev Stack Manager"
 echo "=========================================="
@@ -45,14 +53,14 @@ cleanup_pids() {
 }
 do_stage_monitoring() {
     local cmd="${2:-up}"
-    docker compose -f "$INFRA_DIR/docker-compose.monitoring-stage.yml" "$cmd"
+    docker_compose -f "$INFRA_DIR/docker-compose.monitoring-stage.yml" "$cmd"
 }
 
 do_stage_infra() {
     local cmd="${2:-up}"
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-stage.yml "$cmd"
+    docker_compose -f docker-compose.infra-stage.yml "$cmd"
     docker context use desktop-linux
 }
 
@@ -65,13 +73,13 @@ case "${1:-help}" in
     echo "📦 Starting infrastructure on pi-node..."
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml up -d
+    docker_compose -f docker-compose.infra-dev.yml up -d
     echo ""
 
     # Wait for services to be healthy
     echo "⏳ Waiting for services to be ready..."
     sleep 15
-    docker compose -f docker-compose.infra-dev.yml ps
+    docker_compose -f docker-compose.infra-dev.yml ps
     echo ""
 
     # Switch back to local context
@@ -95,10 +103,9 @@ case "${1:-help}" in
     export LOG_FILE="$BACKEND_DIR/logs/swing-trade-local.log"
     mkdir -p "$BACKEND_DIR/logs"
     cd "$BACKEND_DIR"
-    ./gradlew :api:jar :api:copyRuntimeDeps -q
+    ./gradlew :api:bootJar -q
     nohup java -Duser.timezone=Asia/Kolkata \
-        -cp "api/build/libs/api-plain.jar:api/build/runtimeDeps/*" \
-        com.swingtrade.api.app.SwingTradeApiApplication \
+        -jar "api/build/libs/api.jar" \
         --spring.profiles.active=local > "$BACKEND_DIR/logs/dev-stack-api-console.log" 2>&1 < /dev/null &
     BACKEND_PID=$!
     save_pid "$BACKEND_PID"
@@ -108,7 +115,7 @@ case "${1:-help}" in
     # Start Vue dev server locally
     echo "🖥️  Starting Vue dev server locally..."
     cd "$DASHBOARD_DIR"
-    nohup yarn dev > "$BACKEND_DIR/logs/dev-stack-frontend-console.log" 2>&1 < /dev/null &
+    nohup ./node_modules/.bin/vite --host 127.0.0.1 --port 3003 > "$BACKEND_DIR/logs/dev-stack-frontend-console.log" 2>&1 < /dev/null &
     FRONTEND_PID=$!
     save_pid "$FRONTEND_PID"
     echo "✓ Frontend PID: $FRONTEND_PID"
@@ -145,7 +152,7 @@ case "${1:-help}" in
     echo "📦 Stopping infrastructure on pi-node..."
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml down
+    docker_compose -f docker-compose.infra-dev.yml down
     echo ""
 
     # Switch back to local context
@@ -158,7 +165,7 @@ case "${1:-help}" in
     echo "📦 Managing infrastructure on pi-node..."
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml "${@:2}"
+    docker_compose -f docker-compose.infra-dev.yml "${@:2}"
     ;;
 
   status)
@@ -167,17 +174,18 @@ case "${1:-help}" in
     echo "Infrastructure (pi-node):"
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml ps
+    docker_compose -f docker-compose.infra-dev.yml ps
     echo ""
 
     echo "Local Spring Boot:"
     docker context use desktop-linux
-    pgrep -f "com.swingtrade.api.app.SwingTradeApiApplication" > /dev/null 2>&1 \
+    lsof -nP -iTCP:8080 -sTCP:LISTEN > /dev/null 2>&1 \
       && echo "✓ Running" || echo "✗ Not running"
     echo ""
 
     echo "Local Vue Dev Server:"
-    pgrep -f "vite" && echo "✓ Running" || echo "✗ Not running"
+    lsof -nP -iTCP:3003 -sTCP:LISTEN > /dev/null 2>&1 \
+      && echo "✓ Running" || echo "✗ Not running"
     echo ""
 
     echo "API Health:"
@@ -190,7 +198,28 @@ case "${1:-help}" in
     echo "=== Infrastructure Logs ==="
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml logs "${@:2}"
+    docker_compose -f docker-compose.infra-dev.yml logs "${@:2}"
+    ;;
+
+  live-logs)
+    echo "📡 Following live dev-stack logs (Ctrl-C to stop)..."
+    echo ""
+
+    # Keep the remote Compose context selected while its stream is active.
+    docker context use pi-node >/dev/null
+    cd "$INFRA_DIR"
+    docker_compose -f docker-compose.infra-dev.yml logs -f --tail=100 &
+    INFRA_LOG_PID=$!
+
+    cd "$PROJECT_ROOT"
+    mkdir -p "$BACKEND_DIR/logs"
+    tail -F -n 100 \
+      "$BACKEND_DIR/logs/dev-stack-api-console.log" \
+      "$BACKEND_DIR/logs/dev-stack-frontend-console.log" &
+    LOCAL_LOG_PID=$!
+
+    trap 'kill "$INFRA_LOG_PID" "$LOCAL_LOG_PID" 2>/dev/null || true' INT TERM EXIT
+    wait "$INFRA_LOG_PID" "$LOCAL_LOG_PID"
     ;;
 
   stage-monitoring)
@@ -439,7 +468,7 @@ case "${1:-help}" in
     ;;
 
   *)
-    echo "Usage: $0 {start|stage|stage-down|stage-logs|stage-restart|stop|infra|status|logs|logs-json|stage-monitoring|frontend|frontend-logs}"
+    echo "Usage: $0 {start|stage|stage-down|stage-logs|stage-restart|stop|infra|status|logs|live-logs|logs-json|stage-monitoring|frontend|frontend-logs}"
     echo ""
     echo "Commands:"
     echo "  start            - Start dev infra on pi-node + Spring Boot + Vue locally"
@@ -451,6 +480,7 @@ case "${1:-help}" in
     echo "  infra            - Manage dev infrastructure (pass docker compose commands)"
     echo "  status           - Check status of all services"
     echo "  logs             - View infrastructure logs"
+    echo "  live-logs        - Follow infrastructure, API, and frontend logs"
     echo "  logs-json        - View structured JSON logs (requires jq)"
     echo "  stage-monitoring - Start/stop local Grafana (scrapes pi-node Prometheus)"
     echo "  frontend         - Manage Vue dev server (start|stop|logs)"
@@ -470,6 +500,7 @@ case "${1:-help}" in
     echo "  $0 infra up -d"
     echo "  $0 status"
     echo "  $0 logs --tail=100"
+    echo "  $0 live-logs"
     echo "  $0 logs-json 50"
     echo "  $0 stage-monitoring up -d"
     echo "  $0 frontend start"

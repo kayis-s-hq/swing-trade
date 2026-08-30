@@ -91,6 +91,48 @@ export interface HealthComponent {
   details?: Record<string, unknown>
 }
 
+export interface CandidateScanRun {
+  runId: string
+  status: 'RUNNING' | 'COMPLETED' | 'CANCELLED'
+  totalSymbols: number
+  completedSymbols: number
+  failedSymbols: number
+  qualifiedSymbols: number
+  startedAt: string
+  completedAt?: string
+  errorMessage?: string
+}
+
+export interface CandidateScanResult {
+  runId: string
+  symbol: string
+  dataStatus: 'READY' | 'INSUFFICIENT' | 'ERROR'
+  candleCount: number
+  signalType?: 'BUY' | 'SELL' | 'HOLD'
+  totalTrades?: number
+  winRate?: number
+  totalReturn?: number
+  maxDrawdownPct?: number
+  qualified: boolean
+  activated: boolean
+  reason?: string
+  errorMessage?: string
+  createdAt: string
+}
+
+export interface CandidateScanLogEvent {
+  eventType: 'RUN_SNAPSHOT' | 'RUN_STARTED' | 'STAGE_STARTED' | 'STAGE_COMPLETED' | 'SYMBOL_STARTED' | 'SYMBOL_COMPLETED' | 'SYMBOL_FAILED' | 'RUN_COMPLETED' | 'RUN_CANCELLED'
+  runId: string
+  symbol?: string | null
+  level: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR'
+  message: string
+  completedSymbols: number
+  totalSymbols: number
+  failedSymbols: number
+  qualifiedSymbols: number
+  timestamp: string
+}
+
 export interface FyersStatus {
   connected: boolean
   clientId: string

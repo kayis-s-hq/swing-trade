@@ -1,4 +1,4 @@
-# SwingTrade dashboard
+# Swing Trade
 
 Vue 3 + TypeScript dashboard for watchlists, market data, signals, backtests, paper trading, monitoring, and settings.
 

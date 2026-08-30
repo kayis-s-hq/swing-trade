@@ -10,7 +10,7 @@
           <div class="flex h-7 w-7 items-center justify-center rounded-md bg-brand/10">
             <span class="text-sm font-bold text-brand">S</span>
           </div>
-          <span class="font-display text-base font-semibold text-text-primary">SwingTrade</span>
+          <span class="font-display text-base font-semibold text-text-primary">Swing Trade</span>
         </div>
       </template>
       <template v-else>
@@ -163,6 +163,7 @@ const navItems = [
   { path: '/monitoring', label: 'Monitoring', icon: iconPaths.intelligence, badge: undefined },
   { path: '/portfolio', label: 'Portfolio', icon: iconPaths.portfolio, badge: undefined },
   { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
+  { path: '/candidate-explorer', label: 'Candidate Explorer', icon: iconPaths.search, badge: undefined },
   { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
   { path: '/data', label: 'Data', icon: iconPaths.data, badge: undefined },
   { path: '/orchestrator', label: 'Orchestrator', icon: iconPaths.dashboard, badge: undefined },

@@ -11,7 +11,7 @@
           Settings
         </h1>
         <p class="mt-2 max-w-xl text-sm leading-6 text-text-muted">
-          Configure how SwingTrade connects, thinks, trades, and reports back to you.
+          Configure how Swing Trade connects, thinks, trades, and reports back to you.
         </p>
       </div>
       <button

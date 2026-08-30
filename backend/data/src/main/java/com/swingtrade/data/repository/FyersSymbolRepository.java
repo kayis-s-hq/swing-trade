@@ -15,6 +15,8 @@ public interface FyersSymbolRepository extends JpaRepository<FyersSymbolEntity, 
 
     Optional<FyersSymbolEntity> findByTradingSymbolIgnoreCase(String tradingSymbol);
 
+    List<FyersSymbolEntity> findByExchangeIgnoreCaseOrderByTradingSymbolAsc(String exchange);
+
     @Query("select f from FyersSymbolEntity f where upper(f.tradingSymbol) like upper(concat(:q,'%')) "
         + "or upper(f.name) like upper(concat('%',:q,'%')) order by f.tradingSymbol")
     List<FyersSymbolEntity> search(@Param("q") String q, Pageable page);
