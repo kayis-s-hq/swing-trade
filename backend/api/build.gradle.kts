@@ -28,7 +28,14 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.springframework.boot:spring-boot-devtools")
+    // developmentOnly (not implementation): Boot's Gradle plugin excludes this from the
+    // packaged fat jar automatically. It was previously `implementation`, which shipped
+    // devtools' classpath-watching Restarter inside api.jar itself - its restart trigger
+    // fires on ANY classpath file change (including a concurrent `./gradlew` rebuild
+    // touching build/classes/ while the jar is running) and tears down the running
+    // ApplicationContext, which looked like an unexplained silent shutdown a few seconds
+    // into every startup.
+    developmentOnly("org.springframework.boot:spring-boot-devtools")
 
     // Resilience4j — circuit breaker, retry, bulkhead, time limiter.
     // 2.4.0+ is required for the resilience4j-spring-boot4 autoconfiguration module.

@@ -20,7 +20,15 @@ package com.swingtrade.strategy;
  *                              exit (checked after STOP_LOSS/TARGET_HIT/SIGNAL_EXIT, before
  *                              TIME_STOP). Set higher than {@code maxHoldingDays} to effectively
  *                              disable it and let positions run to STOP_LOSS/TARGET_HIT/TIME_STOP
- *                              only.
+ *                              only. Defaults to disabled: TREND_BREAK is a backtest-only
+ *                              construct with no live-trading counterpart (the paper-trading
+ *                              engine only ever exits on STOP_LOSS/TARGET_HIT price levels or a
+ *                              live SELL signal), so leaving it on by default tested a strategy
+ *                              variant the live system doesn't run. Measured on 2026-08-30 across
+ *                              the 10-symbol watchlist: disabling it moved overall win rate from
+ *                              39.5% to 47.5%, Sharpe from -0.02 to +0.08, and total P&amp;L from
+ *                              +16.4K to +38.2K - the 13 trades it used to cut early at a 15.4%
+ *                              win rate mostly went on to win at TIME_STOP instead.
  */
 public record BacktestConfig(
     double slippagePct,
@@ -39,7 +47,7 @@ public record BacktestConfig(
         return new BacktestConfig(
                 0.001, 20.0, 0.01,
                 500_000.0, 5, 2.0,
-                2.5, 20, false, 2
+                2.5, 20, false, 21
         );
     }
 }
