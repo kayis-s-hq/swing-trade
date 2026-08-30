@@ -6,6 +6,7 @@ import WatchlistView from './WatchlistView.vue'
 
 const apiMocks = vi.hoisted(() => ({
   getWatchlist: vi.fn(),
+  getSignals: vi.fn(),
   addToWatchlist: vi.fn(),
   removeFromWatchlist: vi.fn(),
   toggleWatchlistActive: vi.fn(),
@@ -13,6 +14,7 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock('../api/client', () => apiMocks)
 vi.mock('../api/watchlist', () => apiMocks)
+vi.mock('../api/signals', () => apiMocks)
 
 const entry: WatchlistEntry = {
   id: 1,
@@ -60,6 +62,7 @@ beforeEach(() => {
     vi.fn(() => true)
   )
   apiMocks.getWatchlist.mockResolvedValue([entry])
+  apiMocks.getSignals.mockResolvedValue([])
   apiMocks.addToWatchlist.mockResolvedValue(entry)
   apiMocks.removeFromWatchlist.mockResolvedValue('Removed RELIANCE')
   apiMocks.toggleWatchlistActive.mockResolvedValue({ ...entry, isActive: false })
@@ -129,6 +132,36 @@ describe('WatchlistView — mutation failures', () => {
     expect(wrapper.get('[role="alert"]').text()).toMatch(/couldn.t update RELIANCE/i)
     expect(wrapper.get('[role="alert"]').text()).toContain('Watchlist update conflicted')
     expect(globalThis.alert).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+describe('WatchlistView — signal monitoring', () => {
+  it('shows and filters the latest BUY signal for a watched stock', async () => {
+    apiMocks.getSignals.mockResolvedValue([
+      {
+        id: 'signal-1',
+        symbol: 'RELIANCE',
+        direction: 'BUY',
+        confidence: 88,
+        reason: 'All entry rules passed',
+        entryPrice: 100,
+        stopLoss: 95,
+        target: 115,
+        riskReward: 3,
+        timestamp: '2026-08-30',
+        status: 'ACTIVE',
+      },
+    ])
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('1 BUY signal')
+    expect(wrapper.text()).toContain('BUY')
+
+    await button(wrapper, 'BUY signals 1').trigger('click')
+    expect(wrapper.text()).toContain('RELIANCE')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
     wrapper.unmount()
   })
 })

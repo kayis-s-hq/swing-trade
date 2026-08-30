@@ -11,9 +11,14 @@ import com.swingtrade.domain.JobRun;
 import com.swingtrade.domain.JobRunStage;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.CompositeAnalysis;
+import com.swingtrade.domain.LlmAnalysisResult;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.SignalStore;
 import com.swingtrade.domain.store.WatchlistStore;
+import com.swingtrade.domain.store.SentimentStore;
+import com.swingtrade.domain.store.BacktestResultStore;
+import com.swingtrade.domain.store.LlmAnalysisResultStore;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
 import com.swingtrade.strategy.BacktestConfig;
@@ -46,7 +51,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Orchestrates the 6-stage job pipeline across all watchlist symbols
+ * Orchestrates the 7-stage job pipeline across all watchlist symbols
  * with concurrency control and per-stage progress tracking.
  */
 @Service
@@ -61,14 +66,15 @@ public class JobOrchestratorService {
     // Matches SentimentService.ANALYSIS_TIMEOUT_SECONDS: CPU-only local LLM generation
     // can legitimately run for minutes, so the outer stage must not cut the inner wait short.
     private static final long TIMEOUT_SENTIMENT = 600L;
+    private static final long TIMEOUT_LLM_ANALYSIS = 600L;
     private static final long TIMEOUT_SIGNAL = 30L;
     private static final long TIMEOUT_BACKTEST = 120L;
     private static final long TIMEOUT_PAPER_TRADE = 30L;
 
-    /** Worst-case wall-clock seconds a single symbol can spend across all six stages. */
+    /** Worst-case wall-clock seconds a single symbol can spend across all seven stages. */
     private static final long STAGE_TIMEOUT_SUM_SECONDS =
         TIMEOUT_DATA_FETCH + TIMEOUT_NEWS + TIMEOUT_SENTIMENT
-            + TIMEOUT_SIGNAL + TIMEOUT_BACKTEST + TIMEOUT_PAPER_TRADE;
+            + TIMEOUT_SIGNAL + TIMEOUT_BACKTEST + TIMEOUT_LLM_ANALYSIS + TIMEOUT_PAPER_TRADE;
 
     /** Generous margin over the worst case before a RUNNING row is considered orphaned. */
     private static final long STALE_RUN_SAFETY_MULTIPLIER = 6L;
@@ -121,7 +127,18 @@ public class JobOrchestratorService {
     private final WatchlistStore watchlistStore;
     private final CandleStore candleStore;
     private final JobOrchestratorMetrics jobMetrics;
+    private final TechnicalAnalysisService technicalAnalysisService;
+    private final FundamentalScorer fundamentalScorer;
+    private final CompositeAnalysisService compositeAnalysisService;
+    private final com.swingtrade.llm.service.SynthesisService synthesisService;
+    private final BacktestResultStore backtestResultStore;
+    private final LlmAnalysisResultStore llmAnalysisResultStore;
+    private final LlmAnalysisGate llmAnalysisGate;
+    private final SentimentStore sentimentStore;
+    private final boolean llmAnalysisEnabled;
+    private final boolean llmAnalysisAdvisoryOnly;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public JobOrchestratorService(
             DataIngestionService dataIngestionService,
             NewsIngestionService newsIngestionService,
@@ -136,9 +153,19 @@ public class JobOrchestratorService {
             WatchlistStore watchlistStore,
             CandleStore candleStore,
             JobOrchestratorMetrics jobMetrics,
+            TechnicalAnalysisService technicalAnalysisService,
+            FundamentalScorer fundamentalScorer,
+            CompositeAnalysisService compositeAnalysisService,
+            com.swingtrade.llm.service.SynthesisService synthesisService,
+            BacktestResultStore backtestResultStore,
+            LlmAnalysisResultStore llmAnalysisResultStore,
+            LlmAnalysisGate llmAnalysisGate,
+            SentimentStore sentimentStore,
             @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
             @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs,
-            @Value("${job.orchestrator.reaper.enabled:true}") boolean reaperEnabled) {
+            @Value("${job.orchestrator.reaper.enabled:true}") boolean reaperEnabled,
+            @Value("${job.orchestrator.llm-analysis.enabled:true}") boolean llmAnalysisEnabled,
+            @Value("${job.orchestrator.llm-analysis.advisory-only:true}") boolean llmAnalysisAdvisoryOnly) {
         this.pollIntervalMs = pollIntervalMs;
         this.maxConcurrent = maxConcurrent;
         this.reaperEnabled = reaperEnabled;
@@ -158,6 +185,24 @@ public class JobOrchestratorService {
         this.watchlistStore = watchlistStore;
         this.candleStore = candleStore;
         this.jobMetrics = jobMetrics;
+        this.technicalAnalysisService = technicalAnalysisService;
+        this.fundamentalScorer = fundamentalScorer;
+        this.compositeAnalysisService = compositeAnalysisService;
+        this.synthesisService = synthesisService;
+        this.backtestResultStore = backtestResultStore;
+        this.llmAnalysisResultStore = llmAnalysisResultStore;
+        this.llmAnalysisGate = llmAnalysisGate;
+        this.sentimentStore = sentimentStore;
+        this.llmAnalysisEnabled = llmAnalysisEnabled;
+        this.llmAnalysisAdvisoryOnly = llmAnalysisAdvisoryOnly;
+    }
+
+    /** Compatibility fixture constructor for pre-LLM pipeline tests. */
+    public JobOrchestratorService(DataIngestionService d, NewsIngestionService n, SentimentService s,
+            SignalPipeline p, SentimentGate sg, BacktestEngine b, TradingService t,
+            JobRunRepository jr, JobRunStageRepository js, SignalStore ss, WatchlistStore w,
+            CandleStore c, JobOrchestratorMetrics m, int max, long poll, boolean reaper) {
+        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
     }
 
     /**
@@ -277,13 +322,12 @@ public class JobOrchestratorService {
         try {
             acquireSlot(symbol);
             try {
-                // Set by the SIGNAL stage's executor as a side effect so the NEWS/SENTIMENT
-                // skip check below can see the outcome — sentiment is only ever relevant for
-                // a BUY, so there is no reason to spend NEWS fetches or an LLM call on a
-                // symbol that came back SELL/HOLD (the common case).
+                // Set by the SIGNAL stage's executor for the signal context used by the
+                // PAPER_TRADE stage. NEWS and SENTIMENT intentionally run for every symbol;
+                // their output is useful for monitoring SELL/HOLD names as well as BUYs.
                 Signal.SignalType[] signalType = {null};
 
-                List<StageDef> stageDefs = List.of(
+                List<StageDef> stageDefs = new java.util.ArrayList<>(List.of(
                     new StageDef(JobRunStage.StageName.DATA_FETCH,
                         () -> StageExecutionResult.completed(stageDataFetch(symbol)), TIMEOUT_DATA_FETCH),
                     new StageDef(JobRunStage.StageName.SIGNAL,
@@ -295,7 +339,14 @@ public class JobOrchestratorService {
                         () -> StageExecutionResult.completed(stageSentiment(symbol, today)), TIMEOUT_SENTIMENT),
                     new StageDef(JobRunStage.StageName.PAPER_TRADE,
                         () -> StageExecutionResult.completed(stagePaperTrade(symbol)), TIMEOUT_PAPER_TRADE)
-                );
+                ));
+                if (llmAnalysisEnabled) {
+                    stageDefs.add(stageDefs.size() - 1, new StageDef(JobRunStage.StageName.LLM_ANALYSIS,
+                        () -> stageLlmAnalysis(runId, symbol, today), TIMEOUT_LLM_ANALYSIS));
+                } else {
+                    updateStageStatus(runId, symbol, JobRunStage.StageName.LLM_ANALYSIS,
+                        JobRunStage.Status.SKIPPED, 0L, null, "disabled by config");
+                }
 
                 boolean priorStageBlocked = false;
                 for (StageDef stageDef : stageDefs) {
@@ -314,17 +365,12 @@ public class JobOrchestratorService {
                             stageDef.name(), symbol);
                         continue;
                     }
-                    boolean isSentimentPrerequisite = stageDef.name() == JobRunStage.StageName.NEWS
-                        || stageDef.name() == JobRunStage.StageName.SENTIMENT;
-                    if (isSentimentPrerequisite && signalType[0] != Signal.SignalType.BUY) {
-                        updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.SKIPPED,
-                            null, null, "Skipped — no BUY signal, sentiment check not needed");
-                        logger.debug("Skipping stage {} for {}: no BUY signal", stageDef.name(), symbol);
-                        continue;
-                    }
                     boolean succeeded = executeStage(runId, symbol, stageDef.name(),
                         stageDef.executor(), stageDef.timeoutSec());
-                    if (!succeeded) {
+                    // A timed-out/failed LLM analysis has no persisted verdict, so PAPER_TRADE
+                    // must still run and defer through LlmAnalysisGate.PENDING. Earlier stages
+                    // retain the normal skip-cascade semantics.
+                    if (!succeeded && stageDef.name() != JobRunStage.StageName.LLM_ANALYSIS) {
                         priorStageBlocked = true;
                     }
                 }
@@ -473,14 +519,45 @@ public class JobOrchestratorService {
         try {
             BacktestConfig config = BacktestConfig.defaults();
             BacktestResult result = backtestEngine.runBacktest(symbol, "NSE", config);
+            LocalDate date = LocalDate.now(IST);
+            if (backtestResultStore != null) backtestResultStore.saveOrUpdate(new com.swingtrade.domain.BacktestResult(null, symbol, date,
+                result.totalTrades(), result.winningTrades(), result.losingTrades(), result.winRate(),
+                result.avgGainPct(), result.avgLossPct(), result.maxDrawdownPct(), result.sharpeRatio(),
+                result.totalReturn(), result.expectancy(), BacktestScorer.calculateProfitFactor(result), true));
             String summary = result.totalTrades() + " trades, "
                 + String.format("%.0f", result.winRate()) + "% win, "
                 + String.format("%.1f", result.totalReturn()) + "% return";
             return StageExecutionResult.completed(summary);
         } catch (IllegalStateException e) {
             logger.info("Backtest skipped for {}: {}", symbol, e.getMessage());
+            if (backtestResultStore != null) backtestResultStore.saveOrUpdate(new com.swingtrade.domain.BacktestResult(null, symbol, LocalDate.now(IST),
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false));
             return StageExecutionResult.skipped(e.getMessage());
         }
+    }
+
+    private StageExecutionResult stageLlmAnalysis(UUID runId, String symbol, LocalDate date) {
+        CompositeAnalysis.TechnicalScore technical;
+        CompositeAnalysis.FundamentalScore fundamentals;
+        boolean inputFallback = false;
+        try { technical = technicalAnalysisService.compute(symbol); }
+        catch (Exception e) { inputFallback = true; technical = new CompositeAnalysis.TechnicalScore(0, "HOLD", 0, List.of()); }
+        try { fundamentals = fundamentalScorer.compute(symbol); }
+        catch (Exception e) { inputFallback = true; fundamentals = new CompositeAnalysis.FundamentalScore(0, List.of("Unavailable")); }
+        CompositeAnalysis.BacktestScore backtest = backtestResultStore.findBySymbolAndDate(symbol, date)
+            .map(r -> new CompositeAnalysis.BacktestScore(r.totalTrades(), r.winRate(), r.profitFactor(),
+                r.maxDrawdownPct(), r.totalReturn(), r.expectancy(), r.hasEnoughData()))
+            .orElse(new CompositeAnalysis.BacktestScore(0, 0, 0, 0, 0, 0, false));
+        var sentiment = sentimentStore.findBySymbolAndDate(symbol, date).orElse(null);
+        CompositeAnalysis composite = compositeAnalysisService.analyze(symbol, technical, fundamentals, backtest, sentiment);
+        var synthesis = synthesisService.synthesize(composite);
+        llmAnalysisResultStore.saveOrUpdate(new LlmAnalysisResult(null, runId.toString(), symbol, date,
+            synthesis.recommendation(), synthesis.confidence(), synthesis.narrative(), synthesis.keyDrivers(),
+            synthesis.bullishFactors(), synthesis.bearishFactors(), composite.compositeScore(),
+            composite.compositeSignal(), synthesis.success(), !synthesis.success() || inputFallback,
+            inputFallback ? "One or more analysis inputs were unavailable" : null));
+        String summary = "recommendation=" + synthesis.recommendation() + ", confidence=" + synthesis.confidence();
+        return StageExecutionResult.completed(summary);
     }
 
     private String stagePaperTrade(String symbol) {
@@ -492,15 +569,15 @@ public class JobOrchestratorService {
         int executed = 0;
         int failedAfterMark = 0;
         int blockedBySentiment = 0;
+        int blockedByLlm = 0;
         for (Signal signal : unprocessed) {
             OhlcvCandle latest = candleStore.findLatestBySymbol(symbol)
                 .orElse(null);
             if (latest == null || latest.close() == null) continue;
 
-            // A BUY only gets this far once SENTIMENT has run (see the NEWS/SENTIMENT skip
-            // condition in processSymbol) - but read its verdict rather than assume, since a
-            // stale unprocessed BUY from an earlier run could reach here with no sentiment
-            // recorded for its date at all.
+            // NEWS/SENTIMENT runs for every symbol. A BUY still reads its persisted verdict
+            // here rather than assuming the latest sentiment call applies, since a stale
+            // unprocessed BUY from an earlier run may have no verdict for its signal date.
             if (signal.type() == Signal.SignalType.BUY) {
                 var verdict = sentimentGate.evaluatePersisted(symbol, signal.date());
                 if (verdict.action() == SentimentGate.SentimentVerdict.Action.PENDING) {
@@ -519,6 +596,15 @@ public class JobOrchestratorService {
                     blockedBySentiment++;
                     logger.info("Blocked BUY signal {} for {} on sentiment: {}",
                         signal.id(), symbol, verdict.reason());
+                    continue;
+                }
+                var llmVerdict = llmAnalysisEnabled && llmAnalysisGate != null
+                    ? llmAnalysisGate.evaluatePersisted(symbol, signal.date()) : null;
+                if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.PENDING) continue;
+                if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.SUPPRESS && !llmAnalysisAdvisoryOnly) {
+                    try { signalStore.markProcessed(signal.id()); } catch (Exception e) { continue; }
+                    blockedByLlm++;
+                    logger.info("Blocked BUY signal {} for {} by LLM analysis: {}", signal.id(), symbol, llmVerdict.reason());
                     continue;
                 }
             }
@@ -560,6 +646,7 @@ public class JobOrchestratorService {
         if (blockedBySentiment > 0) {
             summary.append(", ").append(blockedBySentiment).append(" blocked by sentiment");
         }
+        if (blockedByLlm > 0) summary.append(", ").append(blockedByLlm).append(" blocked by LLM analysis");
         if (failedAfterMark > 0) {
             summary.append(", ").append(failedAfterMark).append(" failed after marking processed (see logs)");
         }

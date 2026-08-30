@@ -79,8 +79,8 @@ public class SignalPipeline {
      *
      * <p>Sentiment is deliberately NOT evaluated here. Every technical BUY is persisted
      * unconditionally with a {@code PENDING_SENTIMENT} warning flag; the JobOrchestrator's
-     * SENTIMENT stage runs afterward (only for a BUY, not every symbol every day) and its
-     * verdict is read by the PAPER_TRADE stage before a trade is actually executed. This
+     * SENTIMENT stage runs afterward for every symbol and its verdict is read by the
+     * PAPER_TRADE stage before a BUY trade is actually executed. This
      * gives a full audit trail ("a real BUY signal fired, sentiment later blocked the
      * trade") instead of a sentiment-suppressed BUY silently never existing in the
      * `signals` table at all, which was this method's previous behavior.</p>

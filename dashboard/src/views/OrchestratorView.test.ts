@@ -34,6 +34,16 @@ const runningProgress: JobRunProgressResponse = {
   stages: [],
 }
 
+const orderedStages = [
+  'DATA_FETCH',
+  'SIGNAL',
+  'BACKTEST',
+  'NEWS',
+  'SENTIMENT',
+  'LLM_ANALYSIS',
+  'PAPER_TRADE',
+] as const
+
 function appError(
   message: string,
   options: { kind?: string; outcomeUnknown?: boolean } = {}
@@ -96,6 +106,45 @@ afterEach(() => {
 })
 
 describe('OrchestratorView — run control', () => {
+  it('renders stages in the backend execution sequence', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const sequence = wrapper.get('[aria-label="Execution sequence"]')
+    expect(sequence.text()).toContain('Data fetch')
+    expect(sequence.text()).toContain('Signal')
+    expect(sequence.text()).toContain('Backtest')
+    expect(sequence.text()).toContain('News')
+    expect(sequence.text()).toContain('Sentiment')
+    expect(sequence.text()).toContain('LLM analysis')
+    expect(sequence.text()).toContain('Paper trade')
+
+    const labels = sequence.findAll('span').map((node) => node.text().trim())
+    expect(
+      labels.filter(
+        (label) => label && !/^\d+$/.test(label) && label !== '→' && label !== '7 stages'
+      )
+    ).toEqual([
+      'Data fetch',
+      'Signal',
+      'Backtest',
+      'News',
+      'Sentiment',
+      'LLM analysis',
+      'Paper trade',
+    ])
+    expect(orderedStages).toEqual([
+      'DATA_FETCH',
+      'SIGNAL',
+      'BACKTEST',
+      'NEWS',
+      'SENTIMENT',
+      'LLM_ANALYSIS',
+      'PAPER_TRADE',
+    ])
+    wrapper.unmount()
+  })
+
   it('shows an immediate starting state and prevents duplicate start requests', async () => {
     const startRequest = deferred<JobRunResponse>()
     apiMocks.startJobRun.mockReturnValue(startRequest.promise)

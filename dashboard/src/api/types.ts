@@ -392,7 +392,8 @@ export interface JobRunResponse {
 
 export interface JobRunStageResponse {
   symbol: string
-  stageName: 'DATA_FETCH' | 'NEWS' | 'SENTIMENT' | 'SIGNAL' | 'BACKTEST' | 'PAPER_TRADE'
+  stageName:
+    'DATA_FETCH' | 'NEWS' | 'SENTIMENT' | 'LLM_ANALYSIS' | 'SIGNAL' | 'BACKTEST' | 'PAPER_TRADE'
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'SKIPPED' | 'ERROR'
   startedAt: string
   completedAt: string | null

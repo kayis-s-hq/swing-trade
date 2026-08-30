@@ -4,7 +4,9 @@
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="font-display text-2xl font-semibold text-text-primary">Watchlist</h1>
-        <p class="mt-1 text-sm text-text-muted">{{ watchlist.length }} stocks being monitored</p>
+        <p class="mt-1 text-sm text-text-muted">
+          {{ watchlist.length }} stocks being monitored · {{ buySignalCount }} BUY signal{{ buySignalCount === 1 ? '' : 's' }}
+        </p>
       </div>
       <button
         class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90"
@@ -19,6 +21,21 @@
           />
         </svg>
         Add Stock
+      </button>
+    </div>
+
+    <div class="mb-4 flex flex-wrap items-center gap-2" aria-label="Watchlist filters">
+      <button
+        v-for="filter in filters"
+        :key="filter.value"
+        type="button"
+        class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+        :class="signalFilter === filter.value
+          ? 'border-brand bg-brand text-white'
+          : 'border-border-subtle text-text-muted hover:border-brand/50 hover:text-text-primary'"
+        @click="signalFilter = filter.value"
+      >
+        {{ filter.label }} <span class="ml-1 opacity-70">{{ filterCount(filter.value) }}</span>
       </button>
     </div>
 
@@ -122,6 +139,11 @@
                   Status
                 </th>
                 <th
+                  class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
+                >
+                  Latest signal
+                </th>
+                <th
                   class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
                 >
                   Candles
@@ -135,7 +157,7 @@
             </thead>
             <tbody class="divide-y divide-border-subtle/50">
               <tr
-                v-for="entry in watchlist"
+                v-for="entry in filteredWatchlist"
                 :key="entry.symbol"
                 class="transition-colors hover:bg-bg-hover"
               >
@@ -161,6 +183,16 @@
                     {{ entry.isActive ? 'Active' : 'Inactive' }}
                   </button>
                 </td>
+                <td class="px-5 py-4 text-center">
+                  <span
+                    v-if="latestSignal(entry.symbol)"
+                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                    :class="signalClass(latestSignal(entry.symbol)!.direction)"
+                  >
+                    {{ latestSignal(entry.symbol)!.direction }}
+                  </span>
+                  <span v-else class="text-xs text-text-muted">No signal</span>
+                </td>
                 <td class="px-5 py-4 text-right text-sm text-text-secondary">
                   {{ entry.candleCount ?? 0 }}
                 </td>
@@ -185,7 +217,10 @@
           </table>
         </div>
 
-        <div v-if="watchlist.length === 0" class="mt-6 text-center text-sm text-text-muted">
+        <div v-if="watchlist.length > 0 && filteredWatchlist.length === 0" class="mt-6 text-center text-sm text-text-muted">
+          No {{ signalFilter === 'BUY' ? 'BUY' : '' }} signals in the watchlist.
+        </div>
+        <div v-else-if="watchlist.length === 0" class="mt-6 text-center text-sm text-text-muted">
           No stocks in watchlist. Click "Add Stock" to get started.
         </div>
       </template>
@@ -194,14 +229,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   getWatchlist,
   addToWatchlist,
   removeFromWatchlist,
   toggleWatchlistActive,
 } from '../api/watchlist'
-import type { WatchlistEntry } from '../api/types'
+import { getSignals } from '../api/signals'
+import type { Signal, WatchlistEntry } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
@@ -217,6 +253,12 @@ interface MutationErrorPresentation {
 
 const { loading, error, errorMessage, execute } = useAsyncData<void>()
 const watchlist = ref<WatchlistEntry[]>([])
+const signals = ref<Signal[]>([])
+const signalFilter = ref<'ALL' | 'BUY'>('ALL')
+const filters = [
+  { value: 'ALL' as const, label: 'All stocks' },
+  { value: 'BUY' as const, label: 'BUY signals' },
+]
 const mutationError = ref<MutationErrorPresentation | null>(null)
 const staleWarning = ref('')
 const showAddForm = ref(false)
@@ -224,9 +266,38 @@ const newSymbol = ref('')
 const newName = ref('')
 const adding = ref(false)
 
+const latestSignals = computed(() => {
+  const bySymbol = new Map<string, Signal>()
+  for (const signal of signals.value) {
+    const current = bySymbol.get(signal.symbol)
+    if (!current || signal.timestamp > current.timestamp) bySymbol.set(signal.symbol, signal)
+  }
+  return bySymbol
+})
+
+const latestSignal = (symbol: string) => latestSignals.value.get(symbol)
+const buySignalCount = computed(
+  () => watchlist.value.filter((entry) => latestSignal(entry.symbol)?.direction === 'BUY').length
+)
+const filteredWatchlist = computed(() =>
+  signalFilter.value === 'BUY'
+    ? watchlist.value.filter((entry) => latestSignal(entry.symbol)?.direction === 'BUY')
+    : watchlist.value
+)
+const filterCount = (filter: 'ALL' | 'BUY') =>
+  filter === 'BUY' ? buySignalCount.value : watchlist.value.length
+const signalClass = (direction: Signal['direction']) =>
+  direction === 'BUY'
+    ? 'bg-success-bg text-success'
+    : direction === 'SELL'
+      ? 'bg-danger-bg text-danger'
+      : 'bg-bg-hover text-text-muted'
+
 const loadWatchlist = async (): Promise<boolean> => {
   await execute(async () => {
-    watchlist.value = await getWatchlist()
+    const [entries, latest] = await Promise.all([getWatchlist(), getSignals()])
+    watchlist.value = entries
+    signals.value = latest
   })
   return error.value === null
 }

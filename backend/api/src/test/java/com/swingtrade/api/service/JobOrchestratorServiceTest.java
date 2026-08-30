@@ -313,8 +313,8 @@ class JobOrchestratorServiceTest {
                 .thenAnswer(invocation -> List.copyOf(stageState.values()));
 
             when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 100)).thenReturn(List.of());
-            // generatePrimarySignal() returns empty below, so NEWS/SENTIMENT are skipped for
-            // this run and never call these two - lenient since that's deliberate here.
+            // The backtest is deliberately insufficient, so later stages are blocked by the
+            // normal failure gate in this scenario.
             lenient().when(newsIngestionService.fetchStockNews(SYMBOL)).thenReturn(List.of());
             lenient().when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
                 .thenReturn(SentimentResult.create(
@@ -564,9 +564,7 @@ class JobOrchestratorServiceTest {
 
             when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 100)).thenReturn(List.of(latestCandle));
             // generatePrimarySignal() returns empty below (this run produces no signal of its
-            // own - buySignal below simulates a stale unprocessed one from an earlier run), so
-            // NEWS/SENTIMENT are skipped for this run and never call these two - lenient since
-            // that's a deliberate property of this scenario, not a stubbing mistake.
+            // own - buySignal below simulates a stale unprocessed one from an earlier run).
             lenient().when(newsIngestionService.fetchStockNews(SYMBOL)).thenReturn(List.of());
             lenient().when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
                 .thenReturn(SentimentResult.create(
@@ -575,10 +573,8 @@ class JobOrchestratorServiceTest {
             when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.empty());
             when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
                 .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
-            // buySignal simulates a stale unprocessed BUY left over from an earlier run - this
-            // run's own SIGNAL stage returns empty above, so NEWS/SENTIMENT are skipped here,
-            // and stagePaperTrade must fall back to reading whatever sentiment verdict (if any)
-            // was already persisted for the signal's own date.
+            // buySignal simulates a stale unprocessed BUY left over from an earlier run; its
+            // paper-trade sentiment lookup must use whatever verdict was persisted for its date.
             when(sentimentGate.evaluatePersisted(eq(SYMBOL), eq(buySignal.date())))
                 .thenReturn(SentimentGate.SentimentVerdict.allow());
 
@@ -691,9 +687,9 @@ class JobOrchestratorServiceTest {
         @Test
         @DisplayName("RUNNING run older than the staleness threshold is not blocking")
         void shouldReturnEmptyWhenOnlyRunningRunIsOlderThanStalenessThreshold() {
-            // Threshold is 84 min (840s * 1 batch * 6); 90 min is past it.
+            // Threshold is 144 min (1440s * 1 batch * 6); 3 hours is past it.
             JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
-                LocalDateTime.now(IST).minusMinutes(90));
+                LocalDateTime.now(IST).minusHours(3));
             when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
                 .thenReturn(List.of(entity));
 
@@ -763,9 +759,9 @@ class JobOrchestratorServiceTest {
         @Test
         @DisplayName("Stale RUNNING run and its RUNNING stages are force-failed")
         void shouldReapStaleRunningRunAndItsRunningStages() {
-            // Threshold is 84 min (840s * 1 batch * 6); 2 h is past it.
+            // Threshold is 144 min (1440s * 1 batch * 6); 3 h is past it.
             JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
-                LocalDateTime.now(IST).minusHours(2));
+                LocalDateTime.now(IST).minusHours(3));
             entity.setCompletedAt(null);
             JobRunStageEntity stage = makeStageEntity(runId, SYMBOL,
                 JobRunStage.StageName.SENTIMENT, JobRunStage.Status.RUNNING.name(), null, null);
@@ -1006,7 +1002,7 @@ class JobOrchestratorServiceTest {
                 }
                 return entity;
             });
-            when(jobRunStageRepository.saveAll(any())).thenAnswer(invocation -> {
+            lenient().when(jobRunStageRepository.saveAll(any())).thenAnswer(invocation -> {
                 List<JobRunStageEntity> entities = invocation.getArgument(0);
                 for (JobRunStageEntity entity : entities) {
                     stageState.put(entity.getStageName(), entity);
@@ -1023,7 +1019,7 @@ class JobOrchestratorServiceTest {
                     JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
                     return entity == null ? List.of() : List.of(entity);
                 });
-            when(jobRunStageRepository.findByRunIdAndStageName(any(UUID.class), anyString()))
+            lenient().when(jobRunStageRepository.findByRunIdAndStageName(any(UUID.class), anyString()))
                 .thenAnswer(invocation -> {
                     JobRunStageEntity entity = stageState.get(invocation.getArgument(1));
                     return entity == null ? List.of() : List.of(entity);
@@ -1035,8 +1031,8 @@ class JobOrchestratorServiceTest {
             // would skip the rest of the stage loop before SENTIMENT ever starts.
             when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
                 .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
-            // NEWS/SENTIMENT only run for a BUY signal - these tests need SENTIMENT to actually
-            // execute (and block) so cancelRun() has something in-flight to interrupt.
+            // The cancellation tests use a BUY so SENTIMENT actually blocks and gives
+            // cancelRun() something in-flight to interrupt.
             when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.of(
                 new com.swingtrade.domain.Signal(
                     42L, SYMBOL, LocalDate.now(IST), com.swingtrade.domain.Signal.SignalType.BUY,
@@ -1044,6 +1040,33 @@ class JobOrchestratorServiceTest {
                     java.math.BigDecimal.valueOf(100), java.math.BigDecimal.valueOf(95),
                     java.math.BigDecimal.valueOf(110), java.math.BigDecimal.valueOf(2),
                     "{}", LocalDate.now(IST), null, null)));
+        }
+
+        @Test
+        @DisplayName("News and sentiment run for a non-BUY signal")
+        void shouldRunNewsAndSentimentForHoldSignal() throws InterruptedException {
+            when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.of(
+                new com.swingtrade.domain.Signal(
+                    42L, SYMBOL, LocalDate.now(IST), com.swingtrade.domain.Signal.SignalType.HOLD,
+                    java.math.BigDecimal.ONE, "waiting for confirmation",
+                    java.math.BigDecimal.valueOf(100), java.math.BigDecimal.valueOf(95),
+                    java.math.BigDecimal.valueOf(110), java.math.BigDecimal.valueOf(2),
+                    "{}", LocalDate.now(IST), null, null)));
+            when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
+                .thenReturn(SentimentResult.create(
+                    SYMBOL, LocalDate.now(IST), SentimentResult.SentimentScore.NEUTRAL,
+                    "No news", "", 0.0));
+
+            JobRun startedRun = service.startRun(JobRun.TriggerType.MANUAL);
+
+            assertThat(symbolProcessingFinished.await(5, TimeUnit.SECONDS)).isTrue();
+            verify(newsIngestionService).fetchStockNews(SYMBOL);
+            verify(sentimentService).analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class));
+            assertThat(stageState.get(JobRunStage.StageName.NEWS.name()).getStatus())
+                .isEqualTo(JobRunStage.Status.COMPLETED.name());
+            assertThat(stageState.get(JobRunStage.StageName.SENTIMENT.name()).getStatus())
+                .isEqualTo(JobRunStage.Status.COMPLETED.name());
+            assertThat(startedRun.status()).isEqualTo(JobRun.Status.RUNNING);
         }
 
         @Test
@@ -1232,8 +1255,8 @@ class JobOrchestratorServiceTest {
             // would skip the rest of the stage loop before SENTIMENT ever starts.
             when(backtestEngine.runBacktest(anyString(), eq(EXCHANGE), any(BacktestConfig.class)))
                 .thenReturn(new BacktestResult("X", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
-            // NEWS/SENTIMENT only run for a BUY signal - both A and B need one so sentiment
-            // actually starts for the active symbol and B is left genuinely queued behind it.
+            // Both symbols use BUY here so SENTIMENT actually starts for the active symbol and
+            // B is left genuinely queued behind it.
             when(signalPipeline.generatePrimarySignal(anyString())).thenAnswer(invocation -> {
                 String symbol = invocation.getArgument(0);
                 return Optional.of(new com.swingtrade.domain.Signal(

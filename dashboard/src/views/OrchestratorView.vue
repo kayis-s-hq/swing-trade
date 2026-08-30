@@ -4,7 +4,7 @@
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="font-display text-2xl font-semibold text-text-primary">Job Orchestrator</h1>
-        <p class="mt-1 text-sm text-text-muted">6-stage pipeline for all watchlist symbols</p>
+        <p class="mt-1 text-sm text-text-muted">7-stage pipeline for all watchlist symbols</p>
       </div>
       <div class="flex gap-2">
         <button
@@ -103,6 +103,37 @@
       </div>
 
       <template v-else>
+        <!-- Execution order is shared with JobRunStage.StageName and the backend stage loop. -->
+        <div class="mb-6 card-panel overflow-hidden p-5" aria-label="Execution sequence">
+          <div class="mb-3 flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold text-text-primary">Execution sequence</h2>
+              <p class="mt-0.5 text-xs text-text-muted">Each symbol advances left to right</p>
+            </div>
+            <span class="rounded-full bg-brand/10 px-2.5 py-1 text-[11px] font-semibold text-brand">
+              7 stages
+            </span>
+          </div>
+          <div class="grid min-w-[860px] grid-cols-[16%_repeat(7,11.428%)_4%] items-center">
+            <div aria-hidden="true" />
+            <template v-for="(stage, index) in stages" :key="stage">
+              <div
+                class="flex min-w-0 items-center justify-center gap-1.5 border-r border-border-subtle/60 px-1.5 py-2 last:border-r-0"
+              >
+                <span
+                  class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white"
+                >
+                  {{ index + 1 }}
+                </span>
+                <span class="truncate text-center text-[11px] font-semibold text-text-primary">{{
+                  stageLabel(stage)
+                }}</span>
+              </div>
+            </template>
+            <div aria-hidden="true" />
+          </div>
+        </div>
+
         <!-- Current Run -->
         <div v-if="currentRun" class="mb-6 card-panel p-5">
           <div class="mb-3 flex items-center justify-between">
@@ -141,16 +172,22 @@
 
           <!-- Stage Table -->
           <div class="mt-4 overflow-x-auto">
-            <table class="w-full text-sm border-collapse">
+            <table class="w-full table-fixed border-collapse text-sm">
+              <colgroup>
+                <col style="width: 16%" />
+                <col v-for="stage in stages" :key="`column-${stage}`" style="width: 13.333%" />
+                <col style="width: 4%" />
+              </colgroup>
               <thead>
                 <tr class="border-b border-border-subtle">
                   <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Symbol</th>
                   <th
-                    v-for="stage in stages"
+                    v-for="(stage, index) in stages"
                     :key="stage"
                     class="pb-2 px-3 text-center text-xs font-medium text-text-muted"
                   >
-                    {{ stage }}
+                    <span class="block text-[10px] text-brand">{{ index + 1 }}</span>
+                    {{ stageLabel(stage) }}
                   </th>
                   <th class="pb-2 px-3 text-center text-xs font-medium text-text-muted" />
                 </tr>
@@ -191,7 +228,7 @@
                     </td>
                   </tr>
                   <tr v-if="expandedSymbol === symbol" class="bg-bg-hover/30">
-                    <td :colspan="8" class="p-4">
+                    <td :colspan="9" class="p-4">
                       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         <div
                           v-for="stage in stages"
@@ -199,7 +236,9 @@
                           class="rounded-md border border-border-subtle bg-bg-surface p-3"
                         >
                           <div class="mb-1 flex items-center justify-between">
-                            <span class="text-xs font-medium text-text-muted">{{ stage }}</span>
+                            <span class="text-xs font-medium text-text-muted">{{
+                              stageLabel(stage)
+                            }}</span>
                             <StageIcon :status="getStageStatus(symbol, stage)" />
                           </div>
                           <div class="text-xs text-text-primary">
@@ -331,7 +370,25 @@ import ErrorBoundary from '../components/ErrorBoundary.vue'
 import { useAsyncData } from '../composables/useAsyncData'
 import { safeHumanMessage } from '../errors/appError'
 
-const STAGES = ['DATA_FETCH', 'NEWS', 'SENTIMENT', 'SIGNAL', 'BACKTEST', 'PAPER_TRADE'] as const
+const STAGES = [
+  'DATA_FETCH',
+  'SIGNAL',
+  'BACKTEST',
+  'NEWS',
+  'SENTIMENT',
+  'LLM_ANALYSIS',
+  'PAPER_TRADE',
+] as const
+
+const STAGE_LABELS: Record<(typeof STAGES)[number], string> = {
+  DATA_FETCH: 'Data fetch',
+  SIGNAL: 'Signal',
+  BACKTEST: 'Backtest',
+  NEWS: 'News',
+  SENTIMENT: 'Sentiment',
+  LLM_ANALYSIS: 'LLM analysis',
+  PAPER_TRADE: 'Paper trade',
+}
 
 type OperationNotice = {
   message: string
@@ -356,6 +413,7 @@ const staleStatusWarning = ref('')
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const stages = STAGES
+const stageLabel = (stage: (typeof STAGES)[number]) => STAGE_LABELS[stage]
 const runButtonDisabled = computed(
   () => isStarting.value || isRunning.value || (loading.value && !currentRun.value)
 )

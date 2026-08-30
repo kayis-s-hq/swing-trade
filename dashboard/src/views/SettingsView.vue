@@ -113,7 +113,7 @@
       </button>
     </div>
 
-    <div class="max-w-4xl">
+    <div class="settings-content w-full max-w-none">
       <div
         v-if="unconfirmedDefaults"
         role="status"
@@ -759,16 +759,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Save Button -->
-    <button
-      :disabled="saving || unconfirmedDefaults"
-      class="w-full rounded-md bg-brand px-4 py-3 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
-      :class="saved ? 'bg-success' : ''"
-      @click="handleSave"
-    >
-      {{ saving ? 'Saving...' : saved ? 'Saved!' : 'Save All Settings' }}
-    </button>
 
     <!-- Toast notifications -->
     <Transition
