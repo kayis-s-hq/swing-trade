@@ -80,6 +80,29 @@ public class SignalEntity {
     public static final String WARNING_NONE = "";
     public static final String WARNING_NEUTRAL_SENTIMENT = "NEUTRAL_SENTIMENT";
 
+    /**
+     * Type-safe wrapper around the {@code warning_flag} column's known values. The column
+     * itself stays a plain String (existing rows already persist {@link #NONE}'s value as
+     * {@code WARNING_NONE} = {@code ""}, not the literal text {@code "NONE"}, so this enum's
+     * {@link #code()} must match that, not {@code name()}, to avoid a silent on-disk value
+     * change for new rows).
+     */
+    public enum WarningFlag {
+        NONE(WARNING_NONE),
+        PENDING_SENTIMENT("PENDING_SENTIMENT"),
+        NEUTRAL_SENTIMENT(WARNING_NEUTRAL_SENTIMENT);
+
+        private final String code;
+
+        WarningFlag(String code) {
+            this.code = code;
+        }
+
+        public String code() {
+            return code;
+        }
+    }
+
     // Strategy constants identifying which engine produced this signal
     public static final String STRATEGY_DEFAULT = "DEFAULT";
     public static final String STRATEGY_PRICE_ACTION = "PRICE_ACTION";

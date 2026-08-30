@@ -6,6 +6,8 @@ import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestReportSummary;
 import com.swingtrade.strategy.BacktestResult;
+import com.swingtrade.strategy.StrategyRegistry;
+import com.swingtrade.strategy.TradingStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,28 +38,61 @@ public class BacktestController {
     private static final Pattern REPORT_FILENAME_PATTERN = Pattern.compile("^backtest_\\d{8}_\\d{6}\\.json$");
 
     private final BacktestEngine backtestEngine;
+    private final StrategyRegistry strategyRegistry;
     private final ObjectMapper objectMapper;
     private final String reportsDir;
 
     public BacktestController(BacktestEngine backtestEngine,
+                               StrategyRegistry strategyRegistry,
                                ObjectMapper objectMapper,
                                @Value("${backtest.reports.dir:reports}") String reportsDir) {
         this.backtestEngine = backtestEngine;
+        this.strategyRegistry = strategyRegistry;
         this.objectMapper = objectMapper;
         this.reportsDir = reportsDir;
     }
 
     /**
+     * Resolves a strategy by name for backtest/testing use only - live signal generation
+     * and job orchestration always use {@link StrategyRegistry#defaultStrategy()} and never
+     * take this parameter.
+     *
+     * @param strategyName the strategy name, or {@code null}/blank to use the default
+     * @throws IllegalArgumentException if the name doesn't match a registered strategy
+     */
+    private TradingStrategy resolveStrategy(String strategyName) {
+        if (strategyName == null || strategyName.isBlank()) {
+            return strategyRegistry.defaultStrategy();
+        }
+        return strategyRegistry.find(strategyName)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Unknown strategy: %s (available: %s)".formatted(strategyName, strategyRegistry.availableNames())));
+    }
+
+    /**
+     * Lists the strategy names available for backtest comparison.
+     */
+    @GetMapping("/strategies")
+    public ResponseEntity<List<String>> listStrategies() {
+        return ResponseEntity.ok(strategyRegistry.availableNames());
+    }
+
+    /**
      * Runs a backtest for a single symbol with a tunable JSON config body.
+     *
+     * @param strategyName optional strategy name for comparison testing; defaults to the
+     *                     production strategy when omitted
      */
     @PostMapping("/run-tune")
     public ResponseEntity<BacktestResult> runTunedBacktest(
             @RequestParam String symbol,
             @RequestParam(defaultValue = "NSE") String exchange,
+            @RequestParam(required = false) String strategyName,
             @org.springframework.web.bind.annotation.RequestBody BacktestConfig config) {
         logger.info("Running tuned backtest for {} with config: {}", symbol, config);
         try {
-            BacktestResult result = backtestEngine.runBacktest(symbol, exchange, config);
+            TradingStrategy strategy = resolveStrategy(strategyName);
+            BacktestResult result = backtestEngine.runBacktest(symbol, exchange, config, strategy);
             return ResponseEntity.ok(result);
         } catch (IllegalStateException e) {
             logger.warn("Backtest failed for {}: {}", symbol, e.getMessage());
@@ -70,17 +105,21 @@ public class BacktestController {
     /**
      * Runs a backtest for a single symbol using default {@link BacktestConfig} parameters.
      *
-     * @param symbol   stock symbol
-     * @param exchange exchange code (accepted for API symmetry; not used to filter candles)
+     * @param symbol       stock symbol
+     * @param exchange     exchange code (accepted for API symmetry; not used to filter candles)
+     * @param strategyName optional strategy name for comparison testing; defaults to the
+     *                     production strategy when omitted
      * @return the backtest result, or 404 if there isn't enough candle history
      */
     @PostMapping("/run")
     public ResponseEntity<BacktestResult> runBacktest(
             @RequestParam String symbol,
-            @RequestParam(defaultValue = "NSE") String exchange) {
+            @RequestParam(defaultValue = "NSE") String exchange,
+            @RequestParam(required = false) String strategyName) {
         logger.info("Running backtest for {} on {}", symbol, exchange);
         try {
-            BacktestResult result = backtestEngine.runBacktest(symbol, exchange, BacktestConfig.defaults());
+            TradingStrategy strategy = resolveStrategy(strategyName);
+            BacktestResult result = backtestEngine.runBacktest(symbol, exchange, BacktestConfig.defaults(), strategy);
             return ResponseEntity.ok(result);
         } catch (IllegalStateException e) {
             logger.warn("Backtest failed for {}: {}", symbol, e.getMessage());
@@ -96,26 +135,40 @@ public class BacktestController {
     @PostMapping("/run-all-tune")
     public ResponseEntity<BacktestReportSummary> runTunedBacktestAll(
             @RequestParam(defaultValue = "NSE") String exchange,
+            @RequestParam(required = false) String strategyName,
             @org.springframework.web.bind.annotation.RequestBody BacktestConfig config) {
         logger.info("Running tuned backtest-all with config: {}", config);
-        List<BacktestResult> results = backtestEngine.runBacktestAll(exchange, config);
-        BacktestReportSummary summary = backtestEngine.generateReport(results);
-        return ResponseEntity.ok(summary);
+        try {
+            TradingStrategy strategy = resolveStrategy(strategyName);
+            List<BacktestResult> results = backtestEngine.runBacktestAll(exchange, config, strategy);
+            BacktestReportSummary summary = backtestEngine.generateReport(results);
+            return ResponseEntity.ok(summary);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     /**
      * Runs a backtest across every symbol in the active watchlist and saves a JSON+CSV report.
      *
-     * @param exchange exchange code (accepted for API symmetry; not used to filter candles)
+     * @param exchange     exchange code (accepted for API symmetry; not used to filter candles)
+     * @param strategyName optional strategy name for comparison testing; defaults to the
+     *                     production strategy when omitted
      * @return the aggregated report summary
      */
     @PostMapping("/run-all")
     public ResponseEntity<BacktestReportSummary> runBacktestAll(
-            @RequestParam(defaultValue = "NSE") String exchange) {
+            @RequestParam(defaultValue = "NSE") String exchange,
+            @RequestParam(required = false) String strategyName) {
         logger.info("Running backtest for all watchlist symbols on {}", exchange);
-        List<BacktestResult> results = backtestEngine.runBacktestAll(exchange, BacktestConfig.defaults());
-        BacktestReportSummary summary = backtestEngine.generateReport(results);
-        return ResponseEntity.ok(summary);
+        try {
+            TradingStrategy strategy = resolveStrategy(strategyName);
+            List<BacktestResult> results = backtestEngine.runBacktestAll(exchange, BacktestConfig.defaults(), strategy);
+            BacktestReportSummary summary = backtestEngine.generateReport(results);
+            return ResponseEntity.ok(summary);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     /**

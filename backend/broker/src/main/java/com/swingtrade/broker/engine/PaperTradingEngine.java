@@ -46,6 +46,14 @@ public class PaperTradingEngine implements TradingService {
     // Portfolio state
     private final Portfolio portfolio;
 
+    // Guards every read-modify-write of portfolio.currentCapital plus its immediate DB
+    // persist, so concurrent symbol-processing threads (e.g. JobOrchestratorService
+    // closing several SELL signals at once) serialize onto the single shared
+    // PaperTradingPortfolioEntity row instead of racing on it — the optimistic-lock
+    // retries in OptimisticLockRetryHelper only tolerate occasional contention, not a
+    // handful of threads hitting the same row in the same instant.
+    private final Object portfolioLock = new Object();
+
     // Configuration
     private final PaperTradingProperties properties;
     private final BigDecimal commissionRate;
@@ -249,19 +257,21 @@ public class PaperTradingEngine implements TradingService {
 
         // Create position from filled order
         if (order.getStatus() == OrderStatus.FILLED) {
-            Position position = createPositionFromOrder(order);
+            synchronized (portfolioLock) {
+                Position position = createPositionFromOrder(order);
 
-            // Update portfolio
-            updatePortfolioAfterEntry(order);
+                // Update portfolio
+                updatePortfolioAfterEntry(order);
 
-            logger.info("Position {} created from order {} at {}",
-                position.positionId(), orderId, executionPrice);
+                logger.info("Position {} created from order {} at {}",
+                    position.positionId(), orderId, executionPrice);
 
-            // Persist
-            if (stateService != null) {
-                stateService.saveOrder(order);
-                stateService.savePosition(position);
-                stateService.savePortfolio();
+                // Persist
+                if (stateService != null) {
+                    stateService.saveOrder(order);
+                    stateService.savePosition(position);
+                    stateService.savePortfolio();
+                }
             }
         }
 
@@ -414,27 +424,29 @@ public class PaperTradingEngine implements TradingService {
      * @return the updated position
      */
     public Position partialExitPosition(String positionId, BigDecimal exitRatio, BigDecimal exitPrice) {
-        // Capture quantity before partial exit (this is the original at call time)
-        BigDecimal currentQty = BigDecimal.valueOf(positionManager.getPosition(positionId).quantity());
-        BigDecimal exitedQuantity = currentQty.multiply(exitRatio);
+        synchronized (portfolioLock) {
+            // Capture quantity before partial exit (this is the original at call time)
+            BigDecimal currentQty = BigDecimal.valueOf(positionManager.getPosition(positionId).quantity());
+            BigDecimal exitedQuantity = currentQty.multiply(exitRatio);
 
-        Position position = positionManager.partialExitPosition(positionId, exitRatio, exitPrice);
+            Position position = positionManager.partialExitPosition(positionId, exitRatio, exitPrice);
 
-        // Update portfolio with cash proceeds from exited shares
-        BigDecimal exitValue = exitedQuantity.multiply(exitPrice);
-        BigDecimal commission = exitedQuantity.multiply(commissionRate);
-        portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(exitValue.subtract(commission)));
+            // Update portfolio with cash proceeds from exited shares
+            BigDecimal exitValue = exitedQuantity.multiply(exitPrice);
+            BigDecimal commission = exitedQuantity.multiply(commissionRate);
+            portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(exitValue.subtract(commission)));
 
-        logger.info("Partial exit completed for position {}: exited={}, remaining={}",
-            positionId, exitedQuantity, position.quantity());
+            logger.info("Partial exit completed for position {}: exited={}, remaining={}",
+                positionId, exitedQuantity, position.quantity());
 
-        // Persist
-        if (stateService != null) {
-            stateService.savePosition(position);
-            stateService.savePortfolio();
+            // Persist
+            if (stateService != null) {
+                stateService.savePosition(position);
+                stateService.savePortfolio();
+            }
+
+            return position;
         }
-
-        return position;
     }
 
     /**
@@ -532,23 +544,25 @@ public class PaperTradingEngine implements TradingService {
      * @param reason the reason for closing
      */
     public void closePosition(String positionId, BigDecimal exitPrice, String reason) {
-        Position position = positionManager.closePosition(positionId, exitPrice, reason);
-        tradeMetrics.recordTradeClose(reason);
+        synchronized (portfolioLock) {
+            Position position = positionManager.closePosition(positionId, exitPrice, reason);
+            tradeMetrics.recordTradeClose(reason);
 
-        // Update portfolio
-        BigDecimal exitValue = exitPrice.multiply(BigDecimal.valueOf(position.quantity()));
-        BigDecimal commission = calculateCommissionForPosition(position);
-        BigDecimal netProceeds = exitValue.subtract(commission);
+            // Update portfolio
+            BigDecimal exitValue = exitPrice.multiply(BigDecimal.valueOf(position.quantity()));
+            BigDecimal commission = calculateCommissionForPosition(position);
+            BigDecimal netProceeds = exitValue.subtract(commission);
 
-        portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(netProceeds));
+            portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(netProceeds));
 
-        logger.info("Position {} closed: P&L={}, Reason={}",
-            positionId, position.realizedPnL(), reason);
+            logger.info("Position {} closed: P&L={}, Reason={}",
+                positionId, position.realizedPnL(), reason);
 
-        // Persist
-        if (stateService != null) {
-            stateService.closePosition(positionId, position);
-            stateService.savePortfolio();
+            // Persist
+            if (stateService != null) {
+                stateService.closePosition(positionId, position);
+                stateService.savePortfolio();
+            }
         }
     }
 
@@ -767,9 +781,11 @@ public class PaperTradingEngine implements TradingService {
                 position.positionId(), position.status());
 
             // Persist closed position
-            if (stateService != null) {
-                stateService.closePosition(position.positionId(), position);
-                stateService.savePortfolio();
+            synchronized (portfolioLock) {
+                if (stateService != null) {
+                    stateService.closePosition(position.positionId(), position);
+                    stateService.savePortfolio();
+                }
             }
             tradeMetrics.recordTradeClose(position.status().name().toLowerCase());
         }

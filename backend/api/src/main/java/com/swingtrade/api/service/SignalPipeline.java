@@ -16,6 +16,7 @@
 
 package com.swingtrade.api.service;
 
+import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.RiskCalculator;
 import com.swingtrade.domain.Signal;
@@ -74,10 +75,18 @@ public class SignalPipeline {
      * Generates a primary swing-trading signal for a symbol.
      *
      * <p>Pipeline: fetch candles -> check min count -> reverse to chronological
-     * -> check dedup -> compute strategy signal -> check sentiment -> compute risk params -> save.</p>
+     * -> check dedup -> compute strategy signal -> compute risk params -> save.</p>
+     *
+     * <p>Sentiment is deliberately NOT evaluated here. Every technical BUY is persisted
+     * unconditionally with a {@code PENDING_SENTIMENT} warning flag; the JobOrchestrator's
+     * SENTIMENT stage runs afterward (only for a BUY, not every symbol every day) and its
+     * verdict is read by the PAPER_TRADE stage before a trade is actually executed. This
+     * gives a full audit trail ("a real BUY signal fired, sentiment later blocked the
+     * trade") instead of a sentiment-suppressed BUY silently never existing in the
+     * `signals` table at all, which was this method's previous behavior.</p>
      *
      * @param symbol the stock symbol
-     * @return the saved signal, or empty if suppressed or skipped
+     * @return the saved signal, or empty if skipped (not enough candle history)
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public java.util.Optional<Signal> generatePrimarySignal(String symbol) {
@@ -112,29 +121,17 @@ public class SignalPipeline {
         Signal signal = Signal.create(result.symbol(), result.date(), result.type(),
                 BigDecimal.ONE, result.reasoning());
 
-        SentimentGate.SentimentVerdict verdict = SentimentGate.SentimentVerdict.allow();
-        String sentimentScore = null;
-        String sentimentReasoning = null;
-        if (result.type() == Signal.SignalType.BUY) {
-            verdict = sentimentGate.evaluate(symbol, latestDate);
-            sentimentReasoning = verdict.reason();
-            if (verdict.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
-                return java.util.Optional.empty();
-            }
-            sentimentScore = switch (verdict.action()) {
-                case FLAG_NEUTRAL -> "NEUTRAL";
-                case ALLOW_GRACEFUL -> "UNKNOWN";
-                default -> "POSITIVE";
-            };
-        }
-
         BigDecimal atr = RiskCalculator.calculateATR(chronologicalCandles);
         String indicators = buildPriceActionIndicators(result);
 
-        String warningFlag = warningFlag(result, latestDate, verdict);
+        // Sentiment score/reasoning are filled in later by the SENTIMENT stage's own
+        // write path (see JobOrchestratorService), not here.
+        String warningFlag = (result.type() == Signal.SignalType.BUY
+            ? SignalEntity.WarningFlag.PENDING_SENTIMENT
+            : SignalEntity.WarningFlag.NONE).code();
         Signal saved = persistenceService.buildAndSaveWithWarning(
                 symbol, latestDate, result.type(), BigDecimal.ONE,
-                result.reasoning(), indicators, atr, warningFlag, sentimentScore, sentimentReasoning);
+                result.reasoning(), indicators, atr, warningFlag, null, null);
 
         logger.info("Generated {} signal for {} on {} (reasoning: {})",
                 result.type(), symbol, latestDate, result.reasoning());
@@ -237,14 +234,4 @@ public class SignalPipeline {
                 result.rsi(), result.ema20(), result.ema50(), result.atr());
     }
 
-    private String warningFlag(SignalResult result, LocalDate date, SentimentGate.SentimentVerdict verdict) {
-        if (result.type() != Signal.SignalType.BUY) {
-            return "NONE";
-        }
-        return switch (verdict.action()) {
-            case FLAG_NEUTRAL -> "NEUTRAL_SENTIMENT";
-            case ALLOW_GRACEFUL -> "SENTIMENT_ERROR";
-            default -> "NONE";
-        };
-    }
 }

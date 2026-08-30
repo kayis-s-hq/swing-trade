@@ -1,7 +1,9 @@
 package com.swingtrade.data.service;
 
+import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
+import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.data.repository.WatchlistRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +28,7 @@ public class WatchlistService {
     private static final Logger logger = LoggerFactory.getLogger(WatchlistService.class);
 
     private final WatchlistRepository watchlistRepository;
+    private final StockRepository stockRepository;
     private final OhlcvCandleRepository candleRepository;
     private final DataIngestionService dataIngestionService;
     private final MarketDataClientProvider marketDataClientProvider;
@@ -36,11 +39,13 @@ public class WatchlistService {
 
     public WatchlistService(
             WatchlistRepository watchlistRepository,
+            StockRepository stockRepository,
             OhlcvCandleRepository candleRepository,
             DataIngestionService dataIngestionService,
             MarketDataClientProvider marketDataClientProvider
     ) {
         this.watchlistRepository = watchlistRepository;
+        this.stockRepository = stockRepository;
         this.candleRepository = candleRepository;
         this.dataIngestionService = dataIngestionService;
         this.marketDataClientProvider = marketDataClientProvider;
@@ -64,6 +69,8 @@ public class WatchlistService {
 
     @Transactional
     public WatchlistEntity addToWatchlist(String symbol, String name, String exchange) {
+        ensureStockExists(symbol, name, exchange);
+
         Optional<WatchlistEntity> existing = watchlistRepository.findBySymbol(symbol);
         if (existing.isPresent()) {
             WatchlistEntity entity = existing.get();
@@ -74,6 +81,26 @@ public class WatchlistService {
         WatchlistEntity entity = new WatchlistEntity(symbol, name);
         entity.setExchange(exchange != null ? exchange : "NSE");
         return watchlistRepository.save(entity);
+    }
+
+    /**
+     * Ensures a {@code stocks} row exists for the symbol before it's added to the
+     * watchlist. {@code signals.symbol} has a foreign key to {@code stocks.symbol}
+     * (see V1__swing_trade_schema.sql), so a watchlist symbol with no matching stock row
+     * would let the SIGNAL stage fail with a DataIntegrityViolationException the first
+     * time it tries to persist a signal for that symbol - a failure mode discovered while
+     * testing with a hand-added symbol that had never gone through stock-master seeding.
+     */
+    private void ensureStockExists(String symbol, String name, String exchange) {
+        if (stockRepository.existsBySymbol(symbol)) {
+            return;
+        }
+        StockEntity stock = new StockEntity();
+        stock.setSymbol(symbol);
+        stock.setName(name != null && !name.isBlank() ? name : symbol);
+        stock.setExchange(exchange != null ? exchange : "NSE");
+        stock.setAddedOn(LocalDate.now());
+        stockRepository.save(stock);
     }
 
     @Transactional

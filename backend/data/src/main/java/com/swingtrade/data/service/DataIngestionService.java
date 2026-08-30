@@ -167,6 +167,8 @@ public class DataIngestionService {
      * multi-year backfill so the daily orchestration can close data gaps
      * without re-downloading every historical candle on every run.
      */
+    private static final int GAP_REPAIR_LOOKBACK_DAYS = 30;
+
     public String fetchLatestAndRepairGaps(String symbol, LocalDate latestDate) {
         processSingleStock(symbol, latestDate);
 
@@ -176,7 +178,15 @@ public class DataIngestionService {
             return "latest date pulled; no historical range available for gap repair";
         }
 
-        LocalDate fromDate = earliest.get().getDate();
+        // Bounded to a recent rolling window, not the symbol's entire history: the
+        // nse_holidays table is often incomplete, so a genuine holiday looks like a
+        // permanent "missing" trading day. Scanning the full history on every call
+        // re-requests years of already-settled data from the market data client for a
+        // gap that will never close, which is what was blowing past the DATA_FETCH
+        // stage timeout.
+        LocalDate fromDate = earliest.get().getDate().isAfter(latestDate.minusDays(GAP_REPAIR_LOOKBACK_DAYS))
+            ? earliest.get().getDate()
+            : latestDate.minusDays(GAP_REPAIR_LOOKBACK_DAYS);
         List<LocalDate> expectedDates = getTradingDays(fromDate, latestDate);
         if (expectedDates.isEmpty()) {
             return "latest date pulled; no trading sessions in range";

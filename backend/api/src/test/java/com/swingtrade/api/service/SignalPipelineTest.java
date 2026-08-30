@@ -124,7 +124,8 @@ class SignalPipelineTest {
             ArgumentCaptor<String> indicatorsCaptor = ArgumentCaptor.forClass(String.class);
             verify(persistenceService).buildAndSaveWithWarning(
                     eq(SYMBOL), eq(latestDate), eq(Signal.SignalType.HOLD), eq(BigDecimal.ONE),
-                    reasoningCaptor.capture(), indicatorsCaptor.capture(), any(), eq("NONE"), any(), any());
+                    reasoningCaptor.capture(), indicatorsCaptor.capture(), any(),
+                    eq(com.swingtrade.data.entity.SignalEntity.WARNING_NONE), any(), any());
 
             String persistedReasoning = reasoningCaptor.getValue();
             String persistedIndicators = indicatorsCaptor.getValue();
@@ -195,7 +196,6 @@ class SignalPipelineTest {
                     SYMBOL, latestDate, Signal.SignalType.BUY,
                     58.0, 102.0, 100.0, 2.1, "All entry rules passed: ...");
             when(priceActionEngine.analyze(eq(SYMBOL), anyList())).thenReturn(buyResult);
-            when(sentimentGate.evaluate(eq(SYMBOL), eq(latestDate))).thenReturn(SentimentGate.SentimentVerdict.allow());
             stubSavedSignal(Signal.SignalType.BUY);
 
             pipeline.generatePrimarySignal(SYMBOL);

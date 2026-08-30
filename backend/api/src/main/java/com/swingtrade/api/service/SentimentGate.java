@@ -17,6 +17,7 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.llm.service.SentimentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,13 +37,17 @@ public class SentimentGate {
     private static final Logger logger = LoggerFactory.getLogger(SentimentGate.class);
 
     private final SentimentService sentimentService;
+    private final SentimentStore sentimentStore;
 
-    public SentimentGate(SentimentService sentimentService) {
+    public SentimentGate(SentimentService sentimentService, SentimentStore sentimentStore) {
         this.sentimentService = sentimentService;
+        this.sentimentStore = sentimentStore;
     }
 
     /**
-     * Evaluates sentiment for a BUY signal.
+     * Evaluates sentiment for a BUY signal, running a fresh LLM analysis unconditionally.
+     * Used by the price-action manual/dashboard path, which persists its signal in the same
+     * call and has no later stage to defer the check to.
      *
      * @param symbol the stock symbol
      * @param date the signal date
@@ -50,27 +55,42 @@ public class SentimentGate {
      */
     public SentimentVerdict evaluate(String symbol, LocalDate date) {
         try {
-            SentimentResult sentiment = sentimentService.analyzeStockSentiment(symbol, date);
-
-            if (sentiment.isNegative()) {
-                logger.info("Suppressing BUY signal for {} on {} due to NEGATIVE sentiment (reasoning: {})",
-                        symbol, date, sentiment.summary());
-                return SentimentVerdict.suppress(sentiment.summary());
-            }
-
-            if (sentiment.isNeutral()) {
-                logger.info("Saving NEUTRAL sentiment signal for {} on {} (reasoning: {})",
-                        symbol, date, sentiment.summary());
-                return SentimentVerdict.flagNeutral(sentiment.summary());
-            }
-
-            return SentimentVerdict.allowWithSummary(sentiment.summary());
-
+            return classify(sentimentService.analyzeStockSentiment(symbol, date));
         } catch (Exception e) {
             logger.warn("Failed to check sentiment for {} on {}: {}, saving signal anyway",
                     symbol, date, e.getMessage());
             return SentimentVerdict.allowGraceful(e.getMessage());
         }
+    }
+
+    /**
+     * Evaluates sentiment for a BUY signal using only what the SENTIMENT stage already
+     * persisted - never triggers a second, independent LLM call for the same symbol/date.
+     * Used by the orchestrated pipeline's PAPER_TRADE stage, which runs after SENTIMENT and
+     * should read its verdict, not recompute it (recomputing risked disagreeing with the
+     * SENTIMENT stage's own recorded result, since the LLM isn't deterministic call-to-call).
+     *
+     * @param symbol the stock symbol
+     * @param date the signal date
+     * @return {@link SentimentVerdict#pending()} if nothing has been persisted yet (the safe
+     *     default is to not trade an unvetted signal), otherwise the classified verdict
+     */
+    public SentimentVerdict evaluatePersisted(String symbol, LocalDate date) {
+        return sentimentStore.findBySymbolAndDate(symbol, date)
+            .map(this::classify)
+            .orElseGet(SentimentVerdict::pending);
+    }
+
+    private SentimentVerdict classify(SentimentResult sentiment) {
+        if (sentiment.isNegative()) {
+            logger.info("Blocking BUY trade due to NEGATIVE sentiment (reasoning: {})", sentiment.summary());
+            return SentimentVerdict.suppress(sentiment.summary());
+        }
+        if (sentiment.isNeutral()) {
+            logger.info("Flagging NEUTRAL sentiment (reasoning: {})", sentiment.summary());
+            return SentimentVerdict.flagNeutral(sentiment.summary());
+        }
+        return SentimentVerdict.allowWithSummary(sentiment.summary());
     }
 
     /**
@@ -89,7 +109,9 @@ public class SentimentGate {
             ALLOW,
             SUPPRESS,
             FLAG_NEUTRAL,
-            ALLOW_GRACEFUL
+            ALLOW_GRACEFUL,
+            /** No sentiment has been persisted for this symbol/date yet. */
+            PENDING
         }
 
         public static SentimentVerdict allow() {
@@ -110,6 +132,10 @@ public class SentimentGate {
 
         public static SentimentVerdict allowGraceful(String errorMessage) {
             return new SentimentVerdict(Action.ALLOW_GRACEFUL, null, errorMessage);
+        }
+
+        public static SentimentVerdict pending() {
+            return new SentimentVerdict(Action.PENDING, null, null);
         }
     }
 }

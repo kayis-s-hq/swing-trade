@@ -70,6 +70,9 @@ import static org.mockito.ArgumentMatchers.eq;
 class JobOrchestratorServiceTest {
 
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final String SYMBOL = "RELIANCE";
+    private static final String EXCHANGE = "NSE";
+    private static final String STATUS_RUNNING = "RUNNING";
 
     private JobOrchestratorService service;
 
@@ -84,6 +87,9 @@ class JobOrchestratorServiceTest {
 
     @Mock
     private SignalPipeline signalPipeline;
+
+    @Mock
+    private SentimentGate sentimentGate;
 
     @Mock
     private BacktestEngine backtestEngine;
@@ -158,7 +164,7 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             service = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
@@ -187,7 +193,7 @@ class JobOrchestratorServiceTest {
         @Test
         @DisplayName("Single symbol creates run entity")
         void testStartRun_SingleSymbol_CreatesRunAndStages() {
-            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("RELIANCE"));
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of(SYMBOL));
             when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(a -> {
                 JobRunEntity e = a.getArgument(0);
                 capturedRunEntity = e;
@@ -276,7 +282,7 @@ class JobOrchestratorServiceTest {
             ConcurrentHashMap<String, JobRunStageEntity> stageState = new ConcurrentHashMap<>();
             CountDownLatch runCompleted = new CountDownLatch(1);
 
-            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("RELIANCE"));
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of(SYMBOL));
             when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
                 JobRunEntity entity = invocation.getArgument(0);
                 runState.set(entity);
@@ -298,7 +304,7 @@ class JobOrchestratorServiceTest {
                 return entity;
             });
             when(jobRunStageRepository.findByRunIdAndSymbolAndStageName(
-                    any(UUID.class), eq("RELIANCE"), anyString()))
+                    any(UUID.class), eq(SYMBOL), anyString()))
                 .thenAnswer(invocation -> {
                     JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
                     return entity == null ? List.of() : List.of(entity);
@@ -306,14 +312,16 @@ class JobOrchestratorServiceTest {
             when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
                 .thenAnswer(invocation -> List.copyOf(stageState.values()));
 
-            when(candleStore.findTopBySymbolOrderByDateDesc("RELIANCE", 100)).thenReturn(List.of());
-            when(newsIngestionService.fetchStockNews("RELIANCE")).thenReturn(List.of());
-            when(sentimentService.analyzeStockSentiment(eq("RELIANCE"), any(LocalDate.class)))
+            when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 100)).thenReturn(List.of());
+            // generatePrimarySignal() returns empty below, so NEWS/SENTIMENT are skipped for
+            // this run and never call these two - lenient since that's deliberate here.
+            lenient().when(newsIngestionService.fetchStockNews(SYMBOL)).thenReturn(List.of());
+            lenient().when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
                 .thenReturn(SentimentResult.create(
-                    "RELIANCE", LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL,
+                    SYMBOL, LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL,
                     "No news", "", 0.0));
-            when(signalPipeline.generatePrimarySignal("RELIANCE")).thenReturn(Optional.empty());
-            when(backtestEngine.runBacktest(eq("RELIANCE"), eq("NSE"), any(BacktestConfig.class)))
+            when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.empty());
+            when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
                 .thenThrow(new IllegalStateException(
                     "Insufficient candle history for RELIANCE: need at least 60 candles, found 0"));
 
@@ -342,7 +350,7 @@ class JobOrchestratorServiceTest {
             AtomicReference<JobRunEntity> runState = new AtomicReference<>();
             CountDownLatch runCompleted = new CountDownLatch(1);
 
-            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("RELIANCE"));
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of(SYMBOL));
             when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
                 JobRunEntity entity = invocation.getArgument(0);
                 runState.set(entity);
@@ -500,14 +508,14 @@ class JobOrchestratorServiceTest {
         private CountDownLatch runCompleted;
 
         private final com.swingtrade.domain.Signal buySignal = new com.swingtrade.domain.Signal(
-                42L, "RELIANCE", LocalDate.now(IST), com.swingtrade.domain.Signal.SignalType.BUY,
+                42L, SYMBOL, LocalDate.now(IST), com.swingtrade.domain.Signal.SignalType.BUY,
                 java.math.BigDecimal.valueOf(0.8), "strong setup",
                 java.math.BigDecimal.valueOf(100), java.math.BigDecimal.valueOf(95),
                 java.math.BigDecimal.valueOf(110), java.math.BigDecimal.valueOf(2),
                 "{}", LocalDate.now(IST), null, null);
 
         private final com.swingtrade.domain.OhlcvCandle latestCandle = com.swingtrade.domain.OhlcvCandle.of(
-                "RELIANCE", LocalDate.now(IST), java.math.BigDecimal.valueOf(99),
+                SYMBOL, LocalDate.now(IST), java.math.BigDecimal.valueOf(99),
                 java.math.BigDecimal.valueOf(101), java.math.BigDecimal.valueOf(98),
                 java.math.BigDecimal.valueOf(100), 1000L);
 
@@ -520,11 +528,11 @@ class JobOrchestratorServiceTest {
 
             service = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
 
-            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("RELIANCE"));
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of(SYMBOL));
             when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
                 JobRunEntity entity = invocation.getArgument(0);
                 runState.set(entity);
@@ -546,7 +554,7 @@ class JobOrchestratorServiceTest {
                 return entity;
             });
             when(jobRunStageRepository.findByRunIdAndSymbolAndStageName(
-                    any(UUID.class), eq("RELIANCE"), anyString()))
+                    any(UUID.class), eq(SYMBOL), anyString()))
                 .thenAnswer(invocation -> {
                     JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
                     return entity == null ? List.of() : List.of(entity);
@@ -554,18 +562,28 @@ class JobOrchestratorServiceTest {
             when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
                 .thenAnswer(invocation -> List.copyOf(stageState.values()));
 
-            when(candleStore.findTopBySymbolOrderByDateDesc("RELIANCE", 100)).thenReturn(List.of(latestCandle));
-            when(newsIngestionService.fetchStockNews("RELIANCE")).thenReturn(List.of());
-            when(sentimentService.analyzeStockSentiment(eq("RELIANCE"), any(LocalDate.class)))
+            when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 100)).thenReturn(List.of(latestCandle));
+            // generatePrimarySignal() returns empty below (this run produces no signal of its
+            // own - buySignal below simulates a stale unprocessed one from an earlier run), so
+            // NEWS/SENTIMENT are skipped for this run and never call these two - lenient since
+            // that's a deliberate property of this scenario, not a stubbing mistake.
+            lenient().when(newsIngestionService.fetchStockNews(SYMBOL)).thenReturn(List.of());
+            lenient().when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
                 .thenReturn(SentimentResult.create(
-                    "RELIANCE", LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL,
+                    SYMBOL, LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL,
                     "No news", "", 0.0));
-            when(signalPipeline.generatePrimarySignal("RELIANCE")).thenReturn(Optional.empty());
-            when(backtestEngine.runBacktest(eq("RELIANCE"), eq("NSE"), any(BacktestConfig.class)))
-                .thenReturn(new BacktestResult("RELIANCE", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+            when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.empty());
+            when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+            // buySignal simulates a stale unprocessed BUY left over from an earlier run - this
+            // run's own SIGNAL stage returns empty above, so NEWS/SENTIMENT are skipped here,
+            // and stagePaperTrade must fall back to reading whatever sentiment verdict (if any)
+            // was already persisted for the signal's own date.
+            when(sentimentGate.evaluatePersisted(eq(SYMBOL), eq(buySignal.date())))
+                .thenReturn(SentimentGate.SentimentVerdict.allow());
 
             when(signalStore.findUnprocessed()).thenReturn(List.of(buySignal));
-            when(candleStore.findLatestBySymbol("RELIANCE")).thenReturn(Optional.of(latestCandle));
+            when(candleStore.findLatestBySymbol(SYMBOL)).thenReturn(Optional.of(latestCandle));
         }
 
         @Test
@@ -640,7 +658,7 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             svc = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
@@ -694,7 +712,7 @@ class JobOrchestratorServiceTest {
         private JobOrchestratorService newService(boolean reaperEnabled) {
             return new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, reaperEnabled);
         }
@@ -749,7 +767,7 @@ class JobOrchestratorServiceTest {
             JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
                 LocalDateTime.now(IST).minusHours(2));
             entity.setCompletedAt(null);
-            JobRunStageEntity stage = makeStageEntity(runId, "RELIANCE",
+            JobRunStageEntity stage = makeStageEntity(runId, SYMBOL,
                 JobRunStage.StageName.SENTIMENT, JobRunStage.Status.RUNNING.name(), null, null);
             stage.setCompletedAt(null);
 
@@ -787,7 +805,7 @@ class JobOrchestratorServiceTest {
         private JobOrchestratorService newService(boolean reaperEnabled) {
             return new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, reaperEnabled);
         }
@@ -850,7 +868,7 @@ class JobOrchestratorServiceTest {
             JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
                 LocalDateTime.now(IST).minusMinutes(1));
             entity.setCompletedAt(null);
-            JobRunStageEntity stage = makeStageEntity(runId, "RELIANCE",
+            JobRunStageEntity stage = makeStageEntity(runId, SYMBOL,
                 JobRunStage.StageName.SENTIMENT, JobRunStage.Status.RUNNING.name(), null, null);
             stage.setCompletedAt(null);
 
@@ -905,7 +923,7 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             svc = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
@@ -958,11 +976,11 @@ class JobOrchestratorServiceTest {
 
             service = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
 
-            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of("RELIANCE"));
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of(SYMBOL));
             when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
                 JobRunEntity entity = invocation.getArgument(0);
                 runState.set(entity);
@@ -983,7 +1001,7 @@ class JobOrchestratorServiceTest {
                 JobRunStageEntity entity = invocation.getArgument(0);
                 stageState.put(entity.getStageName(), entity);
                 if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
-                        && !"RUNNING".equals(entity.getStatus())) {
+                        && !STATUS_RUNNING.equals(entity.getStatus())) {
                     sentimentStageFinalized.countDown();
                 }
                 return entity;
@@ -993,14 +1011,14 @@ class JobOrchestratorServiceTest {
                 for (JobRunStageEntity entity : entities) {
                     stageState.put(entity.getStageName(), entity);
                     if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
-                            && !"RUNNING".equals(entity.getStatus())) {
+                            && !STATUS_RUNNING.equals(entity.getStatus())) {
                         sentimentStageFinalized.countDown();
                     }
                 }
                 return entities;
             });
             when(jobRunStageRepository.findByRunIdAndSymbolAndStageName(
-                    any(UUID.class), eq("RELIANCE"), anyString()))
+                    any(UUID.class), eq(SYMBOL), anyString()))
                 .thenAnswer(invocation -> {
                     JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
                     return entity == null ? List.of() : List.of(entity);
@@ -1011,14 +1029,27 @@ class JobOrchestratorServiceTest {
                     return entity == null ? List.of() : List.of(entity);
                 });
 
-            when(candleStore.findTopBySymbolOrderByDateDesc("RELIANCE", 100)).thenReturn(List.of());
-            when(newsIngestionService.fetchStockNews("RELIANCE")).thenReturn(List.of());
+            when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 100)).thenReturn(List.of());
+            when(newsIngestionService.fetchStockNews(SYMBOL)).thenReturn(List.of());
+            // BACKTEST now runs before NEWS/SENTIMENT - must not error, or priorStageBlocked
+            // would skip the rest of the stage loop before SENTIMENT ever starts.
+            when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+            // NEWS/SENTIMENT only run for a BUY signal - these tests need SENTIMENT to actually
+            // execute (and block) so cancelRun() has something in-flight to interrupt.
+            when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.of(
+                new com.swingtrade.domain.Signal(
+                    42L, SYMBOL, LocalDate.now(IST), com.swingtrade.domain.Signal.SignalType.BUY,
+                    java.math.BigDecimal.valueOf(0.8), "strong setup",
+                    java.math.BigDecimal.valueOf(100), java.math.BigDecimal.valueOf(95),
+                    java.math.BigDecimal.valueOf(110), java.math.BigDecimal.valueOf(2),
+                    "{}", LocalDate.now(IST), null, null)));
         }
 
         @Test
         @DisplayName("Cancelling a run interrupts the blocking SENTIMENT-stage thread instead of only flipping DB status")
         void shouldInterruptInFlightSentimentStageOnCancel() throws InterruptedException {
-            when(sentimentService.analyzeStockSentiment(eq("RELIANCE"), any(LocalDate.class)))
+            when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
                 .thenAnswer(invocation -> {
                     sentimentStarted.countDown();
                     try {
@@ -1063,7 +1094,7 @@ class JobOrchestratorServiceTest {
         @DisplayName("A race between cancelRun()'s belt-and-suspenders write and executeStage()'s own "
             + "cancellation write does not corrupt the stage's terminal status or abort the remaining stage loop")
         void shouldTolerateRaceBetweenCancelRunWriteAndExecuteStageWrite() throws InterruptedException {
-            when(sentimentService.analyzeStockSentiment(eq("RELIANCE"), any(LocalDate.class)))
+            when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
                 .thenAnswer(invocation -> {
                     sentimentStarted.countDown();
                     try {
@@ -1088,7 +1119,7 @@ class JobOrchestratorServiceTest {
                 }
                 stageState.put(entity.getStageName(), entity);
                 if (JobRunStage.StageName.SENTIMENT.name().equals(entity.getStageName())
-                        && !"RUNNING".equals(entity.getStatus())) {
+                        && !STATUS_RUNNING.equals(entity.getStatus())) {
                     sentimentStageFinalized.countDown();
                 }
                 return entity;
@@ -1113,13 +1144,14 @@ class JobOrchestratorServiceTest {
                     + "write must not revert it to ERROR")
                 .isEqualTo(JobRunStage.Status.CANCELLED.name());
 
-            JobRunStageEntity signalStage = stageState.get(JobRunStage.StageName.SIGNAL.name());
-            assertThat(signalStage.getStatus())
+            // SIGNAL now runs before SENTIMENT in the pipeline order (it must complete with a
+            // BUY before NEWS/SENTIMENT are even scheduled), so it is no longer a "later stage"
+            // relative to SENTIMENT — only PAPER_TRADE still follows it.
+            JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
+            assertThat(paperTradeStage.getStatus())
                 .as("later stages must still be visited and reach a terminal CANCELLED state, not be "
                     + "left dangling at PENDING forever")
                 .isEqualTo(JobRunStage.Status.CANCELLED.name());
-            JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
-            assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.CANCELLED.name());
 
             assertThat(runState.get().getStatus()).isEqualTo(JobRun.Status.CANCELLED.name());
         }
@@ -1149,7 +1181,7 @@ class JobOrchestratorServiceTest {
             // pollIntervalMs = 50 so B's acquireSlot() polling doesn't slow the test down.
             service = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 1, 50L, true);
 
@@ -1196,6 +1228,21 @@ class JobOrchestratorServiceTest {
 
             when(candleStore.findTopBySymbolOrderByDateDesc(anyString(), eq(100))).thenReturn(List.of());
             when(newsIngestionService.fetchStockNews(anyString())).thenReturn(List.of());
+            // BACKTEST now runs before NEWS/SENTIMENT - must not error, or priorStageBlocked
+            // would skip the rest of the stage loop before SENTIMENT ever starts.
+            when(backtestEngine.runBacktest(anyString(), eq(EXCHANGE), any(BacktestConfig.class)))
+                .thenReturn(new BacktestResult("X", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+            // NEWS/SENTIMENT only run for a BUY signal - both A and B need one so sentiment
+            // actually starts for the active symbol and B is left genuinely queued behind it.
+            when(signalPipeline.generatePrimarySignal(anyString())).thenAnswer(invocation -> {
+                String symbol = invocation.getArgument(0);
+                return Optional.of(new com.swingtrade.domain.Signal(
+                    42L, symbol, LocalDate.now(IST), com.swingtrade.domain.Signal.SignalType.BUY,
+                    java.math.BigDecimal.valueOf(0.8), "strong setup",
+                    java.math.BigDecimal.valueOf(100), java.math.BigDecimal.valueOf(95),
+                    java.math.BigDecimal.valueOf(110), java.math.BigDecimal.valueOf(2),
+                    "{}", LocalDate.now(IST), null, null));
+            });
             when(sentimentService.analyzeStockSentiment(anyString(), any(LocalDate.class)))
                 .thenAnswer(invocation -> {
                     String symbol = invocation.getArgument(0);
@@ -1257,7 +1304,7 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             svc = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
@@ -1298,7 +1345,7 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             svc = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }
@@ -1348,7 +1395,7 @@ class JobOrchestratorServiceTest {
             runId = UUID.randomUUID();
             svc = new JobOrchestratorService(
                     dataIngestionService, newsIngestionService, sentimentService,
-                    signalPipeline, backtestEngine, tradingService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
                     jobRunRepository, jobRunStageRepository, signalStore,
                     watchlistStore, candleStore, jobOrchestratorMetrics, 3, 1000L, true);
         }

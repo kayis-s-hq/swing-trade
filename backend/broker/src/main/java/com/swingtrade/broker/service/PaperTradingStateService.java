@@ -23,6 +23,7 @@ import org.springframework.context.annotation.Lazy;
 
 import java.util.ArrayList;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -174,6 +175,13 @@ public class PaperTradingStateService {
         logger.info("Loaded {} closed positions, total realized P&L: {}", closedEntities.size(), totalRealized);
     }
 
+    // REQUIRES_NEW so this commits (and releases the row) immediately when the method
+    // returns, instead of joining the caller's often much longer-lived transaction (e.g.
+    // SignalPipeline.generatePrimarySignal's REQUIRES_NEW). Without this, PaperTradingEngine's
+    // portfolioLock only serializes the in-JVM critical section - the version bump it wrote
+    // is still uncommitted when the lock releases, so the next thread's read-modify-write
+    // still races against it and loses at commit time.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void savePortfolio() {
         try {
             OptimisticLockRetryHelper.execute(() -> {
@@ -220,7 +228,9 @@ public class PaperTradingStateService {
         }
     }
 
-    @Transactional
+    // REQUIRES_NEW for the same reason as savePortfolio() - this must commit before
+    // portfolioLock releases, not join the caller's longer-lived ambient transaction.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void closePosition(String positionId, Position closedPos) {
         try {
             OptimisticLockRetryHelper.execute(() -> {

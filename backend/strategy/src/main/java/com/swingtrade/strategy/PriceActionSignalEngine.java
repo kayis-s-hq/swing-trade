@@ -77,10 +77,12 @@ public class PriceActionSignalEngine {
 
     private final CandleStore candleStore;
     private final SignalMetrics signalMetrics;
+    private final TradingStrategy strategy;
 
-    public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics) {
+    public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics, PriceActionStrategy strategy) {
         this.candleStore = candleStore;
         this.signalMetrics = signalMetrics;
+        this.strategy = strategy;
     }
 
     /**
@@ -133,33 +135,31 @@ public class PriceActionSignalEngine {
         BigDecimal weeklyHigh = numToBigDecimal(weeklyHighIndicator.getValue(lastIndex));
         LocalDate date = chronologicalCandles.get(chronologicalCandles.size() - 1).date();
 
+        Indicators indicators = new Indicators(price, ema20, ema50, rsi, volume, volumeMa, weeklyHigh);
+
         List<String> passed = new ArrayList<>();
         List<String> failed = new ArrayList<>();
 
-        boolean priceAboveEma20 = price.compareTo(ema20) > 0;
-        boolean ema20AboveEma50 = ema20.compareTo(ema50) > 0;
-        boolean trendAligned = priceAboveEma20 && ema20AboveEma50;
+        boolean trendAligned = strategy.trendAligned(indicators);
         recordRule(trendAligned, passed, failed,
             "Price > EMA20 > EMA50 (price=" + fmt(price) + ", ema20=" + fmt(ema20) + ", ema50=" + fmt(ema50) + ")");
 
-        boolean rsiInRange = rsi.compareTo(RSI_LOWER_BOUND) >= 0 && rsi.compareTo(RSI_UPPER_BOUND) <= 0;
+        boolean rsiInRange = strategy.rsiInEntryRange(indicators);
         recordRule(rsiInRange, passed, failed, "RSI between 50-65 (rsi=" + fmt(rsi) + ")");
 
-        BigDecimal volumeThreshold = volumeMa.multiply(VOLUME_MULTIPLIER);
-        boolean volumeSurge = volume.compareTo(volumeThreshold) > 0;
+        boolean volumeSurge = strategy.volumeSurge(indicators);
         recordRule(volumeSurge, passed, failed,
-            "Volume > 1.5x VolumeMA20 (volume=" + fmt(volume) + ", threshold=" + fmt(volumeThreshold) + ")");
+            "Volume > 1.5x VolumeMA20 (volume=" + fmt(volume) + ", threshold=" + fmt(volumeMa.multiply(VOLUME_MULTIPLIER)) + ")");
 
-        BigDecimal highProximityThreshold = weeklyHigh.multiply(HIGH_PROXIMITY_THRESHOLD);
-        boolean nearWeeklyHigh = price.compareTo(highProximityThreshold) >= 0;
+        boolean nearWeeklyHigh = strategy.nearWeeklyHigh(indicators);
         recordRule(nearWeeklyHigh, passed, failed,
             "Price within 3% of 52-week high (price=" + fmt(price) + ", 52wHigh=" + fmt(weeklyHigh) + ")");
 
         int rulesPassed = (trendAligned ? 1 : 0) + (rsiInRange ? 1 : 0) + (volumeSurge ? 1 : 0) + (nearWeeklyHigh ? 1 : 0);
         // All 4 entry rules must hold — see docs/backtesting.md "Entry rules (same as the live
-        // signal engine)". BacktestEngine.tryEnter mirrors this threshold so the backtest never
-        // drifts from the live signal engine's rules.
-        boolean enoughRulesPassed = rulesPassed == 4;
+        // signal engine)". BacktestEngine.tryEnter evaluates entry through the same
+        // TradingStrategy instance so the backtest can never drift from these thresholds.
+        boolean enoughRulesPassed = strategy.isEntrySignal(indicators);
 
         SignalType type;
         String reasoning;
@@ -174,19 +174,19 @@ public class PriceActionSignalEngine {
             List<String> exitPassed = new ArrayList<>();
             List<String> exitFailed = new ArrayList<>();
 
-            boolean closeBelowEma20 = price.compareTo(ema20) < 0;
+            boolean closeBelowEma20 = strategy.closeBelowEma20(indicators);
             recordRule(closeBelowEma20, exitPassed, exitFailed,
                 "Close < EMA20 (close=%s, ema20=%s)".formatted(fmt(price), fmt(ema20)));
 
-            boolean ema20BelowEma50 = ema20.compareTo(ema50) < 0;
+            boolean ema20BelowEma50 = strategy.ema20BelowEma50(indicators);
             recordRule(ema20BelowEma50, exitPassed, exitFailed,
                 "EMA20 < EMA50 (ema20=%s, ema50=%s)".formatted(fmt(ema20), fmt(ema50)));
 
-            boolean rsiBelowLowerBound = rsi.compareTo(RSI_LOWER_BOUND) < 0;
+            boolean rsiBelowLowerBound = strategy.rsiBelowLowerBound(indicators);
             recordRule(rsiBelowLowerBound, exitPassed, exitFailed,
                 "RSI < 50 (rsi=%s)".formatted(fmt(rsi)));
 
-            if (closeBelowEma20 || ema20BelowEma50 || rsiBelowLowerBound) {
+            if (strategy.isSignalExit(indicators)) {
                 type = SignalType.SELL;
                 reasoning = "Exit rule triggered (%d of 3): %s".formatted(exitPassed.size(), String.join("; ", exitPassed));
             } else {

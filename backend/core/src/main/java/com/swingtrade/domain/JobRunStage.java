@@ -18,6 +18,11 @@ public record JobRunStage(
     String logDetails,
     String resultSummary
 ) {
-    public enum StageName { DATA_FETCH, NEWS, SENTIMENT, SIGNAL, BACKTEST, PAPER_TRADE }
+    // Declaration order drives the PENDING rows startRun() inserts up front (see
+    // JobOrchestratorService), which the dashboard displays in insertion order - keep it in
+    // sync with processSymbol()'s actual execution order. NEWS/SENTIMENT run after SIGNAL,
+    // and only for a BUY signal, not every symbol every day: sentiment is a trade-execution
+    // gate (checked by PAPER_TRADE), not a signal-generation input.
+    public enum StageName { DATA_FETCH, SIGNAL, BACKTEST, NEWS, SENTIMENT, PAPER_TRADE }
     public enum Status { PENDING, RUNNING, COMPLETED, SKIPPED, ERROR, CANCELLED }
 }

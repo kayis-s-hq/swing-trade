@@ -54,6 +54,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -143,8 +144,15 @@ class PositionServiceTest {
 
             PositionEntity entity = makePositionEntity(10L, "WIPRO", new BigDecimal("450"),
                     new BigDecimal("450"), "POS_00000010", "Test");
-            when(positionRepository.findById(10L)).thenReturn(Optional.of(entity));
-            when(positionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            // PaperTradingStateService.closePosition() persists the close in its own
+            // REQUIRES_NEW transaction, so on a successful engine close this method
+            // re-fetches rather than saving its own (now stale) in-memory copy - simulate
+            // that by returning the pre-close entity on the first lookup and a distinct
+            // post-close entity on the re-fetch.
+            PositionEntity closedEntity = makePositionEntity(10L, "WIPRO", new BigDecimal("450"),
+                    new BigDecimal("585"), "POS_00000010", "Test");
+            closedEntity.setStatus("CLOSED");
+            when(positionRepository.findById(10L)).thenReturn(Optional.of(entity), Optional.of(closedEntity));
 
             OhlcvCandle latestCandle = OhlcvCandle.of("WIPRO", LocalDate.now(),
                     new BigDecimal("580"), new BigDecimal("590"),
@@ -157,11 +165,11 @@ class PositionServiceTest {
             // When
             PositionResponse response = positionService.closePosition("WIPRO", ExitReason.SIGNAL_EXIT.name());
 
-            // Then: the engine close and the persisted entity both use the fresh candle
-            // close (585), not the stale currentPrice field (450)
+            // Then: the engine close uses the fresh candle close (585), not the stale
+            // currentPrice field (450), and the response reflects the re-fetched entity
             verify(tradingService).closePosition(eq(10L), eq(new BigDecimal("585")), eq(ExitReason.SIGNAL_EXIT.name()));
-            verify(positionRepository).save(argThat(e ->
-                    e.getCurrentPrice().compareTo(new BigDecimal("585")) == 0));
+            verify(positionRepository, times(2)).findById(10L);
+            verify(positionRepository, never()).save(any());
             assertThat(response).isNotNull();
         }
 
@@ -175,7 +183,6 @@ class PositionServiceTest {
             PositionEntity entity = makePositionEntity(11L, "TCS", new BigDecimal("3500"),
                     new BigDecimal("3550"), "POS_00000011", "Test");
             when(positionRepository.findById(11L)).thenReturn(Optional.of(entity));
-            when(positionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
             when(candleStore.findLatestBySymbol("TCS")).thenReturn(Optional.empty());
             when(tradingService.findOpenPositionBySymbol("TCS")).thenReturn(domainPos);
             when(tradeStore.findOpenByPositionId(11L)).thenReturn(Optional.empty());
@@ -183,9 +190,12 @@ class PositionServiceTest {
             // When
             positionService.closePosition("TCS", ExitReason.MANUAL.name());
 
-            // Then: falls back to entity.getCurrentPrice()
-            verify(positionRepository).save(argThat(e ->
-                    e.getCurrentPrice().compareTo(new BigDecimal("3550")) == 0));
+            // Then: falls back to entity.getCurrentPrice() when calling the engine close,
+            // and re-fetches rather than saving its own copy (see usesLatestCandleClose_
+            // notStaleCurrentPrice for why)
+            verify(tradingService).closePosition(eq(11L), eq(new BigDecimal("3550")), eq(ExitReason.MANUAL.name()));
+            verify(positionRepository, times(2)).findById(11L);
+            verify(positionRepository, never()).save(any());
         }
 
         @Test

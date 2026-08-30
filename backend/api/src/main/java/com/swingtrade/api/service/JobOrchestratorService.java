@@ -112,6 +112,7 @@ public class JobOrchestratorService {
     private final NewsIngestionService newsIngestionService;
     private final SentimentService sentimentService;
     private final SignalPipeline signalPipeline;
+    private final SentimentGate sentimentGate;
     private final BacktestEngine backtestEngine;
     private final TradingService tradingService;
     private final JobRunRepository jobRunRepository;
@@ -126,6 +127,7 @@ public class JobOrchestratorService {
             NewsIngestionService newsIngestionService,
             SentimentService sentimentService,
             SignalPipeline signalPipeline,
+            SentimentGate sentimentGate,
             BacktestEngine backtestEngine,
             TradingService tradingService,
             JobRunRepository jobRunRepository,
@@ -147,6 +149,7 @@ public class JobOrchestratorService {
         this.newsIngestionService = newsIngestionService;
         this.sentimentService = sentimentService;
         this.signalPipeline = signalPipeline;
+        this.sentimentGate = sentimentGate;
         this.backtestEngine = backtestEngine;
         this.tradingService = tradingService;
         this.jobRunRepository = jobRunRepository;
@@ -274,16 +277,22 @@ public class JobOrchestratorService {
         try {
             acquireSlot(symbol);
             try {
+                // Set by the SIGNAL stage's executor as a side effect so the NEWS/SENTIMENT
+                // skip check below can see the outcome — sentiment is only ever relevant for
+                // a BUY, so there is no reason to spend NEWS fetches or an LLM call on a
+                // symbol that came back SELL/HOLD (the common case).
+                Signal.SignalType[] signalType = {null};
+
                 List<StageDef> stageDefs = List.of(
                     new StageDef(JobRunStage.StageName.DATA_FETCH,
                         () -> StageExecutionResult.completed(stageDataFetch(symbol)), TIMEOUT_DATA_FETCH),
+                    new StageDef(JobRunStage.StageName.SIGNAL,
+                        () -> stageSignal(symbol, signalType), TIMEOUT_SIGNAL),
+                    new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol), TIMEOUT_BACKTEST),
                     new StageDef(JobRunStage.StageName.NEWS,
                         () -> StageExecutionResult.completed(stageNews(symbol)), TIMEOUT_NEWS),
                     new StageDef(JobRunStage.StageName.SENTIMENT,
                         () -> StageExecutionResult.completed(stageSentiment(symbol, today)), TIMEOUT_SENTIMENT),
-                    new StageDef(JobRunStage.StageName.SIGNAL,
-                        () -> StageExecutionResult.completed(stageSignal(symbol)), TIMEOUT_SIGNAL),
-                    new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol), TIMEOUT_BACKTEST),
                     new StageDef(JobRunStage.StageName.PAPER_TRADE,
                         () -> StageExecutionResult.completed(stagePaperTrade(symbol)), TIMEOUT_PAPER_TRADE)
                 );
@@ -303,6 +312,14 @@ public class JobOrchestratorService {
                             null, null, reason);
                         logger.debug("Skipping stage {} for {}: earlier stage did not complete",
                             stageDef.name(), symbol);
+                        continue;
+                    }
+                    boolean isSentimentPrerequisite = stageDef.name() == JobRunStage.StageName.NEWS
+                        || stageDef.name() == JobRunStage.StageName.SENTIMENT;
+                    if (isSentimentPrerequisite && signalType[0] != Signal.SignalType.BUY) {
+                        updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.SKIPPED,
+                            null, null, "Skipped — no BUY signal, sentiment check not needed");
+                        logger.debug("Skipping stage {} for {}: no BUY signal", stageDef.name(), symbol);
                         continue;
                     }
                     boolean succeeded = executeStage(runId, symbol, stageDef.name(),
@@ -444,10 +461,12 @@ public class JobOrchestratorService {
         return result.score() + ", confidence " + result.confidence();
     }
 
-    private String stageSignal(String symbol) {
+    private StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut) {
         var signal = signalPipeline.generatePrimarySignal(symbol);
-        return signal.map(s -> s.type() + " signal generated, confidence " +
-            String.format("%.0f", s.confidence().doubleValue() * 100) + "%").orElse("no signal");
+        signalTypeOut[0] = signal.map(Signal::type).orElse(null);
+        String summary = signal.map(s -> "%s signal generated, confidence %.0f%%"
+            .formatted(s.type(), s.confidence().doubleValue() * 100)).orElse("no signal");
+        return StageExecutionResult.completed(summary);
     }
 
     private StageExecutionResult stageBacktest(String symbol) {
@@ -472,10 +491,37 @@ public class JobOrchestratorService {
 
         int executed = 0;
         int failedAfterMark = 0;
+        int blockedBySentiment = 0;
         for (Signal signal : unprocessed) {
             OhlcvCandle latest = candleStore.findLatestBySymbol(symbol)
                 .orElse(null);
             if (latest == null || latest.close() == null) continue;
+
+            // A BUY only gets this far once SENTIMENT has run (see the NEWS/SENTIMENT skip
+            // condition in processSymbol) - but read its verdict rather than assume, since a
+            // stale unprocessed BUY from an earlier run could reach here with no sentiment
+            // recorded for its date at all.
+            if (signal.type() == Signal.SignalType.BUY) {
+                var verdict = sentimentGate.evaluatePersisted(symbol, signal.date());
+                if (verdict.action() == SentimentGate.SentimentVerdict.Action.PENDING) {
+                    logger.debug("Deferring BUY signal {} for {}: sentiment not yet evaluated for {}",
+                        signal.id(), symbol, signal.date());
+                    continue; // leave unprocessed, retry once sentiment exists
+                }
+                if (verdict.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
+                    try {
+                        signalStore.markProcessed(signal.id());
+                    } catch (Exception e) {
+                        logger.warn("Failed to mark sentiment-blocked signal {} processed for {}: {}",
+                            signal.id(), symbol, e.getMessage());
+                        continue;
+                    }
+                    blockedBySentiment++;
+                    logger.info("Blocked BUY signal {} for {} on sentiment: {}",
+                        signal.id(), symbol, verdict.reason());
+                    continue;
+                }
+            }
 
             // Mark the signal processed BEFORE executing the trade, not after. If we executed
             // first and markProcessed() then threw (e.g. an optimistic-lock failure on a row
@@ -510,11 +556,14 @@ public class JobOrchestratorService {
                     symbol, signal.id(), e.getMessage());
             }
         }
-        String summary = executed + " trade(s) executed";
-        if (failedAfterMark > 0) {
-            summary += ", " + failedAfterMark + " failed after marking processed (see logs)";
+        StringBuilder summary = new StringBuilder(executed + " trade(s) executed");
+        if (blockedBySentiment > 0) {
+            summary.append(", ").append(blockedBySentiment).append(" blocked by sentiment");
         }
-        return summary;
+        if (failedAfterMark > 0) {
+            summary.append(", ").append(failedAfterMark).append(" failed after marking processed (see logs)");
+        }
+        return summary.toString();
     }
 
     private void updateStageStatus(UUID runId, String symbol, JobRunStage.StageName stage,

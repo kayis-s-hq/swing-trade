@@ -273,13 +273,18 @@ public class PositionService {
             .orElseGet(() -> entity.getCurrentPrice() != null ? entity.getCurrentPrice() : entity.getEntryPrice());
         String reason = exitReason != null ? exitReason : ExitReason.MANUAL.name();
 
-        // Close in engine first (updates portfolio capital, calculates P&L). When this
-        // succeeds, PaperTradingStateService.closePosition() already sets realizedPnL,
-        // exitReason and exitTime on this same managed entity (shared persistence
-        // context, same transaction) - so the fields below are redundant but harmless
-        // in that case. When it does NOT run (no engine-side position, or the engine
-        // call throws), nothing else sets those fields, so we must compute and set
-        // them ourselves - otherwise this close persists with a null P&L and reason.
+        // Close in engine first (updates portfolio capital, calculates P&L).
+        // PaperTradingStateService.closePosition() runs in its own REQUIRES_NEW
+        // transaction (so it commits independently of the caller's ambient transaction
+        // and doesn't hold the portfolio row's lock open across it - see
+        // PaperTradingEngine's portfolioLock). That means it is NOT the same managed
+        // entity/persistence context as this method: `entity` below still holds the
+        // pre-close version. Saving it again here would collide with the version the
+        // engine just committed, so when the engine close succeeds we re-fetch instead
+        // of reusing the stale in-memory copy. When it does NOT run (no engine-side
+        // position, or the engine call throws), nothing else sets those fields, so we
+        // must compute and set them ourselves - otherwise this close persists with a
+        // null P&L and reason.
         boolean closedInEngine = false;
         try {
             com.swingtrade.domain.Position enginePos =
@@ -295,16 +300,18 @@ public class PositionService {
                 symbol, e.getMessage());
         }
 
-        // Then update DB entity
-        entity.setStatus("CLOSED");
-        entity.setCurrentPrice(exitPrice);
-        entity.setUpdatedAt(LocalDateTime.now());
-        if (!closedInEngine) {
+        PositionEntity savedEntity;
+        if (closedInEngine) {
+            savedEntity = positionRepository.findById(entity.getId()).orElse(entity);
+        } else {
+            entity.setStatus(PositionStatus.CLOSED.name());
+            entity.setCurrentPrice(exitPrice);
+            entity.setUpdatedAt(LocalDateTime.now());
             entity.setRealizedPnL(calculateRealizedPnL(entity, exitPrice));
             entity.setExitReason(reason);
             entity.setExitTime(LocalDateTime.now());
+            savedEntity = positionRepository.save(entity);
         }
-        PositionEntity savedEntity = positionRepository.save(entity);
 
         // Close out the audit-trail Trade record opened at entry, if one exists.
         tradeStore.findOpenByPositionId(entity.getId()).ifPresentOrElse(
