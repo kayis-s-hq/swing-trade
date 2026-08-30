@@ -10,10 +10,15 @@ import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.repository.JobRunRepository;
 import com.swingtrade.data.repository.JobRunStageRepository;
 import com.swingtrade.data.service.DataIngestionService;
+import com.swingtrade.domain.CompositeAnalysis;
 import com.swingtrade.domain.JobRun;
 import com.swingtrade.domain.JobRunStage;
 import com.swingtrade.domain.SentimentResult;
+import com.swingtrade.domain.SynthesisResult;
+import com.swingtrade.domain.store.BacktestResultStore;
 import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.LlmAnalysisResultStore;
+import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.SignalStore;
 import com.swingtrade.domain.store.WatchlistStore;
 import com.swingtrade.llm.service.NewsIngestionService;
@@ -114,6 +119,30 @@ class JobOrchestratorServiceTest {
 
     @Mock
     private CandleStore candleStore;
+
+    @Mock
+    private TechnicalAnalysisService technicalAnalysisService;
+
+    @Mock
+    private FundamentalScorer fundamentalScorer;
+
+    @Mock
+    private CompositeAnalysisService compositeAnalysisService;
+
+    @Mock
+    private com.swingtrade.llm.service.SynthesisService synthesisService;
+
+    @Mock
+    private BacktestResultStore backtestResultStore;
+
+    @Mock
+    private LlmAnalysisResultStore llmAnalysisResultStore;
+
+    @Mock
+    private LlmAnalysisGate llmAnalysisGate;
+
+    @Mock
+    private SentimentStore sentimentStore;
 
     private UUID runId;
 
@@ -345,6 +374,64 @@ class JobOrchestratorServiceTest {
         }
 
         @Test
+        @DisplayName("Kill switch: LLM_ANALYSIS is skipped entirely, not attempted, when disabled")
+        void shouldSkipLlmAnalysisStageWhenKillSwitchDisabled() throws InterruptedException {
+            // `service` here comes from this nested class's setUp(), which uses the
+            // compatibility fixture constructor — llmAnalysisEnabled=false.
+            AtomicReference<JobRunEntity> runState = new AtomicReference<>();
+            ConcurrentHashMap<String, JobRunStageEntity> stageState = new ConcurrentHashMap<>();
+            CountDownLatch runCompleted = new CountDownLatch(1);
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of(SYMBOL));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                if (!JobRun.Status.RUNNING.name().equals(entity.getStatus())) {
+                    runCompleted.countDown();
+                }
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            when(jobRunRepository.incrementCompletedCount(any(UUID.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = runState.get();
+                entity.setCompletedCount(entity.getCompletedCount() + 1);
+                return 1;
+            });
+            when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
+                JobRunStageEntity entity = invocation.getArgument(0);
+                stageState.put(entity.getStageName(), entity);
+                return entity;
+            });
+            when(jobRunStageRepository.findByRunIdAndSymbolAndStageName(
+                    any(UUID.class), eq(SYMBOL), anyString()))
+                .thenAnswer(invocation -> {
+                    JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
+                    return entity == null ? List.of() : List.of(entity);
+                });
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
+                .thenAnswer(invocation -> List.copyOf(stageState.values()));
+
+            when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 100)).thenReturn(List.of());
+            lenient().when(newsIngestionService.fetchStockNews(SYMBOL)).thenReturn(List.of());
+            lenient().when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
+                .thenReturn(SentimentResult.create(
+                    SYMBOL, LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL,
+                    "No news", "", 0.0));
+            when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.empty());
+            when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+            JobRunStageEntity llmStage = stageState.get(JobRunStage.StageName.LLM_ANALYSIS.name());
+            assertThat(llmStage.getStatus()).isEqualTo(JobRunStage.Status.SKIPPED.name());
+            assertThat(llmStage.getResultSummary()).contains("disabled by config");
+            verifyNoInteractions(compositeAnalysisService, synthesisService, llmAnalysisResultStore);
+        }
+
+        @Test
         @DisplayName("Completion callback failure forces the run to FAILED instead of leaving it RUNNING")
         void shouldForceRunToFailedWhenCompletionCallbackThrows() throws InterruptedException {
             AtomicReference<JobRunEntity> runState = new AtomicReference<>();
@@ -494,6 +581,144 @@ class JobOrchestratorServiceTest {
                 .hasMessageContaining(activeRun.getRunId().toString());
 
             verify(watchlistStore, never()).getActiveWatchlistSymbols();
+        }
+    }
+
+    // ==================== LLM_ANALYSIS stage: enabled end-to-end ====================
+
+    @Nested
+    @DisplayName("LLM_ANALYSIS stage — enabled")
+    class LlmAnalysisStageIntegration {
+
+        private ConcurrentHashMap<String, JobRunStageEntity> stageState;
+        private AtomicReference<JobRunEntity> runState;
+        private CountDownLatch runCompleted;
+        // save() mutates and re-saves the SAME entity instance per stage, so by the time
+        // assertions run every captured reference reflects only its FINAL status. Recording
+        // "stage::status" strings at the moment of each save() call is the only way to observe
+        // the actual transition sequence (e.g. RUNNING before COMPLETED) after the fact.
+        private java.util.List<String> transitions;
+
+        @BeforeEach
+        void setUp() {
+            runId = UUID.randomUUID();
+            service = new JobOrchestratorService(
+                dataIngestionService, newsIngestionService, sentimentService,
+                signalPipeline, sentimentGate, backtestEngine, tradingService,
+                jobRunRepository, jobRunStageRepository, signalStore, watchlistStore,
+                candleStore, jobOrchestratorMetrics, technicalAnalysisService, fundamentalScorer,
+                compositeAnalysisService, synthesisService, backtestResultStore, llmAnalysisResultStore,
+                llmAnalysisGate, sentimentStore, 3, 1000L, true, true, true);
+
+            stageState = new ConcurrentHashMap<>();
+            runState = new AtomicReference<>();
+            runCompleted = new CountDownLatch(1);
+            transitions = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of(SYMBOL));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                if (!JobRun.Status.RUNNING.name().equals(entity.getStatus())) {
+                    runCompleted.countDown();
+                }
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            lenient().when(jobRunRepository.incrementCompletedCount(any(UUID.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = runState.get();
+                entity.setCompletedCount(entity.getCompletedCount() + 1);
+                return 1;
+            });
+            when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
+                JobRunStageEntity entity = invocation.getArgument(0);
+                stageState.put(entity.getStageName(), entity);
+                transitions.add(entity.getStageName() + "::" + entity.getStatus());
+                return entity;
+            });
+            when(jobRunStageRepository.findByRunIdAndSymbolAndStageName(
+                    any(UUID.class), eq(SYMBOL), anyString()))
+                .thenAnswer(invocation -> {
+                    JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
+                    return entity == null ? List.of() : List.of(entity);
+                });
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
+                .thenAnswer(invocation -> List.copyOf(stageState.values()));
+
+            when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 100)).thenReturn(List.of());
+            lenient().when(newsIngestionService.fetchStockNews(SYMBOL)).thenReturn(List.of());
+            lenient().when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.empty());
+            lenient().when(signalStore.findUnprocessed()).thenReturn(List.of());
+        }
+
+        @Test
+        @DisplayName("Stage order: LLM_ANALYSIS runs strictly between SENTIMENT and PAPER_TRADE")
+        void shouldRunLlmAnalysisBetweenSentimentAndPaperTrade() throws InterruptedException {
+            when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+            when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
+                .thenReturn(SentimentResult.create(
+                    SYMBOL, LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL, "No news", "", 0.0));
+            when(technicalAnalysisService.compute(SYMBOL))
+                .thenReturn(new CompositeAnalysis.TechnicalScore(0, "HOLD", 0, List.of()));
+            when(fundamentalScorer.compute(SYMBOL))
+                .thenReturn(new CompositeAnalysis.FundamentalScore(0, List.of()));
+            when(backtestResultStore.findBySymbolAndDate(eq(SYMBOL), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+            when(sentimentStore.findBySymbolAndDate(eq(SYMBOL), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+            var composite = new CompositeAnalysis(SYMBOL, LocalDate.now(), 0, "HOLD", java.math.BigDecimal.ZERO,
+                List.of(), new CompositeAnalysis.NewsScore(0, "none", List.of(), List.of(), 0),
+                new CompositeAnalysis.TechnicalScore(0, "HOLD", 0, List.of()),
+                new CompositeAnalysis.FundamentalScore(0, List.of()),
+                new CompositeAnalysis.BacktestScore(0, 0, 0, 0, 0, 0, false), "reason", null);
+            when(compositeAnalysisService.analyze(eq(SYMBOL), any(), any(), any(), any())).thenReturn(composite);
+            when(synthesisService.synthesize(composite)).thenReturn(new SynthesisResult(
+                "n", "HOLD", 0.5, List.of(), List.of(), List.of(), true));
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(stageState.get(JobRunStage.StageName.LLM_ANALYSIS.name()).getStatus())
+                .isEqualTo(JobRunStage.Status.COMPLETED.name());
+
+            String sentimentCompleted = JobRunStage.StageName.SENTIMENT.name() + "::"
+                + JobRunStage.Status.COMPLETED.name();
+            String llmRunning = JobRunStage.StageName.LLM_ANALYSIS.name() + "::"
+                + JobRunStage.Status.RUNNING.name();
+            String paperTradeRunning = JobRunStage.StageName.PAPER_TRADE.name() + "::"
+                + JobRunStage.Status.RUNNING.name();
+
+            int sentimentIndex = transitions.indexOf(sentimentCompleted);
+            int llmIndex = transitions.indexOf(llmRunning);
+            int paperTradeIndex = transitions.indexOf(paperTradeRunning);
+
+            assertThat(sentimentIndex).as("SENTIMENT completed transition recorded").isNotEqualTo(-1);
+            assertThat(llmIndex).as("LLM_ANALYSIS running transition recorded").isNotEqualTo(-1);
+            assertThat(paperTradeIndex).as("PAPER_TRADE running transition recorded").isNotEqualTo(-1);
+            assertThat(sentimentIndex).isLessThan(llmIndex);
+            assertThat(llmIndex).isLessThan(paperTradeIndex);
+        }
+
+        @Test
+        @DisplayName("Skip-cascade: SENTIMENT error skips both LLM_ANALYSIS and PAPER_TRADE")
+        void shouldSkipLlmAnalysisAndPaperTradeWhenSentimentErrors() throws InterruptedException {
+            when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+            when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
+                .thenThrow(new RuntimeException("sentiment provider unavailable"));
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(stageState.get(JobRunStage.StageName.SENTIMENT.name()).getStatus())
+                .isEqualTo(JobRunStage.Status.ERROR.name());
+            assertThat(stageState.get(JobRunStage.StageName.LLM_ANALYSIS.name()).getStatus())
+                .isEqualTo(JobRunStage.Status.SKIPPED.name());
+            assertThat(stageState.get(JobRunStage.StageName.PAPER_TRADE.name()).getStatus())
+                .isEqualTo(JobRunStage.Status.SKIPPED.name());
+            verifyNoInteractions(compositeAnalysisService, synthesisService, llmAnalysisResultStore);
         }
     }
 
