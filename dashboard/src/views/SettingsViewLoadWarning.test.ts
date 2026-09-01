@@ -11,6 +11,7 @@ const storeMocks = vi.hoisted(() => {
       stopLoss: 5,
       takeProfit: 15,
       allocationPerPosition: 100000,
+      initialCapital: 500000,
     },
     llmSettings: {
       llmBackend: 'local',

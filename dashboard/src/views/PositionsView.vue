@@ -459,7 +459,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { getPositions, getClosedPositions, closePosition, executeTrade } from '../api/positions'
 import type { Position } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -624,7 +624,14 @@ const submitClosePosition = async () => {
   }
 }
 
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+
 onMounted(() => {
   refreshPositions()
+  refreshTimer = setInterval(() => void refreshPositions(), 60_000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>

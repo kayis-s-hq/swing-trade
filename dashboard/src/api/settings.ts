@@ -137,11 +137,27 @@ export async function setTradingSettings(
   })
 }
 
+export async function getScanningSettings(): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/scanning', { responseContract: 'envelope' })
+}
+
+export async function setScanningSettings(
+  settings: Record<string, string>
+): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/scanning', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+    responseContract: 'envelope',
+  })
+}
+
 export async function saveAllSettings(body: {
   broker?: string
   llm?: Record<string, string>
   discord?: Record<string, string>
   trading?: Record<string, string>
+  scanning?: Record<string, string>
 }): Promise<Record<string, string>> {
   return apiRequest<Record<string, string>>('/settings/save', {
     method: 'POST',

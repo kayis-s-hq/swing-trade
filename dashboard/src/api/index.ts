@@ -83,6 +83,8 @@ export {
   setGpuHubSettings,
   getTradingSettings,
   setTradingSettings,
+  getScanningSettings,
+  setScanningSettings,
   saveAllSettings,
 } from './settings'
 

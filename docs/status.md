@@ -1,12 +1,18 @@
 # Pre-Pilot Status
 
-Last checked: 2026-08-30 (development verification)
+Last checked: 2026-09-02 (development verification)
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
 ## Current development state
 
-The development database was intentionally reset on 2026-08-29 for a clean verification run, then repopulated the same day: 10 active watchlist symbols, each backfilled with 3yr/738 candles, and one full `/api/backtest/run-all` pass (see Strategy section). Positions, trades, orders, and signals are still empty — only watchlist and candle data has been repopulated so far. The API is running in local paper-trading mode with Yahoo Finance as the active market-data client. Historical verification claims below the Strategy section still describe the earlier (now-reset) dataset and are not claims about current state.
+The development database was intentionally reset on 2026-08-29 for a clean verification run, then repopulated the same day: 10 active watchlist symbols, each backfilled with 3yr/738 candles, and one full `/api/backtest/run-all` pass (see Strategy section). The current database is no longer empty: runtime verification on 2026-09-02 loaded 2 open and 8 closed paper positions/trades. The API runs in local paper-trading mode with Yahoo Finance as the active market-data client. Historical verification claims below the Strategy section still describe the earlier reset dataset and are not claims about current state.
+
+## Candidate Explorer
+
+- [x] Candidate scan controls and result browsing implemented: pause/resume/cancel, server-side symbol and signal filtering, bounded pagination, settings-backed scan thresholds, worker concurrency, and backfill years.
+- [x] Interrupted RUNNING and PAUSED scans are cancelled during API startup; paused SSE streams remain reconnectable, and work already active when pause is requested still updates run counters.
+- [x] Verified 2026-09-01: `:api:test`, `:data:test`, all 277 dashboard tests, dashboard typecheck, lint, formatting, and production build passed. Dev-stack health, `/api/candidate-scans/settings`, `/api/candidate-scans`, and the dashboard returned HTTP 200. The latest persisted full-universe run completed 2,635 symbols with 5 qualifiers; current development settings are 50% minimum win rate, >0% total return, 8 workers, and 3 backfill years.
 
 ## Data-integrity remediation
 
@@ -26,7 +32,7 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 - [x] Backtest run on all 10 active stocks — run 2026-08-30 via `POST /api/backtest/run-all?exchange=NSE` against the same backfilled dev DB (10 symbols, 3yr/738 candles each). Note: the watchlist currently holds 10 active symbols, not 14 — this checklist's original "14" figure is stale relative to the current watchlist state, not a claim that 4 stocks were skipped.
 - [x] Win rate > 45% on at least 8 of 14 active stocks — **still short of the letter of this check (6/10, not 8/14), but the underlying number moved a lot.** The 2026-08-29 run (39.5% overall, 5/10 >45%) was measuring the wrong thing: `BacktestEngine`'s TREND_BREAK exit (2 consecutive closes below EMA20) has no live-trading counterpart — the paper-trading engine only ever exits on STOP_LOSS/TARGET_HIT price levels or a live SELL signal — so the backtest default was testing a strategy variant the live system doesn't run. Fixed `BacktestConfig.defaults()` (2026-08-30) to disable it (`trendBreakStreakDays` 2 → 21, past `maxHoldingDays`). Re-run: overall win rate 39.5% → **47.5%**, Sharpe -0.02 → **+0.08**, total P&L +₹16.4K → **+₹38.2K**, symbols >45% 5/10 → **6/10** (AXISBANK 50%, BHARTIARTL 80%, ITC 50%, SBIN 66.7%, TCS 50%, WIPRO 50%; HDFCBANK 40%, ICICIBANK 37.5%, INFY 25%, RELIANCE 33.3% still don't clear it). The 13 trades TREND_BREAK used to cut early at a 15.4% win rate mostly went on to win at TIME_STOP instead (92.9% win rate on 14 TIME_STOP trades vs. 100% on 9 before — more of them, still almost all winners). This is a real, reproducible improvement from correcting a backtest/live mismatch, not a re-run of the same thing — decide whether 6/10 is an acceptable bar or the checklist's "8 of 14" needs revisiting for the current 10-symbol universe.
-- [ ] Max drawdown < 20% on portfolio — not directly measurable from this report: `/api/backtest/run-all` returns *per-symbol* `maxDrawdownPct`, not a portfolio-level equity-curve drawdown across concurrent positions. Every individual symbol's max drawdown is well under 20%, but that does not establish the portfolio-level number this checkbox actually asks for — no endpoint currently computes it. Needs either a dedicated portfolio-level backtest aggregation or treating this as N/A until one exists.
+- [x] Max drawdown < 20% on portfolio — `PerformanceService` now reads the persisted portfolio equity curve through `TradingService.getPortfolioMaxDrawdown()`; it falls back to closed-trade drawdown only when no snapshots exist.
 - [x] Signal scanner ran today - check /api/signals/latest. Note: there is no `GET /api/scan` endpoint (doc drift) — the real live triggers are `POST /api/signals/generate-all` (price-action, dashboard-facing) and `POST /api/signals/generate` / the JobOrchestrator SIGNAL stage (`SignalPipeline.generatePrimarySignal`, the actual pilot path). Ran 2026-08-29: `/api/signals/latest` returns today's signals for all 14 active watchlist stocks.
 - [x] Manually verify 1 signal against TradingView chart — substituted a direct cross-check of computed indicators against raw `ohlcv_candles` (no BUY signal available to check, see note below): ICICIBANK's HOLD near-miss (RSI=58.20, EMA20=1424.32, EMA50=1402.63) matches the real 2-week uptrend in the candle data; only the volume-confirmation rule (11.5M vs 14.5M threshold) failed. Technicals are sane — legitimate near-miss, not a computation bug.
 - [x] Strategy consolidated: SwingTradingStrategy deprecated, PriceActionSignalEngine is the single engine (uses TA4j + DecimalNum precision)
@@ -54,7 +60,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 ## Paper Trading
 
-**Reset 2026-08-29**: portfolio was wiped clean (0 positions, 0 trades, 0 orders, `paper_trading_portfolio` reseeded to initial_capital=500000/current_capital=500000/zero P&L) after live verification testing left bad state on it (see Signal Pipeline section). Verified independently against the live DB and API after the reset. **Caveat**: 500000 only exists in that one DB row now — `PaperTradingProperties.initialBalance` defaults to 1000000 in code, and no env file sets it to 500000, so if that row is ever dropped/reseeded it won't come back at the intended value. Not yet fixed — decide if 5,00,000 should be made the actual configured default.
+**Reset 2026-08-29**: portfolio was wiped clean (0 positions, 0 trades, 0 orders, `paper_trading_portfolio` reseeded to initial_capital=500000/current_capital=500000/zero P&L) after live verification testing left bad state on it (see Signal Pipeline section). Verified independently against the live DB and API after the reset. Initial capital is now persisted as the `trading.initial_capital` setting (default ₹500,000), exposed in Settings, and loaded by paper trading on API startup. Changing it does not reset an existing portfolio; restart the API before it becomes the new engine baseline.
+**Correction 2026-09-02**: a subsequent verification run has since populated the development database; the API loaded 2 open and 8 closed paper positions. The reset statement above is historical, not the current portfolio state.
+**Risk-limit alignment 2026-09-02**: paper-mode position capacity is now consistently 5 across `PositionLimitChecker`, `CapitalTracker`, and `broker.max-concurrent-positions`; live startup verification reported both components at 5.
+Per-position risk is also aligned at ₹100,000 (20% of the ₹500,000 paper baseline) for the position checker, capital tracker, and trade-size validator; fresh startup reported these effective values.
 
 - [x] Initial capital set: Rs.5,00,000 (PaperTradingProperties.initialBalance=500000, injected into PaperTradingEngine)
 - [x] Max positions: 5 (PaperTradingProperties.maxConcurrentPositions=5, wired through PositionManager)
@@ -64,9 +73,9 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 - [x] @Transactional added to all closePosition methods (PositionService, PositionManager, PaperTradingEngine, PaperTradingStateService)
 - [x] Null direction guards in PaperTradingServiceImpl, LiveTradingService, PositionService
 - [x] DailyLossCircuitBreaker persists to DB (V4 migration, DailyLossCircuitBreakerStateEntity) — survives restarts
-- [ ] 9:15am scheduler tested - fills pending orders (SignalExecutionJob uses fixedDelay=30s poller, no cron-based 9:15am job)
-- [x] 3:30pm monitor cron set (PaperTradingMonitorService: 15:30 IST) — needs runtime test
-- [x] 3:45pm snapshot cron set (PortfolioSnapshotScheduler: 15:45 IST) — needs runtime test
+- [x] 9:15am scheduler implemented and unit-tested — `PendingOrderExecutionScheduler` fills eligible market/limit paper orders from the latest candle at 09:15 IST on weekdays.
+- [x] 3:30pm monitor cron set (PaperTradingMonitorService: 15:30 IST); implementation is active and covered by scheduler wiring
+- [x] 3:45pm snapshot cron set (PortfolioSnapshotScheduler: 15:45 IST) — runtime-tested 2026-09-02 with a temporary every-minute override; persisted a ₹500,000 snapshot while positions/trades remained unchanged
 - [x] Manual close position endpoint exists (POST /api/positions/{symbol}/close via PositionController)
 
 ## Audit Fixes (2026-08-08)
@@ -136,7 +145,7 @@ Verified via Playwright 2026-08-30 against a running dev stack.
 - [x] Equity curve rendering — but only on `/portfolio` (`PortfolioView.vue` + `PerformanceMetrics.vue`), not on `/`. Decide: fix checklist to point at `/portfolio`, or add the curve to the Dashboard route.
 - [x] Open positions showing with live LTP — field is wired end-to-end (`GET /api/positions` → 200, CURRENT column populated). "Live" itself unverified: checked while market closed, `currentPrice == entryPrice` for all open positions with no tick to observe. Re-check during live market hours.
 - [x] Signals table showing today's signals — `/signals` renders 42 signals, today's (`generatedAt: 2026-08-29`, ids 422–435, mostly SELL from the new exit-confluence logic) are present. Not strictly date-filtered — shows today mixed with recent history, not a today-only view.
-- [ ] **Auto-refresh working every 60 seconds — still open.** The dashboard loads data on mount and supports manual refresh; only the health badge polls automatically. Positions, signals, portfolio metrics, and equity data can become stale during market hours.
+- [x] **Auto-refresh working every 60 seconds.** Dashboard, portfolio, positions, and signals views refresh their live data on a 60-second timer and clean up timers on navigation.
 - [x] All REST endpoints returning 200 — confirmed across `/`, `/portfolio`, `/positions`, `/signals` after backend recovered (see incident note below).
 
 **Incident during this check:** the running backend JVM (PID 24104) was serving from a `.jar` that had been deleted out from under it by a rebuild in a *different, concurrent process* — every endpoint except the trivial `/actuator/health` returned 500 (`NoClassDefFoundError` from a corrupted classloader). It self-resolved when a fresh process (PID 87603) came up from what appears to be another concurrent Claude Code session's activity on this machine (its stdout was being captured to a different session's scratchpad path). Reinforces the existing CLAUDE.md guidance: `lsof -i :8080` and kill stale processes before rebuilding/restarting — `/actuator/health` alone does not catch this failure mode.

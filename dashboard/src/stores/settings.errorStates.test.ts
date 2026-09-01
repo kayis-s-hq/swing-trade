@@ -13,6 +13,8 @@ const apiMocks = vi.hoisted(() => ({
   setDiscordSettings: vi.fn(),
   getTradingSettings: vi.fn(),
   setTradingSettings: vi.fn(),
+  getScanningSettings: vi.fn(),
+  setScanningSettings: vi.fn(),
   saveAllSettings: vi.fn(),
 }))
 
@@ -40,7 +42,11 @@ beforeEach(() => {
       'trading.stop_loss': '3',
       'trading.take_profit': '11',
       'trading.allocation_per_position': '75000',
+      'trading.initial_capital': '500000',
     })
+  )
+  apiMocks.getScanningSettings.mockResolvedValue(
+    legacySuccess({ 'candidate-scan.max-concurrent': '3' })
   )
   apiMocks.setLlmSettings.mockResolvedValue(legacySuccess({}))
   apiMocks.setDiscordSettings.mockResolvedValue(legacySuccess({}))
@@ -69,6 +75,7 @@ describe('settings store — unconfirmed defaults', () => {
       stopLoss: 3,
       takeProfit: 11,
       allocationPerPosition: 75000,
+      initialCapital: 500000,
     })
 
     await expect(saveSettings()).resolves.toBe(false)

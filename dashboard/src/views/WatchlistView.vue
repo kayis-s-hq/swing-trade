@@ -5,7 +5,9 @@
       <div>
         <h1 class="font-display text-2xl font-semibold text-text-primary">Watchlist</h1>
         <p class="mt-1 text-sm text-text-muted">
-          {{ watchlist.length }} stocks being monitored · {{ buySignalCount }} BUY signal{{ buySignalCount === 1 ? '' : 's' }}
+          {{ watchlist.length }} stocks being monitored · {{ buySignalCount }} BUY signal{{
+            buySignalCount === 1 ? '' : 's'
+          }}
         </p>
       </div>
       <button
@@ -30,9 +32,11 @@
         :key="filter.value"
         type="button"
         class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
-        :class="signalFilter === filter.value
-          ? 'border-brand bg-brand text-white'
-          : 'border-border-subtle text-text-muted hover:border-brand/50 hover:text-text-primary'"
+        :class="
+          signalFilter === filter.value
+            ? 'border-brand bg-brand text-white'
+            : 'border-border-subtle text-text-muted hover:border-brand/50 hover:text-text-primary'
+        "
         @click="signalFilter = filter.value"
       >
         {{ filter.label }} <span class="ml-1 opacity-70">{{ filterCount(filter.value) }}</span>
@@ -217,7 +221,10 @@
           </table>
         </div>
 
-        <div v-if="watchlist.length > 0 && filteredWatchlist.length === 0" class="mt-6 text-center text-sm text-text-muted">
+        <div
+          v-if="watchlist.length > 0 && filteredWatchlist.length === 0"
+          class="mt-6 text-center text-sm text-text-muted"
+        >
           No {{ signalFilter === 'BUY' ? 'BUY' : '' }} signals in the watchlist.
         </div>
         <div v-else-if="watchlist.length === 0" class="mt-6 text-center text-sm text-text-muted">

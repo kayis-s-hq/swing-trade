@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16
     container_name: swing_trade_stage_postgres
+    restart: always
     environment:
       POSTGRES_DB: swingtrade_stage
       POSTGRES_USER: swingtrade_user
@@ -22,6 +23,7 @@ services:
   api:
     image: swing-trade-api:stage
     container_name: swing-trade-stage-api
+    restart: always
     env_file:
       - .env.stage
     build:
@@ -59,6 +61,7 @@ services:
   dashboard:
     image: swing-trade-dashboard:stage
     container_name: swing-trade-stage-dashboard
+    restart: always
     build:
       context: ./dashboard
       dockerfile: Dockerfile

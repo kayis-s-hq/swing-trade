@@ -86,6 +86,24 @@ class PerformanceServiceTest {
         }
 
         @Test
+        void whenSnapshotDrawdownExists_usesPortfolioEquityCurve() {
+            PaperTradingEngine engine = mock(PaperTradingEngine.class);
+            when(engine.getTotalPnL()).thenReturn(BigDecimal.ZERO);
+            when(engine.getTotalValue()).thenReturn(BigDecimal.valueOf(950000));
+            when(engine.getInitialCapital()).thenReturn(BigDecimal.valueOf(1000000));
+            when(engine.getPortfolioMaxDrawdown()).thenReturn(BigDecimal.valueOf(8.25));
+
+            PositionRepository positionRepo = mock(PositionRepository.class);
+            when(positionRepo.findByStatus("CLOSED")).thenReturn(List.of());
+            when(positionRepo.findByStatus("STOPPED")).thenReturn(List.of());
+            when(positionRepo.findByStatus("TARGET_HIT")).thenReturn(List.of());
+
+            var response = new PerformanceService(engine, positionRepo).getPortfolioPerformance();
+
+            assertThat(response.getMaxDrawdown()).isEqualByComparingTo("8.25");
+        }
+
+        @Test
         void whenPortfolioExists_averageWinFromClosedPositions() {
             Portfolio portfolio = new Portfolio("test", BigDecimal.valueOf(1000000));
             PaperTradingEngine engine = mock(PaperTradingEngine.class);

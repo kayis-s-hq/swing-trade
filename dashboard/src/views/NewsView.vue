@@ -45,86 +45,127 @@
 
     <!-- Results -->
     <div v-else-if="articles.length > 0" class="flex flex-col gap-4">
-      <!-- Summary bar -->
-      <div class="card-panel p-4">
-        <div class="flex items-center gap-4 text-sm">
-          <span class="text-text-muted">Symbol:</span>
-          <span class="font-semibold text-text-primary">{{ displayedSymbol }}</span>
-          <span class="text-text-muted">|</span>
-          <span class="text-text-muted">Articles:</span>
-          <span class="font-semibold text-text-primary">{{ articles.length }}</span>
-          <span class="text-text-muted">|</span>
-          <span class="text-text-muted">Sources:</span>
-          <span class="font-semibold text-text-primary">{{ sourceCount }}</span>
-        </div>
-      </div>
-
-      <!-- Article list -->
-      <div class="flex flex-col gap-3">
-        <div
-          v-for="(article, index) in articles"
-          :key="index"
-          class="card-panel p-4 transition-colors hover:bg-bg-hover/50"
-        >
-          <!-- Article header -->
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex-1">
-              <div class="mb-1 flex items-center gap-2">
-                <span class="rounded bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
-                  {{ article.source }}
-                </span>
-                <span v-if="article.publishedDate" class="text-xs text-text-muted">
-                  {{ formatDate(article.publishedDate) }}
-                </span>
+      <section
+        class="news-history overflow-hidden rounded-xl border border-border-subtle bg-bg-surface"
+      >
+        <header class="border-b border-border-subtle px-5 py-5 sm:px-6">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p class="news-kicker">Coverage history</p>
+              <div class="mt-1 flex items-center gap-3">
+                <h2 class="font-display text-lg font-semibold tracking-tight text-text-primary">
+                  Latest reporting
+                </h2>
+                <span
+                  class="rounded-full bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand"
+                  >{{ displayedSymbol }}</span
+                >
               </div>
-              <h3 class="text-sm font-medium text-text-primary">
-                {{ article.title }}
-              </h3>
+              <p class="mt-1 text-sm text-text-muted">
+                A focused archive of recent market coverage for this symbol.
+              </p>
             </div>
-            <button
-              class="shrink-0 text-text-muted transition-colors hover:text-text-primary"
-              @click="toggleArticle(index)"
-            >
-              <svg
-                class="h-5 w-5 transition-transform"
-                :class="{ 'rotate-180': expandedArticles.has(index) }"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
+            <div class="flex items-center gap-2 text-xs">
+              <div class="rounded-lg border border-border-subtle bg-bg-primary/40 px-3 py-2">
+                <span class="block text-text-muted">Articles</span>
+                <strong class="mt-0.5 block text-sm text-text-primary">{{
+                  articles.length
+                }}</strong>
+              </div>
+              <div class="rounded-lg border border-border-subtle bg-bg-primary/40 px-3 py-2">
+                <span class="block text-text-muted">Sources</span>
+                <strong class="mt-0.5 block text-sm text-text-primary">{{ sourceCount }}</strong>
+              </div>
+            </div>
           </div>
+          <div class="mt-3 flex items-center gap-2 text-xs text-text-muted">
+            <span>Symbol:</span>
+            <span class="font-semibold text-text-primary">{{ displayedSymbol }}</span>
+            <span class="text-border-default">•</span>
+            <span>Newest results first</span>
+          </div>
+        </header>
 
-          <!-- Expandable content -->
-          <div v-if="expandedArticles.has(index)" class="mt-3 animate-fade-in">
-            <p v-if="article.description" class="text-sm text-text-secondary leading-relaxed">
-              {{ article.description }}
-            </p>
-            <p
-              v-if="article.rawContent && article.rawContent !== article.description"
-              class="mt-2 text-sm text-text-secondary leading-relaxed"
-            >
-              {{ article.rawContent }}
-            </p>
-            <a
-              v-if="article.link"
-              :href="article.link"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="mt-2 inline-block text-xs text-brand hover:underline"
-            >
-              Read full article &rarr;
-            </a>
-          </div>
+        <div class="divide-y divide-border-subtle/70">
+          <article
+            v-for="(article, index) in articles"
+            :key="article.link || `${article.title}-${index}`"
+            class="news-history-item group p-5 transition-colors duration-150 hover:bg-bg-hover/45 sm:p-6"
+          >
+            <div class="flex gap-4">
+              <div class="news-timeline-marker mt-1 hidden shrink-0 sm:block" aria-hidden="true">
+                <span class="block h-2.5 w-2.5 rounded-full bg-brand ring-4 ring-brand/10" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="mb-2 flex flex-wrap items-center gap-2">
+                  <span
+                    class="rounded-md bg-brand/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-brand"
+                  >
+                    {{ article.source }}
+                  </span>
+                  <span v-if="article.publishedDate" class="text-xs text-text-muted">
+                    {{ formatDate(article.publishedDate) }}
+                  </span>
+                </div>
+                <h3 class="text-base font-semibold leading-6 text-text-primary">
+                  {{ article.title }}
+                </h3>
+                <p
+                  v-if="!expandedArticles.has(index) && article.description"
+                  class="mt-2 line-clamp-2 text-sm leading-6 text-text-secondary"
+                >
+                  {{ article.description }}
+                </p>
+                <div v-if="expandedArticles.has(index)" class="mt-3 animate-fade-in">
+                  <p v-if="article.description" class="text-sm leading-relaxed text-text-secondary">
+                    {{ article.description }}
+                  </p>
+                  <p
+                    v-if="article.rawContent && article.rawContent !== article.description"
+                    class="mt-2 text-sm leading-relaxed text-text-secondary"
+                  >
+                    {{ article.rawContent }}
+                  </p>
+                  <a
+                    v-if="article.link"
+                    :href="article.link"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
+                  >
+                    Read full article <span aria-hidden="true">↗</span>
+                  </a>
+                </div>
+              </div>
+              <button
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors duration-150 hover:bg-bg-hover hover:text-text-primary active:scale-[0.97]"
+                :aria-label="
+                  expandedArticles.has(index)
+                    ? `Collapse ${article.title}`
+                    : `Expand ${article.title}`
+                "
+                :aria-expanded="expandedArticles.has(index)"
+                @click="toggleArticle(index)"
+              >
+                <svg
+                  class="h-4 w-4 transition-transform duration-150"
+                  :class="{ 'rotate-180': expandedArticles.has(index) }"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
+            </div>
+          </article>
         </div>
-      </div>
+      </section>
     </div>
 
     <!-- Empty state -->
@@ -214,3 +255,35 @@ function formatDate(dateStr: string): string {
   }
 }
 </script>
+
+<style scoped>
+.news-kicker {
+  color: var(--color-brand);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.news-history-item {
+  transition-timing-function: var(--ease-out-strong);
+}
+
+.news-timeline-marker {
+  position: relative;
+}
+
+.news-timeline-marker::after {
+  position: absolute;
+  top: 0.8rem;
+  bottom: -2rem;
+  left: 0.3rem;
+  width: 1px;
+  background: var(--color-border-subtle);
+  content: '';
+}
+
+.news-history-item:last-child .news-timeline-marker::after {
+  display: none;
+}
+</style>

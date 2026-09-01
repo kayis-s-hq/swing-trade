@@ -64,7 +64,7 @@ describe('SettingsView — Tabs', () => {
     const SettingsView = (await import('./SettingsView.vue')).default
     const wrapper = mountSettings(SettingsView)
     expect(wrapper.find('[role="tablist"]').exists()).toBe(true)
-    expect(wrapper.findAll('[role="tab"]').length).toBe(4)
+    expect(wrapper.findAll('[role="tab"]').length).toBe(5)
     wrapper.unmount()
   })
 })

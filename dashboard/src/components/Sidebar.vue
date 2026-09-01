@@ -104,10 +104,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { iconPaths } from './Icons'
 import { getSettings, brokerLabels } from '../stores/settings'
 import type { BackendHealthStatus } from '../stores/appState'
+import { getSignals } from '../api/signals'
 
 const settings = getSettings()
 const props = withDefaults(
@@ -155,18 +156,50 @@ const healthTextClass = computed(() => {
 
 const brokerLabel = computed(() => brokerLabels[settings.selectedBroker] || 'Unknown')
 
-const navItems = [
+const buySignalCount = ref<number | null>(null)
+let signalCountTimer: ReturnType<typeof setInterval> | undefined
+
+const refreshBuySignalCount = async () => {
+  try {
+    const signals = await getSignals()
+    buySignalCount.value = signals.filter((signal) => signal.direction === 'BUY').length
+  } catch {
+    // A stale/unavailable count is worse than no badge.
+    buySignalCount.value = null
+  }
+}
+
+const navItems = computed(() => [
   { path: '/', label: 'Dashboard', icon: iconPaths.dashboard, badge: undefined },
-  { path: '/positions', label: 'Positions', icon: iconPaths.positions, badge: undefined },
-  { path: '/signals', label: 'Signals', icon: iconPaths.signals, badge: '6' },
-  { path: '/sentiment', label: 'Sentiment', icon: iconPaths.intelligence, badge: undefined },
-  { path: '/monitoring', label: 'Monitoring', icon: iconPaths.intelligence, badge: undefined },
-  { path: '/portfolio', label: 'Portfolio', icon: iconPaths.portfolio, badge: undefined },
-  { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
-  { path: '/candidate-explorer', label: 'Candidate Explorer', icon: iconPaths.search, badge: undefined },
-  { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
   { path: '/data', label: 'Data', icon: iconPaths.data, badge: undefined },
+  {
+    path: '/candidate-explorer',
+    label: 'Candidate Explorer',
+    icon: iconPaths.search,
+    badge: undefined,
+  },
+  {
+    path: '/signals',
+    label: 'Signals',
+    icon: iconPaths.signals,
+    badge: buySignalCount.value ? String(buySignalCount.value) : undefined,
+  },
+  { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
+  { path: '/sentiment', label: 'Sentiment', icon: iconPaths.intelligence, badge: undefined },
+  { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
+  { path: '/portfolio', label: 'Portfolio', icon: iconPaths.portfolio, badge: undefined },
+  { path: '/positions', label: 'Positions', icon: iconPaths.positions, badge: undefined },
+  { path: '/monitoring', label: 'Monitoring', icon: iconPaths.intelligence, badge: undefined },
   { path: '/orchestrator', label: 'Orchestrator', icon: iconPaths.dashboard, badge: undefined },
   { path: '/settings', label: 'Settings', icon: iconPaths.settings, badge: undefined },
-]
+])
+
+onMounted(() => {
+  void refreshBuySignalCount()
+  signalCountTimer = setInterval(() => void refreshBuySignalCount(), 30_000)
+})
+
+onBeforeUnmount(() => {
+  if (signalCountTimer) clearInterval(signalCountTimer)
+})
 </script>

@@ -6,6 +6,7 @@ import com.swingtrade.data.repository.CandidateScanResultRepository;
 import com.swingtrade.data.repository.CandidateScanRunRepository;
 import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.DataIngestionService;
+import com.swingtrade.data.service.AppSettingsService;
 import com.swingtrade.data.service.WatchlistService;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.strategy.BacktestConfig;
@@ -14,6 +15,7 @@ import com.swingtrade.strategy.BacktestResult;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
 import jakarta.annotation.PreDestroy;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,8 +28,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -37,12 +41,19 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.data.domain.PageRequest;
 
 @Service
 public class CandidateScanService {
     private static final Logger logger = LoggerFactory.getLogger(CandidateScanService.class);
     private static final int MIN_CANDLES = 60;
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
+    private static final String KEY_MIN_WIN_RATE = "candidate-scan.min-win-rate";
+    private static final String KEY_MIN_TOTAL_RETURN = "candidate-scan.min-total-return";
+    private static final String KEY_MAX_CONCURRENT = "candidate-scan.max-concurrent";
+    private static final String KEY_BACKFILL_YEARS = "candidate-scan.backfill-years";
+    private static final double DEFAULT_MIN_WIN_RATE = 45.0;
+    private static final double DEFAULT_MIN_TOTAL_RETURN = 0.0;
 
     private final FyersSymbolRepository symbolRepository;
     private final CandidateScanRunRepository runRepository;
@@ -52,35 +63,26 @@ public class CandidateScanService {
     private final CandleStore candleStore;
     private final PriceActionSignalEngine signalEngine;
     private final BacktestEngine backtestEngine;
-    private final int backfillYears;
+    private final int defaultBackfillYears;
     private final long delayMs;
-    private final int maxConcurrent;
-    private final Semaphore semaphore;
+    private final AppSettingsService appSettingsService;
+    private volatile int maxConcurrent;
+    private volatile Semaphore semaphore;
     private final ExecutorService executor;
     private final AtomicReference<UUID> activeRun = new AtomicReference<>();
     private final ConcurrentHashMap<UUID, AtomicBoolean> cancellations = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, AtomicBoolean> pauses = new ConcurrentHashMap<>();
+    private final Object pauseMonitor = new Object();
     private final ConcurrentHashMap<UUID, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Deque<ScanLogEvent>> logHistory = new ConcurrentHashMap<>();
     private static final int MAX_LOG_HISTORY = 500;
-
-    public record ScanLogEvent(
-        String eventType,
-        UUID runId,
-        String symbol,
-        String level,
-        String message,
-        int completedSymbols,
-        int totalSymbols,
-        int failedSymbols,
-        int qualifiedSymbols,
-        LocalDateTime timestamp
-    ) {}
 
     public CandidateScanService(FyersSymbolRepository symbolRepository,
                                 CandidateScanRunRepository runRepository,
                                 CandidateScanResultRepository resultRepository,
                                 DataIngestionService ingestionService,
                                 WatchlistService watchlistService,
+                                AppSettingsService appSettingsService,
                                 CandleStore candleStore,
                                 PriceActionSignalEngine signalEngine,
                                 BacktestEngine backtestEngine,
@@ -92,15 +94,32 @@ public class CandidateScanService {
         this.resultRepository = resultRepository;
         this.ingestionService = ingestionService;
         this.watchlistService = watchlistService;
+        this.appSettingsService = appSettingsService;
         this.candleStore = candleStore;
         this.signalEngine = signalEngine;
         this.backtestEngine = backtestEngine;
-        this.backfillYears = backfillYears;
+        this.defaultBackfillYears = backfillYears;
         this.delayMs = Math.max(0, delayMs);
-        this.maxConcurrent = Math.max(1, maxConcurrent);
+        this.maxConcurrent = Math.max(1, Math.min(maxConcurrent, 12));
         this.semaphore = new Semaphore(this.maxConcurrent);
         this.executor = Executors.newThreadPerTaskExecutor(
             Thread.ofVirtual().name("candidate-scan-", 0).factory());
+    }
+
+    @PostConstruct
+    @Transactional
+    void recoverInterruptedRuns() {
+        List<CandidateScanRunEntity> interruptedRuns = new ArrayList<>(runRepository.findByStatus("RUNNING"));
+        interruptedRuns.addAll(runRepository.findByStatus("PAUSED"));
+        for (CandidateScanRunEntity run : interruptedRuns) {
+            run.setStatus("CANCELLED");
+            run.setCompletedAt(LocalDateTime.now(MARKET_ZONE));
+            run.setErrorMessage("Scan interrupted by API restart.");
+            runRepository.save(run);
+        }
+        if (!interruptedRuns.isEmpty()) {
+            logger.info("Marked {} candidate scan(s) as cancelled after API restart.", interruptedRuns.size());
+        }
     }
 
     @Transactional
@@ -114,6 +133,8 @@ public class CandidateScanService {
         // previous run and its child results before creating the replacement snapshot.
         resultRepository.deleteAllInBatch();
         runRepository.deleteAllInBatch();
+        maxConcurrent = configuredMaxConcurrent();
+        semaphore = new Semaphore(maxConcurrent);
 
         List<String> symbols = symbolRepository.findByExchangeIgnoreCaseOrderByTradingSymbolAsc("NSE")
             .stream()
@@ -130,11 +151,79 @@ public class CandidateScanService {
         runRepository.save(run);
         activeRun.set(run.getRunId());
         cancellations.put(run.getRunId(), new AtomicBoolean(false));
+        pauses.put(run.getRunId(), new AtomicBoolean(false));
         logHistory.put(run.getRunId(), new ConcurrentLinkedDeque<>());
         publish(run.getRunId(), "RUN_STARTED", null, "INFO",
             "Scanning " + symbols.size() + " NSE symbols with up to " + maxConcurrent + " workers.");
         executor.submit(() -> execute(run.getRunId(), symbols));
         return run;
+    }
+
+    private int configuredMaxConcurrent() {
+        try {
+            return Math.max(1, Math.min(12, Integer.parseInt(
+                appSettingsService.get(KEY_MAX_CONCURRENT, String.valueOf(maxConcurrent)))));
+        } catch (NumberFormatException ignored) {
+            return 3;
+        }
+    }
+
+    private int configuredBackfillYears() {
+        try {
+            return Math.max(1, Math.min(10, Integer.parseInt(
+                appSettingsService.get(KEY_BACKFILL_YEARS, String.valueOf(defaultBackfillYears)))));
+        } catch (NumberFormatException ignored) {
+            return defaultBackfillYears;
+        }
+    }
+
+    private double configuredMinWinRate() {
+        try {
+            return Math.max(0.0, Math.min(100.0, Double.parseDouble(
+                appSettingsService.get(KEY_MIN_WIN_RATE, String.valueOf(DEFAULT_MIN_WIN_RATE)))));
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_MIN_WIN_RATE;
+        }
+    }
+
+    private double configuredMinTotalReturn() {
+        try {
+            return Double.parseDouble(
+                appSettingsService.get(KEY_MIN_TOTAL_RETURN, String.valueOf(DEFAULT_MIN_TOTAL_RETURN)));
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_MIN_TOTAL_RETURN;
+        }
+    }
+
+    public Map<String, String> getScanSettings() {
+        Map<String, String> settings = new LinkedHashMap<>();
+        settings.put(KEY_MIN_WIN_RATE, String.valueOf(configuredMinWinRate()));
+        settings.put(KEY_MIN_TOTAL_RETURN, String.valueOf(configuredMinTotalReturn()));
+        settings.put(KEY_MAX_CONCURRENT, String.valueOf(configuredMaxConcurrent()));
+        settings.put(KEY_BACKFILL_YEARS, String.valueOf(configuredBackfillYears()));
+        return settings;
+    }
+
+    public Map<String, String> updateScanSettings(Map<String, String> updates) {
+        if (updates.containsKey(KEY_MIN_WIN_RATE)) {
+            double value = Double.parseDouble(updates.get(KEY_MIN_WIN_RATE));
+            if (value < 0.0 || value > 100.0) throw new IllegalArgumentException("min-win-rate must be between 0 and 100");
+            appSettingsService.set(KEY_MIN_WIN_RATE, String.valueOf(value));
+        }
+        if (updates.containsKey(KEY_MIN_TOTAL_RETURN)) {
+            appSettingsService.set(KEY_MIN_TOTAL_RETURN, String.valueOf(Double.parseDouble(updates.get(KEY_MIN_TOTAL_RETURN))));
+        }
+        if (updates.containsKey(KEY_MAX_CONCURRENT)) {
+            int value = Integer.parseInt(updates.get(KEY_MAX_CONCURRENT));
+            if (value < 1 || value > 12) throw new IllegalArgumentException("max-concurrent must be between 1 and 12");
+            appSettingsService.set(KEY_MAX_CONCURRENT, String.valueOf(value));
+        }
+        if (updates.containsKey(KEY_BACKFILL_YEARS)) {
+            int value = Integer.parseInt(updates.get(KEY_BACKFILL_YEARS));
+            if (value < 1 || value > 10) throw new IllegalArgumentException("backfill-years must be between 1 and 10");
+            appSettingsService.set(KEY_BACKFILL_YEARS, String.valueOf(value));
+        }
+        return getScanSettings();
     }
 
     public SseEmitter stream(UUID runId) {
@@ -155,7 +244,7 @@ public class CandidateScanService {
         for (ScanLogEvent event : logHistory.getOrDefault(runId, new ConcurrentLinkedDeque<>())) {
             send(emitter, event);
         }
-        if (!"RUNNING".equals(run.getStatus())) emitter.complete();
+        if (!isActiveStatus(run.getStatus())) emitter.complete();
         return emitter;
     }
 
@@ -164,10 +253,16 @@ public class CandidateScanService {
     }
 
     public List<CandidateScanResultEntity> getResults(UUID runId, int offset, int limit) {
-        List<CandidateScanResultEntity> all = resultRepository.findByRunIdOrderBySymbolAsc(runId);
-        int from = Math.max(0, Math.min(offset, all.size()));
-        int to = Math.min(all.size(), from + Math.max(1, Math.min(limit, 500)));
-        return all.subList(from, to);
+        return getResultsPage(runId, offset, limit, "", "").items();
+    }
+
+    public ResultPage getResultsPage(UUID runId, int offset, int limit, String symbol, String signalType) {
+        int safeOffset = Math.max(0, offset);
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        var page = resultRepository.search(runId, symbol == null ? "" : symbol.trim(),
+            signalType == null ? "" : signalType.trim().toUpperCase(),
+            PageRequest.of(safeOffset / safeLimit, safeLimit));
+        return new ResultPage(page.getContent(), page.getTotalElements(), safeOffset, safeLimit);
     }
 
     public List<CandidateScanRunEntity> getHistory() {
@@ -177,15 +272,41 @@ public class CandidateScanService {
     @Transactional
     public boolean cancel(UUID runId) {
         CandidateScanRunEntity run = getRun(runId);
-        if (run == null || !"RUNNING".equals(run.getStatus())) return false;
+        if (run == null || !("RUNNING".equals(run.getStatus()) || "PAUSED".equals(run.getStatus()))) return false;
         AtomicBoolean cancellation = cancellations.get(runId);
         if (cancellation != null) cancellation.set(true);
+        AtomicBoolean pause = pauses.get(runId);
+        if (pause != null) pause.set(false);
+        synchronized (pauseMonitor) { pauseMonitor.notifyAll(); }
         run.setStatus("CANCELLED");
         run.setCompletedAt(LocalDateTime.now(MARKET_ZONE));
         runRepository.save(run);
         if (runId.equals(activeRun.get())) activeRun.compareAndSet(runId, null);
         publish(runId, "RUN_CANCELLED", null, "WARN", "Scan cancellation requested.");
         completeStreams(runId);
+        return true;
+    }
+
+    @Transactional
+    public boolean pause(UUID runId) {
+        CandidateScanRunEntity run = getRun(runId);
+        if (run == null || !"RUNNING".equals(run.getStatus())) return false;
+        pauses.computeIfAbsent(runId, ignored -> new AtomicBoolean()).set(true);
+        run.setStatus("PAUSED");
+        runRepository.save(run);
+        publish(runId, "RUN_PAUSED", null, "WARN", "Scan paused. Active symbols will finish; queued symbols are waiting.");
+        return true;
+    }
+
+    @Transactional
+    public boolean resume(UUID runId) {
+        CandidateScanRunEntity run = getRun(runId);
+        if (run == null || !"PAUSED".equals(run.getStatus())) return false;
+        pauses.computeIfAbsent(runId, ignored -> new AtomicBoolean()).set(false);
+        run.setStatus("RUNNING");
+        runRepository.save(run);
+        synchronized (pauseMonitor) { pauseMonitor.notifyAll(); }
+        publish(runId, "RUN_RESUMED", null, "SUCCESS", "Scan resumed.");
         return true;
     }
 
@@ -204,6 +325,7 @@ public class CandidateScanService {
         try {
             semaphore.acquire();
             acquired = true;
+            awaitIfPaused(runId);
             if (isCancelled(runId)) return;
             publish(runId, "SYMBOL_STARTED", symbol, "INFO", "Processing " + symbol + ".");
             boolean qualified = scanSymbol(runId, symbol);
@@ -226,7 +348,7 @@ public class CandidateScanService {
 
     private void finalizeRun(UUID runId, Throwable error) {
         CandidateScanRunEntity run = getRun(runId);
-        if (run != null && "RUNNING".equals(run.getStatus())) {
+        if (run != null && ("RUNNING".equals(run.getStatus()) || "PAUSED".equals(run.getStatus()))) {
             run.setStatus(isCancelled(runId) || error != null ? "CANCELLED" : "COMPLETED");
             run.setCompletedAt(LocalDateTime.now(MARKET_ZONE));
             if (error != null) run.setErrorMessage(error.getMessage());
@@ -237,10 +359,12 @@ public class CandidateScanService {
         }
         activeRun.compareAndSet(runId, null);
         cancellations.remove(runId);
+        pauses.remove(runId);
         completeStreams(runId);
     }
 
     private boolean scanSymbol(UUID runId, String symbol) {
+        int backfillYears = configuredBackfillYears();
         int candles = (int) candleStore.countBySymbol(symbol);
         boolean fetched = false;
         publish(runId, "STAGE_STARTED", symbol, "INFO", "Data: checking OHLCV history.");
@@ -279,11 +403,13 @@ public class CandidateScanService {
             "Backtest: " + backtest.totalTrades() + " trades, "
                 + String.format(java.util.Locale.ROOT, "%.1f%% win rate, %.2f%% return.",
                     backtest.winRate(), backtest.totalReturn()));
+        double minWinRate = configuredMinWinRate();
+        double minTotalReturn = configuredMinTotalReturn();
         boolean qualified = signal.type() == com.swingtrade.domain.Signal.SignalType.BUY
-            && backtest.winRate() >= 45.0
-            && backtest.totalReturn() > 0.0;
+            && backtest.winRate() >= minWinRate
+            && backtest.totalReturn() > minTotalReturn;
         result.setQualified(qualified);
-        result.setReason(qualified ? "BUY and backtest gate passed" : qualificationReason(signal, backtest));
+        result.setReason(qualified ? "BUY and backtest gate passed" : qualificationReason(signal, backtest, minWinRate, minTotalReturn));
         if (qualified) {
             watchlistService.addToWatchlist(symbol, symbol, "NSE");
             result.setActivated(true);
@@ -292,10 +418,10 @@ public class CandidateScanService {
         return qualified;
     }
 
-    private String qualificationReason(SignalResult signal, BacktestResult backtest) {
+    private String qualificationReason(SignalResult signal, BacktestResult backtest, double minWinRate, double minTotalReturn) {
         if (signal.type() != com.swingtrade.domain.Signal.SignalType.BUY) return "Current signal is " + signal.type();
-        if (backtest.winRate() < 45.0) return "BUY rejected: win rate below 45%";
-        return "BUY rejected: backtest return is not positive";
+        if (backtest.winRate() < minWinRate) return "BUY rejected: win rate below " + minWinRate + "%";
+        return "BUY rejected: backtest return not above " + minTotalReturn + "%";
     }
 
     private void saveFailure(UUID runId, String symbol, Exception error) {
@@ -312,7 +438,9 @@ public class CandidateScanService {
 
     private synchronized void increment(UUID runId, boolean failed, boolean qualified) {
         CandidateScanRunEntity run = getRun(runId);
-        if (run == null || !"RUNNING".equals(run.getStatus())) return;
+        // Work that was already active when pause was requested is allowed to
+        // finish, and its result must still contribute to the run counters.
+        if (run == null || !isActiveStatus(run.getStatus())) return;
         run.setCompletedSymbols(run.getCompletedSymbols() + 1);
         if (failed) run.setFailedSymbols(run.getFailedSymbols() + 1);
         if (qualified) run.setQualifiedSymbols(run.getQualifiedSymbols() + 1);
@@ -322,6 +450,21 @@ public class CandidateScanService {
     private boolean isCancelled(UUID runId) {
         AtomicBoolean value = cancellations.get(runId);
         return value != null && value.get();
+    }
+
+    private void awaitIfPaused(UUID runId) throws InterruptedException {
+        synchronized (pauseMonitor) {
+            while (isPaused(runId) && !isCancelled(runId)) pauseMonitor.wait();
+        }
+    }
+
+    private boolean isPaused(UUID runId) {
+        AtomicBoolean value = pauses.get(runId);
+        return value != null && value.get();
+    }
+
+    private static boolean isActiveStatus(String status) {
+        return "RUNNING".equals(status) || "PAUSED".equals(status);
     }
 
     private void publish(UUID runId, String eventType, String symbol, String level, String message) {
@@ -339,8 +482,11 @@ public class CandidateScanService {
     private void send(SseEmitter emitter, ScanLogEvent event) {
         try {
             emitter.send(SseEmitter.event().name("log").data(event));
-        } catch (IOException e) {
-            emitter.completeWithError(e);
+        } catch (IOException | IllegalStateException e) {
+            // A disconnected browser must not turn a successful symbol scan into
+            // a processing failure. The next stream connection can use the run
+            // snapshot and any retained events to catch up.
+            logger.debug("Candidate scan SSE client disconnected: {}", e.getMessage());
         }
     }
 
@@ -351,4 +497,24 @@ public class CandidateScanService {
 
     @PreDestroy
     void shutdown() { executor.shutdownNow(); }
+
+    public record ScanLogEvent(
+        String eventType,
+        UUID runId,
+        String symbol,
+        String level,
+        String message,
+        int completedSymbols,
+        int totalSymbols,
+        int failedSymbols,
+        int qualifiedSymbols,
+        LocalDateTime timestamp
+    ) {}
+
+    public record ResultPage(
+        List<CandidateScanResultEntity> items,
+        long total,
+        int offset,
+        int limit
+    ) {}
 }

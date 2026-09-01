@@ -708,6 +708,24 @@ public class PaperTradingEngine implements TradingService {
         return p != null ? p.getTotalValue() : null;
     }
 
+    @Override
+    public BigDecimal getPortfolioMaxDrawdown() {
+        if (stateService == null) return null;
+        BigDecimal peak = null;
+        BigDecimal maxDrawdown = BigDecimal.ZERO;
+        List<com.swingtrade.broker.entity.PaperTradingSnapshotEntity> snapshots = stateService.getSnapshots();
+        for (int i = snapshots.size() - 1; i >= 0; i--) {
+            BigDecimal value = snapshots.get(i).getTotalValue();
+            if (value == null || value.signum() <= 0) continue;
+            if (peak == null || value.compareTo(peak) > 0) peak = value;
+            BigDecimal drawdown = peak.subtract(value)
+                .divide(peak, 8, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100));
+            if (drawdown.compareTo(maxDrawdown) > 0) maxDrawdown = drawdown;
+        }
+        return peak == null ? null : maxDrawdown.setScale(2, RoundingMode.HALF_UP);
+    }
+
     /**
      * Gets the maximum number of concurrent positions.
      *

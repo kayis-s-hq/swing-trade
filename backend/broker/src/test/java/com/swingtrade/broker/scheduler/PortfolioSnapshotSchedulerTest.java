@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doNothing;
@@ -155,6 +156,18 @@ class PortfolioSnapshotSchedulerTest {
 
             // Then: Only Monday to Friday
             assertThat(parts[5]).isEqualTo("MON-FRI");
+        }
+
+        @Test
+        void snapshotMethod_hasScheduledAnnotation() throws NoSuchMethodException {
+            Scheduled scheduled = PortfolioSnapshotScheduler.class
+                .getMethod("takeSnapshot")
+                .getAnnotation(Scheduled.class);
+
+            assertThat(scheduled).isNotNull();
+            assertThat(scheduled.cron())
+                .isEqualTo("${paper.trading.snapshot-cron:0 45 15 * * MON-FRI}");
+            assertThat(scheduled.zone()).isEqualTo("Asia/Kolkata");
         }
     }
 

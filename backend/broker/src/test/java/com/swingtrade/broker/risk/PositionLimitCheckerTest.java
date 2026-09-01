@@ -1,5 +1,6 @@
 package com.swingtrade.broker.risk;
 
+import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.PositionManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -92,6 +93,14 @@ class PositionLimitCheckerTest {
 
         // Then
         assertThat(max).isEqualTo(5);
+    }
+
+    @Test
+    void brokerPropertiesDefault_matchesPaperTradingCapacity() {
+        PositionLimitChecker configuredChecker =
+                new PositionLimitChecker(positionManager, new BrokerProperties());
+
+        assertThat(configuredChecker.getMaxConcurrentPositions()).isEqualTo(5);
     }
 
     @Test

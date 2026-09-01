@@ -49,7 +49,7 @@
     <div
       role="tablist"
       aria-label="Settings sections"
-      class="settings-nav mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-border-subtle p-2 sm:grid-cols-4"
+      class="settings-nav mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-border-subtle p-2 sm:grid-cols-5"
     >
       <button
         role="tab"
@@ -110,6 +110,21 @@
       >
         <span class="settings-tab-index">04</span><span>Health</span
         ><span class="settings-tab-detail">Diagnostics</span>
+      </button>
+      <button
+        role="tab"
+        aria-label="Scanning"
+        :aria-selected="activeTab === 'scanning'"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
+        :class="
+          activeTab === 'scanning'
+            ? 'border-b-2 border-brand text-brand'
+            : 'text-text-muted hover:text-text-primary'
+        "
+        @click="activeTab = 'scanning'"
+      >
+        <span class="settings-tab-index">05</span><span>Scanning</span
+        ><span class="settings-tab-detail">Candidate Explorer</span>
       </button>
     </div>
 
@@ -655,7 +670,21 @@
             </select>
           </div>
 
-          <div class="mt-5 grid gap-3 sm:grid-cols-3">
+          <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label class="settings-field rounded-xl border border-border-subtle p-4">
+              <span class="settings-field-label">Initial Capital</span>
+              <span class="settings-field-help">Paper-trading starting balance</span>
+              <span class="settings-input-wrap">
+                <span>Rs.</span>
+                <input
+                  v-model.number="settings.tradingConfig.initialCapital"
+                  type="number"
+                  min="1"
+                  step="1000"
+                  class="settings-input"
+                />
+              </span>
+            </label>
             <label class="settings-field rounded-xl border border-border-subtle p-4">
               <span class="settings-field-label">Max Position Size</span>
               <span class="settings-field-help">Portfolio allocation limit</span>
@@ -699,6 +728,49 @@
               </span>
             </label>
           </div>
+          <p class="mt-4 text-xs text-text-muted">
+            Initial capital changes apply after the API restarts; the current paper portfolio is not reset automatically.
+          </p>
+        </div>
+      </div>
+
+      <!-- Scanning Tab -->
+      <div v-show="activeTab === 'scanning'">
+        <div class="settings-panel card-panel p-5 sm:p-6">
+          <div class="settings-panel-heading">
+            <div>
+              <p class="settings-section-kicker">Research throughput</p>
+              <h2 class="mt-1 text-lg font-semibold text-text-primary">Candidate Explorer</h2>
+              <p class="mt-1 max-w-xl text-sm leading-6 text-text-muted">
+                Choose how many symbols can be processed at once during the next scan. Higher values
+                finish faster but can increase provider load.
+              </p>
+            </div>
+            <span class="settings-panel-mark">05</span>
+          </div>
+
+          <label
+            class="settings-field mt-6 block max-w-md rounded-xl border border-border-subtle p-4"
+          >
+            <span class="settings-field-label">Parallel workers</span>
+            <span class="settings-field-help">Allowed range: 1–12. Default: 3.</span>
+            <span class="settings-input-wrap mt-3">
+              <input
+                v-model.number="scanningConfig.maxConcurrent"
+                type="number"
+                min="1"
+                max="12"
+                step="1"
+                aria-label="Candidate Explorer parallel workers"
+                class="settings-input"
+              />
+              <span>workers</span>
+            </span>
+          </label>
+          <p class="mt-4 text-xs leading-5 text-text-muted">
+            This setting is applied when a new scan starts; an active scan keeps its original worker
+            limit.
+          </p>
         </div>
       </div>
 
@@ -806,6 +878,7 @@ const activeTab = ref('broker')
 const settings = getSettings()
 const llmSettings = settings.llmSettings
 const discordSettings = settings.discordSettings
+const scanningConfig = settings.scanningConfig ?? { maxConcurrent: 3 }
 
 function confirmed<T>(value: T | { success: boolean; data?: T }): T | undefined {
   if (typeof value === 'object' && value !== null && 'data' in value) {

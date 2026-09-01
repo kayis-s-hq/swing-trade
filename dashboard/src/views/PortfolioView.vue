@@ -173,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { getPortfolioSummary, getTradeHistory, getEquityCurve } from '../api/client'
 import type { PortfolioSummary, Position, EquityPoint } from '../api/types'
 import PerformanceMetrics from '../components/PerformanceMetrics.vue'
@@ -233,7 +233,14 @@ const refreshPortfolio = async () => {
   loading.value = false
 }
 
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+
 onMounted(() => {
   refreshPortfolio()
+  refreshTimer = setInterval(() => void refreshPortfolio(), 60_000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>

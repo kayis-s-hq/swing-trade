@@ -28,6 +28,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -448,14 +449,53 @@ public class SettingsController {
         settings.put("trading.max_position_size", appSettingsService.get("trading.max_position_size", "10"));
         settings.put("trading.stop_loss", appSettingsService.get("trading.stop_loss", "5"));
         settings.put("trading.take_profit", appSettingsService.get("trading.take_profit", "15"));
+        settings.put("trading.allocation_per_position", appSettingsService.get("trading.allocation_per_position", "100000"));
+        settings.put("trading.initial_capital", appSettingsService.get(
+            "trading.initial_capital", "500000"));
         return ResponseEntity.ok(ApiResponse.ok(settings));
     }
 
     @PutMapping("/settings/trading")
     public ResponseEntity<ApiResponse<Map<String, String>>> setTradingSettings(
             @RequestBody Map<String, String> body) {
+        try {
+            validateInitialCapital(body.get("trading.initial_capital"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
         body.forEach((key, value) -> appSettingsService.set(key, value));
         return ResponseEntity.ok(ApiResponse.ok(body));
+    }
+
+    private void validateInitialCapital(String raw) {
+        if (raw == null) return;
+        try {
+            if (new BigDecimal(raw).signum() <= 0) throw new NumberFormatException();
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Initial capital must be greater than zero");
+        }
+    }
+
+    @GetMapping("/settings/scanning")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getScanningSettings() {
+        return ResponseEntity.ok(ApiResponse.ok(Map.of(
+            "candidate-scan.max-concurrent",
+            appSettingsService.get("candidate-scan.max-concurrent", "3"))));
+    }
+
+    @PutMapping("/settings/scanning")
+    public ResponseEntity<ApiResponse<Map<String, String>>> setScanningSettings(
+            @RequestBody Map<String, String> body) {
+        String raw = body.get("candidate-scan.max-concurrent");
+        try {
+            int workers = Integer.parseInt(raw);
+            if (workers < 1 || workers > 12) throw new NumberFormatException();
+        } catch (NumberFormatException | NullPointerException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(
+                "Candidate scan workers must be between 1 and 12"));
+        }
+        appSettingsService.set("candidate-scan.max-concurrent", raw);
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("candidate-scan.max-concurrent", raw)));
     }
 
     // -----------------------------------------------------------------------
@@ -465,7 +505,7 @@ public class SettingsController {
     @PostMapping("/settings/save")
     public ResponseEntity<ApiResponse<Map<String, String>>> saveAllSettings(
             @RequestBody Map<String, Object> body) {
-        // Accept nested objects: { broker, llm, discord, trading, gpuhub }
+        // Accept nested objects: { broker, llm, discord, trading, scanning, gpuhub }
         if (body.containsKey("broker")) {
             String broker = String.valueOf(body.get("broker"));
             if (broker != null && !broker.isBlank() && !"null".equals(broker)) {
@@ -483,7 +523,28 @@ public class SettingsController {
             ((Map<?, ?>) body.get("discord")).forEach((key, value) -> appSettingsService.set(String.valueOf(key), String.valueOf(value)));
         }
         if (body.containsKey("trading") && body.get("trading") instanceof Map<?, ?>) {
-            ((Map<?, ?>) body.get("trading")).forEach((key, value) -> appSettingsService.set(String.valueOf(key), String.valueOf(value)));
+            Map<?, ?> trading = (Map<?, ?>) body.get("trading");
+            Object initialCapital = trading.get("trading.initial_capital");
+            try {
+                validateInitialCapital(initialCapital == null ? null : String.valueOf(initialCapital));
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+            }
+            trading.forEach((key, value) -> appSettingsService.set(String.valueOf(key), String.valueOf(value)));
+        }
+        if (body.containsKey("scanning") && body.get("scanning") instanceof Map<?, ?>) {
+            ((Map<?, ?>) body.get("scanning")).forEach((key, value) -> {
+                if ("candidate-scan.max-concurrent".equals(String.valueOf(key))) {
+                    try {
+                        int workers = Integer.parseInt(String.valueOf(value));
+                        if (workers >= 1 && workers <= 12) {
+                            appSettingsService.set(String.valueOf(key), String.valueOf(value));
+                        }
+                    } catch (NumberFormatException ignored) {
+                        logger.warn("Ignoring invalid candidate scan worker count: {}", value);
+                    }
+                }
+            });
         }
 
         // Return consolidated settings
@@ -493,6 +554,7 @@ public class SettingsController {
         result.putAll(getGpuHubSettings().getBody().data());
         result.putAll(getDiscordSettings().getBody().data());
         result.putAll(getTradingSettings().getBody().data());
+        result.putAll(getScanningSettings().getBody().data());
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 }

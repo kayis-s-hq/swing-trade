@@ -93,7 +93,7 @@ export interface HealthComponent {
 
 export interface CandidateScanRun {
   runId: string
-  status: 'RUNNING' | 'COMPLETED' | 'CANCELLED'
+  status: 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'CANCELLED'
   totalSymbols: number
   completedSymbols: number
   failedSymbols: number
@@ -120,8 +120,33 @@ export interface CandidateScanResult {
   createdAt: string
 }
 
+export interface CandidateScanSettings {
+  'candidate-scan.min-win-rate': string
+  'candidate-scan.min-total-return': string
+  'candidate-scan.max-concurrent': string
+  'candidate-scan.backfill-years': string
+}
+
+export interface CandidateScanResultPage {
+  items: CandidateScanResult[]
+  total: number
+  offset: number
+  limit: number
+}
+
 export interface CandidateScanLogEvent {
-  eventType: 'RUN_SNAPSHOT' | 'RUN_STARTED' | 'STAGE_STARTED' | 'STAGE_COMPLETED' | 'SYMBOL_STARTED' | 'SYMBOL_COMPLETED' | 'SYMBOL_FAILED' | 'RUN_COMPLETED' | 'RUN_CANCELLED'
+  eventType:
+    | 'RUN_SNAPSHOT'
+    | 'RUN_STARTED'
+    | 'RUN_PAUSED'
+    | 'RUN_RESUMED'
+    | 'STAGE_STARTED'
+    | 'STAGE_COMPLETED'
+    | 'SYMBOL_STARTED'
+    | 'SYMBOL_COMPLETED'
+    | 'SYMBOL_FAILED'
+    | 'RUN_COMPLETED'
+    | 'RUN_CANCELLED'
   runId: string
   symbol?: string | null
   level: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR'

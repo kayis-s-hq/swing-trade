@@ -336,7 +336,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   getSignals,
   generateAllSignalsStream,
@@ -606,10 +606,17 @@ const clearSignals = () => (selectedCount.value > 0 ? clearSelected() : clearAll
 
 const refreshSignals = doRefresh
 
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+
 onMounted(() => {
   // Clear any stale error state from a previous failed load
   error.value = null
   errorMessage.value = ''
   refreshSignals()
+  refreshTimer = setInterval(() => void refreshSignals(), 60_000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>

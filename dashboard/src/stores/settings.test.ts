@@ -8,6 +8,8 @@ const apiMocks = vi.hoisted(() => ({
   setDiscordSettings: vi.fn(),
   getTradingSettings: vi.fn(),
   setTradingSettings: vi.fn(),
+  getScanningSettings: vi.fn(),
+  setScanningSettings: vi.fn(),
   saveAllSettings: vi.fn(),
 }))
 
@@ -26,9 +28,11 @@ beforeEach(() => {
     data: { 'discord.webhook.enabled': 'false' },
   })
   apiMocks.getTradingSettings.mockResolvedValue({ success: true, data: {} })
+  apiMocks.getScanningSettings.mockResolvedValue({ success: true, data: {} })
   apiMocks.setLlmSettings.mockResolvedValue({ success: true, data: {} })
   apiMocks.setDiscordSettings.mockResolvedValue({ success: true, data: {} })
   apiMocks.setTradingSettings.mockResolvedValue({ success: true, data: {} })
+  apiMocks.setScanningSettings.mockResolvedValue({ success: true, data: {} })
   apiMocks.saveAllSettings.mockResolvedValue({ success: true, data: {} })
 })
 
@@ -134,6 +138,7 @@ describe('settings store — individual save updates', () => {
       stopLoss: 4,
       takeProfit: 20,
       allocationPerPosition: 75000,
+      initialCapital: 500000,
     })
 
     await expect(saveTradingConfig()).resolves.toBe(true)
@@ -143,6 +148,7 @@ describe('settings store — individual save updates', () => {
       'trading.stop_loss': '4',
       'trading.take_profit': '20',
       'trading.allocation_per_position': '75000',
+      'trading.initial_capital': '500000',
     })
   })
 

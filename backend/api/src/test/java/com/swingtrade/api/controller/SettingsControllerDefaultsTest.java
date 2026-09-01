@@ -67,6 +67,32 @@ class SettingsControllerDefaultsTest {
         );
     }
 
+    @Nested
+    @DisplayName("Trading initial capital setting")
+    class TradingInitialCapital {
+
+        @Test
+        void exposesConfiguredInitialCapitalAndAllocation() {
+            when(appSettingsService.get("trading.initial_capital", "500000"))
+                .thenReturn("750000");
+
+            Map<String, String> settings = controller.getTradingSettings().getBody().data();
+
+            assertThat(settings)
+                .containsEntry("trading.initial_capital", "750000")
+                .containsEntry("trading.allocation_per_position", "100000");
+        }
+
+        @Test
+        void rejectsNonPositiveInitialCapital() {
+            ResponseEntity<ApiResponse<Map<String, String>>> response = controller.setTradingSettings(
+                Map.of("trading.initial_capital", "0"));
+
+            assertThat(response.getStatusCode().value()).isEqualTo(400);
+            verify(appSettingsService, never()).set("trading.initial_capital", "0");
+        }
+    }
+
     private LlmProperties properties() {
         LlmProperties properties = new LlmProperties();
         properties.setBaseUrl(URI.create("http://active-default.test/v1"));

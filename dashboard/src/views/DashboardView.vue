@@ -349,7 +349,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   getEquityCurve,
   getHealthStatus,
@@ -441,7 +441,16 @@ const refreshDashboard = async () => {
   loading.value = false
 }
 
-onMounted(refreshDashboard)
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+
+onMounted(() => {
+  refreshDashboard()
+  refreshTimer = setInterval(() => void refreshDashboard(), 60_000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
 </script>
 
 <style scoped>

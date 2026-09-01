@@ -133,6 +133,12 @@ button:disabled {
   transition-timing-function: var(--ease-out-strong);
 }
 
+/* Native selects use one consistent control height across every view. */
+select {
+  height: 2.5rem;
+  min-height: 2.5rem;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .view-shell input:not([type='checkbox']):not([type='radio']):hover,
   .view-shell select:hover,

@@ -7,6 +7,8 @@ import {
   setDiscordSettings,
   getTradingSettings,
   setTradingSettings,
+  getScanningSettings,
+  setScanningSettings,
   saveAllSettings,
 } from '../api/client'
 
@@ -16,6 +18,11 @@ interface TradingConfig {
   stopLoss: number
   takeProfit: number
   allocationPerPosition: number
+  initialCapital: number
+}
+
+interface ScanningConfig {
+  maxConcurrent: number
 }
 
 type LlmBackend = 'local' | 'pi_ssh' | 'openai' | 'ollama'
@@ -42,6 +49,7 @@ interface DiscordSettings {
 interface SettingsState {
   selectedBroker: 'fyers' | 'upstox' | 'yahoo' | 'none'
   tradingConfig: TradingConfig
+  scanningConfig: ScanningConfig
   llmSettings: LlmSettings
   discordSettings: DiscordSettings
 }
@@ -56,7 +64,9 @@ const defaults: SettingsState = {
     stopLoss: 5,
     takeProfit: 15,
     allocationPerPosition: 100000,
+    initialCapital: 500000,
   },
+  scanningConfig: { maxConcurrent: 3 },
   llmSettings: {
     llmBackend: 'local',
     llmBaseUrl: '',
@@ -82,6 +92,7 @@ function createDefaultState(): SettingsState {
   return {
     selectedBroker: defaults.selectedBroker,
     tradingConfig: { ...defaults.tradingConfig },
+    scanningConfig: { ...defaults.scanningConfig },
     llmSettings: { ...defaults.llmSettings },
     discordSettings: { ...defaults.discordSettings },
   }
@@ -109,7 +120,13 @@ function parseTradingConfig(raw: Record<string, string>): TradingConfig {
     stopLoss: parseInt(raw['trading.stop_loss'] || '5', 10),
     takeProfit: parseInt(raw['trading.take_profit'] || '15', 10),
     allocationPerPosition: parseInt(raw['trading.allocation_per_position'] || '100000', 10),
+    initialCapital: parseInt(raw['trading.initial_capital'] || '500000', 10),
   }
+}
+
+function parseScanningConfig(raw: Record<string, string>): ScanningConfig {
+  const value = Number.parseInt(raw['candidate-scan.max-concurrent'] || '3', 10)
+  return { maxConcurrent: Number.isFinite(value) ? Math.min(12, Math.max(1, value)) : 3 }
 }
 
 interface LoadAllResult {
@@ -199,6 +216,16 @@ async function loadAll(): Promise<LoadAllResult> {
     failedSections.push('Trading settings')
   }
 
+  try {
+    if (typeof getScanningSettings !== 'function') return { state, failedSections }
+    const scanningRes = await getScanningSettings()
+    const scanningData = readData(scanningRes)
+    if (scanningData) Object.assign(state.scanningConfig, parseScanningConfig(scanningData))
+    else failedSections.push('Scanning settings')
+  } catch {
+    failedSections.push('Scanning settings')
+  }
+
   return { state, failedSections }
 }
 
@@ -256,6 +283,10 @@ export async function saveSettings(): Promise<boolean> {
       'trading.stop_loss': String(state.tradingConfig.stopLoss),
       'trading.take_profit': String(state.tradingConfig.takeProfit),
       'trading.allocation_per_position': String(state.tradingConfig.allocationPerPosition),
+      'trading.initial_capital': String(state.tradingConfig.initialCapital),
+    },
+    scanning: {
+      'candidate-scan.max-concurrent': String(state.scanningConfig.maxConcurrent),
     },
   }
 
@@ -292,6 +323,17 @@ export async function saveDiscordSettings(): Promise<boolean> {
   return true
 }
 
+export async function saveScanningConfig(): Promise<boolean> {
+  const res = await setScanningSettings({
+    'candidate-scan.max-concurrent': String(state.scanningConfig.maxConcurrent),
+  })
+  if (!readData(res)) {
+    console.error('Failed to save scanning config')
+    return false
+  }
+  return true
+}
+
 export async function saveTradingConfig(): Promise<boolean> {
   const settings: Record<string, string> = {
     'trading.mode': state.tradingConfig.mode,
@@ -299,6 +341,7 @@ export async function saveTradingConfig(): Promise<boolean> {
     'trading.stop_loss': String(state.tradingConfig.stopLoss),
     'trading.take_profit': String(state.tradingConfig.takeProfit),
     'trading.allocation_per_position': String(state.tradingConfig.allocationPerPosition),
+    'trading.initial_capital': String(state.tradingConfig.initialCapital),
   }
   const res = await setTradingSettings(settings)
   if (!readData(res)) {
