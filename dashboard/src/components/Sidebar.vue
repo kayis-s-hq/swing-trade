@@ -185,6 +185,7 @@ const navItems = computed(() => [
     badge: buySignalCount.value ? String(buySignalCount.value) : undefined,
   },
   { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
+  { path: '/news', label: 'News', icon: iconPaths.intelligence, badge: undefined },
   { path: '/sentiment', label: 'Sentiment', icon: iconPaths.intelligence, badge: undefined },
   { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
   { path: '/portfolio', label: 'Portfolio', icon: iconPaths.portfolio, badge: undefined },
