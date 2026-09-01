@@ -67,10 +67,10 @@ import Header from './components/Header.vue'
 import BackendDownBanner from './components/BackendDownBanner.vue'
 import NotificationHost from './components/NotificationHost.vue'
 import RuntimeErrorBoundary from './components/RuntimeErrorBoundary.vue'
-import { getAppState, startHealthPolling, stopHealthPolling } from './stores/appState'
+import { useAppStateStore } from './stores/appState'
 import { getSettings } from './stores/settings'
 
-const appState = getAppState()
+const appState = useAppStateStore()
 const settings = getSettings()
 const sidebarCollapsed = ref(false)
 const currentTime = ref('')
@@ -111,11 +111,11 @@ const updateTime = () => {
 onMounted(() => {
   updateTime()
   timer = window.setInterval(updateTime, 1000)
-  startHealthPolling()
+  appState.startHealthPolling()
 })
 
 onUnmounted(() => {
   clearInterval(timer)
-  stopHealthPolling()
+  appState.stopHealthPolling()
 })
 </script>

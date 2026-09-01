@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { formatCount, formatCurrency, formatNumber, formatPercent } from '../utils/format'
 
 export interface EquityPoint {
   date: string
@@ -74,7 +75,10 @@ const areaPath = computed(() => {
 })
 
 const hasChart = computed(() => equityCoords.value.length >= 2)
-const pnlPositive = computed(() => (props.portfolioSummary?.totalPnlPercent ?? 0) >= 0)
+const pnlPositive = computed(() => {
+  const value = props.portfolioSummary?.totalPnlPercent
+  return Number.isFinite(value) ? (value as number) >= 0 : true
+})
 </script>
 
 <template>
@@ -84,28 +88,28 @@ const pnlPositive = computed(() => (props.portfolioSummary?.totalPnlPercent ?? 0
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Total Value</p>
         <p class="mt-1 text-xl font-bold text-text-primary">
-          ₹{{ portfolioSummary?.totalValue.toLocaleString() ?? 0 }}
+          {{ formatCurrency(portfolioSummary?.totalValue, { prefix: '₹', fallback: '₹0' }) }}
         </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Total P&L</p>
         <p class="mt-1 text-xl font-bold" :class="pnlPositive ? 'text-success' : 'text-danger'">
-          ₹{{ portfolioSummary?.totalPnl.toLocaleString() ?? 0 }}
+          {{ formatCurrency(portfolioSummary?.totalPnl, { prefix: '₹', fallback: '₹0' }) }}
           <span class="ml-1 text-sm font-normal opacity-70"
-            >({{ (portfolioSummary?.totalPnlPercent ?? 0).toFixed(2) }}%)</span
+            >({{ formatPercent(portfolioSummary?.totalPnlPercent, { fallback: '0.00%' }) }})</span
           >
         </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Win Rate</p>
         <p class="mt-1 text-xl font-bold text-text-primary">
-          {{ portfolioSummary?.winRate.toLocaleString() ?? 0 }}%
+          {{ formatCount(portfolioSummary?.winRate, '0') }}%
         </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Total Trades</p>
         <p class="mt-1 text-xl font-bold text-text-primary">
-          {{ portfolioSummary?.totalTrades.toLocaleString() ?? 0 }}
+          {{ formatCount(portfolioSummary?.totalTrades, '0') }}
         </p>
       </div>
     </div>
@@ -115,19 +119,19 @@ const pnlPositive = computed(() => (props.portfolioSummary?.totalPnlPercent ?? 0
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Profit Factor</p>
         <p class="mt-1 text-lg font-bold text-text-primary">
-          {{ (portfolioSummary?.profitFactor ?? 0).toFixed(2) }}
+          {{ formatNumber(portfolioSummary?.profitFactor, { fallback: '0.00' }) }}
         </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Avg Win</p>
         <p class="mt-1 text-lg font-bold text-success">
-          ₹{{ portfolioSummary?.averageWin.toLocaleString() ?? 0 }}
+          {{ formatCurrency(portfolioSummary?.averageWin, { prefix: '₹', fallback: '₹0' }) }}
         </p>
       </div>
       <div class="card-panel p-4">
         <p class="text-xs font-medium text-text-muted">Avg Loss</p>
         <p class="mt-1 text-lg font-bold text-danger">
-          ₹{{ portfolioSummary?.averageLoss.toLocaleString() ?? 0 }}
+          {{ formatCurrency(portfolioSummary?.averageLoss, { prefix: '₹', fallback: '₹0' }) }}
         </p>
       </div>
     </div>

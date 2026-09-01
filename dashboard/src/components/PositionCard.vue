@@ -29,25 +29,33 @@
       <!-- Entry Price -->
       <div>
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">Entry</span>
-        <p class="text-sm font-medium text-text-primary">₹{{ position.entryPrice.toFixed(2) }}</p>
+        <p class="text-sm font-medium text-text-primary">
+          {{ formatCurrency(position.entryPrice, { prefix: '₹' }) }}
+        </p>
       </div>
 
       <!-- Current Price -->
       <div>
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">Current</span>
-        <p class="text-sm font-medium text-text-primary">₹{{ position.currentPrice.toFixed(2) }}</p>
+        <p class="text-sm font-medium text-text-primary">
+          {{ formatCurrency(position.currentPrice, { prefix: '₹' }) }}
+        </p>
       </div>
 
       <!-- Stop Loss -->
       <div>
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">Stop Loss</span>
-        <p class="text-sm font-medium text-danger">₹{{ position.stopLoss.toFixed(2) }}</p>
+        <p class="text-sm font-medium text-danger">
+          {{ formatCurrency(position.stopLoss, { prefix: '₹' }) }}
+        </p>
       </div>
 
       <!-- Target -->
       <div>
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">Target</span>
-        <p class="text-sm font-medium text-success">₹{{ position.target.toFixed(2) }}</p>
+        <p class="text-sm font-medium text-success">
+          {{ formatCurrency(position.target, { prefix: '₹' }) }}
+        </p>
       </div>
     </div>
 
@@ -61,10 +69,10 @@
       </div>
       <div class="text-right">
         <span class="text-[9px] uppercase tracking-[0.15em] text-text-muted">P&L</span>
-        <p class="text-sm font-bold" :class="position.pnl >= 0 ? 'text-success' : 'text-danger'">
-          {{ position.pnl >= 0 ? '+' : '' }}₹{{ position.pnl.toFixed(2) }}
+        <p class="text-sm font-bold" :class="pnlClass">
+          {{ formatSignedCurrency(position.pnl, { prefix: '₹' }) }}
           <span class="text-[10px] font-normal opacity-70">
-            ({{ position.pnlPercent >= 0 ? '+' : '' }}{{ position.pnlPercent.toFixed(2) }}%)
+            ({{ formatSignedPercent(position.pnlPercent) }})
           </span>
         </p>
       </div>
@@ -84,6 +92,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { formatCurrency, formatSignedCurrency, formatSignedPercent } from '../utils/format'
 
 export interface PositionCardProps {
   position: {
@@ -101,6 +110,10 @@ export interface PositionCardProps {
 }
 
 const props = defineProps<PositionCardProps>()
+
+const pnlClass = computed(() =>
+  Number.isFinite(props.position.pnl) && props.position.pnl >= 0 ? 'text-success' : 'text-danger'
+)
 
 const statusBarColor = computed(() => {
   switch (props.position.status) {

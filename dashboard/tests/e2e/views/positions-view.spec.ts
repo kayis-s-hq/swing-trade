@@ -446,18 +446,16 @@ test.describe('Positions View', () => {
   })
 
   test('no JavaScript errors on page load', async ({ page }) => {
-    await page.goto(`${DASHBOARD}/positions`)
-    await page.waitForLoadState('networkidle')
-
-    const consoleErrors = []
+    const consoleErrors: string[] = []
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
         consoleErrors.push(msg.text())
       }
     })
 
-    // Wait a beat for any async errors
-    await page.waitForTimeout(1000)
+    await page.goto(`${DASHBOARD}/positions`)
+    await page.waitForLoadState('networkidle')
+    await expect(page.locator('h1', { hasText: 'Positions' })).toBeVisible()
 
     expect(consoleErrors).toHaveLength(0)
   })

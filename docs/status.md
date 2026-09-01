@@ -112,21 +112,21 @@ Dismissed (not bugs): C1 (param order safe), C3 (.env not in git), C5 (backtest 
 
 | Finding | Priority | Status | Notes |
 |---------|----------|--------|-------|
-| M1: DailyLossCircuitBreaker timezone | P3 | OPEN | Use Asia/Kolkata explicitly |
-| M9: Position god object (23 fields) | P3 | OPEN | Split into PositionSummary/PositionDetails |
-| M10: VARCHAR(10) symbols | P3 | OPEN | Standardize VARCHAR(20) |
-| M13: No rate limiting | P3 | OPEN | Add @RateLimiter on analysis/scan endpoints |
-| M28: No pagination on performance | P3 | OPEN | Add pagination to /api/performance |
+| M1: DailyLossCircuitBreaker timezone | P3 | ✅ Done | `MARKET_ZONE = ZoneId.of("Asia/Kolkata")` added, all 8 unqualified `LocalDate/LocalDateTime.now()` calls fixed, test added |
+| M9: Position god object (23 fields) | P3 | OPEN | Mis-scoped — the 23-field type is `backend/core/domain/Position.java` (not the API DTO, which is already lean `PositionResponse`). A split there is a cross-module refactor touching broker/core/data, not a boundary-layer change — needs its own scoped task. Also found: unused dead-code `api/dto/Position.java`, safe to delete separately. |
+| M10: VARCHAR(10) symbols | P3 | ✅ Done | New migration `V36__widen_symbol_column.sql` widens `symbol` to VARCHAR(20) across all 9 tables; V1 untouched |
+| M13: No rate limiting | P3 | ✅ Done | `@RateLimiter` on CandidateScan/Analysis/AnalysisOrchestration/SentimentApi trigger endpoints, 5 req/min fail-fast config, 429 handler added |
+| M28: No pagination on performance | P3 | Dismissed (false positive) | `PerformanceResponse` is scalar-only (returns, Sharpe/Sortino, win rate, streaks) — no unbounded list to paginate |
 
 ### Remaining — Frontend
 
 | Finding | Priority | Status | Notes |
 |---------|----------|--------|-------|
-| C7: appState not Pinia | P1 | OPEN | Still uses `reactive()` — 54 lines, 1 store |
-| M3: NaN validation gap | P3 | OPEN | No `isFinite()` checks on numeric responses |
+| C7: appState not Pinia | P1 | ✅ Done | Rewritten as `defineStore` setup-store matching `notifications.ts`; consumers (App.vue, BackendDownBanner.vue) and tests updated |
+| M3: NaN validation gap | P3 | ✅ Done | New `dashboard/src/utils/format.ts` (safeNumber/formatCurrency/formatPercent/etc.) falling back to `—`; wired into DashboardView, PerformanceMetrics, PositionCard, PositionsView |
 | M12: API client 1096 lines | P3 | ✅ Done | Split into 14 domain modules (commit `22232700`) |
-| M20: Flaky E2E waits | P3 | OPEN | 10+ `waitForTimeout` calls in 5 test files |
-| L1: Only 2 component unit tests | P4 | OPEN | Down from 4 — need Vitest for key components |
+| M20: Flaky E2E waits | P3 | ✅ Done | All 13 `waitForTimeout` calls replaced with condition-based waits across 4 spec files |
+| L1: Component unit test coverage | P4 | ✅ Done | 7 component test files exist (ErrorMessage, NotificationHost, BackendDownBanner, Toast, RuntimeErrorBoundary, Header.errorStates, Sidebar) |
 
 ## LLM Layer
 

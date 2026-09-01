@@ -14,9 +14,11 @@ const bannerMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/stores/appState', () => ({
-  getAppState: () => bannerMocks.state,
-  checkHealthNow: bannerMocks.checkHealthNow,
-  dismissBackendBanner: bannerMocks.dismissBackendBanner,
+  useAppStateStore: () => ({
+    ...bannerMocks.state,
+    checkHealthNow: bannerMocks.checkHealthNow,
+    dismissBackendBanner: bannerMocks.dismissBackendBanner,
+  }),
 }))
 
 let wrapper: VueWrapper | undefined

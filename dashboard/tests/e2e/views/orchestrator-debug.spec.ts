@@ -7,7 +7,8 @@ test('orchestrator page — full feature check', async ({ page }) => {
   page.on('console', (msg) => consoleMessages.push(msg.text()))
 
   await page.goto('http://localhost:3003/orchestrator')
-  await page.waitForTimeout(4000)
+  await expect(page.locator('h1:has-text("Job Orchestrator")')).toBeVisible()
+  await expect(page.locator('table tbody tr').first()).toBeVisible()
 
   // Print all console messages
   console.log('\n=== CONSOLE MESSAGES ===')
@@ -66,20 +67,16 @@ test('orchestrator page — full feature check', async ({ page }) => {
   // 7. Click a row to expand (accordion)
   const firstRow = page.locator('table tbody tr').first()
   await firstRow.click()
-  await page.waitForTimeout(500)
 
   // Check for expanded detail row using the grid container
   const detailCards = page.locator('.grid .rounded-md.border.bg-bg-surface.p-3')
-  const cardCount = await detailCards.count()
-  console.log(`Detail stage cards: ${cardCount}`)
-  expect(cardCount).toBe(7) // all 7 stages
+  await expect(detailCards).toHaveCount(7) // all 7 stages
+  console.log(`Detail stage cards: ${await detailCards.count()}`)
 
   // 8. Click again to collapse
   await firstRow.click()
-  await page.waitForTimeout(500)
-  const detailAfterCollapse = await detailCards.count()
-  console.log(`After collapse: ${detailAfterCollapse} detail cards`)
-  expect(detailAfterCollapse).toBe(0)
+  await expect(detailCards).toHaveCount(0)
+  console.log(`After collapse: ${await detailCards.count()} detail cards`)
 
   // 10. Verify API data directly
   const apiData = await page.evaluate(async () => {

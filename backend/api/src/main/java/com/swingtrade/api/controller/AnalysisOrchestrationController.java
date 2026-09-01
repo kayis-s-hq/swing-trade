@@ -2,6 +2,7 @@ package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.FullAnalysisResult;
 import com.swingtrade.api.service.AnalysisOrchestratorService;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,6 +31,7 @@ public class AnalysisOrchestrationController {
     }
 
     @PostMapping("/analysis/run-full")
+    @RateLimiter(name = "llmAnalysis")
     public SseEmitter runFullAnalysis(
             @RequestParam String symbol,
             @RequestParam(defaultValue = "3") int backfillYears) {

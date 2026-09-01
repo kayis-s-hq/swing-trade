@@ -2,6 +2,7 @@ package com.swingtrade.api.controller;
 
 import com.swingtrade.api.service.CandidateScanService;
 import com.swingtrade.data.entity.CandidateScanRunEntity;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,6 +41,7 @@ public class CandidateScanController {
     }
 
     @PostMapping
+    @RateLimiter(name = "candidateScan")
     public ResponseEntity<?> start() {
         try { return ResponseEntity.ok(service.start()); }
         catch (IllegalStateException e) {

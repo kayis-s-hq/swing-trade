@@ -1,6 +1,7 @@
 package com.swingtrade.api.config;
 
 import com.swingtrade.api.dto.ErrorResponse;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -185,6 +186,28 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
+    /**
+     * Handle rate limit rejections from {@code @RateLimiter}-annotated endpoints
+     * (e.g. candidate scan or LLM/sentiment analysis triggers). Returns
+     * 429 TOO_MANY_REQUESTS instead of falling through to the generic 500 handler.
+     */
+    @ExceptionHandler(RequestNotPermitted.class)
+    public ResponseEntity<ErrorResponse> handleRequestNotPermitted(
+            RequestNotPermitted ex, WebRequest request) {
+
+        logger.warn("Rate limit exceeded: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                HttpStatus.TOO_MANY_REQUESTS.value(),
+                "RATE_LIMIT_EXCEEDED",
+                "Too many requests. Please try again shortly.",
+                LocalDateTime.now(),
+                request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(response);
     }
 
     /**

@@ -375,6 +375,13 @@ import ErrorMessage from '../components/ErrorMessage.vue'
 import HealthStatus from '../components/HealthStatus.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { asAppError, type AppError } from '../errors/appError'
+import {
+  formatCurrency,
+  formatSignedCurrency,
+  formatPercent,
+  formatSignedPercent,
+  formatNumber,
+} from '../utils/format'
 
 const loading = ref(true)
 const positionsError = ref<AppError | null>(null)
@@ -389,15 +396,12 @@ const equityPoints = ref<EquityPoint[]>([])
 const lastUpdated = ref('--:--')
 
 const pnlClass = (value?: number | null) =>
-  value != null && value >= 0 ? 'text-success' : 'text-danger'
-const currency = (value?: number | null) =>
-  `Rs.${(value ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-const signedCurrency = (value?: number | null) =>
-  `${value != null && value >= 0 ? '+' : '-'}${currency(Math.abs(value ?? 0))}`
-const percent = (value?: number | null) => `${(value ?? 0).toFixed(2)}%`
-const signedPercent = (value?: number | null) =>
-  `${value != null && value >= 0 ? '+' : ''}${percent(value)}`
-const number = (value?: number | null) => (value ?? 0).toFixed(2)
+  Number.isFinite(value) && (value as number) >= 0 ? 'text-success' : 'text-danger'
+const currency = (value?: number | null) => formatCurrency(value)
+const signedCurrency = (value?: number | null) => formatSignedCurrency(value)
+const percent = (value?: number | null) => formatPercent(value)
+const signedPercent = (value?: number | null) => formatSignedPercent(value)
+const number = (value?: number | null) => formatNumber(value)
 const equityPath = computed(() => {
   const values = equityPoints.value.map((point) => point.value)
   if (values.length < 2) return ''

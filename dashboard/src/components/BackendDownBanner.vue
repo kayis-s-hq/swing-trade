@@ -55,9 +55,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { checkHealthNow, dismissBackendBanner, getAppState } from '@/stores/appState'
+import { useAppStateStore } from '@/stores/appState'
 
-const appState = getAppState()
+const appState = useAppStateStore()
+const checkHealthNow = appState.checkHealthNow
+const dismissBackendBanner = appState.dismissBackendBanner
 
 const showBanner = computed(
   () =>

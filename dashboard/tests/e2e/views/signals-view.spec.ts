@@ -69,14 +69,12 @@ test.describe('Signals View', () => {
 
     if (buyIdx >= 0) {
       await buttons.nth(buyIdx).click()
-      await page.waitForTimeout(300)
 
       // All displayed cards should be BUY
       const cards = page.locator('div.card-panel')
       const count = await cards.count()
       if (count > 0) {
-        const firstCardText = await cards.first().textContent()
-        expect(firstCardText).toContain('BUY')
+        await expect(cards.first()).toContainText('BUY')
       }
     }
   })
@@ -91,13 +89,11 @@ test.describe('Signals View', () => {
 
     if (activeIdx >= 0) {
       await buttons.nth(activeIdx).click()
-      await page.waitForTimeout(300)
 
       const cards = page.locator('div.card-panel')
       const count = await cards.count()
       if (count > 0) {
-        const firstCardText = await cards.first().textContent()
-        expect(firstCardText).toContain('ACTIVE')
+        await expect(cards.first()).toContainText('ACTIVE')
       }
     }
   })
@@ -125,11 +121,12 @@ test.describe('Signals View', () => {
       const isChecked = await firstCheckbox.isChecked()
       if (!isChecked) {
         await firstCheckbox.click()
-        await page.waitForTimeout(300)
       }
 
       // Selected count should appear
-      const selectedText = await page.getByText(/\d+ selected/).textContent()
+      const selectedLocator = page.getByText(/\d+ selected/)
+      await expect(selectedLocator).toBeVisible()
+      const selectedText = await selectedLocator.textContent()
       expect(selectedText?.match(/\d+ selected/)).not.toBeNull()
     }
   })
@@ -146,7 +143,6 @@ test.describe('Signals View', () => {
       const isChecked = await firstCheckbox.isChecked()
       if (!isChecked) {
         await firstCheckbox.click()
-        await page.waitForTimeout(300)
       }
 
       // Execute button should appear
@@ -167,7 +163,6 @@ test.describe('Signals View', () => {
       const isChecked = await firstCheckbox.isChecked()
       if (!isChecked) {
         await firstCheckbox.click()
-        await page.waitForTimeout(300)
       }
 
       // Clear N button should appear
@@ -219,10 +214,12 @@ test.describe('Signals View', () => {
       const idx = texts.indexOf(dir)
       if (idx >= 0) {
         await buttons.nth(idx).click()
-        await page.waitForTimeout(300)
 
         const noMatch = page.locator('text=No signals matching filter')
-        const isVisible = await noMatch.isVisible().catch(() => false)
+        const isVisible = await noMatch
+          .waitFor({ state: 'visible', timeout: 2000 })
+          .then(() => true)
+          .catch(() => false)
         if (isVisible) {
           await expect(noMatch).toBeVisible()
           return
@@ -368,18 +365,19 @@ test.describe('Signals View', () => {
       const isChecked = await firstCheckbox.isChecked()
       if (!isChecked) {
         await firstCheckbox.click()
-        await page.waitForTimeout(300)
       }
 
       const execBtn = page.getByRole('button', { name: /Execute \d+/ })
       if (await execBtn.isVisible()) {
         // Execute will likely fail (no real broker), but the toast should appear
         await execBtn.click()
-        await page.waitForTimeout(1000)
 
         // Toast should appear (either success or failure)
         const toast = page.locator('div.fixed.bottom-4.right-4')
-        const isVisible = await toast.isVisible().catch(() => false)
+        const isVisible = await toast
+          .waitFor({ state: 'visible', timeout: 3000 })
+          .then(() => true)
+          .catch(() => false)
         if (isVisible) {
           await expect(toast).toBeVisible()
         }

@@ -11,6 +11,7 @@ import com.swingtrade.llm.domain.EarningsData;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.PdfExtractionService;
 import com.swingtrade.llm.service.SentimentService;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -156,6 +157,7 @@ public class SentimentApiController {
     // --- Job status & manual trigger ---
 
     @PostMapping("/sentiment/evaluate/trigger")
+    @RateLimiter(name = "sentimentAnalysis")
     public ResponseEntity<ApiResponse<Map<String, Object>>> triggerEvaluation() {
         evaluationJob.triggerEvaluation();
         Map<String, Object> data = Map.of(
@@ -199,6 +201,7 @@ public class SentimentApiController {
     }
 
     @PostMapping("/sentiment/{symbol}/analyse")
+    @RateLimiter(name = "sentimentAnalysis")
     public ResponseEntity<ApiResponse<SentimentResult>> triggerAnalysis(
             @PathVariable String symbol) {
         SentimentResult result = sentimentService.analyzeStockSentiment(symbol, LocalDate.now());
@@ -206,6 +209,7 @@ public class SentimentApiController {
     }
 
     @PostMapping("/pdf/{symbol}/extract")
+    @RateLimiter(name = "sentimentAnalysis")
     public ResponseEntity<ApiResponse<EarningsData>> triggerPdfExtraction(
             @PathVariable String symbol,
             @RequestParam String url) {

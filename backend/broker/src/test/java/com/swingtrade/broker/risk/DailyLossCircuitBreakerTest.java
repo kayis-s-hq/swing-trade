@@ -11,8 +11,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -155,6 +159,23 @@ class DailyLossCircuitBreakerTest {
 
         // Then
         assertThat(actualTime).isNull(); // Should be null before opening circuit
+    }
+
+    @Test
+    void testDailyTrackerUsesIndiaMarketZoneNotSystemDefault() throws Exception {
+        // Given - the tracker is seeded on construction via resetDailyTracker()
+        Field trackerField = DailyLossCircuitBreaker.class.getDeclaredField("dailyPnLTracker");
+        trackerField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<LocalDate, BigDecimal> tracker = (Map<LocalDate, BigDecimal>) trackerField.get(dailyLossCircuitBreaker);
+
+        // Then - the seeded date must be "today" in Asia/Kolkata, regardless of
+        // the JVM's default time zone.
+        LocalDate expectedMarketDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        assertThat(tracker).containsKey(expectedMarketDate);
+
+        // And - getCurrentDailyPnL() must resolve using the same zone.
+        assertThat(dailyLossCircuitBreaker.getCurrentDailyPnL()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test

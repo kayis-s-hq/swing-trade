@@ -28,9 +28,11 @@ vi.mock('./components/NotificationHost.vue', () => ({
 }))
 
 vi.mock('./stores/appState', () => ({
-  getAppState: () => appStateMocks.state,
-  startHealthPolling: appStateMocks.startHealthPolling,
-  stopHealthPolling: appStateMocks.stopHealthPolling,
+  useAppStateStore: () => ({
+    ...appStateMocks.state,
+    startHealthPolling: appStateMocks.startHealthPolling,
+    stopHealthPolling: appStateMocks.stopHealthPolling,
+  }),
 }))
 
 vi.mock('./stores/settings', () => ({

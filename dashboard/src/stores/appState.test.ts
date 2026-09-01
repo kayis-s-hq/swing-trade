@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 const healthMocks = vi.hoisted(() => ({
   checkHealth: vi.fn(),
@@ -23,22 +24,25 @@ function deferred<T>(): Deferred<T> {
 }
 
 async function loadStore() {
-  const store = await import('./appState')
-  const errors = await import('../errors/appError')
-  return { ...store, AppError: errors.AppError }
+  vi.resetModules()
+  const [{ useAppStateStore }, { AppError }] = await Promise.all([
+    import('./appState'),
+    import('../errors/appError'),
+  ])
+  setActivePinia(createPinia())
+  return { store: useAppStateStore(), AppError }
 }
 
-describe('appState backend health', () => {
+describe('appState store', () => {
   beforeEach(() => {
     vi.useRealTimers()
-    vi.resetModules()
     healthMocks.checkHealth.mockReset()
   })
 
   it('starts in an explicit checking state rather than claiming the backend is healthy', async () => {
-    const { getAppState } = await loadStore()
+    const { store } = await loadStore()
 
-    expect(getAppState()).toMatchObject({
+    expect(store).toMatchObject({
       healthStatus: 'checking',
       checking: false,
       healthError: null,
@@ -49,7 +53,7 @@ describe('appState backend health', () => {
   })
 
   it('stores a typed health error and marks network failures unavailable', async () => {
-    const { AppError, checkHealthNow, getAppState } = await loadStore()
+    const { store, AppError } = await loadStore()
     const error = new AppError({
       kind: 'network',
       message: 'Failed to fetch http://private-host/health',
@@ -57,37 +61,37 @@ describe('appState backend health', () => {
     })
     healthMocks.checkHealth.mockRejectedValue(error)
 
-    await expect(checkHealthNow()).resolves.toBeUndefined()
+    await expect(store.checkHealthNow()).resolves.toBeUndefined()
 
-    expect(getAppState()).toMatchObject({
+    expect(store).toMatchObject({
       healthStatus: 'unavailable',
       checking: false,
       healthError: error,
     })
-    expect(getAppState().healthError).toBeInstanceOf(AppError)
+    expect(store.healthError).toBeInstanceOf(AppError)
   })
 
   it.each(['network', 'timeout'] as const)(
     'classifies a %s health failure as unavailable',
     async (kind) => {
-      const { AppError, checkHealthNow, getAppState } = await loadStore()
+      const { store, AppError } = await loadStore()
       healthMocks.checkHealth.mockRejectedValue(
         new AppError({ kind, message: `${kind} details`, retryable: kind === 'network' })
       )
 
-      await checkHealthNow()
+      await store.checkHealthNow()
 
-      expect(getAppState().healthStatus).toBe('unavailable')
+      expect(store.healthStatus).toBe('unavailable')
     }
   )
 
   it('marks a reachable unhealthy response as degraded rather than unavailable', async () => {
-    const { checkHealthNow, getAppState } = await loadStore()
+    const { store } = await loadStore()
     healthMocks.checkHealth.mockResolvedValue({ status: 'DOWN', components: {} })
 
-    await checkHealthNow()
+    await store.checkHealthNow()
 
-    expect(getAppState()).toMatchObject({
+    expect(store).toMatchObject({
       healthStatus: 'degraded',
       checking: false,
       healthError: null,
@@ -95,7 +99,7 @@ describe('appState backend health', () => {
   })
 
   it('marks a typed server response failure as degraded because the backend was reachable', async () => {
-    const { AppError, checkHealthNow, getAppState } = await loadStore()
+    const { store, AppError } = await loadStore()
     const error = new AppError({
       kind: 'server',
       message: 'internal health response body',
@@ -104,21 +108,21 @@ describe('appState backend health', () => {
     })
     healthMocks.checkHealth.mockRejectedValue(error)
 
-    await checkHealthNow()
+    await store.checkHealthNow()
 
-    expect(getAppState()).toMatchObject({ healthStatus: 'degraded', healthError: error })
+    expect(store).toMatchObject({ healthStatus: 'degraded', healthError: error })
   })
 
   it('tracks every attempt while preserving the last successful health timestamp', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-26T09:00:00.000Z'))
-    const { AppError, checkHealthNow, getAppState } = await loadStore()
+    const { store, AppError } = await loadStore()
     healthMocks.checkHealth.mockResolvedValueOnce({ status: 'UP', components: {} })
 
-    await checkHealthNow()
+    await store.checkHealthNow()
 
     const successfulAt = Date.parse('2026-08-26T09:00:00.000Z')
-    expect(getAppState()).toMatchObject({
+    expect(store).toMatchObject({
       healthStatus: 'healthy',
       lastHealthAttempt: successfulAt,
       lastHealthSuccess: successfulAt,
@@ -128,9 +132,9 @@ describe('appState backend health', () => {
     healthMocks.checkHealth.mockRejectedValueOnce(
       new AppError({ kind: 'timeout', message: 'timed out', retryable: false })
     )
-    await checkHealthNow()
+    await store.checkHealthNow()
 
-    expect(getAppState()).toMatchObject({
+    expect(store).toMatchObject({
       healthStatus: 'unavailable',
       lastHealthAttempt: Date.parse('2026-08-26T09:05:00.000Z'),
       lastHealthSuccess: successfulAt,
@@ -140,66 +144,66 @@ describe('appState backend health', () => {
   it('deduplicates concurrent immediate checks and exposes the checking flag', async () => {
     const pending = deferred<{ status: string; components: Record<string, unknown> }>()
     healthMocks.checkHealth.mockReturnValue(pending.promise)
-    const { checkHealthNow, getAppState } = await loadStore()
+    const { store } = await loadStore()
 
-    const first = checkHealthNow()
-    const second = checkHealthNow()
+    const first = store.checkHealthNow()
+    const second = store.checkHealthNow()
 
     expect(healthMocks.checkHealth).toHaveBeenCalledTimes(1)
-    expect(getAppState().checking).toBe(true)
+    expect(store.checking).toBe(true)
 
     pending.resolve({ status: 'UP', components: {} })
     await Promise.all([first, second])
 
-    expect(getAppState()).toMatchObject({ healthStatus: 'healthy', checking: false })
+    expect(store).toMatchObject({ healthStatus: 'healthy', checking: false })
   })
 
   it('exports an immediate check that still runs while the polling interval is active', async () => {
     vi.useFakeTimers()
     healthMocks.checkHealth.mockResolvedValue({ status: 'UP', components: {} })
-    const { checkHealthNow, startHealthPolling, stopHealthPolling } = await loadStore()
+    const { store } = await loadStore()
 
-    await startHealthPolling(60_000)
+    await store.startHealthPolling(60_000)
     expect(healthMocks.checkHealth).toHaveBeenCalledTimes(1)
 
-    await checkHealthNow()
+    await store.checkHealthNow()
     expect(healthMocks.checkHealth).toHaveBeenCalledTimes(2)
 
-    stopHealthPolling()
+    store.stopHealthPolling()
   })
 
   it('dismisses only the current outage banner without changing connectivity', async () => {
-    const { AppError, checkHealthNow, dismissBackendBanner, getAppState } = await loadStore()
+    const { store, AppError } = await loadStore()
     const outage = new AppError({
       kind: 'network',
       message: 'offline',
       retryable: true,
     })
     healthMocks.checkHealth.mockRejectedValue(outage)
-    await checkHealthNow()
+    await store.checkHealthNow()
 
-    dismissBackendBanner()
+    store.dismissBackendBanner()
 
-    expect(getAppState()).toMatchObject({
+    expect(store).toMatchObject({
       healthStatus: 'unavailable',
       healthError: outage,
       bannerDismissed: true,
     })
 
-    await checkHealthNow()
-    expect(getAppState().bannerDismissed).toBe(true)
+    await store.checkHealthNow()
+    expect(store.bannerDismissed).toBe(true)
 
     healthMocks.checkHealth.mockResolvedValueOnce({ status: 'UP', components: {} })
-    await checkHealthNow()
-    expect(getAppState()).toMatchObject({
+    await store.checkHealthNow()
+    expect(store).toMatchObject({
       healthStatus: 'healthy',
       healthError: null,
       bannerDismissed: false,
     })
 
     healthMocks.checkHealth.mockRejectedValueOnce(outage)
-    await checkHealthNow()
-    expect(getAppState()).toMatchObject({
+    await store.checkHealthNow()
+    expect(store).toMatchObject({
       healthStatus: 'unavailable',
       bannerDismissed: false,
     })

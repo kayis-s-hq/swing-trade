@@ -18,15 +18,15 @@ const appStateMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('./stores/appState', () => ({
-  getAppState: () => ({
+  useAppStateStore: () => ({
     backendUp: true,
     backendError: '',
     lastHealthCheck: 0,
     healthStatus: 'healthy',
     connectionFailed: false,
+    startHealthPolling: appStateMocks.startHealthPolling,
+    stopHealthPolling: appStateMocks.stopHealthPolling,
   }),
-  startHealthPolling: appStateMocks.startHealthPolling,
-  stopHealthPolling: appStateMocks.stopHealthPolling,
 }))
 
 vi.mock('./stores/settings', () => ({

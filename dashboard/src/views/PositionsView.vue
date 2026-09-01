@@ -177,11 +177,11 @@
                 </td>
                 <td
                   class="px-5 py-4 text-right text-sm font-semibold"
-                  :class="pos.pnl >= 0 ? 'text-success' : 'text-danger'"
+                  :class="Number.isFinite(pos.pnl) && pos.pnl >= 0 ? 'text-success' : 'text-danger'"
                 >
-                  {{ pos.pnl >= 0 ? '+' : '' }}₹{{ pos.pnl }}
+                  {{ formatSignedCurrency(pos.pnl, { prefix: '₹' }) }}
                   <span class="ml-1 text-xs font-normal opacity-70"
-                    >({{ pos.pnlPercent >= 0 ? '+' : '' }}{{ pos.pnlPercent.toFixed(2) }}%)</span
+                    >({{ formatSignedPercent(pos.pnlPercent) }})</span
                   >
                 </td>
                 <td class="px-5 py-4 text-center">
@@ -415,11 +415,15 @@
           <div class="mt-2 text-right">
             <span
               class="text-sm font-semibold"
-              :class="closeTarget.pnl >= 0 ? 'text-success' : 'text-danger'"
+              :class="
+                Number.isFinite(closeTarget.pnl) && closeTarget.pnl >= 0
+                  ? 'text-success'
+                  : 'text-danger'
+              "
             >
-              {{ closeTarget.pnl >= 0 ? '+' : '' }}₹{{ closeTarget.pnl }} ({{
-                closeTarget.pnlPercent >= 0 ? '+' : ''
-              }}{{ closeTarget.pnlPercent.toFixed(2) }}%)
+              {{ formatSignedCurrency(closeTarget.pnl, { prefix: '₹' }) }} ({{
+                formatSignedPercent(closeTarget.pnlPercent)
+              }})
             </span>
           </div>
         </div>
@@ -466,6 +470,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
 import { useAsyncData } from '../composables/useAsyncData'
 import { formatAppError, type FormattedErrorDetail } from '../errors/appError'
+import { formatSignedCurrency, formatSignedPercent } from '../utils/format'
 
 interface MutationErrorPresentation {
   title: string
