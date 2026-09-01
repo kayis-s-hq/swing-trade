@@ -67,7 +67,7 @@ Per-position risk is also aligned at ₹100,000 (20% of the ₹500,000 paper bas
 
 - [x] Initial capital set: Rs.5,00,000 (PaperTradingProperties.initialBalance=500000, injected into PaperTradingEngine)
 - [x] Max positions: 5 (PaperTradingProperties.maxConcurrentPositions=5, wired through PositionManager)
-- [x] Max capital per position: Rs.2,00,000 (PaperTradingProperties.maxCapitalPerPosition=200000, aligned with BrokerProperties)
+- [x] Max capital per position: Rs.1,00,000 (PaperTradingProperties.maxCapitalPerPosition=100000, aligned with BrokerProperties and the Settings allocation)
 - [x] Risk per trade: 1% (changed from 2% hardcoded to 1% in calculatePositionSize)
 - [x] CapitalTracker uses PaperTradingProperties (not BrokerProperties) for initial balance, max positions, max capital
 - [x] @Transactional added to all closePosition methods (PositionService, PositionManager, PaperTradingEngine, PaperTradingStateService)
