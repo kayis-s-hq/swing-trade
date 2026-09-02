@@ -729,7 +729,8 @@
             </label>
           </div>
           <p class="mt-4 text-xs text-text-muted">
-            Initial capital changes apply after the API restarts; the current paper portfolio is not reset automatically.
+            Initial capital changes apply after the API restarts; the current paper portfolio is not
+            reset automatically.
           </p>
         </div>
       </div>

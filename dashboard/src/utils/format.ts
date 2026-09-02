@@ -62,10 +62,7 @@ export function formatNumber(
 }
 
 /** Formats an integer count with thousands separators, e.g. "1,234". */
-export function formatCount(
-  value: number | null | undefined,
-  fallback: string = FALLBACK
-): string {
+export function formatCount(value: number | null | undefined, fallback: string = FALLBACK): string {
   const safe = safeNumber(value)
   if (safe === undefined) return fallback
   return safe.toLocaleString()
