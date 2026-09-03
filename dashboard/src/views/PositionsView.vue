@@ -1,12 +1,12 @@
 <template>
-  <div class="view-shell p-6 animate-fade-in">
+  <div class="view-shell p-4 sm:p-6 animate-fade-in">
     <!-- Page Header -->
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="font-display text-2xl font-semibold text-text-primary">Positions</h1>
         <p class="mt-1 text-sm text-text-muted">Active and closed paper trading positions</p>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
         <button
           class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary"
           @click="refreshPositions"
@@ -66,11 +66,11 @@
 
     <template v-else>
       <!-- Filters -->
-      <div class="mb-4 flex items-center gap-3">
+      <div class="mb-4 flex flex-wrap items-center gap-3">
         <input
           v-model="searchQuery"
           placeholder="Search symbol..."
-          class="w-56 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 transition-colors focus:border-brand/50 focus:outline-none"
+          class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 transition-colors focus:border-brand/50 focus:outline-none sm:w-56"
         />
         <div class="flex rounded-md border border-border-subtle">
           <button
@@ -211,7 +211,7 @@
   <Teleport to="body">
     <div
       v-if="showNewPositionModal"
-      class="fixed inset-0 z-50 flex items-center justify-center"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
       @click.self="showNewPositionModal = false"
     >
       <div class="absolute inset-0 bg-black/50" />
@@ -375,7 +375,7 @@
   <Teleport to="body">
     <div
       v-if="showClosePositionModal && closeTarget"
-      class="fixed inset-0 z-50 flex items-center justify-center"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
       @click.self="showClosePositionModal = false"
     >
       <div class="absolute inset-0 bg-black/50" />

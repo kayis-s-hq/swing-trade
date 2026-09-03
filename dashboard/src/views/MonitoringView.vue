@@ -1,5 +1,5 @@
 <template>
-  <div class="view-shell p-6 animate-fade-in">
+  <div class="view-shell p-4 sm:p-6 animate-fade-in">
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>

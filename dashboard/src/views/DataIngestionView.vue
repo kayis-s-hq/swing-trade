@@ -1,14 +1,14 @@
 <template>
-  <div class="view-shell p-6 animate-fade-in">
+  <div class="view-shell p-4 sm:p-6 animate-fade-in">
     <!-- Page Header -->
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="font-display text-2xl font-semibold text-text-primary">Data Ingestion</h1>
         <p class="mt-1 text-sm text-text-muted">
           Monitor data quality and pull historical market data
         </p>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3">
         <button
           :disabled="loading || pulling"
           class="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary disabled:opacity-50"
@@ -118,7 +118,7 @@
 
     <!-- Broker Connection Status -->
     <div class="mb-6 card-panel p-5">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-3">
           <span class="inline-flex h-3 w-3">
             <span

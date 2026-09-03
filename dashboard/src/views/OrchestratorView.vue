@@ -1,12 +1,12 @@
 <template>
-  <div class="view-shell p-6 animate-fade-in">
+  <div class="view-shell p-4 sm:p-6 animate-fade-in">
     <!-- Page Header -->
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="font-display text-2xl font-semibold text-text-primary">Job Orchestrator</h1>
         <p class="mt-1 text-sm text-text-muted">7-stage pipeline for all watchlist symbols</p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <button
           type="button"
           aria-label="Run job orchestrator"
@@ -114,23 +114,26 @@
               7 stages
             </span>
           </div>
-          <div class="grid min-w-[860px] grid-cols-[16%_repeat(7,11.428%)_4%] items-center">
-            <div aria-hidden="true" />
-            <template v-for="(stage, index) in stages" :key="stage">
-              <div
-                class="flex min-w-0 items-center justify-center gap-1.5 border-r border-border-subtle/60 px-1.5 py-2 last:border-r-0"
-              >
-                <span
-                  class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white"
+          <div class="overflow-x-auto">
+            <div class="grid min-w-[860px] grid-cols-[16%_repeat(7,11.428%)_4%] items-center">
+              <div aria-hidden="true" />
+              <template v-for="(stage, index) in stages" :key="stage">
+                <div
+                  class="flex min-w-0 items-center justify-center gap-1.5 border-r border-border-subtle/60 px-1.5 py-2 last:border-r-0"
                 >
-                  {{ index + 1 }}
-                </span>
-                <span class="truncate text-center text-[11px] font-semibold text-text-primary">{{
-                  stageLabel(stage)
-                }}</span>
-              </div>
-            </template>
-            <div aria-hidden="true" />
+                  <span
+                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white"
+                  >
+                    {{ index + 1 }}
+                  </span>
+                  <span
+                    class="truncate text-center text-[11px] font-semibold text-text-primary"
+                    >{{ stageLabel(stage) }}</span
+                  >
+                </div>
+              </template>
+              <div aria-hidden="true" />
+            </div>
           </div>
         </div>
 
@@ -305,54 +308,56 @@
         <div class="mt-6 card-panel p-5">
           <h3 class="mb-3 text-sm font-semibold text-text-primary">Past Runs</h3>
           <div v-if="pastRuns.length === 0" class="text-sm text-text-muted">No past runs.</div>
-          <table v-else class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-border-subtle">
-                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Time</th>
-                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Type</th>
-                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Status</th>
-                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Symbols</th>
-                <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Duration</th>
-                <th class="pb-2 text-left text-xs font-medium text-text-muted">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="run in pastRuns"
-                :key="run.runId"
-                class="border-b border-border-subtle/50 hover:bg-bg-hover/50 cursor-pointer"
-                @click="viewRun(run.runId)"
-              >
-                <td class="py-2 pr-4 text-text-primary">
-                  {{ formatTime(run.startedAt) }}
-                </td>
-                <td class="py-2 pr-4 text-text-muted">
-                  {{ run.triggerType }}
-                </td>
-                <td class="py-2 pr-4">
-                  <StatusBadge :status="run.status" :label="run.status" />
-                </td>
-                <td class="py-2 pr-4 text-text-muted">
-                  {{ run.completedCount }}/{{ run.symbolsCount }}
-                  <span v-if="run.failedCount > 0" class="text-danger"
-                    >({{ run.failedCount }} failed)</span
-                  >
-                </td>
-                <td v-if="run.completedAt" class="py-2 pr-4 text-text-muted">
-                  {{ formatDuration(run.startedAt, run.completedAt) }}
-                </td>
-                <td v-else class="py-2 pr-4 text-text-muted">-</td>
-                <td class="py-2 text-text-muted">
-                  <button
-                    class="text-xs text-brand hover:underline"
-                    @click.stop="viewRun(run.runId)"
-                  >
-                    View
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-else class="overflow-x-auto">
+            <table class="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr class="border-b border-border-subtle">
+                  <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Time</th>
+                  <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Type</th>
+                  <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Status</th>
+                  <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Symbols</th>
+                  <th class="pb-2 pr-4 text-left text-xs font-medium text-text-muted">Duration</th>
+                  <th class="pb-2 text-left text-xs font-medium text-text-muted">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="run in pastRuns"
+                  :key="run.runId"
+                  class="border-b border-border-subtle/50 hover:bg-bg-hover/50 cursor-pointer"
+                  @click="viewRun(run.runId)"
+                >
+                  <td class="py-2 pr-4 text-text-primary">
+                    {{ formatTime(run.startedAt) }}
+                  </td>
+                  <td class="py-2 pr-4 text-text-muted">
+                    {{ run.triggerType }}
+                  </td>
+                  <td class="py-2 pr-4">
+                    <StatusBadge :status="run.status" :label="run.status" />
+                  </td>
+                  <td class="py-2 pr-4 text-text-muted">
+                    {{ run.completedCount }}/{{ run.symbolsCount }}
+                    <span v-if="run.failedCount > 0" class="text-danger"
+                      >({{ run.failedCount }} failed)</span
+                    >
+                  </td>
+                  <td v-if="run.completedAt" class="py-2 pr-4 text-text-muted">
+                    {{ formatDuration(run.startedAt, run.completedAt) }}
+                  </td>
+                  <td v-else class="py-2 pr-4 text-text-muted">-</td>
+                  <td class="py-2 text-text-muted">
+                    <button
+                      class="text-xs text-brand hover:underline"
+                      @click.stop="viewRun(run.runId)"
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </template>
     </ErrorBoundary>
