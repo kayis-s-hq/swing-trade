@@ -59,6 +59,11 @@ public class SentimentService {
     private static final long ANALYSIS_TIMEOUT_SECONDS = 930;
     private static final int MAX_ARTICLES_FOR_LLM = 10;
 
+    // Per-article character cap. MAX_ARTICLES_FOR_LLM x MAX_ARTICLE_CHARS keeps the
+    // combined prompt near ~3k tokens, leaving comfortable headroom inside
+    // llamacpp.context (4096) for the completion.
+    private static final int MAX_ARTICLE_CHARS = 1200;
+
     // Thread pool for async operations
     private final ExecutorService analysisExecutor;
 
@@ -121,6 +126,23 @@ public class SentimentService {
     }
 
     /**
+     * Trims a cleaned article to {@link #MAX_ARTICLE_CHARS}, cutting on a word
+     * boundary where one is available near the limit so the text doesn't end
+     * mid-token.
+     */
+    private static String capArticleLength(String text) {
+        if (text.length() <= MAX_ARTICLE_CHARS) {
+            return text;
+        }
+        String truncated = text.substring(0, MAX_ARTICLE_CHARS);
+        int lastSpace = truncated.lastIndexOf(' ');
+        if (lastSpace > MAX_ARTICLE_CHARS - 100) {
+            truncated = truncated.substring(0, lastSpace);
+        }
+        return truncated + "...";
+    }
+
+    /**
      * Analyzes sentiment for a single stock using news from RSS feeds.
      *
      * @param stockSymbol the stock symbol (e.g., "RELIANCE", "TCS")
@@ -143,10 +165,16 @@ public class SentimentService {
 
             logger.info("Found {} articles for {}: {}", articles.size(), stockSymbol, stockSymbol);
 
-            // Clean and prepare news content
+            // Clean and prepare news content. Each article is capped: capping the
+            // article *count* alone isn't enough, since full article bodies pushed
+            // the prompt to ~8.5k tokens and llama.cpp rejected it outright with
+            // "request (8556 tokens) exceeds the available context size (4096)".
+            // The lead of an article carries the sentiment signal, so trimming the
+            // tail costs little and cuts prompt-eval time (and heat) substantially.
             List<String> newsContent = articles.stream()
                     .map(a -> newsIngestionService.cleanNewsText(a))
                     .filter(s -> s != null && !s.trim().isEmpty())
+                    .map(SentimentService::capArticleLength)
                     .toList();
 
             if (newsContent.isEmpty()) {
