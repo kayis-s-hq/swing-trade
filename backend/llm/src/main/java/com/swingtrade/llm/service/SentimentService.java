@@ -59,10 +59,18 @@ public class SentimentService {
     private static final long ANALYSIS_TIMEOUT_SECONDS = 930;
     private static final int MAX_ARTICLES_FOR_LLM = 10;
 
-    // Per-article character cap. MAX_ARTICLES_FOR_LLM x MAX_ARTICLE_CHARS keeps the
-    // combined prompt near ~3k tokens, leaving comfortable headroom inside
-    // llamacpp.context (4096) for the completion.
-    private static final int MAX_ARTICLE_CHARS = 1200;
+    // Per-article character cap, sized from measured data rather than estimated.
+    // Scraped news text tokenizes at roughly 1.9 chars/token on this model (much
+    // denser than the ~3.7 of clean prose, because of URLs, entities and heavy
+    // punctuation), so a 1200-char cap still produced a 6595-token prompt and
+    // llama.cpp rejected it against the 4096 context.
+    //
+    // At 450: 10 articles x 450 = 4500 chars ~= 2400 tokens, plus the ~755-char
+    // system prompt (~400 tokens) ~= 2800 total, leaving ~1300 tokens of headroom
+    // inside llamacpp.context (4096) for the 512-token completion. Keeping the
+    // prompt small also cuts prompt-eval time — the dominant CPU/heat cost per
+    // request on this Pi.
+    private static final int MAX_ARTICLE_CHARS = 450;
 
     // Thread pool for async operations
     private final ExecutorService analysisExecutor;
@@ -136,7 +144,7 @@ public class SentimentService {
         }
         String truncated = text.substring(0, MAX_ARTICLE_CHARS);
         int lastSpace = truncated.lastIndexOf(' ');
-        if (lastSpace > MAX_ARTICLE_CHARS - 100) {
+        if (lastSpace > MAX_ARTICLE_CHARS - 60) {
             truncated = truncated.substring(0, lastSpace);
         }
         return truncated + "...";
