@@ -88,4 +88,4 @@ for m in "${modules_to_check[@]}"; do
     module_args="$module_args :$m:checkstyleMain :$m:checkstyleTest"
 done
 cd backend
-../gradlew $module_args -B -x test
+./gradlew $module_args -x test
