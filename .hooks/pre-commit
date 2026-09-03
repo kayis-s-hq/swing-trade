@@ -67,7 +67,7 @@ if [ ${#java_files[@]} -gt 0 ] || [ ${#gradle_files[@]} -gt 0 ]; then
             module_args="$module_args :$m:checkstyleMain :$m:checkstyleTest"
         done
         cd backend
-        ../gradlew $module_args -B -x test
+        ./gradlew $module_args -x test
         checkstyle_exit=$?
 
         if [ $checkstyle_exit -ne 0 ]; then
