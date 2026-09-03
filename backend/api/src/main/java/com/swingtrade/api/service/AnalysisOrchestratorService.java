@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 @Service
 public class AnalysisOrchestratorService {
@@ -35,6 +36,12 @@ public class AnalysisOrchestratorService {
     private final FundamentalScorer fundamentalScorer;
     private final SynthesisService synthesisService;
     private final CandleStore candleStore;
+    private final PiThermalGuard thermalGuard;
+
+    // Full analysis is CPU-bound local LLM inference (sentiment + synthesis
+    // stages) — only one run at a time so two requests never double up the
+    // thermal/CPU load on the Pi.
+    private final Semaphore analysisLock = new Semaphore(1);
 
     public AnalysisOrchestratorService(DataIngestionService dataIngestionService,
                                        NewsIngestionService newsIngestionService,
@@ -44,7 +51,8 @@ public class AnalysisOrchestratorService {
                                        BacktestScorer backtestScorer,
                                        FundamentalScorer fundamentalScorer,
                                        SynthesisService synthesisService,
-                                       CandleStore candleStore) {
+                                       CandleStore candleStore,
+                                       PiThermalGuard thermalGuard) {
         this.dataIngestionService = dataIngestionService;
         this.newsIngestionService = newsIngestionService;
         this.sentimentService = sentimentService;
@@ -54,6 +62,7 @@ public class AnalysisOrchestratorService {
         this.fundamentalScorer = fundamentalScorer;
         this.synthesisService = synthesisService;
         this.candleStore = candleStore;
+        this.thermalGuard = thermalGuard;
     }
 
     public FullAnalysisResult runFullAnalysis(String symbol, SseEmitter emitter, int backfillYears) {
@@ -61,22 +70,32 @@ public class AnalysisOrchestratorService {
         long startTime = System.currentTimeMillis();
         List<AnalysisProgress> progress = new ArrayList<>();
 
-        emitProgress(emitter, progress, AnalysisProgress.running(0, "pipeline-start"));
-        emitProgress(emitter, progress, AnalysisProgress.completed(0, "pipeline-start",
-            "Full analysis started for " + sym));
+        if (!analysisLock.tryAcquire()) {
+            logger.warn("Rejecting analysis request for {}: another analysis is already running", sym);
+            emitProgress(emitter, progress, AnalysisProgress.error(0, "pipeline-start",
+                "Another analysis is already running on this Pi — please wait for it to finish."));
+            return new FullAnalysisResult(null, List.copyOf(progress),
+                System.currentTimeMillis() - startTime, sym);
+        }
 
         try {
+            emitProgress(emitter, progress, AnalysisProgress.running(0, "pipeline-start"));
+            emitProgress(emitter, progress, AnalysisProgress.completed(0, "pipeline-start",
+                "Full analysis started for " + sym));
+
             StageContext ctx = new StageContext();
             ctx.setCandleCount((int) candleStore.countBySymbol(sym));
 
             runStage1CheckData(emitter, progress, sym, ctx);
             runStage2Backfill(emitter, progress, sym, backfillYears, ctx);
             runStage3FetchNews(emitter, progress, sym, ctx);
+            thermalGuard.awaitSafeTemperature();
             runStage4Sentiment(emitter, progress, sym, ctx);
             runStage5Technical(emitter, progress, sym, ctx);
             runStage6Fundamentals(emitter, progress, sym, ctx);
             runStage7Backtest(emitter, progress, sym, ctx);
             runStage8Composite(emitter, progress, sym, ctx);
+            thermalGuard.awaitSafeTemperature();
             runStage9Synthesis(emitter, progress, sym, ctx);
 
             long duration = System.currentTimeMillis() - startTime;
@@ -92,6 +111,8 @@ public class AnalysisOrchestratorService {
             var result = new FullAnalysisResult(null, List.copyOf(progress),
                 System.currentTimeMillis() - startTime, sym);
             return result;
+        } finally {
+            analysisLock.release();
         }
     }
 

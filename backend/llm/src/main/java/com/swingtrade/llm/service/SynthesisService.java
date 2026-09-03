@@ -19,7 +19,10 @@ public class SynthesisService {
     private static final Logger logger = LoggerFactory.getLogger(SynthesisService.class);
     private static final int MAX_TOKENS = 1024;
     private static final double TEMPERATURE = 0.2;
-    private static final long TIMEOUT_SECONDS = 600;
+    // Must stay comfortably above LlmConfig's LOCAL_LLAMA_TIMEOUT (900s) for the
+    // CPU-bound local backends, or this outer deadline cuts the call off before
+    // the client's own timeout ever gets a chance to fire.
+    private static final long TIMEOUT_SECONDS = 930;
 
     private final LlmClientProvider clientProvider;
     private final SynthesisPromptLoader promptLoader;

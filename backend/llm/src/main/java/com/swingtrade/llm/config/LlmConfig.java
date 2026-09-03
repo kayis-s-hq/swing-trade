@@ -66,8 +66,16 @@ public class LlmConfig {
      * local, pi_ssh, and ollama all get this override since they're all CPU-bound
      * llama.cpp on this Pi; openai/gpuhub keep Spring AI's tighter defaults since
      * those are genuinely fast remote endpoints.
+     *
+     * 570s (leaving 30s under the old 600s outer deadline) turned out too tight in
+     * practice: generation time on this Pi varies run to run (289s one run, >570s
+     * the next, same prompt shape) — with zero retries, hitting the ceiling
+     * discards an almost-finished generation, wasting the CPU/heat already spent
+     * for nothing. 900s gives real, slow-but-working calls room to finish; the
+     * outer Mono#block deadlines in SentimentService/SynthesisService are widened
+     * to 930s to match (see their TIMEOUT_SECONDS/ANALYSIS_TIMEOUT_SECONDS).
      */
-    private static final Duration LOCAL_LLAMA_TIMEOUT = Duration.ofSeconds(570);
+    private static final Duration LOCAL_LLAMA_TIMEOUT = Duration.ofSeconds(900);
     private static final int LOCAL_LLAMA_MAX_RETRIES = 0;
 
     @Bean

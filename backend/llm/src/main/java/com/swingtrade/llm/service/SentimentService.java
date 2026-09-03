@@ -53,7 +53,10 @@ public class SentimentService {
 
     private static final Logger logger = LoggerFactory.getLogger(SentimentService.class);
 
-    private static final long ANALYSIS_TIMEOUT_SECONDS = 600;
+    // Must stay comfortably above LlmConfig's LOCAL_LLAMA_TIMEOUT (900s) for the
+    // CPU-bound local backends, or this outer deadline cuts the call off before
+    // the client's own timeout ever gets a chance to fire.
+    private static final long ANALYSIS_TIMEOUT_SECONDS = 930;
     private static final int MAX_ARTICLES_FOR_LLM = 10;
 
     // Thread pool for async operations
