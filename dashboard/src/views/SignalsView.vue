@@ -1,5 +1,5 @@
 <template>
-  <div class="view-shell signals-view p-6 animate-fade-in">
+  <div class="view-shell signals-view p-4 sm:p-6 animate-fade-in">
     <!-- Page Header -->
     <div class="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
       <div>

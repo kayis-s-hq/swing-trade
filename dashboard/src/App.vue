@@ -3,8 +3,10 @@
     <!-- Sidebar -->
     <Sidebar
       :collapsed="sidebarCollapsed"
+      :mobile-open="mobileNavOpen"
       :health-status="appState.healthStatus"
       @toggle="sidebarCollapsed = !sidebarCollapsed"
+      @close="mobileNavOpen = false"
     />
 
     <!-- Main Content -->
@@ -14,10 +16,7 @@
       <NotificationHost />
 
       <!-- Header -->
-      <Header
-        :sidebar-collapsed="sidebarCollapsed"
-        @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
-      />
+      <Header :sidebar-collapsed="sidebarCollapsed" @toggle-sidebar="toggleNav" />
 
       <!-- Page Content -->
       <main class="flex-1 overflow-auto bg-bg-primary">
@@ -27,7 +26,7 @@
             :reset-key="route.fullPath"
             :route="route.fullPath"
           >
-            <Transition name="route" mode="out-in">
+            <Transition name="route" mode="out-in" @after-leave="mobileNavOpen = false">
               <component :is="Component" />
             </Transition>
           </RuntimeErrorBoundary>
@@ -73,7 +72,18 @@ import { getSettings } from './stores/settings'
 const appState = useAppStateStore()
 const settings = getSettings()
 const sidebarCollapsed = ref(false)
+const mobileNavOpen = ref(false)
 const currentTime = ref('')
+
+const DESKTOP_BREAKPOINT = 1024
+
+const toggleNav = () => {
+  if (window.innerWidth < DESKTOP_BREAKPOINT) {
+    mobileNavOpen.value = !mobileNavOpen.value
+  } else {
+    sidebarCollapsed.value = !sidebarCollapsed.value
+  }
+}
 
 const healthLabel = computed(() => {
   const labels = {

@@ -1,10 +1,11 @@
 <template>
   <header
-    class="flex h-14 items-center justify-between border-b border-border-subtle bg-bg-surface px-6"
+    class="flex h-14 items-center justify-between border-b border-border-subtle bg-bg-surface px-3 sm:px-6"
   >
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2 sm:gap-3">
       <button
-        class="rounded-md p-2 text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary"
+        class="flex h-10 w-10 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary"
+        aria-label="Toggle navigation"
         @click="$emit('toggle-sidebar')"
       >
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -18,17 +19,22 @@
       </button>
 
       <nav class="flex items-center gap-2">
-        <span class="text-sm text-text-muted">Home</span>
-        <svg class="h-4 w-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <span class="hidden text-sm text-text-muted sm:inline">Home</span>
+        <svg
+          class="hidden h-4 w-4 text-text-muted sm:block"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
         </svg>
-        <span class="text-sm font-semibold text-text-primary">{{ currentPage }}</span>
+        <span class="truncate text-sm font-semibold text-text-primary">{{ currentPage }}</span>
       </nav>
     </div>
 
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-2 sm:gap-4">
       <!-- Holiday -->
-      <div class="flex items-center gap-2 text-xs text-text-muted">
+      <div class="hidden items-center gap-2 text-xs text-text-muted md:flex">
         <svg
           class="h-3.5 w-3.5 shrink-0"
           fill="none"
@@ -59,16 +65,19 @@
       </div>
 
       <!-- Market Status -->
-      <div class="flex items-center gap-2 rounded-full border border-border-subtle px-3 py-1.5">
+      <div
+        class="flex items-center gap-2 rounded-full border border-border-subtle px-2.5 py-1.5 sm:px-3"
+      >
         <span class="pulse-dot inline-block h-2 w-2 rounded-full" :class="marketPillClass" />
-        <span class="text-xs font-medium" :class="marketPillClass">{{
+        <span class="hidden text-xs font-medium sm:inline" :class="marketPillClass">{{
           marketCountdownState.label || 'Closed'
         }}</span>
       </div>
 
       <!-- Theme Toggle -->
       <button
-        class="flex items-center gap-2 rounded-md border border-border-subtle px-3 py-1.5 text-text-muted transition-colors hover:border-border-default hover:text-text-primary"
+        class="flex h-10 items-center gap-2 rounded-md border border-border-subtle px-2.5 text-text-muted transition-colors hover:border-border-default hover:text-text-primary sm:px-3"
+        aria-label="Toggle theme"
         @click="themeStore.toggle"
       >
         <!-- Sun Icon -->
@@ -95,13 +104,15 @@
             d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
           />
         </svg>
-        <span class="text-xs font-medium">{{ themeStore.isDark ? 'Dark' : 'Light' }}</span>
+        <span class="hidden text-xs font-medium sm:inline">{{
+          themeStore.isDark ? 'Dark' : 'Light'
+        }}</span>
       </button>
 
       <!-- Broker Connection Status -->
       <div
         v-if="brokerConnected"
-        class="flex items-center gap-1.5 rounded-md bg-success-bg px-2.5 py-1"
+        class="hidden items-center gap-1.5 rounded-md bg-success-bg px-2.5 py-1 sm:flex"
       >
         <span class="h-1.5 w-1.5 rounded-full bg-success" />
         <span class="text-[11px] font-medium text-success">{{ brokerName }}</span>
@@ -114,7 +125,7 @@
 
       <!-- User -->
       <button
-        class="flex items-center gap-2 rounded-md border border-border-subtle px-2 py-1.5 transition-colors hover:border-border-default"
+        class="flex h-10 items-center gap-2 rounded-md border border-border-subtle px-2 transition-colors hover:border-border-default"
       >
         <div class="flex h-7 w-7 items-center justify-center rounded-full bg-brand/10">
           <span class="text-xs font-semibold text-brand">KT</span>
