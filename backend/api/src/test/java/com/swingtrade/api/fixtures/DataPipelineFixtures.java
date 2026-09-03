@@ -12,6 +12,9 @@ import java.util.List;
  */
 public class DataPipelineFixtures {
 
+    private DataPipelineFixtures() {
+    }
+
     public static OhlcvCandleEntity createValidCandle(String symbol, LocalDate date) {
         OhlcvCandleEntity candle = new OhlcvCandleEntity();
         candle.setSymbol(symbol);

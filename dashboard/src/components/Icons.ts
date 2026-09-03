@@ -9,6 +9,8 @@ export const iconPaths = {
     '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />',
   watchlist:
     '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11.48 3.499a5.942 5.942 0 003.755.366l-3.958 9.843a6.51 6.51 0 01-1.935-.067L11.48 3.5zm0 0l-2.98 7.45a3.5 3.5 0 00-1.553 2.024l-1.13 4.163a1.5 1.5 0 001.788 1.874l7.566-1.73a3.5 3.5 0 002.576-2.71l.762-3.27a3.5 3.5 0 00-2.34-4.045l-3.755-.366z" />',
+  search:
+    '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m21 21-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />',
   data: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />',
   backtest:
     '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-9-9 9 9 0 019 9zm-9-9a9 9 0 00-9 9h4" />',

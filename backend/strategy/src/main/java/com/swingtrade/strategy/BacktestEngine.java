@@ -1,6 +1,6 @@
 package com.swingtrade.strategy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.CandleStore;
@@ -20,7 +20,6 @@ import org.ta4j.core.indicators.helpers.HighestValueIndicator;
 import org.ta4j.core.indicators.helpers.LowPriceIndicator;
 import org.ta4j.core.indicators.helpers.OpenPriceIndicator;
 import org.ta4j.core.indicators.helpers.VolumeIndicator;
-import org.ta4j.core.num.DecimalNum;
 import org.ta4j.core.num.Num;
 
 import java.io.IOException;
@@ -60,23 +59,26 @@ public class BacktestEngine {
     private final CandleStore candleStore;
     private final WatchlistStore watchlistStore;
     private final PriceActionSignalEngine priceActionSignalEngine;
+    private final StrategyRegistry strategyRegistry;
     private final ObjectMapper objectMapper;
     private final String reportsDir;
 
     public BacktestEngine(CandleStore candleStore,
                           WatchlistStore watchlistStore,
                           PriceActionSignalEngine priceActionSignalEngine,
+                          StrategyRegistry strategyRegistry,
                           ObjectMapper objectMapper,
                           @Value("${backtest.reports.dir:reports}") String reportsDir) {
         this.candleStore = candleStore;
         this.watchlistStore = watchlistStore;
         this.priceActionSignalEngine = priceActionSignalEngine;
+        this.strategyRegistry = strategyRegistry;
         this.objectMapper = objectMapper;
         this.reportsDir = reportsDir;
     }
 
     /**
-     * Runs a single-symbol backtest.
+     * Runs a single-symbol backtest using the default (production) strategy.
      *
      * @param symbol   the stock symbol
      * @param exchange accepted for API symmetry/future filtering; candles are not currently
@@ -87,17 +89,29 @@ public class BacktestEngine {
      * @throws IllegalStateException    if there isn't enough candle history to backtest
      */
     public BacktestResult runBacktest(String symbol, String exchange, BacktestConfig config) {
+        return runBacktest(symbol, exchange, config, strategyRegistry.defaultStrategy());
+    }
+
+    /**
+     * Runs a single-symbol backtest against an explicitly chosen {@link TradingStrategy} -
+     * for backtest/testing comparison only; live signal generation stays pinned to the
+     * default strategy and never takes this parameter.
+     */
+    public BacktestResult runBacktest(String symbol, String exchange, BacktestConfig config, TradingStrategy strategy) {
         if (symbol == null || symbol.isBlank()) {
             throw new IllegalArgumentException("Symbol cannot be null or blank");
         }
         if (config == null) {
             throw new IllegalArgumentException("Config cannot be null");
         }
-        logger.debug("Running backtest for {} on {}", symbol, exchange);
+        if (strategy == null) {
+            throw new IllegalArgumentException("Strategy cannot be null");
+        }
+        logger.debug("Running backtest for {} on {} using strategy {}", symbol, exchange, strategy.name());
 
         List<OhlcvCandle> chronologicalCandles = getDescendingCandles(symbol, candleStore, MIN_CANDLES_FOR_BACKTEST);
 
-        return simulate(symbol, chronologicalCandles, config);
+        return simulate(symbol, chronologicalCandles, config, strategy);
     }
 
     static List<OhlcvCandle> getDescendingCandles(String symbol, CandleStore candleStore, int minCandles) {
@@ -118,13 +132,22 @@ public class BacktestEngine {
      * fails, e.g. due to insufficient candle history.
      */
     public List<BacktestResult> runBacktestAll(List<String> symbols, String exchange, BacktestConfig config) {
+        return runBacktestAll(symbols, exchange, config, strategyRegistry.defaultStrategy());
+    }
+
+    /**
+     * Runs a backtest for each symbol against an explicitly chosen {@link TradingStrategy} -
+     * for backtest/testing comparison only.
+     */
+    public List<BacktestResult> runBacktestAll(List<String> symbols, String exchange, BacktestConfig config,
+                                               TradingStrategy strategy) {
         List<BacktestResult> results = new ArrayList<>();
         int processed = 0;
 
         for (String symbol : symbols) {
             processed++;
             try {
-                results.add(runBacktest(symbol, exchange, config));
+                results.add(runBacktest(symbol, exchange, config, strategy));
             } catch (Exception e) {
                 logger.warn("Skipping {} in backtest run: {}", symbol, e.getMessage());
             }
@@ -139,13 +162,22 @@ public class BacktestEngine {
     }
 
     /**
-     * Runs a backtest across every symbol in the active watchlist.
+     * Runs a backtest across every symbol in the active watchlist using the default
+     * (production) strategy.
      */
     public List<BacktestResult> runBacktestAll(String exchange, BacktestConfig config) {
+        return runBacktestAll(exchange, config, strategyRegistry.defaultStrategy());
+    }
+
+    /**
+     * Runs a backtest across every symbol in the active watchlist against an explicitly
+     * chosen {@link TradingStrategy} - for backtest/testing comparison only.
+     */
+    public List<BacktestResult> runBacktestAll(String exchange, BacktestConfig config, TradingStrategy strategy) {
         List<String> symbols = watchlistStore.getWatchlist().stream()
                 .map(Stock::symbol)
                 .toList();
-        return runBacktestAll(symbols, exchange, config);
+        return runBacktestAll(symbols, exchange, config, strategy);
     }
 
     /**
@@ -178,7 +210,8 @@ public class BacktestEngine {
     // Simulation
     // -----------------------------------------------------------------------
 
-    private BacktestResult simulate(String symbol, List<OhlcvCandle> chronologicalCandles, BacktestConfig config) {
+    private BacktestResult simulate(String symbol, List<OhlcvCandle> chronologicalCandles, BacktestConfig config,
+                                    TradingStrategy strategy) {
         BarSeries series = priceActionSignalEngine.buildBarSeries(symbol, chronologicalCandles);
         int barCount = series.getBarCount();
 
@@ -208,10 +241,17 @@ public class BacktestEngine {
                 BigDecimal high = numToBigDecimal(highPrice.getValue(i));
                 BigDecimal close = numToBigDecimal(closePrice.getValue(i));
                 BigDecimal ema20Val = numToBigDecimal(ema20.getValue(i));
+                BigDecimal ema50Val = numToBigDecimal(ema50.getValue(i));
+                BigDecimal rsiVal = numToBigDecimal(rsi.getValue(i));
+                Indicators exitIndicators = new Indicators(close, ema20Val, ema50Val, rsiVal, null, null, null);
 
                 int streak = close.compareTo(ema20Val) < 0 ? open.belowEma20Streak + 1 : 0;
                 BigDecimal exitPrice = null;
                 ExitReason reason = null;
+
+                // Evaluated through the same TradingStrategy instance used for entry so the
+                // backtest can never drift from its rules.
+                boolean signalExitTriggered = strategy.isSignalExit(exitIndicators);
 
                 if (low.compareTo(open.stopLoss()) <= 0) {
                     reason = ExitReason.STOP_LOSS;
@@ -219,7 +259,10 @@ public class BacktestEngine {
                 } else if (high.compareTo(open.target()) >= 0) {
                     reason = ExitReason.TARGET_HIT;
                     exitPrice = open.target();
-                } else if (streak >= 2) {
+                } else if (config.signalExitEnabled() && signalExitTriggered) {
+                    reason = ExitReason.SIGNAL_EXIT;
+                    exitPrice = close;
+                } else if (streak >= config.trendBreakStreakDays()) {
                     reason = ExitReason.TREND_BREAK;
                     exitPrice = close;
                 } else if ((i - open.entryIndex()) >= config.maxHoldingDays()) {
@@ -241,7 +284,7 @@ public class BacktestEngine {
 
             if (open == null && i + 1 < barCount) {
                 open = tryEnter(chronologicalCandles, series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
-                        weeklyHigh, i, capital, config);
+                        weeklyHigh, i, capital, config, strategy);
             }
         }
 
@@ -263,21 +306,13 @@ public class BacktestEngine {
                                   ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
                                   EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
                                   VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
-                                  int i, double capital, BacktestConfig config) {
-        Indicators ind = Indicators.from(series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
+                                  int i, double capital, BacktestConfig config, TradingStrategy strategy) {
+        Indicators ind = indicatorsAt(series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
                 weeklyHigh, i);
 
-        boolean trendAligned = ind.price().compareTo(ind.ema20()) > 0 && ind.ema20().compareTo(ind.ema50()) > 0;
-        boolean rsiInRange = ind.rsi().compareTo(PriceActionSignalEngine.RSI_LOWER_BOUND) >= 0
-                && ind.rsi().compareTo(PriceActionSignalEngine.RSI_UPPER_BOUND) <= 0;
-        boolean volumeSurge = ind.volume().compareTo(ind.volumeMa().multiply(PriceActionSignalEngine.VOLUME_MULTIPLIER)) > 0;
-        boolean nearWeeklyHigh = ind.price().compareTo(ind.weeklyHigh().multiply(PriceActionSignalEngine.HIGH_PROXIMITY_THRESHOLD)) >= 0;
-
-        int rulesPassed = (trendAligned ? 1 : 0)
-                + (rsiInRange ? 1 : 0)
-                + (volumeSurge ? 1 : 0)
-                + (nearWeeklyHigh ? 1 : 0);
-        if (rulesPassed < 3) {
+        // Evaluated through the same TradingStrategy instance PriceActionSignalEngine.analyze()
+        // uses, so the backtest can never drift from its live rules (docs/backtesting.md).
+        if (!strategy.isEntrySignal(ind)) {
             return null;
         }
 
@@ -426,21 +461,18 @@ public class BacktestEngine {
         Files.writeString(csvPath, csv.toString());
     }
 
-    record Indicators(BigDecimal price, BigDecimal ema20, BigDecimal ema50, BigDecimal rsi,
-                      BigDecimal volume, BigDecimal volumeMa, BigDecimal weeklyHigh) {
-        static Indicators from(BarSeries series, ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
-                               EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
-                               VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
-                               int bar) {
-            return new Indicators(
-                    numToBigDecimal(closePrice.getValue(bar)),
-                    numToBigDecimal(ema20.getValue(bar)),
-                    numToBigDecimal(ema50.getValue(bar)),
-                    numToBigDecimal(rsi.getValue(bar)),
-                    numToBigDecimal(volume.getValue(bar)),
-                    numToBigDecimal(volumeMa.getValue(bar)),
-                    numToBigDecimal(weeklyHigh.getValue(bar)));
-        }
+    private static Indicators indicatorsAt(BarSeries series, ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
+                                           EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
+                                           VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
+                                           int bar) {
+        return new Indicators(
+                numToBigDecimal(closePrice.getValue(bar)),
+                numToBigDecimal(ema20.getValue(bar)),
+                numToBigDecimal(ema50.getValue(bar)),
+                numToBigDecimal(rsi.getValue(bar)),
+                numToBigDecimal(volume.getValue(bar)),
+                numToBigDecimal(volumeMa.getValue(bar)),
+                numToBigDecimal(weeklyHigh.getValue(bar)));
     }
 
     // -----------------------------------------------------------------------

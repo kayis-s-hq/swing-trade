@@ -1,13 +1,22 @@
 <template>
-  <div class="p-6 animate-fade-in">
-    <div class="mb-6 flex items-start justify-between">
+  <div class="view-shell settings-shell p-4 sm:p-6 animate-fade-in">
+    <div
+      class="settings-header mb-6 flex flex-col gap-5 rounded-2xl border border-border-subtle p-5 sm:flex-row sm:items-end sm:justify-between sm:p-7"
+    >
       <div>
-        <h1 class="font-display text-2xl font-semibold text-text-primary">Settings</h1>
-        <p class="mt-1 text-sm text-text-muted">Broker connections and trading configuration</p>
+        <p class="settings-kicker">
+          Control centre <span aria-hidden="true">/</span> Workspace preferences
+        </p>
+        <h1 class="mt-2 font-display text-3xl font-semibold tracking-tight text-text-primary">
+          Settings
+        </h1>
+        <p class="mt-2 max-w-xl text-sm leading-6 text-text-muted">
+          Configure how Swing Trade connects, thinks, trades, and reports back to you.
+        </p>
       </div>
       <button
-        :disabled="saving"
-        class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
+        :disabled="saving || unconfirmedDefaults"
+        class="settings-save rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-text transition-all hover:-translate-y-0.5 hover:bg-brand-hover disabled:opacity-50"
         :class="saved ? 'bg-success' : ''"
         @click="handleSave"
       >
@@ -15,13 +24,38 @@
       </button>
     </div>
 
-    <!-- Tab bar -->
-    <div role="tablist" class="mb-6 flex gap-1 border-b border-border-subtle">
+    <div class="settings-overview mb-6 grid gap-3 sm:grid-cols-3">
+      <div class="settings-status-card rounded-xl border border-border-subtle p-4">
+        <span class="settings-card-label">Active broker</span>
+        <span class="settings-card-value">{{
+          brokers.find((b) => b.value === settings.selectedBroker)?.label
+        }}</span>
+      </div>
+      <div class="settings-status-card rounded-xl border border-border-subtle p-4">
+        <span class="settings-card-label">Intelligence</span>
+        <span class="settings-card-value">{{
+          llmBackends.find((b) => b.value === llmSettings.llmBackend)?.label
+        }}</span>
+      </div>
+      <div class="settings-status-card rounded-xl border border-border-subtle p-4">
+        <span class="settings-card-label">Trading mode</span>
+        <span class="settings-card-value">{{
+          settings.tradingConfig.mode === 'paper' ? 'Paper Trading' : 'Live Trading'
+        }}</span>
+      </div>
+    </div>
+
+    <!-- Section navigation -->
+    <div
+      role="tablist"
+      aria-label="Settings sections"
+      class="settings-nav mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-border-subtle p-2 sm:grid-cols-5"
+    >
       <button
         role="tab"
         aria-label="Broker"
         :aria-selected="activeTab === 'broker'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
         :class="
           activeTab === 'broker'
             ? 'border-b-2 border-brand text-brand'
@@ -29,13 +63,14 @@
         "
         @click="activeTab = 'broker'"
       >
-        Broker
+        <span class="settings-tab-index">01</span><span>Broker</span
+        ><span class="settings-tab-detail">Connection</span>
       </button>
       <button
         role="tab"
         aria-label="AI/LLM"
         :aria-selected="activeTab === 'llm'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
         :class="
           activeTab === 'llm'
             ? 'border-b-2 border-brand text-brand'
@@ -43,13 +78,14 @@
         "
         @click="activeTab = 'llm'"
       >
-        AI/LLM
+        <span class="settings-tab-index">02</span><span>AI / LLM</span
+        ><span class="settings-tab-detail">Intelligence</span>
       </button>
       <button
         role="tab"
         aria-label="Trading"
         :aria-selected="activeTab === 'trading'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
         :class="
           activeTab === 'trading'
             ? 'border-b-2 border-brand text-brand'
@@ -57,13 +93,14 @@
         "
         @click="activeTab = 'trading'"
       >
-        Trading
+        <span class="settings-tab-index">03</span><span>Trading</span
+        ><span class="settings-tab-detail">Risk & limits</span>
       </button>
       <button
         role="tab"
         aria-label="Health"
         :aria-selected="activeTab === 'health'"
-        class="px-4 py-2 text-sm font-medium transition-colors"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
         :class="
           activeTab === 'health'
             ? 'border-b-2 border-brand text-brand'
@@ -71,11 +108,34 @@
         "
         @click="activeTab = 'health'"
       >
-        Health
+        <span class="settings-tab-index">04</span><span>Health</span
+        ><span class="settings-tab-detail">Diagnostics</span>
+      </button>
+      <button
+        role="tab"
+        aria-label="Scanning"
+        :aria-selected="activeTab === 'scanning'"
+        class="settings-tab px-3 py-3 text-left text-sm font-medium transition-all"
+        :class="
+          activeTab === 'scanning'
+            ? 'border-b-2 border-brand text-brand'
+            : 'text-text-muted hover:text-text-primary'
+        "
+        @click="activeTab = 'scanning'"
+      >
+        <span class="settings-tab-index">05</span><span>Scanning</span
+        ><span class="settings-tab-detail">Candidate Explorer</span>
       </button>
     </div>
 
-    <div class="max-w-2xl">
+    <div class="settings-content w-full max-w-none">
+      <div
+        v-if="unconfirmedDefaults"
+        role="status"
+        class="mb-4 rounded-lg bg-warning-bg p-3 text-sm text-warning"
+      >
+        Some settings could not be loaded; showing unconfirmed defaults. Retry before saving.
+      </div>
       <!-- Auth Success/Error Banner -->
       <div
         v-if="authResultBanner"
@@ -96,15 +156,26 @@
 
       <!-- Broker Tab -->
       <div v-show="activeTab === 'broker'">
-        <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">Broker Connection</h2>
+        <div class="broker-card card-panel p-5 sm:p-6">
+          <div class="broker-card-heading">
+            <div>
+              <p class="settings-section-kicker">Execution access</p>
+              <h2 class="mt-2 text-xl font-semibold tracking-tight text-text-primary">
+                Broker Connection
+              </h2>
+              <p class="mt-1 max-w-lg text-sm leading-6 text-text-muted">
+                Choose the account used for market data and order execution.
+              </p>
+            </div>
+            <span class="broker-card-mark">01</span>
+          </div>
 
           <!-- Broker Selection -->
-          <div class="mb-4 flex gap-3">
+          <div class="broker-options mt-6">
             <button
               v-for="b in brokers"
               :key="b.value"
-              class="flex-1 rounded-lg border p-3 text-sm font-medium transition-all"
+              class="broker-option rounded-xl border p-4 text-left text-sm font-medium transition-all"
               :class="
                 settings.selectedBroker === b.value
                   ? 'border-brand bg-brand-subtle text-brand'
@@ -112,41 +183,69 @@
               "
               @click="settings.selectedBroker = b.value"
             >
-              {{ b.label }}
+              <span class="flex items-center justify-between gap-3">
+                <span>{{ b.label }}</span>
+                <span
+                  v-if="settings.selectedBroker === b.value"
+                  class="broker-option-check"
+                  aria-hidden="true"
+                >
+                  ✓
+                </span>
+              </span>
+              <span class="mt-1 block text-xs font-normal text-text-muted">
+                {{ b.value === 'fyers' ? 'Market data and trading' : 'Integration coming soon' }}
+              </span>
             </button>
           </div>
 
           <!-- Connection Status -->
           <div
             v-if="settings.selectedBroker === 'fyers'"
-            class="rounded-lg border p-4"
+            class="broker-status mt-4 rounded-xl border p-4"
             :class="
               fyersConnected
                 ? 'border-success/50 bg-success-bg'
                 : 'border-border-subtle bg-bg-primary/50'
             "
           >
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex min-w-0 items-center gap-3">
+                <span v-if="fyersStatusError" class="text-sm font-medium text-warning"
+                  >Status unavailable</span
+                >
                 <span
+                  v-else
                   class="h-2.5 w-2.5 rounded-full"
                   :class="fyersConnected ? 'bg-success pulse-dot' : 'bg-danger'"
                 />
                 <span
-                  class="text-sm font-medium"
+                  v-if="!fyersStatusError"
+                  class="text-sm font-semibold"
                   :class="fyersConnected ? 'text-success' : 'text-text-muted'"
                 >
                   {{ fyersConnected ? 'Connected' : 'Disconnected' }}
                 </span>
               </div>
-              <span v-if="fyersConnected && fyersStatus?.clientId" class="text-xs text-text-muted">
-                ID: {{ fyersStatus.clientId }}
+              <span
+                v-if="fyersConnected && fyersStatus?.clientId"
+                class="truncate font-mono text-[11px] text-text-muted"
+              >
+                {{ fyersStatus.clientId }}
               </span>
             </div>
+            <p class="mt-2 text-xs text-text-muted">
+              {{
+                fyersConnected ? 'Ready for authenticated requests.' : 'Authentication required.'
+              }}
+            </p>
           </div>
 
           <!-- Connect Button -->
-          <div v-if="settings.selectedBroker === 'fyers' && !fyersConnected" class="mt-4 space-y-3">
+          <div
+            v-if="settings.selectedBroker === 'fyers' && !fyersConnected && !fyersStatusError"
+            class="broker-actions mt-4 space-y-3"
+          >
             <button
               :disabled="authing"
               class="w-full rounded-md bg-brand px-4 py-2.5 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
@@ -198,17 +297,28 @@
 
       <!-- LLM Tab -->
       <div v-show="activeTab === 'llm'">
-        <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">LLM & Intelligence</h2>
+        <div class="llm-card card-panel p-5 sm:p-6">
+          <div class="settings-panel-heading">
+            <div>
+              <p class="settings-section-kicker">Decision support</p>
+              <h2 class="mt-2 text-xl font-semibold tracking-tight text-text-primary">
+                LLM & Intelligence
+              </h2>
+              <p class="mt-1 max-w-lg text-sm leading-6 text-text-muted">
+                Configure the services that enrich signals with sentiment and research.
+              </p>
+            </div>
+            <span class="settings-panel-mark">02</span>
+          </div>
 
           <!-- Backend Selection -->
-          <div class="mb-6">
-            <h3 class="text-sm font-medium text-text-secondary mb-3">LLM Backend</h3>
-            <div class="flex gap-2 mb-4">
+          <div class="llm-backend-section mt-6 mb-6">
+            <h3 class="mb-3 text-sm font-semibold text-text-primary">LLM Backend</h3>
+            <div class="llm-backend-options">
               <button
                 v-for="b in llmBackends"
                 :key="b.value"
-                class="flex-1 rounded-lg border p-3 text-sm font-medium transition-all"
+                class="llm-backend-option rounded-xl border p-4 text-left text-sm font-medium transition-all"
                 :class="
                   llmSettings.llmBackend === b.value
                     ? 'border-brand bg-brand-subtle text-brand'
@@ -216,7 +326,16 @@
                 "
                 @click="llmSettings.llmBackend = b.value"
               >
-                {{ b.label }}
+                <span class="flex items-center justify-between gap-3">
+                  <span>{{ b.label }}</span>
+                  <span
+                    v-if="llmSettings.llmBackend === b.value"
+                    class="broker-option-check"
+                    aria-hidden="true"
+                  >
+                    ✓
+                  </span>
+                </span>
               </button>
             </div>
 
@@ -233,10 +352,16 @@
                 <span class="text-text-secondary">Port:</span> 8089
               </div>
               <div
-                v-else-if="llmSettings.llmBackend === 'gpuhub'"
+                v-else-if="llmSettings.llmBackend === 'openai'"
                 class="rounded-md bg-bg-primary p-3"
               >
                 External OpenAI-compatible LLM endpoint. No server management needed.
+              </div>
+              <div
+                v-else-if="llmSettings.llmBackend === 'ollama'"
+                class="rounded-md bg-bg-primary p-3"
+              >
+                Local Ollama server for sentiment analysis. Runs entirely on your machine.
               </div>
             </div>
           </div>
@@ -254,17 +379,11 @@
             </div>
 
             <div class="flex gap-2">
-              <select
+              <input
                 v-model="llmSettings.llamacppModel"
-                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
-              >
-                <option value="/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf">
-                  Qwen3-4B (fast, default)
-                </option>
-                <option value="/home/dietpi/.synapse/models/google_gemma-4-E2B-it-Q4_0.gguf">
-                  Gemma-4 (larger, super analysis)
-                </option>
-              </select>
+                placeholder="Path to the GGUF model configured on the server"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
               <span class="self-center text-xs text-text-muted">Model</span>
             </div>
 
@@ -281,17 +400,11 @@
               llama.cpp server on Pi 5 (dietpi@piworm). Java starts/stops it via SSH on port 8089.
             </p>
             <div class="flex gap-2">
-              <select
+              <input
                 v-model="llmSettings.llamacppModel"
-                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
-              >
-                <option value="/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf">
-                  Qwen3-4B (fast, default)
-                </option>
-                <option value="/home/dietpi/.synapse/models/google_gemma-4-E2B-it-Q4_0.gguf">
-                  Gemma-4 (larger, super analysis)
-                </option>
-              </select>
+                placeholder="Path to the GGUF model configured on the server"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
               <span class="self-center text-xs text-text-muted">Model</span>
             </div>
             <p class="text-xs text-text-muted">
@@ -304,7 +417,12 @@
                   class="h-2.5 w-2.5 rounded-full"
                   :class="piServerRunning ? 'bg-success' : 'bg-danger'"
                 />
-                <span class="text-xs" :class="piServerRunning ? 'text-success' : 'text-text-muted'">
+                <span v-if="piStatusError" class="text-xs text-warning">Status unavailable</span>
+                <span
+                  v-else
+                  class="text-xs"
+                  :class="piServerRunning ? 'text-success' : 'text-text-muted'"
+                >
                   {{ piServerRunning ? 'Running' : 'Stopped' }}
                 </span>
               </div>
@@ -314,7 +432,7 @@
             </div>
             <div class="flex gap-2 pt-1">
               <button
-                v-if="!piServerRunning"
+                v-if="!piStatusError && !piServerRunning"
                 :disabled="piLoading"
                 class="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
                 @click="handlePiStart"
@@ -322,7 +440,7 @@
                 {{ piLoading ? 'Starting...' : 'Start Server' }}
               </button>
               <button
-                v-else
+                v-else-if="!piStatusError"
                 :disabled="piLoading"
                 class="rounded-md border border-danger/30 bg-danger-bg px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
                 @click="handlePiStop"
@@ -330,6 +448,7 @@
                 {{ piLoading ? 'Stopping...' : 'Stop Server' }}
               </button>
               <button
+                v-if="!piStatusError"
                 :disabled="piLoading"
                 class="rounded-md border border-border-subtle px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:border-border-default hover:text-text-primary disabled:opacity-50"
                 @click="refreshPiStatus"
@@ -356,7 +475,7 @@
           </div>
 
           <!-- OpenAI-compatible LLM (Super Analysis) -->
-          <div v-show="llmSettings.llmBackend === 'gpuhub'" class="space-y-4 mb-6">
+          <div v-show="llmSettings.llmBackend === 'openai'" class="space-y-4 mb-6">
             <h3 class="text-sm font-medium text-text-secondary">OpenAI-compatible LLM</h3>
             <div class="flex gap-2">
               <input
@@ -370,7 +489,8 @@
               <input
                 v-model="llmSettings.openaiApiKey"
                 type="password"
-                placeholder="sk-..."
+                autocomplete="new-password"
+                placeholder="Leave blank to keep the configured key"
                 class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
               />
               <span class="self-center text-xs text-text-muted">API Key</span>
@@ -404,6 +524,58 @@
               :class="openaiTestSuccess ? 'text-success' : 'text-danger'"
             >
               {{ openaiTestResult }}
+            </div>
+          </div>
+
+          <!-- Ollama (Local LLM server) -->
+          <div v-show="llmSettings.llmBackend === 'ollama'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">Ollama</h3>
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.ollamaBaseUrl"
+                placeholder="http://localhost:11434/v1"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+            </div>
+
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.ollamaModel"
+                placeholder="qwen3:4b"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+              <span class="self-center text-xs text-text-muted">Model</span>
+            </div>
+
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.ollamaApiKey"
+                type="password"
+                autocomplete="new-password"
+                placeholder="Optional; leave blank to keep the configured key"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+              <span class="self-center text-xs text-text-muted">API Key (optional)</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <p class="text-xs text-text-muted">
+                Local Ollama server for sentiment analysis. Runs entirely on your machine.
+              </p>
+              <button
+                :disabled="testingOllama"
+                class="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+                @click="testOllamaConnection"
+              >
+                {{ testingOllama ? 'Testing...' : 'Test' }}
+              </button>
+            </div>
+
+            <div
+              v-if="ollamaTestResult"
+              class="text-xs"
+              :class="ollamaTestSuccess ? 'text-success' : 'text-danger'"
+            >
+              {{ ollamaTestResult }}
             </div>
           </div>
 
@@ -469,98 +641,197 @@
 
       <!-- Trading Tab -->
       <div v-show="activeTab === 'trading'">
-        <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">Trading Configuration</h2>
-          <div class="grid grid-cols-2 gap-4 text-sm">
-            <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">Mode</p>
-              <select
-                v-model="settings.tradingConfig.mode"
-                class="mt-1 w-full rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
-              >
-                <option value="paper">Paper Trading</option>
-                <option value="live">Live Trading</option>
-              </select>
+        <div class="settings-panel trading-card card-panel p-5 sm:p-6">
+          <div class="settings-panel-heading">
+            <div>
+              <p class="settings-section-kicker">Execution guardrails</p>
+              <h2 class="mt-1 text-lg font-semibold text-text-primary">Trading Configuration</h2>
+              <p class="mt-1 text-sm text-text-muted">
+                Set the rules that keep every paper trade within your plan.
+              </p>
             </div>
-            <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">Max Position Size</p>
-              <div class="mt-1 flex items-center gap-1">
+            <span class="settings-panel-mark">03</span>
+          </div>
+
+          <div class="settings-mode-row mt-6 rounded-xl border border-border-subtle p-4">
+            <div>
+              <p class="text-sm font-semibold text-text-primary">Trading mode</p>
+              <p class="mt-1 text-xs text-text-muted">
+                Live trading stays opt-in until you deliberately switch modes.
+              </p>
+            </div>
+            <select
+              v-model="settings.tradingConfig.mode"
+              aria-label="Trading mode"
+              class="settings-input mt-3 w-full sm:mt-0 sm:w-52"
+            >
+              <option value="paper">Paper Trading</option>
+              <option value="live">Live Trading</option>
+            </select>
+          </div>
+
+          <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label class="settings-field rounded-xl border border-border-subtle p-4">
+              <span class="settings-field-label">Initial Capital</span>
+              <span class="settings-field-help">Paper-trading starting balance</span>
+              <span class="settings-input-wrap">
+                <span>Rs.</span>
+                <input
+                  v-model.number="settings.tradingConfig.initialCapital"
+                  type="number"
+                  min="1"
+                  step="1000"
+                  class="settings-input"
+                />
+              </span>
+            </label>
+            <label class="settings-field rounded-xl border border-border-subtle p-4">
+              <span class="settings-field-label">Max Position Size</span>
+              <span class="settings-field-help">Portfolio allocation limit</span>
+              <span class="settings-input-wrap">
                 <input
                   v-model.number="settings.tradingConfig.maxPositionSize"
                   type="number"
                   min="1"
                   max="100"
-                  class="w-20 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
+                  class="settings-input"
                 />
-                <span class="text-xs text-text-muted">%</span>
-              </div>
-            </div>
-            <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">Stop Loss</p>
-              <div class="mt-1 flex items-center gap-1">
+                <span>%</span>
+              </span>
+            </label>
+            <label class="settings-field rounded-xl border border-border-subtle p-4">
+              <span class="settings-field-label">Stop Loss</span>
+              <span class="settings-field-help">Exit when risk threshold hits</span>
+              <span class="settings-input-wrap">
                 <input
                   v-model.number="settings.tradingConfig.stopLoss"
                   type="number"
                   min="1"
                   max="50"
-                  class="w-20 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
+                  class="settings-input"
                 />
-                <span class="text-xs text-text-muted">%</span>
-              </div>
-            </div>
-            <div class="rounded-lg border border-border-subtle p-3">
-              <p class="text-xs text-text-muted">Take Profit</p>
-              <div class="mt-1 flex items-center gap-1">
+                <span>%</span>
+              </span>
+            </label>
+            <label class="settings-field rounded-xl border border-border-subtle p-4">
+              <span class="settings-field-label">Take Profit</span>
+              <span class="settings-field-help">Target gain before exit</span>
+              <span class="settings-input-wrap">
                 <input
                   v-model.number="settings.tradingConfig.takeProfit"
                   type="number"
                   min="1"
                   max="200"
-                  class="w-20 rounded-md border border-border-subtle bg-bg-primary px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
+                  class="settings-input"
                 />
-                <span class="text-xs text-text-muted">%</span>
-              </div>
-            </div>
+                <span>%</span>
+              </span>
+            </label>
           </div>
+          <p class="mt-4 text-xs text-text-muted">
+            Initial capital changes apply after the API restarts; the current paper portfolio is not
+            reset automatically.
+          </p>
+        </div>
+      </div>
+
+      <!-- Scanning Tab -->
+      <div v-show="activeTab === 'scanning'">
+        <div class="settings-panel card-panel p-5 sm:p-6">
+          <div class="settings-panel-heading">
+            <div>
+              <p class="settings-section-kicker">Research throughput</p>
+              <h2 class="mt-1 text-lg font-semibold text-text-primary">Candidate Explorer</h2>
+              <p class="mt-1 max-w-xl text-sm leading-6 text-text-muted">
+                Choose how many symbols can be processed at once during the next scan. Higher values
+                finish faster but can increase provider load.
+              </p>
+            </div>
+            <span class="settings-panel-mark">05</span>
+          </div>
+
+          <label
+            class="settings-field mt-6 block max-w-md rounded-xl border border-border-subtle p-4"
+          >
+            <span class="settings-field-label">Parallel workers</span>
+            <span class="settings-field-help">Allowed range: 1–12. Default: 3.</span>
+            <span class="settings-input-wrap mt-3">
+              <input
+                v-model.number="scanningConfig.maxConcurrent"
+                type="number"
+                min="1"
+                max="12"
+                step="1"
+                aria-label="Candidate Explorer parallel workers"
+                class="settings-input"
+              />
+              <span>workers</span>
+            </span>
+          </label>
+          <p class="mt-4 text-xs leading-5 text-text-muted">
+            This setting is applied when a new scan starts; an active scan keeps its original worker
+            limit.
+          </p>
         </div>
       </div>
 
       <!-- Health Tab -->
       <div v-show="activeTab === 'health'">
-        <div class="card-panel p-5">
-          <h2 class="mb-4 text-base font-semibold text-text-primary">System Health</h2>
-          <div v-if="healthStatus" class="space-y-2">
+        <div class="settings-panel health-card card-panel p-5 sm:p-6">
+          <div class="settings-panel-heading">
+            <div>
+              <p class="settings-section-kicker">Operational pulse</p>
+              <h2 class="mt-1 text-lg font-semibold text-text-primary">System Health</h2>
+              <p class="mt-1 text-sm text-text-muted">
+                A quick read on the services supporting your workspace.
+              </p>
+            </div>
+            <span class="settings-panel-mark">04</span>
+          </div>
+          <div v-if="healthStatus" class="settings-health-list mt-6 space-y-2">
             <div
               v-for="(comp, key) in healthStatus.components"
               :key="key"
-              class="flex items-center justify-between rounded-lg border border-border-subtle/50 p-3"
+              class="settings-health-row flex items-center justify-between rounded-xl border border-border-subtle/50 p-4"
             >
-              <span class="text-sm font-medium text-text-secondary">{{ key }}</span>
+              <div class="flex items-center gap-3">
+                <span
+                  class="settings-health-icon"
+                  :class="healthDot(comp.status)"
+                  aria-hidden="true"
+                />
+                <div>
+                  <span class="block text-sm font-semibold capitalize text-text-primary">{{
+                    key
+                  }}</span>
+                  <span class="mt-0.5 block text-xs text-text-muted">Service availability</span>
+                </div>
+              </div>
               <span
                 class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
                 :class="healthColor(comp.status)"
               >
-                <span class="h-1.5 w-1.5 rounded-full" :class="healthDot(comp.status)" />
                 {{ comp.status }}
               </span>
             </div>
           </div>
-          <div v-else class="flex items-center justify-center py-8">
+          <div
+            v-else-if="healthStatusError"
+            role="status"
+            class="settings-health-empty mt-6 rounded-xl border border-warning/30 bg-warning-bg p-5 text-sm text-warning"
+          >
+            <span class="font-semibold">Status unavailable.</span> We couldn't confirm every service
+            right now.
+          </div>
+          <div
+            v-else
+            class="flex items-center justify-center rounded-xl border border-border-subtle p-8"
+          >
             <LoadingSpinner :message="'Checking system...'" :small="true" />
           </div>
         </div>
       </div>
     </div>
-
-    <!-- Save Button -->
-    <button
-      :disabled="saving"
-      class="w-full rounded-md bg-brand px-4 py-3 text-sm font-semibold text-brand-text transition-colors hover:bg-brand-hover disabled:opacity-50"
-      :class="saved ? 'bg-success' : ''"
-      @click="handleSave"
-    >
-      {{ saving ? 'Saving...' : saved ? 'Saved!' : 'Save All Settings' }}
-    </button>
 
     <!-- Toast notifications -->
     <Transition
@@ -587,11 +858,13 @@ import {
   testDiscordWebhook as apiTestDiscordWebhook,
   testPiConnection as apiTestPiConnection,
   testOpenAiConnection as apiTestOpenAiConnection,
+  testOllamaConnection as apiTestOllamaConnection,
   startPiServer as apiStartPiServer,
   stopPiServer as apiStopPiServer,
   getPiServerStatus as apiGetPiServerStatus,
 } from '../api/client'
 import type { FyersStatus, HealthStatus } from '../api/types'
+import { formatAppError } from '../errors/appError'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import Toast from '../components/Toast.vue'
 import {
@@ -606,9 +879,21 @@ const activeTab = ref('broker')
 const settings = getSettings()
 const llmSettings = settings.llmSettings
 const discordSettings = settings.discordSettings
+const scanningConfig = settings.scanningConfig ?? { maxConcurrent: 3 }
+
+function confirmed<T>(value: T | { success: boolean; data?: T }): T | undefined {
+  if (typeof value === 'object' && value !== null && 'data' in value) {
+    return value.success ? value.data : undefined
+  }
+  return value as T
+}
 const fyersStatus = ref<FyersStatus | null>(null)
-const fyersConnected = computed(() => fyersStatus.value?.connected ?? false)
+const fyersStatusError = ref(false)
+const fyersConnected = computed(
+  () => !fyersStatusError.value && (fyersStatus.value?.connected ?? false)
+)
 const healthStatus = ref<HealthStatus | null>(null)
+const healthStatusError = ref(false)
 const authResultBanner = ref<'success' | 'error' | null>(null)
 
 const authing = ref(false)
@@ -618,13 +903,18 @@ const testingPdf = ref(false)
 const testingDiscord = ref(false)
 const testingPi = ref(false)
 const testingOpenai = ref(false)
+const testingOllama = ref(false)
 const piTestResult = ref('')
 const piTestSuccess = ref(false)
 const piServerRunning = ref(false)
 const piServerStatusMsg = ref('')
 const piLoading = ref(false)
+const piStatusError = ref(false)
+const unconfirmedDefaults = ref(false)
 const openaiTestResult = ref('')
 const openaiTestSuccess = ref(false)
+const ollamaTestResult = ref('')
+const ollamaTestSuccess = ref(false)
 const saving = ref(false)
 const saved = ref(false)
 const toastMessage = ref('')
@@ -642,7 +932,8 @@ const brokers = [
 const llmBackends = [
   { value: 'local' as const, label: 'Local' },
   { value: 'pi_ssh' as const, label: 'Pi SSH' },
-  { value: 'gpuhub' as const, label: 'OpenAI' },
+  { value: 'openai' as const, label: 'OpenAI' },
+  { value: 'ollama' as const, label: 'Ollama' },
 ]
 
 const healthColor = (status: string) => {
@@ -660,8 +951,20 @@ const healthDot = (status: string) => {
 }
 
 const refreshFyersStatus = async () => {
-  const res = await getFyersStatus()
-  if (res.success && res.data) fyersStatus.value = res.data
+  if (settings.selectedBroker !== 'fyers') {
+    fyersStatus.value = null
+    fyersStatusError.value = false
+    return
+  }
+  fyersStatusError.value = false
+  try {
+    const res = await getFyersStatus()
+    const data = confirmed(res)
+    if (data) fyersStatus.value = data
+    else fyersStatusError.value = true
+  } catch {
+    fyersStatusError.value = true
+  }
 }
 
 const pollFyersStatus = () => {
@@ -672,14 +975,15 @@ const pollFyersStatus = () => {
   pollTimer = window.setInterval(async () => {
     try {
       const res = await getFyersStatus()
-      if (res.success && res.data && res.data.connected) {
+      const data = confirmed(res)
+      if (data?.connected) {
         if (pollTimer) {
           clearInterval(pollTimer)
           pollTimer = null
         }
         authResultBanner.value = 'success'
         showAuthCodeInput.value = false
-        fyersStatus.value = res.data
+        fyersStatus.value = data
       }
     } catch {
       // ignore polling errors
@@ -689,18 +993,27 @@ const pollFyersStatus = () => {
 
 const refreshHealth = async () => {
   const { getHealthStatus } = await import('../api/client')
-  const res = await getHealthStatus()
-  if (res.success && res.data) healthStatus.value = res.data
+  healthStatusError.value = false
+  try {
+    const res = await getHealthStatus()
+    const legacy = res as unknown as { success?: boolean; data?: HealthStatus }
+    const data = legacy.success !== undefined ? (legacy.success ? legacy.data : undefined) : res
+    if (data) healthStatus.value = data
+    else healthStatusError.value = true
+  } catch {
+    healthStatusError.value = true
+  }
 }
 
 const startFyersAuth = async () => {
   authing.value = true
   try {
     const res = await getFyersLoginUrl()
-    if (!res.success || !res.data) throw new Error(res.error ?? 'Failed to get login URL')
+    const data = confirmed(res)
+    if (!data) throw new Error('Failed to get login URL')
 
     const popup = window.open(
-      res.data.url,
+      data.url,
       'fyers-auth',
       'width=600,height=700,left=' +
         Math.round(window.screen.width / 2 - 300) +
@@ -721,7 +1034,7 @@ const startFyersAuth = async () => {
         pollTimer = null
       }
     })
-  } catch (err: unknown) {
+  } catch {
     authResultBanner.value = 'error'
   } finally {
     authing.value = false
@@ -733,12 +1046,19 @@ const submitAuthCode = async () => {
   authing.value = true
   try {
     const res = await fyersAuthCode(authCodeInput.value.trim())
-    if (!res.success) throw new Error(res.error ?? 'Auth failed')
-    fyersStatus.value = res.data ?? null
+    const data = confirmed(res)
+    if (!data) throw new Error('Auth failed')
+    fyersStatus.value = data
     showAuthCodeInput.value = false
     authCodeInput.value = ''
-  } catch (err: unknown) {
-    alert(err instanceof Error ? err.message : 'Auth failed')
+  } catch {
+    authResultBanner.value = 'error'
+    toastMessage.value = 'Fyers authentication failed. Please try again.'
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
   } finally {
     authing.value = false
   }
@@ -746,7 +1066,8 @@ const submitAuthCode = async () => {
 
 const disconnectFyers = async () => {
   const res = await fyersLogout()
-  fyersStatus.value = res.success && res.data ? res.data : null
+  const data = confirmed(res)
+  if (data) fyersStatus.value = data
 }
 
 const handleSave = async () => {
@@ -765,9 +1086,20 @@ const handleSave = async () => {
       setTimeout(() => {
         toastVisible.value = false
       }, 4000)
+    } else {
+      toastMessage.value = 'Failed to save settings'
+      toastType.value = 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Failed to save settings'
+    toastMessage.value = formatAppError(err, {
+      title: 'Settings could not be saved',
+      operation: 'mutation',
+      refreshLabel: 'Refresh settings',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -798,7 +1130,10 @@ const testPdfExtraction = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Failed to save PDF settings'
+    toastMessage.value = formatAppError(err, {
+      title: 'PDF settings could not be saved',
+      operation: 'mutation',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -822,8 +1157,8 @@ const testDiscordWebhook = async () => {
   }
   testingDiscord.value = true
   try {
-    const res = await apiTestDiscordWebhook()
-    if (res.success && res.data?.success) {
+    const result = confirmed(await apiTestDiscordWebhook())
+    if (result?.success) {
       toastMessage.value = 'Discord webhook test successful!'
       toastType.value = 'success'
       toastVisible.value = true
@@ -831,7 +1166,7 @@ const testDiscordWebhook = async () => {
         toastVisible.value = false
       }, 4000)
     } else {
-      toastMessage.value = res.error ?? 'Discord webhook test failed'
+      toastMessage.value = 'Discord webhook test failed'
       toastType.value = 'error'
       toastVisible.value = true
       setTimeout(() => {
@@ -839,7 +1174,10 @@ const testDiscordWebhook = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Discord webhook test failed'
+    toastMessage.value = formatAppError(err, {
+      title: 'Discord webhook test failed',
+      operation: 'mutation',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -851,33 +1189,37 @@ const testDiscordWebhook = async () => {
 }
 
 const refreshPiStatus = async () => {
+  piStatusError.value = false
   try {
-    const res = await apiGetPiServerStatus()
-    if (res.success && res.data) {
-      piServerRunning.value = res.data.running ?? false
-      piServerStatusMsg.value = res.data.message ?? ''
+    const status = confirmed(await apiGetPiServerStatus())
+    if (status) {
+      piServerRunning.value = status.running ?? false
+      piServerStatusMsg.value = status.message ?? ''
     }
   } catch {
-    // ignore
+    piStatusError.value = true
   }
 }
 
 const handlePiStart = async () => {
   piLoading.value = true
   try {
-    const res = await apiStartPiServer()
-    if (res.success && res.data) {
-      piServerRunning.value = res.data.running ?? false
-      piServerStatusMsg.value = res.data.message ?? ''
-      toastMessage.value = res.data.message ?? ''
-      toastType.value = res.data.success ? 'success' : 'error'
+    const result = confirmed(await apiStartPiServer())
+    if (result) {
+      piServerRunning.value = result.running ?? false
+      piServerStatusMsg.value = result.message ?? ''
+      toastMessage.value = result.message ?? ''
+      toastType.value = result.success ? 'success' : 'error'
       toastVisible.value = true
       setTimeout(() => {
         toastVisible.value = false
       }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Failed to start Pi server'
+    toastMessage.value = formatAppError(err, {
+      title: 'Pi server could not start',
+      operation: 'mutation',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -891,19 +1233,22 @@ const handlePiStart = async () => {
 const handlePiStop = async () => {
   piLoading.value = true
   try {
-    const res = await apiStopPiServer()
-    if (res.success && res.data) {
-      piServerRunning.value = res.data.running ?? false
-      piServerStatusMsg.value = res.data.message ?? ''
-      toastMessage.value = res.data.message ?? ''
-      toastType.value = res.data.success ? 'success' : 'error'
+    const result = confirmed(await apiStopPiServer())
+    if (result) {
+      piServerRunning.value = result.running ?? false
+      piServerStatusMsg.value = result.message ?? ''
+      toastMessage.value = result.message ?? ''
+      toastType.value = result.success ? 'success' : 'error'
       toastVisible.value = true
       setTimeout(() => {
         toastVisible.value = false
       }, 4000)
     }
   } catch (err: unknown) {
-    toastMessage.value = err instanceof Error ? err.message : 'Failed to stop Pi server'
+    toastMessage.value = formatAppError(err, {
+      title: 'Pi server could not stop',
+      operation: 'mutation',
+    }).message
     toastType.value = 'error'
     toastVisible.value = true
     setTimeout(() => {
@@ -919,11 +1264,11 @@ const testPiConnection = async () => {
   piTestResult.value = ''
   piTestSuccess.value = false
   try {
-    const res = await apiTestPiConnection()
-    if (res.success && res.data) {
-      piTestResult.value = res.data.message ?? (res.data.success ? 'Connected!' : 'Failed to start')
-      piTestSuccess.value = res.data.success
-      if (res.data.success) {
+    const result = confirmed(await apiTestPiConnection())
+    if (result) {
+      piTestResult.value = result.message ?? (result.success ? 'Connected!' : 'Failed to start')
+      piTestSuccess.value = result.success
+      if (result.success) {
         toastMessage.value = 'Pi SSH connection successful — llama-server started on Pi'
         toastType.value = 'success'
         toastVisible.value = true
@@ -940,7 +1285,7 @@ const testPiConnection = async () => {
         }, 4000)
       }
     } else {
-      piTestResult.value = res.error ?? 'Test failed'
+      piTestResult.value = 'Test failed'
       piTestSuccess.value = false
       toastMessage.value = piTestResult.value
       toastType.value = 'error'
@@ -950,7 +1295,10 @@ const testPiConnection = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    piTestResult.value = err instanceof Error ? err.message : 'Network error'
+    piTestResult.value = formatAppError(err, {
+      title: 'Pi inference test failed',
+      operation: 'mutation',
+    }).message
     piTestSuccess.value = false
     toastMessage.value = piTestResult.value
     toastType.value = 'error'
@@ -968,11 +1316,11 @@ const testOpenAiConnection = async () => {
   openaiTestResult.value = ''
   openaiTestSuccess.value = false
   try {
-    const res = await apiTestOpenAiConnection()
-    if (res.success && res.data) {
-      openaiTestResult.value = res.data.message ?? (res.data.success ? 'Connected!' : 'Failed')
-      openaiTestSuccess.value = res.data.success
-      if (res.data.success) {
+    const result = confirmed(await apiTestOpenAiConnection())
+    if (result) {
+      openaiTestResult.value = result.message ?? (result.success ? 'Connected!' : 'Failed')
+      openaiTestSuccess.value = result.success
+      if (result.success) {
         toastMessage.value = 'OpenAI-compatible LLM responded successfully'
         toastType.value = 'success'
         toastVisible.value = true
@@ -988,7 +1336,7 @@ const testOpenAiConnection = async () => {
         }, 4000)
       }
     } else {
-      openaiTestResult.value = res.error ?? 'Test failed'
+      openaiTestResult.value = 'Test failed'
       openaiTestSuccess.value = false
       toastMessage.value = openaiTestResult.value
       toastType.value = 'error'
@@ -998,7 +1346,10 @@ const testOpenAiConnection = async () => {
       }, 4000)
     }
   } catch (err: unknown) {
-    openaiTestResult.value = err instanceof Error ? err.message : 'Network error'
+    openaiTestResult.value = formatAppError(err, {
+      title: 'OpenAI connection test failed',
+      operation: 'mutation',
+    }).message
     openaiTestSuccess.value = false
     toastMessage.value = openaiTestResult.value
     toastType.value = 'error'
@@ -1008,6 +1359,57 @@ const testOpenAiConnection = async () => {
     }, 4000)
   } finally {
     testingOpenai.value = false
+  }
+}
+
+const testOllamaConnection = async () => {
+  testingOllama.value = true
+  ollamaTestResult.value = ''
+  ollamaTestSuccess.value = false
+  try {
+    const result = confirmed(await apiTestOllamaConnection())
+    if (result) {
+      ollamaTestResult.value = result.message ?? (result.success ? 'Connected!' : 'Failed')
+      ollamaTestSuccess.value = result.success
+      if (result.success) {
+        toastMessage.value = 'Ollama responded successfully'
+        toastType.value = 'success'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+      } else {
+        toastMessage.value = 'Ollama responded but unexpected output'
+        toastType.value = 'warning'
+        toastVisible.value = true
+        setTimeout(() => {
+          toastVisible.value = false
+        }, 4000)
+      }
+    } else {
+      ollamaTestResult.value = 'Test failed'
+      ollamaTestSuccess.value = false
+      toastMessage.value = ollamaTestResult.value
+      toastType.value = 'error'
+      toastVisible.value = true
+      setTimeout(() => {
+        toastVisible.value = false
+      }, 4000)
+    }
+  } catch (err: unknown) {
+    ollamaTestResult.value = formatAppError(err, {
+      title: 'Ollama connection test failed',
+      operation: 'mutation',
+    }).message
+    ollamaTestSuccess.value = false
+    toastMessage.value = ollamaTestResult.value
+    toastType.value = 'error'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 4000)
+  } finally {
+    testingOllama.value = false
   }
 }
 
@@ -1039,10 +1441,19 @@ onMounted(async () => {
     authResultBanner.value = authParam
     router.replace({ query: {} })
   }
-  refreshFyersStatus()
+  const failedSections = await loadSettings()
+  unconfirmedDefaults.value = failedSections.length > 0
+  if (failedSections.length > 0) {
+    toastMessage.value = `Failed to load: ${failedSections.join(', ')}. Showing defaults.`
+    toastType.value = 'warning'
+    toastVisible.value = true
+    setTimeout(() => {
+      toastVisible.value = false
+    }, 6000)
+  }
+  await refreshFyersStatus()
   refreshHealth()
   refreshPiStatus()
-  await loadSettings()
   window.addEventListener('message', handleMessage)
 })
 
@@ -1054,3 +1465,403 @@ onUnmounted(() => {
   window.removeEventListener('message', handleMessage)
 })
 </script>
+
+<style scoped>
+.settings-shell {
+  --settings-ease: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.settings-header {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      color-mix(in srgb, var(--color-brand) 12%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-bg-surface) 96%, white),
+      var(--color-bg-primary)
+    );
+}
+
+.settings-header::after {
+  position: absolute;
+  right: 2rem;
+  bottom: -4rem;
+  width: 12rem;
+  height: 12rem;
+  border: 1px solid color-mix(in srgb, var(--color-brand) 18%, transparent);
+  border-radius: 999px;
+  content: '';
+  pointer-events: none;
+}
+
+.settings-kicker,
+.settings-card-label,
+.settings-tab-index,
+.settings-tab-detail {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.settings-kicker span {
+  color: var(--color-brand);
+  margin: 0 0.35rem;
+}
+
+.settings-save,
+.settings-tab,
+.settings-status-card {
+  position: relative;
+  transition:
+    transform 160ms var(--settings-ease),
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.settings-save:active,
+.settings-tab:active {
+  transform: scale(0.97);
+}
+
+.settings-status-card {
+  display: flex;
+  min-height: 5.25rem;
+  flex-direction: column;
+  justify-content: space-between;
+  background: color-mix(in srgb, var(--color-bg-surface) 72%, transparent);
+}
+
+.settings-status-card:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 38%, var(--color-border-subtle));
+  transform: translateY(-2px);
+}
+
+.settings-card-value {
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.settings-panel {
+  background: color-mix(in srgb, var(--color-bg-surface) 88%, transparent);
+}
+
+.broker-card {
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      color-mix(in srgb, var(--color-brand) 7%, transparent),
+      transparent 34%
+    ),
+    color-mix(in srgb, var(--color-bg-surface) 92%, transparent);
+}
+
+.broker-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.broker-card-mark {
+  color: color-mix(in srgb, var(--color-brand) 70%, var(--color-text-muted));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.broker-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.broker-option {
+  min-height: 4.75rem;
+  text-align: left;
+  transition:
+    transform 160ms var(--settings-ease),
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.broker-option:active {
+  transform: scale(0.98);
+}
+
+.broker-option-check {
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--color-brand);
+  color: var(--color-text-inverse);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.broker-status {
+  background: color-mix(in srgb, var(--color-bg-primary) 42%, transparent);
+}
+
+.broker-actions button {
+  min-height: 2.75rem;
+}
+
+.llm-card {
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      color-mix(in srgb, var(--color-info) 8%, transparent),
+      transparent 34%
+    ),
+    color-mix(in srgb, var(--color-bg-surface) 92%, transparent);
+}
+
+.llm-backend-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.llm-backend-option {
+  min-height: 3.75rem;
+  text-align: left;
+  transition:
+    transform 160ms var(--settings-ease),
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.llm-backend-option:active {
+  transform: scale(0.98);
+}
+
+.llm-backend-section > .space-y-2 > div {
+  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 70%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--color-bg-primary) 42%, transparent);
+  padding: 0.75rem 1rem;
+}
+
+.trading-card,
+.health-card {
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      color-mix(in srgb, var(--color-brand) 6%, transparent),
+      transparent 34%
+    ),
+    color-mix(in srgb, var(--color-bg-surface) 92%, transparent);
+}
+
+.trading-card .settings-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.trading-card .settings-field {
+  background: color-mix(in srgb, var(--color-bg-primary) 34%, transparent);
+}
+
+.health-card .settings-health-list {
+  border-top: 1px solid color-mix(in srgb, var(--color-border-subtle) 70%, transparent);
+  padding-top: 1rem;
+}
+
+.health-card .settings-health-row {
+  min-height: 4.5rem;
+}
+
+@media (max-width: 480px) {
+  .broker-options,
+  .llm-backend-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) and (min-width: 481px) {
+  .llm-backend-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.settings-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.settings-section-kicker {
+  color: var(--color-brand);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settings-panel-mark {
+  color: color-mix(in srgb, var(--color-brand) 70%, var(--color-text-muted));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.settings-mode-row {
+  background: color-mix(in srgb, var(--color-bg-primary) 45%, transparent);
+}
+
+.settings-field {
+  display: flex;
+  min-height: 9.5rem;
+  flex-direction: column;
+  cursor: text;
+  transition:
+    border-color 160ms ease,
+    transform 160ms var(--settings-ease);
+}
+
+.settings-field:focus-within {
+  border-color: color-mix(in srgb, var(--color-brand) 60%, var(--color-border-subtle));
+  transform: translateY(-2px);
+}
+
+.settings-field-label {
+  color: var(--color-text-primary);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.settings-field-help {
+  margin-top: 0.35rem;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.settings-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.settings-input {
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.65rem;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: 0.86rem;
+  outline: none;
+  padding: 0.55rem 0.7rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.settings-input:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-subtle);
+}
+
+.settings-input-wrap .settings-input {
+  width: 100%;
+}
+
+.settings-health-row {
+  background: color-mix(in srgb, var(--color-bg-primary) 35%, transparent);
+  transition:
+    border-color 160ms ease,
+    transform 160ms var(--settings-ease);
+}
+
+.settings-health-row:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 30%, var(--color-border-subtle));
+  transform: translateX(2px);
+}
+
+.settings-health-icon {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.settings-health-empty {
+  line-height: 1.5;
+}
+
+.settings-tab {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.55rem;
+  row-gap: 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+}
+
+.settings-tab-index {
+  grid-row: span 2;
+  padding-top: 0.1rem;
+  color: color-mix(in srgb, var(--color-brand) 72%, var(--color-text-muted));
+}
+
+.settings-tab-detail {
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: none;
+}
+
+.settings-tab[aria-selected='true'] {
+  border-color: color-mix(in srgb, var(--color-brand) 28%, transparent);
+  background: color-mix(in srgb, var(--color-brand) 9%, var(--color-bg-surface));
+  box-shadow: inset 0 -2px 0 var(--color-brand);
+}
+
+@media (max-width: 640px) {
+  .settings-tab-detail {
+    display: none;
+  }
+
+  .settings-tab {
+    grid-template-columns: auto 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-save,
+  .settings-tab,
+  .settings-status-card {
+    transition: none;
+  }
+
+  .settings-field,
+  .settings-health-row,
+  .settings-input {
+    transition: none;
+  }
+}
+</style>

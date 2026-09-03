@@ -16,6 +16,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 public class DatabaseTestContainer {
 
+    private DatabaseTestContainer() {
+    }
+
     private static final Logger logger = LoggerFactory.getLogger(DatabaseTestContainer.class);
 
     // TimescaleDB image (PostgreSQL 16 with TimescaleDB extension)

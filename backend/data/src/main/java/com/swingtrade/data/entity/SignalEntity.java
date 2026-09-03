@@ -8,6 +8,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -26,6 +27,9 @@ public class SignalEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    private Integer version = 0;
 
     @Column(nullable = false, length = 10)
     private String symbol;
@@ -75,6 +79,29 @@ public class SignalEntity {
     // Warning flag constants
     public static final String WARNING_NONE = "";
     public static final String WARNING_NEUTRAL_SENTIMENT = "NEUTRAL_SENTIMENT";
+
+    /**
+     * Type-safe wrapper around the {@code warning_flag} column's known values. The column
+     * itself stays a plain String (existing rows already persist {@link #NONE}'s value as
+     * {@code WARNING_NONE} = {@code ""}, not the literal text {@code "NONE"}, so this enum's
+     * {@link #code()} must match that, not {@code name()}, to avoid a silent on-disk value
+     * change for new rows).
+     */
+    public enum WarningFlag {
+        NONE(WARNING_NONE),
+        PENDING_SENTIMENT("PENDING_SENTIMENT"),
+        NEUTRAL_SENTIMENT(WARNING_NEUTRAL_SENTIMENT);
+
+        private final String code;
+
+        WarningFlag(String code) {
+            this.code = code;
+        }
+
+        public String code() {
+            return code;
+        }
+    }
 
     // Strategy constants identifying which engine produced this signal
     public static final String STRATEGY_DEFAULT = "DEFAULT";

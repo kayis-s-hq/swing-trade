@@ -1,6 +1,6 @@
 package com.swingtrade.broker.kite;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.broker.model.OrderResponse;
 import com.swingtrade.broker.model.Portfolio;
 import com.swingtrade.domain.Exchange;

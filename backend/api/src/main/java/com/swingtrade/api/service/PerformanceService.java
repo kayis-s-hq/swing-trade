@@ -136,6 +136,8 @@ public class PerformanceService {
     }
 
     private BigDecimal calculateMaxDrawdown(List<PositionEntity> closed) {
+        BigDecimal portfolioDrawdown = tradingService.getPortfolioMaxDrawdown();
+        if (portfolioDrawdown != null) return portfolioDrawdown;
         if (closed.isEmpty()) return BigDecimal.ZERO;
 
         BigDecimal initialCapital = tradingService.getInitialCapital();

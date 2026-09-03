@@ -21,8 +21,8 @@ The v7/finance/quote endpoint is dead (401).
 `query2.finance.yahoo.com` aggressively blocks non-browser clients with HTTP 429 (Too Many Requests).
 This happens even with a browser User-Agent header. `query1` is more permissive and should be used
 as the primary host for automated clients. If you get 429, switch to `query1` or add delays between
-requests. The Yahoo Finance client in this project defaults to `query2` — consider switching to
-`query1` to avoid blocking.
+requests. The Yahoo Finance client in this project uses `query1` and applies a one-second shared
+request throttle with bounded retries for 429 and 5xx responses.
 
 ---
 
@@ -226,7 +226,7 @@ HTTP-level errors return the status text as the error message.
 
 | Feature | Yahoo API | YahooFinanceClient |
 |---------|-----------|-------------------|
-| Base URL | `query1.finance.yahoo.com` | `query2.finance.yahoo.com` ⚠️ |
+| Base URL | `query1.finance.yahoo.com` | `query1.finance.yahoo.com` |
 | Chart endpoint | `/v8/finance/chart/{symbol}` | `/v8/finance/chart/{symbol}` |
 | Quote endpoint | **DEAD (401)** | `/v7/finance/quote?symbols=X` ⚠️ |
 | Search endpoint | `/v1/finance/search?q=X` | `/v1/finance/search?q=X` |
@@ -234,13 +234,13 @@ HTTP-level errors return the status text as the error message.
 | adjClose parsing | `indicators.adjclose[0].adjclose` | Implemented |
 | Pre-market filtering | `volume == 0` candles | Implemented |
 | Meta extraction | `chart.result[0].meta` | Implemented |
-| Rate limiting | Aggressive 429 on query2 | 1s minimum between requests |
-| Retry/backoff | Not built in | Not implemented |
+| Rate limiting | Aggressive 429 on query2 | 1s minimum between requests, including retries |
+| Retry/backoff | Provider-dependent | Up to 3 retries with exponential backoff for 429/5xx |
 | Search filtering | `isYahooFinance` field | Filters non-Yahoo + non-EQUITY |
 | Search `exchange` field | `exchange` (not `exchangeName`) | Reads `exchangeName` ⚠️ |
 
 **Issues**:
-- Client defaults to `query2` which blocks automated requests with 429 — should use `query1` as primary
+- Automated requests can still be rate-limited even on `query1`; the client uses throttling and bounded retries
 - Quote endpoint (`/v7/finance/quote`) is dead (401) — `fetchQuote`/`fetchQuotes` always return null
 - Search reads `exchangeName` but API returns `exchange` — search results get null exchange
 

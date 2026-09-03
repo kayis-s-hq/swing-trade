@@ -1,17 +1,8 @@
-import org.springframework.boot.gradle.tasks.bundling.BootJar
-
 plugins {
     java
-    id("org.springframework.boot") version "3.5.9"
+    id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.6"
     id("org.graalvm.buildtools.native") version "0.10.6"
-}
-
-dependencyManagement {
-    imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")
-        mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
-    }
 }
 
 dependencies {
@@ -23,64 +14,81 @@ dependencies {
     // implementation(project(":gpuhub"))
     implementation(project(":broker"))
 
-    implementation("org.springframework.boot:spring-boot-starter-web") {
-        exclude(group = "org.eclipse.jetty", module = "jetty-client")
-        exclude(group = "org.eclipse.jetty", module = "jetty-http")
-        exclude(group = "org.eclipse.jetty", module = "jetty-io")
-        exclude(group = "org.eclipse.jetty", module = "jetty-util")
-        exclude(group = "org.eclipse.jetty", module = "jetty-alpn-client")
-    }
-    implementation("org.springframework.boot:spring-boot-starter-webflux") {
-        exclude(group = "org.eclipse.jetty", module = "jetty-client")
-        exclude(group = "org.eclipse.jetty", module = "jetty-http")
-        exclude(group = "org.eclipse.jetty", module = "jetty-io")
-        exclude(group = "org.eclipse.jetty", module = "jetty-util")
-        exclude(group = "org.eclipse.jetty", module = "jetty-alpn-client")
-    }
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-webflux")
+    implementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    // Spring Boot's ImperativeHttpClientAutoConfiguration probes for a blocking HTTP client
+    // implementation via ClientHttpRequestFactoryBuilder.detect() (tries Jetty, then
+    // HttpComponents, then JDK). Without a real client on the classpath it still attempts the
+    // Jetty branch and fails with NoClassDefFoundError (org.eclipse.jetty.http.HttpCookieStore)
+    // even though Jetty isn't a declared dependency. Adding HttpComponents Client5 makes it the
+    // preferred candidate so the Jetty branch is never attempted. Version is managed by the
+    // spring-boot-dependencies BOM imported in the root build.gradle.kts.
+    implementation("org.apache.httpcomponents.client5:httpclient5")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.springframework.boot:spring-boot-devtools")
+    // developmentOnly (not implementation): Boot's Gradle plugin excludes this from the
+    // packaged fat jar automatically. It was previously `implementation`, which shipped
+    // devtools' classpath-watching Restarter inside api.jar itself - its restart trigger
+    // fires on ANY classpath file change (including a concurrent `./gradlew` rebuild
+    // touching build/classes/ while the jar is running) and tears down the running
+    // ApplicationContext, which looked like an unexplained silent shutdown a few seconds
+    // into every startup.
+    developmentOnly("org.springframework.boot:spring-boot-devtools")
 
-// Resilience4j — circuit breaker, retry, bulkhead, time limiter
-    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-retry:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-bulkhead:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-timelimiter:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-micrometer:2.2.0")
-
-    // Jetty 11 — Spring AI 1.1.0's JettyClientHttpRequestFactory expects Jetty 11 API
-    implementation("org.eclipse.jetty:jetty-client:11.0.25")
-    implementation("org.eclipse.jetty:jetty-http:11.0.25")
-    implementation("org.eclipse.jetty:jetty-io:11.0.25")
-    implementation("org.eclipse.jetty:jetty-util:11.0.25")
-    implementation("org.eclipse.jetty:jetty-alpn-client:11.0.25")
+    // Resilience4j — circuit breaker, retry, bulkhead, time limiter.
+    // 2.4.0+ is required for the resilience4j-spring-boot4 autoconfiguration module.
+    // No explicit Jetty pin here — Spring AI 2.0.1 (see llm/build.gradle.kts) uses OkHttp.
+    implementation("io.github.resilience4j:resilience4j-spring-boot4:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-retry:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-bulkhead:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-timelimiter:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-micrometer:2.4.0")
 
     implementation("io.micrometer:micrometer-core")
     implementation("io.micrometer:micrometer-registry-prometheus")
 
-    implementation("org.postgresql:postgresql:42.7.3")
-    implementation("org.flywaydb:flyway-core:10.13.0")
-    implementation("org.flywaydb:flyway-database-postgresql:10.13.0")
+    implementation("org.postgresql:postgresql")
+    implementation("org.flywaydb:flyway-core:12.4.0")
+    implementation("org.flywaydb:flyway-database-postgresql:12.4.0")
+    // Spring Boot 4 modularized Flyway autoconfiguration out of spring-boot-autoconfigure
+    // into its own artifact (org.springframework.boot.flyway.autoconfigure.FlywayMigrationInitializer).
+    // Raw flyway-core/flyway-database-postgresql alone do NOT trigger Flyway at startup —
+    // this is the artifact that activates spring.flyway.* properties. Version managed by the
+    // spring-boot-dependencies BOM imported in the root build.gradle.kts.
+    implementation("org.springframework.boot:spring-boot-flyway")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
-    testImplementation("org.mockito:mockito-junit-jupiter:5.12.0")
+    testImplementation("org.mockito:mockito-junit-jupiter")
     testImplementation("org.wiremock:wiremock:3.8.0")
-    testImplementation("org.testcontainers:testcontainers")
-    testImplementation("org.testcontainers:junit-jupiter")
-    testImplementation("org.testcontainers:postgresql")
+    testImplementation("org.testcontainers:testcontainers:1.21.3")
+    testImplementation("org.testcontainers:junit-jupiter:1.21.3")
+    testImplementation("org.testcontainers:postgresql:1.21.3")
     testImplementation("com.h2database:h2")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
-    testImplementation("org.junit.platform:junit-platform-launcher:1.12.2")
-    testImplementation("org.mockito:mockito-core:5.12.0")
-    testImplementation("org.assertj:assertj-core:3.26.3")
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-core")
+    testImplementation("org.assertj:assertj-core")
 }
 
 springBoot {
     mainClass = "com.swingtrade.api.app.SwingTradeApiApplication"
     buildInfo()
+}
+
+// Copies the api module's full runtime classpath (all resolved dependency jars —
+// Spring Boot, Hibernate, Postgres driver, fyersjavasdk, etc.) into build/runtimeDeps/.
+// Used by infra/Dockerfile's jar-build stage to assemble /app/lib/ alongside the
+// thin api-plain.jar produced by the `jar` task, since this project uses a plain
+// jar + lib/ classpath layout instead of Spring Boot's bootJar.
+tasks.register<Copy>("copyRuntimeDeps") {
+    group = "build"
+    description = "Copies the api module's runtime classpath jars into build/runtimeDeps/"
+    from(configurations.runtimeClasspath)
+    into(layout.buildDirectory.dir("runtimeDeps"))
 }
 
 tasks.named("processTestAot").configure {
@@ -101,12 +109,6 @@ graalvmNative {
 }
 
 tasks {
-    named<BootJar>("bootJar") {
-        manifest {
-            attributes["Main-Class"] = "com.swingtrade.api.app.SwingTradeApiApplication"
-        }
-    }
-
     test {
         useJUnitPlatform()
         jvmArgs(

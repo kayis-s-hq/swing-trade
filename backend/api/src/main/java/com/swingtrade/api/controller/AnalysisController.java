@@ -2,6 +2,7 @@ package com.swingtrade.api.controller;
 
 import com.swingtrade.domain.CompositeAnalysis;
 import com.swingtrade.api.service.CompositeAnalysisService;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,7 @@ public class AnalysisController {
     private CompositeAnalysisService analysisService;
 
     @PostMapping("/analysis/analyze")
+    @RateLimiter(name = "llmAnalysis")
     public ResponseEntity<?> analyze(@RequestParam(required = true) String symbol) {
         if (symbol.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "symbol is required"));

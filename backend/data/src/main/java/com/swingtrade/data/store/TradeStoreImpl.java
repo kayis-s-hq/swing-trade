@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class TradeStoreImpl implements TradeStore {
@@ -23,6 +24,11 @@ public class TradeStoreImpl implements TradeStore {
         return repository.findBySymbol(symbol).stream()
             .map(TradeEntity::toDomain)
             .toList();
+    }
+
+    @Override
+    public Optional<Trade> findOpenByPositionId(Long positionId) {
+        return repository.findOpenByPositionId(positionId).map(TradeEntity::toDomain);
     }
 
     @Override

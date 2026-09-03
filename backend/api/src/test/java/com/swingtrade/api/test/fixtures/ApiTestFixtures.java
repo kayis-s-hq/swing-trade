@@ -13,6 +13,9 @@ import java.util.List;
 
 public class ApiTestFixtures {
 
+    private ApiTestFixtures() {
+    }
+
     // Factory methods for SignalResponse test data
     public static SignalResponse createBuySignal(String symbol) {
         SignalResponse response = new SignalResponse();

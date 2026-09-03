@@ -6,17 +6,22 @@ import com.swingtrade.api.dto.RiskSummary;
 import com.swingtrade.api.dto.SectorAllocation;
 import com.swingtrade.api.dto.TradeRequest;
 import com.swingtrade.api.dto.TradeResponse;
+import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.Trade;
 import com.swingtrade.domain.service.OrderService;
 import com.swingtrade.domain.service.TradingService;
+import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PositionStore;
 import com.swingtrade.domain.store.StockStore;
+import com.swingtrade.domain.store.TradeStore;
 import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.repository.PositionRepository;
+import com.swingtrade.strategy.ExitReason;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,23 +51,37 @@ public class PositionService {
     private final PositionRepository positionRepository;
     private final TradingService tradingService;
     private final OrderService orderService;
+    private final CandleStore candleStore;
+    private final TradeStore tradeStore;
 
     public PositionService(PositionStore positionStore, StockStore stockStore,
                            PositionRepository positionRepository,
-                           TradingService tradingService, OrderService orderService) {
+                           TradingService tradingService, OrderService orderService,
+                           CandleStore candleStore, TradeStore tradeStore) {
         this.positionStore = positionStore;
         this.stockStore = stockStore;
         this.positionRepository = positionRepository;
         this.tradingService = tradingService;
         this.orderService = orderService;
+        this.candleStore = candleStore;
+        this.tradeStore = tradeStore;
     }
 
     /**
      * Get open paper trading positions.
+     *
+     * <p>Reads from the DB-backed {@link PositionStore} rather than the
+     * in-memory {@code TradingService} engine store, so results stay
+     * consistent with the single-lookup endpoints ({@code getPositionBySymbol},
+     * {@code getPositionsBySymbol}), which are already DB-backed. The
+     * in-memory engine store can diverge from the DB (e.g. duplicate or
+     * stale entries with no DB id) after restarts or partial persistence
+     * failures, so the DB is treated as the authoritative source for listing.
+     *
      * @return List of open paper positions as PositionResponse DTOs
      */
     public List<PositionResponse> getOpenPositions() {
-        return tradingService.getOpenPositions().stream()
+        return positionStore.findAllOpen().stream()
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
@@ -82,8 +101,12 @@ public class PositionService {
      * @return PositionResponse details for the symbol, or null if not found
      */
     public PositionResponse getPositionBySymbol(String symbol) {
-        Position pos = tradingService.findOpenPositionBySymbol(symbol);
-        if (pos != null) return convertToResponse(pos);
+        // Read from the DB-backed PositionStore (same source as getOpenPositions()
+        // and getRiskSummary()) rather than the in-memory TradingService engine
+        // store, so this can't return a stale/orphaned in-memory position after
+        // the DB-backed truth has moved on (e.g. after a close).
+        Optional<Position> openPos = positionStore.findBySymbol(symbol);
+        if (openPos.isPresent()) return convertToResponse(openPos.get());
         // Fall back to closed positions
         List<Position> all = positionStore.findBySymbolOrderByEntryDateDesc(symbol);
         if (!all.isEmpty()) return convertToResponse(all.get(0));
@@ -160,23 +183,54 @@ public class PositionService {
 
         BigDecimal unrealizedPnL = tradingService.getTotalUnrealizedPnL();
         BigDecimal realizedPnL = tradingService.getTotalRealizedPnL();
+        if (unrealizedPnL == null) unrealizedPnL = BigDecimal.ZERO;
+        if (realizedPnL == null) realizedPnL = BigDecimal.ZERO;
         BigDecimal totalPnL = realizedPnL.add(unrealizedPnL);
 
         stats.setTotalPnL(totalPnL);
         stats.setUnrealizedPnL(unrealizedPnL);
 
+        BigDecimal todayPnL = calculateTodayPnL(openPositions, closedPositions);
+        stats.setTodayPnL(todayPnL);
+        BigDecimal initialCapital = tradingService.getInitialCapital();
+        if (initialCapital == null) initialCapital = BigDecimal.ZERO;
+        stats.setTodayPnLPercent(initialCapital.compareTo(BigDecimal.ZERO) == 0
+                ? BigDecimal.ZERO
+                : todayPnL.multiply(BigDecimal.valueOf(100))
+                        .divide(initialCapital, 4, java.math.RoundingMode.HALF_UP));
+
         long winCount = 0;
+        long stoppedOut = 0;
+        long targetHit = 0;
         for (Position p : closedPositions) {
             if (p.realizedPnL() != null && p.realizedPnL().compareTo(BigDecimal.ZERO) > 0) {
                 winCount++;
             }
+            if (p.status() == PositionStatus.STOPPED) {
+                stoppedOut++;
+            } else if (p.status() == PositionStatus.TARGET_HIT) {
+                targetHit++;
+            }
         }
         int closedCount = closedPositions.size();
         stats.setWinRate(closedCount > 0 ? (double) winCount / closedCount * 100.0 : 0.0);
-        stats.setStoppedOut(0);
-        stats.setTargetHit(0);
+        stats.setStoppedOut((int) stoppedOut);
+        stats.setTargetHit((int) targetHit);
 
         return stats;
+    }
+
+    private BigDecimal calculateTodayPnL(List<Position> openPositions, List<Position> closedPositions) {
+        LocalDate today = LocalDate.now();
+        BigDecimal openToday = openPositions.stream()
+                .filter(p -> today.equals(p.entryDate()))
+                .map(p -> p.unrealizedPnL() != null ? p.unrealizedPnL() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal closedToday = closedPositions.stream()
+                .filter(p -> p.exitTime() != null && today.equals(p.exitTime().toLocalDate()))
+                .map(p -> p.realizedPnL() != null ? p.realizedPnL() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return openToday.add(closedToday);
     }
 
     /**
@@ -210,15 +264,34 @@ public class PositionService {
         }
 
         PositionEntity entity = entityOpt.get();
-        BigDecimal exitPrice = entity.getCurrentPrice() != null ? entity.getCurrentPrice() : entity.getEntryPrice();
-        String reason = exitReason != null ? exitReason : "manual_close";
+        // Prefer the latest ingested OHLCV close as the exit price: entity.getCurrentPrice()
+        // is only refreshed by PaperTradingMonitorService's EOD (15:30 IST) cron, so a
+        // signal-triggered close at any other time would otherwise persist a stale price
+        // (in the worst case, the never-updated entry price) instead of the real market price.
+        BigDecimal exitPrice = candleStore.findLatestBySymbol(symbol)
+            .map(OhlcvCandle::close)
+            .orElseGet(() -> entity.getCurrentPrice() != null ? entity.getCurrentPrice() : entity.getEntryPrice());
+        String reason = exitReason != null ? exitReason : ExitReason.MANUAL.name();
 
-        // Close in engine first (updates portfolio capital, calculates P&L)
+        // Close in engine first (updates portfolio capital, calculates P&L).
+        // PaperTradingStateService.closePosition() runs in its own REQUIRES_NEW
+        // transaction (so it commits independently of the caller's ambient transaction
+        // and doesn't hold the portfolio row's lock open across it - see
+        // PaperTradingEngine's portfolioLock). That means it is NOT the same managed
+        // entity/persistence context as this method: `entity` below still holds the
+        // pre-close version. Saving it again here would collide with the version the
+        // engine just committed, so when the engine close succeeds we re-fetch instead
+        // of reusing the stale in-memory copy. When it does NOT run (no engine-side
+        // position, or the engine call throws), nothing else sets those fields, so we
+        // must compute and set them ourselves - otherwise this close persists with a
+        // null P&L and reason.
+        boolean closedInEngine = false;
         try {
             com.swingtrade.domain.Position enginePos =
                 tradingService.findOpenPositionBySymbol(symbol);
             if (enginePos != null) {
                 tradingService.closePosition(entity.getId(), exitPrice, reason);
+                closedInEngine = true;
             } else {
                 logger.warn("Engine position missing for symbol {} — skipping engine close, will only update DB", symbol);
             }
@@ -227,11 +300,25 @@ public class PositionService {
                 symbol, e.getMessage());
         }
 
-        // Then update DB entity
-        entity.setStatus("CLOSED");
-        entity.setCurrentPrice(exitPrice);
-        entity.setUpdatedAt(LocalDateTime.now());
-        PositionEntity savedEntity = positionRepository.save(entity);
+        PositionEntity savedEntity;
+        if (closedInEngine) {
+            savedEntity = positionRepository.findById(entity.getId()).orElse(entity);
+        } else {
+            entity.setStatus(PositionStatus.CLOSED.name());
+            entity.setCurrentPrice(exitPrice);
+            entity.setUpdatedAt(LocalDateTime.now());
+            entity.setRealizedPnL(calculateRealizedPnL(entity, exitPrice));
+            entity.setExitReason(reason);
+            entity.setExitTime(LocalDateTime.now());
+            savedEntity = positionRepository.save(entity);
+        }
+
+        // Close out the audit-trail Trade record opened at entry, if one exists.
+        tradeStore.findOpenByPositionId(entity.getId()).ifPresentOrElse(
+            openTrade -> tradeStore.save(Trade.close(openTrade, LocalDate.now(), exitPrice, reason)),
+            () -> logger.warn("No open Trade record found for position {} ({}) — skipping trade audit close",
+                entity.getId(), symbol)
+        );
 
         return convertToResponse(savedEntity);
     }
@@ -270,9 +357,12 @@ public class PositionService {
             return convertToResponse(tradingService.findOpenPositionBySymbol(request.getSymbol()));
         }
 
-        // Create position in engine via order pipeline
-        // Note: executePendingOrder calls stateService.savePosition() which persists
-        // the position to the DB. We must NOT create a second DB entity.
+        // Create position in engine via order pipeline.
+        // executePendingOrder() already creates AND persists the position
+        // internally (PaperTradingEngine.createPositionFromOrder() +
+        // stateService.savePosition()). We must NOT call createPositionFromOrder()
+        // again here — doing so previously produced a second, orphaned
+        // in-memory-only position for the same order/symbol.
         final String[] positionId = {null};
         Order order = switch (request.getDirection()) {
             case LONG -> orderService.createBuyOrder(
@@ -282,7 +372,11 @@ public class PositionService {
         };
         order = tradingService.executePendingOrder(order.getOrderId(), entryPrice);
         if (order.getStatus() == OrderStatus.FILLED) {
-com.swingtrade.domain.Position pos = tradingService.createPositionFromOrder(order);
+            com.swingtrade.domain.Position pos = tradingService.findOpenPositionBySymbol(request.getSymbol());
+            if (pos == null) {
+                throw new RuntimeException(
+                    "Position not found after order execution for symbol " + request.getSymbol());
+            }
             positionId[0] = pos.positionId();
         } else {
             throw new RuntimeException("Order not filled for symbol " + request.getSymbol() + ": status=" + order.getStatus());
@@ -311,9 +405,33 @@ com.swingtrade.domain.Position pos = tradingService.createPositionFromOrder(orde
                     });
             });
 
+        // Guard against orphaned rows: any entity reaching this point (freshly built,
+        // or matched by symbol from a legacy/partial write) must carry the engine's
+        // positionId so PaperTradingEngine.closePosition(Long) can resolve it back to
+        // the in-memory position later. Without this, close-by-DB-id lookups NPE.
+        if ((entity.getPositionId() == null || entity.getPositionId().isBlank()) && positionId[0] != null) {
+            entity.setPositionId(positionId[0]);
+        }
+
         PositionEntity savedEntity = positionRepository.save(entity);
         logger.info("Position for symbol: {} at price: {} (engine position: {})",
             request.getSymbol(), entryPrice, positionId[0]);
+
+        // Open an audit-trail Trade record for this position (closed out later in closePosition()).
+        // Entry commission comes from the engine's own rate so the audit trail agrees
+        // with what actually gets deducted from portfolio cash - it was previously
+        // hardcoded to ZERO, silently dropping entry-side fees from the trade record.
+        BigDecimal entryCommission = tradingService.calculateEntryCommission(savedEntity.getQuantity());
+        tradeStore.save(Trade.open(
+            savedEntity.getId(),
+            savedEntity.getSymbol(),
+            savedEntity.getEntryDate(),
+            savedEntity.getEntryPrice(),
+            savedEntity.getQuantity(),
+            savedEntity.getEntryReason(),
+            entryCommission,
+            request.getDirection()
+        ));
 
         return convertToResponse(savedEntity);
     }
@@ -336,7 +454,9 @@ com.swingtrade.domain.Position pos = tradingService.createPositionFromOrder(orde
      * @return Risk summary
      */
     public RiskSummary getRiskSummary() {
-        List<Position> openPositions = tradingService.getOpenPositions();
+        // Use the DB-backed store (same source as getOpenPositions()) to avoid
+        // double-counting exposure from stale/duplicate in-memory engine entries.
+        List<Position> openPositions = positionStore.findAllOpen();
         RiskSummary summary = new RiskSummary();
 
         BigDecimal totalExposure = openPositions.stream()
@@ -376,6 +496,25 @@ com.swingtrade.domain.Position pos = tradingService.createPositionFromOrder(orde
     }
 
     /**
+     * Computes realized P&amp;L for a DB-only close (the engine did not run, so
+     * nothing else calculated it). Mirrors PositionManager.calculatePositionPnL.
+     */
+    private BigDecimal calculateRealizedPnL(PositionEntity entity, BigDecimal exitPrice) {
+        BigDecimal entryPrice = entity.getEntryPrice();
+        Integer quantity = entity.getQuantity();
+        if (entryPrice == null || exitPrice == null || quantity == null) {
+            return BigDecimal.ZERO;
+        }
+        com.swingtrade.domain.TradeDirection direction = entity.getDirection() != null
+            ? com.swingtrade.domain.TradeDirection.valueOf(entity.getDirection())
+            : com.swingtrade.domain.TradeDirection.LONG;
+        BigDecimal priceDifference = direction == com.swingtrade.domain.TradeDirection.LONG
+            ? exitPrice.subtract(entryPrice)
+            : entryPrice.subtract(exitPrice);
+        return priceDifference.multiply(BigDecimal.valueOf(quantity));
+    }
+
+    /**
      * Convert PositionEntity to TradeResponse DTO.
      */
     private TradeResponse convertToTradeResponse(PositionEntity entity) {
@@ -384,8 +523,10 @@ com.swingtrade.domain.Position pos = tradingService.createPositionFromOrder(orde
         response.setEntryPrice(entity.getEntryPrice());
         response.setEntryDate(entity.getEntryDate());
         response.setQuantity(entity.getQuantity());
-        response.setExitReason(null);
+        response.setExitPrice(entity.getCurrentPrice());
+        response.setExitDate(entity.getExitTime() != null ? entity.getExitTime().toLocalDate() : null);
+        response.setTotalPnL(entity.getRealizedPnL());
+        response.setExitReason(entity.getExitReason());
         return response;
     }
-
-    }
+}

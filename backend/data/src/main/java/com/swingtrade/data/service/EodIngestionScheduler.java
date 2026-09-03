@@ -5,6 +5,7 @@ import com.swingtrade.data.repository.WatchlistRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -34,7 +35,7 @@ public class EodIngestionScheduler {
         this.holidayService = holidayService;
     }
 
-    // @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Kolkata")
     public void ingestLatestForAll() {
         LocalDate today = LocalDate.now(IST);
         LocalDate yesterday = today.minusDays(1);

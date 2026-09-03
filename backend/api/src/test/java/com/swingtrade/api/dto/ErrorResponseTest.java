@@ -1,13 +1,14 @@
 package com.swingtrade.api.dto;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for ErrorResponse DTO.
@@ -20,7 +21,6 @@ class ErrorResponseTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
         errorResponse = new ErrorResponse();
     }
 
@@ -39,7 +39,6 @@ class ErrorResponseTest {
         assertEquals(400, response.getStatus());
         assertEquals("BAD_REQUEST", response.getCode());
         assertEquals("Test error", response.getMessage());
-        // Timestamp is set in the constructor, verify it matches
         assertEquals(timestamp.getYear(), response.getTimestamp().getYear());
         assertEquals(timestamp.getMonthValue(), response.getTimestamp().getMonthValue());
         assertEquals(timestamp.getDayOfMonth(), response.getTimestamp().getDayOfMonth());
@@ -55,7 +54,6 @@ class ErrorResponseTest {
         assertEquals(404, response.getStatus());
         assertEquals("NOT_FOUND", response.getCode());
         assertEquals("Resource not found", response.getMessage());
-        // Timestamp is set in constructor
         assertEquals(timestamp.getYear(), response.getTimestamp().getYear());
         assertEquals(timestamp.getMonthValue(), response.getTimestamp().getMonthValue());
         assertEquals(timestamp.getDayOfMonth(), response.getTimestamp().getDayOfMonth());

@@ -57,13 +57,12 @@ public class PaperTradingMonitorService {
                 OhlcvCandleEntity entity = OhlcvCandleEntity.fromDomain(candle);
                 ohlcvCandleRepository.save(entity);
 
-                // Update position price and check SL/TP
+                // Update position price and check SL/TP; this already persists the
+                // resulting state (open or closed) via stateService internally.
+                // Do not additionally save `pos` here — it is the pre-update
+                // snapshot captured before this loop and would overwrite whatever
+                // updatePositionsFromDomain just wrote with stale values.
                 engine.updatePositionsFromDomain(candle);
-
-                // Persist updated position
-                if (stateService != null) {
-                    stateService.savePosition(pos);
-                }
 
             } catch (Exception e) {
                 logger.warn("Failed to monitor position {} for {}: {}",

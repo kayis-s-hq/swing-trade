@@ -39,12 +39,35 @@ public class CreateDeploymentRequest {
     public static class Builder {
         private final CreateDeploymentRequest req = new CreateDeploymentRequest();
 
-        public Builder name(String name) { req.name = name; return this; }
-        public Builder deploymentType(String type) { req.deploymentType = type; return this; }
-        public Builder replicaNum(int n) { req.replicaNum = n; return this; }
-        public Builder reuseContainer(boolean reuse) { req.reuseContainer = reuse; return this; }
-        public Builder reuseContainerScope(String scope) { req.reuseContainerScope = scope; return this; }
-        public Builder containerTemplate(ContainerTemplate template) { req.containerTemplate = template; return this; }
+        public Builder name(String name) {
+            req.name = name;
+            return this;
+        }
+
+        public Builder deploymentType(String type) {
+            req.deploymentType = type;
+            return this;
+        }
+
+        public Builder replicaNum(int n) {
+            req.replicaNum = n;
+            return this;
+        }
+
+        public Builder reuseContainer(boolean reuse) {
+            req.reuseContainer = reuse;
+            return this;
+        }
+
+        public Builder reuseContainerScope(String scope) {
+            req.reuseContainerScope = scope;
+            return this;
+        }
+
+        public Builder containerTemplate(ContainerTemplate template) {
+            req.containerTemplate = template;
+            return this;
+        }
         public CreateDeploymentRequest build() { return req; }
     }
 }

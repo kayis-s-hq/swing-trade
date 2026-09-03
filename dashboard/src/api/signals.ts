@@ -1,21 +1,24 @@
-import { rawFetch, toNum, errResponse } from './shared'
-import type { ApiResponse, Signal } from './types'
+import { safeHumanMessage, type AppError } from '../errors/appError'
+import { MalformedResponseError } from '../errors/errorClasses'
+import { apiRequest, apiSseEvents, toNum } from './shared'
+import type { Signal } from './types'
 
 interface BackendSignal {
-  id: number
+  id: number | null
   symbol: string
   date: string
   signalType: 'BUY' | 'SELL' | 'HOLD'
   confidence: number | string
   reasoning: string
-  entryPrice: number | string
-  stopLoss: number | string
-  target: number | string
-  riskRewardRatio: number | string
-  indicators?: string[]
-  generatedAt: string
-  strategy?: string
-  sentimentScore?: string
+  entryPrice: number | string | null
+  stopLoss: number | string | null
+  target: number | string | null
+  riskRewardRatio: number | string | null
+  indicators?: string[] | null
+  generatedAt: string | null
+  strategy?: string | null
+  sentimentScore?: string | null
+  sentimentReasoning?: string | null
 }
 
 interface BackendGenerateAllResponse {
@@ -35,7 +38,7 @@ export interface SignalGenerationProgress {
 }
 
 const mapSignal = (s: BackendSignal): Signal => ({
-  id: String(s.id),
+  id: s.id === null ? `${s.symbol}-${s.date}` : String(s.id),
   symbol: s.symbol,
   direction: s.signalType as 'BUY' | 'SELL' | 'HOLD',
   confidence: Math.round(toNum(s.confidence) * 100),
@@ -44,139 +47,219 @@ const mapSignal = (s: BackendSignal): Signal => ({
   stopLoss: toNum(s.stopLoss),
   target: toNum(s.target),
   riskReward: toNum(s.riskRewardRatio),
-  timestamp: s.generatedAt,
+  timestamp: s.generatedAt ?? s.date,
   status: 'ACTIVE',
-  strategy: s.strategy,
-  indicators: s.indicators,
-  sentimentScore: s.sentimentScore,
+  strategy: s.strategy ?? undefined,
+  indicators: s.indicators ?? undefined,
+  sentimentScore: s.sentimentScore ?? undefined,
+  sentimentReasoning: s.sentimentReasoning ?? undefined,
 })
 
-export async function getSignals(): Promise<ApiResponse<Signal[]>> {
-  const raw = await rawFetch('/signals/latest')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
-}
-
-export async function generateAllSignals(): Promise<
-  ApiResponse<{ signals: Signal[]; skipped: Array<{ symbol: string; reason: string }> }>
-> {
-  const raw = await rawFetch('/signals/generate-all', { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  const resp = raw.data as BackendGenerateAllResponse
-  return {
-    success: true,
-    data: { signals: (resp.signals ?? []).map(mapSignal), skipped: resp.skipped ?? [] },
-  }
-}
-
-export async function* generateAllSignalsStream(): AsyncIterable<SignalGenerationProgress> {
-  const { API_BASE_URL } = await import('./config')
-  const { DEFAULT_HEADERS } = await import('./config')
-  const url = `${API_BASE_URL}/signals/generate-all/stream`
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 600_000)
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: DEFAULT_HEADERS,
-    signal: controller.signal,
+export async function getSignals(): Promise<Signal[]> {
+  const signals = await apiRequest<BackendSignal[]>('/signals/latest', {
+    method: 'GET',
+    responseContract: 'direct',
   })
+  return signals.map(mapSignal)
+}
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    clearTimeout(timeoutId)
-    throw new Error(`Signal generation failed: ${response.statusText} ${text.slice(0, 200)}`)
+export async function generateAllSignals(): Promise<{
+  signals: Signal[]
+  skipped: Array<{ symbol: string; reason: string }>
+}> {
+  const response = await apiRequest<BackendGenerateAllResponse>('/signals/generate-all', {
+    method: 'POST',
+    responseContract: 'direct',
+  })
+  return { signals: (response.signals ?? []).map(mapSignal), skipped: response.skipped ?? [] }
+}
+
+export interface SignalStreamOptions {
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+const SIGNAL_EVENT_TYPES = new Set<SignalGenerationProgress['eventType']>([
+  'STARTED',
+  'GENERATING',
+  'SENTIMENT_ANALYZING',
+  'SIGNAL_DONE',
+  'SKIPPED',
+  'COMPLETE',
+])
+const SIGNAL_EVENT_STATUSES = new Set<SignalGenerationProgress['status']>([
+  'PROCESSING',
+  'DONE',
+  'SKIPPED',
+  'ERROR',
+])
+
+function invalidSignalEvent(message: string): AppError {
+  return new MalformedResponseError({
+    message,
+    retryable: false,
+    outcomeUnknown: true,
+  })
+}
+
+function isNumericWireValue(value: unknown): value is number | string {
+  return (
+    (typeof value === 'number' && Number.isFinite(value)) ||
+    (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)))
+  )
+}
+
+function isNullableNumericWireValue(value: unknown): value is number | string | null {
+  return value === null || isNumericWireValue(value)
+}
+
+function isBackendSignal(value: unknown): value is BackendSignal {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const signal = value as Record<string, unknown>
+  return (
+    (signal.id === null || typeof signal.id === 'number') &&
+    typeof signal.symbol === 'string' &&
+    typeof signal.date === 'string' &&
+    typeof signal.signalType === 'string' &&
+    ['BUY', 'SELL', 'HOLD'].includes(signal.signalType) &&
+    isNumericWireValue(signal.confidence) &&
+    typeof signal.reasoning === 'string' &&
+    isNullableNumericWireValue(signal.entryPrice) &&
+    isNullableNumericWireValue(signal.stopLoss) &&
+    isNullableNumericWireValue(signal.target) &&
+    isNullableNumericWireValue(signal.riskRewardRatio) &&
+    (signal.generatedAt === null || typeof signal.generatedAt === 'string') &&
+    (signal.strategy === undefined ||
+      signal.strategy === null ||
+      typeof signal.strategy === 'string') &&
+    (signal.sentimentScore === undefined ||
+      signal.sentimentScore === null ||
+      typeof signal.sentimentScore === 'string') &&
+    (signal.sentimentReasoning === undefined ||
+      signal.sentimentReasoning === null ||
+      typeof signal.sentimentReasoning === 'string') &&
+    (signal.indicators === undefined ||
+      signal.indicators === null ||
+      (Array.isArray(signal.indicators) &&
+        signal.indicators.every((item) => typeof item === 'string')))
+  )
+}
+
+function safeSignalProgressMessage(
+  message: string,
+  eventType: SignalGenerationProgress['eventType'],
+  symbol?: string
+): string {
+  let fallback = 'Signal generation progress was updated.'
+  if (eventType === 'SKIPPED') {
+    fallback = symbol ? `Couldn’t generate a signal for ${symbol}.` : 'Signal generation failed.'
+  } else if (eventType === 'SIGNAL_DONE') {
+    fallback = symbol ? `Signal generated for ${symbol}.` : 'Signal generation completed.'
+  } else if (eventType === 'COMPLETE') {
+    fallback = 'Signal generation completed.'
+  }
+  return safeHumanMessage(message, fallback)
+}
+
+function signalProgressFromWire(payload: unknown): SignalGenerationProgress {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw invalidSignalEvent('The signal stream contained an invalid event.')
   }
 
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let currentEvent = 'progress'
+  const event = payload as Record<string, unknown>
+  if (
+    typeof event.eventType !== 'string' ||
+    !SIGNAL_EVENT_TYPES.has(event.eventType as SignalGenerationProgress['eventType']) ||
+    typeof event.status !== 'string' ||
+    !SIGNAL_EVENT_STATUSES.has(event.status as SignalGenerationProgress['status']) ||
+    typeof event.message !== 'string' ||
+    (event.symbol !== undefined && event.symbol !== null && typeof event.symbol !== 'string') ||
+    (event.current !== undefined && typeof event.current !== 'number') ||
+    (event.total !== undefined && typeof event.total !== 'number') ||
+    (event.eventType === 'COMPLETE' && event.status !== 'DONE')
+  ) {
+    throw invalidSignalEvent('The signal stream contained an invalid event.')
+  }
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-      for (const line of lines) {
-        const trimmed = line.trim()
-        const eventMatch = trimmed.match(/^event:\s*(\S+)/)
-        if (eventMatch) {
-          currentEvent = eventMatch[1]
-          continue
-        }
-        const dataPrefix = 'data:'
-        if (trimmed.startsWith(dataPrefix)) {
-          try {
-            const data = JSON.parse(trimmed.slice(dataPrefix.length).trim())
-            yield { ...data, _eventType: currentEvent }
-          } catch {
-            // Skip malformed JSON
-          }
-        }
-      }
+  const progress = {
+    ...event,
+    message: safeSignalProgressMessage(
+      event.message,
+      event.eventType as SignalGenerationProgress['eventType'],
+      typeof event.symbol === 'string' ? event.symbol : undefined
+    ),
+  } as unknown as SignalGenerationProgress
+  // Progress events intentionally carry signal: null; only validate/map an
+  // actual signal payload.
+  if (event.signal !== undefined && event.signal !== null) {
+    if (!isBackendSignal(event.signal)) {
+      throw invalidSignalEvent('The signal stream contained an invalid signal.')
     }
-  } finally {
-    clearTimeout(timeoutId)
-    reader.releaseLock()
+    progress.signal = mapSignal(event.signal)
   }
+  return progress
 }
 
-export async function clearAllSignals(): Promise<ApiResponse<{ cleared: number }>> {
-  const raw = await rawFetch('/signals', { method: 'DELETE' })
-  if (!raw.ok) return errResponse(raw.error!)
-  const resp = raw.data as { cleared: number }
-  return { success: true, data: resp }
+export function generateAllSignalsStream(
+  options: SignalStreamOptions = {}
+): AsyncIterable<SignalGenerationProgress> {
+  return apiSseEvents('/signals/generate-all/stream', {
+    method: 'POST',
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
+    parseEvent: signalProgressFromWire,
+    isTerminal: (event) => event.eventType === 'COMPLETE',
+  })
 }
 
-export async function clearSignalsForSymbol(
-  symbol: string
-): Promise<ApiResponse<{ cleared: number }>> {
-  const raw = await rawFetch(`/signals/${symbol}`, { method: 'DELETE' })
-  if (!raw.ok) return errResponse(raw.error!)
-  const resp = raw.data as { cleared: number }
-  return { success: true, data: resp }
+export async function clearAllSignals(): Promise<{ cleared: number }> {
+  return apiRequest<{ cleared: number }>('/signals', {
+    method: 'DELETE',
+    responseContract: 'direct',
+  })
 }
 
-export async function getSignalsByType(
-  type: 'BUY' | 'SELL' | 'HOLD'
-): Promise<ApiResponse<Signal[]>> {
-  const raw = await rawFetch(`/signals/type/${type}`)
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
+export async function clearSignalsForSymbol(symbol: string): Promise<{ cleared: number }> {
+  return apiRequest<{ cleared: number }>(`/signals/${symbol}`, {
+    method: 'DELETE',
+    responseContract: 'direct',
+  })
 }
 
-export async function getLatestSignalForSymbol(
-  symbol: string
-): Promise<ApiResponse<Signal | null>> {
-  const raw = await rawFetch(`/signals/symbol/${symbol}`)
-  if (!raw.ok) return errResponse(raw.error!)
-  const data = raw.data as BackendSignal[]
+export async function getSignalsByType(type: 'BUY' | 'SELL' | 'HOLD'): Promise<Signal[]> {
+  const signals = await apiRequest<BackendSignal[]>(`/signals/type/${type}`, {
+    responseContract: 'direct',
+  })
+  return signals.map(mapSignal)
+}
+
+export async function getLatestSignalForSymbol(symbol: string): Promise<Signal | null> {
+  const data = await apiRequest<BackendSignal[]>(`/signals/symbol/${symbol}`, {
+    responseContract: 'direct',
+  })
   const latest = data.length > 0 ? data[data.length - 1] : null
-  if (!latest) return { success: true, data: null }
-  return { success: true, data: mapSignal(latest) }
+  return latest ? mapSignal(latest) : null
 }
 
-export async function getHighConfidenceSignals(
-  minConfidence: number = 0.7
-): Promise<ApiResponse<Signal[]>> {
-  const raw = await rawFetch(`/signals/high-confidence?minConfidence=${minConfidence}`)
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: (raw.data as BackendSignal[]).map(mapSignal) }
+export async function getHighConfidenceSignals(minConfidence: number = 0.7): Promise<Signal[]> {
+  const signals = await apiRequest<BackendSignal[]>(
+    `/signals/high-confidence?minConfidence=${minConfidence}`,
+    { responseContract: 'direct' }
+  )
+  return signals.map(mapSignal)
 }
 
-export async function generatePriceActionSignal(symbol: string): Promise<ApiResponse<Signal>> {
-  const raw = await rawFetch(`/signals/price-action/${symbol}/generate`, { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: mapSignal(raw.data as BackendSignal) }
+export async function generatePriceActionSignal(symbol: string): Promise<Signal> {
+  const signal = await apiRequest<BackendSignal>(`/signals/price-action/${symbol}/generate`, {
+    method: 'POST',
+    responseContract: 'direct',
+  })
+  return mapSignal(signal)
 }
 
-export async function triggerScan(): Promise<
-  ApiResponse<{ signalsFound: number; status: string }>
-> {
-  const raw = await rawFetch('/signals/scan', { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as { signalsFound: number; status: string } }
+export async function triggerScan(): Promise<{ signalsFound: number; status: string }> {
+  return apiRequest<{ signalsFound: number; status: string }>('/signals/scan', {
+    method: 'POST',
+    responseContract: 'direct',
+  })
 }

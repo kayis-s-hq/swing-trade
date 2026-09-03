@@ -16,6 +16,7 @@ export interface MarketOverview {
   openPositions: number
   todayPnl: number
   todayPnlPercent: number
+  todayPnLSource?: 'DAILY' | 'FALLBACK_TOTAL'
 }
 
 export interface Position {
@@ -74,11 +75,87 @@ export interface HealthStatus {
   components: Record<string, HealthComponent>
 }
 
+export interface RiskSummary {
+  totalExposure: number
+  availableCapital: number
+  usedCapital: number
+  stopLossExposure: number
+  numberOfPositions: number
+  sectorExposure?: Record<string, number>
+}
+
 export interface HealthComponent {
   name: string
   status: string
   description: string
   details?: Record<string, unknown>
+}
+
+export interface CandidateScanRun {
+  runId: string
+  status: 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'CANCELLED'
+  totalSymbols: number
+  completedSymbols: number
+  failedSymbols: number
+  qualifiedSymbols: number
+  startedAt: string
+  completedAt?: string
+  errorMessage?: string
+}
+
+export interface CandidateScanResult {
+  runId: string
+  symbol: string
+  dataStatus: 'READY' | 'INSUFFICIENT' | 'ERROR'
+  candleCount: number
+  signalType?: 'BUY' | 'SELL' | 'HOLD'
+  totalTrades?: number
+  winRate?: number
+  totalReturn?: number
+  maxDrawdownPct?: number
+  qualified: boolean
+  activated: boolean
+  reason?: string
+  errorMessage?: string
+  createdAt: string
+}
+
+export interface CandidateScanSettings {
+  'candidate-scan.min-win-rate': string
+  'candidate-scan.min-total-return': string
+  'candidate-scan.max-concurrent': string
+  'candidate-scan.backfill-years': string
+}
+
+export interface CandidateScanResultPage {
+  items: CandidateScanResult[]
+  total: number
+  offset: number
+  limit: number
+}
+
+export interface CandidateScanLogEvent {
+  eventType:
+    | 'RUN_SNAPSHOT'
+    | 'RUN_STARTED'
+    | 'RUN_PAUSED'
+    | 'RUN_RESUMED'
+    | 'STAGE_STARTED'
+    | 'STAGE_COMPLETED'
+    | 'SYMBOL_STARTED'
+    | 'SYMBOL_COMPLETED'
+    | 'SYMBOL_FAILED'
+    | 'RUN_COMPLETED'
+    | 'RUN_CANCELLED'
+  runId: string
+  symbol?: string | null
+  level: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR'
+  message: string
+  completedSymbols: number
+  totalSymbols: number
+  failedSymbols: number
+  qualifiedSymbols: number
+  timestamp: string
 }
 
 export interface FyersStatus {
@@ -92,12 +169,6 @@ export interface FyersLoginUrl {
 }
 
 export type BrokerType = 'fyers' | 'upstox' | 'yahoo' | 'none'
-
-export interface ApiResponse<T = unknown> {
-  success: boolean
-  data?: T
-  error?: string
-}
 
 // ---------------------------------------------------------------------------
 // Watchlist
@@ -323,6 +394,7 @@ export interface AnalysisProgress {
   message: string
   timestamp: string
   details?: StageDetails
+  _eventType?: 'progress'
 }
 
 export interface StageDetails {
@@ -341,10 +413,11 @@ export interface SynthesisResult {
 }
 
 export interface FullAnalysisResult {
-  composite: CompositeAnalysis
+  composite: CompositeAnalysis | null
   progress: AnalysisProgress[]
   durationMs: number
   symbol: string
+  _eventType?: 'complete'
 }
 
 // ---------------------------------------------------------------------------
@@ -386,7 +459,8 @@ export interface JobRunResponse {
 
 export interface JobRunStageResponse {
   symbol: string
-  stageName: 'DATA_FETCH' | 'NEWS' | 'SENTIMENT' | 'SIGNAL' | 'BACKTEST' | 'PAPER_TRADE'
+  stageName:
+    'DATA_FETCH' | 'NEWS' | 'SENTIMENT' | 'LLM_ANALYSIS' | 'SIGNAL' | 'BACKTEST' | 'PAPER_TRADE'
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'SKIPPED' | 'ERROR'
   startedAt: string
   completedAt: string | null

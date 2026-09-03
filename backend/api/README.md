@@ -1,45 +1,19 @@
-# Swing Trade API Module
+# API module
 
-This module provides REST endpoints for the swing trading system with the following functionality:
+The API module exposes the Spring Boot REST API and orchestration services. It owns HTTP controllers, API DTOs, scheduled jobs, and application-level coordination.
 
-## Endpoints
+Run from `backend/`:
 
-### GET /api/signals/latest
-Returns today's trading signals in JSON format.
-
-### GET /api/positions
-Returns open paper trading positions.
-
-### GET /api/performance
-Returns backtest and paper trading performance statistics.
-
-### POST /api/scan
-Triggers a manual scan for trading opportunities.
-
-## Features
-
-- Spring Boot REST API with proper Javadoc documentation
-- Spring Actuator integration for monitoring
-- Micrometer metrics tracking
-- Type-safe POJOs for API responses
-
-## Configuration
-
-The API module requires the following dependencies:
-- spring-boot-starter-web
-- spring-boot-starter-actuator
-- micrometer-core
-- micrometer-registry-prometheus
-
-## Usage
-
-Run the application with:
-```
-cd backend && ./gradlew :api:bootRun --args='--spring.profiles.active=local,fyers'
+```bash
+./gradlew :api:test
+./gradlew :api:bootJar
 ```
 
-Endpoints will be available at:
-- http://localhost:8080/api/signals/latest
-- http://localhost:8080/api/positions
-- http://localhost:8080/api/performance
-- http://localhost:8080/api/scan (POST)
+For local development, use the repository stack command from the root:
+
+```bash
+./dev-stack.sh start
+curl -sS http://localhost:8080/actuator/health
+```
+
+Keep the endpoint inventory in the controller code and root `README.md`; avoid duplicating a stale endpoint table here.

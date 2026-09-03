@@ -16,10 +16,13 @@
 
 package com.swingtrade.api.service;
 
+import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.RiskCalculator;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.PositionStore;
+import com.swingtrade.strategy.ExitReason;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
 import org.slf4j.Logger;
@@ -51,25 +54,39 @@ public class SignalPipeline {
     private final PriceActionSignalEngine priceActionEngine;
     private final SignalPersistenceService persistenceService;
     private final SentimentGate sentimentGate;
+    private final PositionStore positionStore;
+    private final PositionService positionService;
 
     public SignalPipeline(CandleStore candleStore,
                           PriceActionSignalEngine priceActionEngine,
                           SignalPersistenceService persistenceService,
-                          SentimentGate sentimentGate) {
+                          SentimentGate sentimentGate,
+                          PositionStore positionStore,
+                          PositionService positionService) {
         this.candleStore = candleStore;
         this.priceActionEngine = priceActionEngine;
         this.persistenceService = persistenceService;
         this.sentimentGate = sentimentGate;
+        this.positionStore = positionStore;
+        this.positionService = positionService;
     }
 
     /**
      * Generates a primary swing-trading signal for a symbol.
      *
      * <p>Pipeline: fetch candles -> check min count -> reverse to chronological
-     * -> check dedup -> compute strategy signal -> check sentiment -> compute risk params -> save.</p>
+     * -> check dedup -> compute strategy signal -> compute risk params -> save.</p>
+     *
+     * <p>Sentiment is deliberately NOT evaluated here. Every technical BUY is persisted
+     * unconditionally with a {@code PENDING_SENTIMENT} warning flag; the JobOrchestrator's
+     * SENTIMENT stage runs afterward for every symbol and its verdict is read by the
+     * PAPER_TRADE stage before a BUY trade is actually executed. This
+     * gives a full audit trail ("a real BUY signal fired, sentiment later blocked the
+     * trade") instead of a sentiment-suppressed BUY silently never existing in the
+     * `signals` table at all, which was this method's previous behavior.</p>
      *
      * @param symbol the stock symbol
-     * @return the saved signal, or empty if suppressed or skipped
+     * @return the saved signal, or empty if skipped (not enough candle history)
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public java.util.Optional<Signal> generatePrimarySignal(String symbol) {
@@ -87,7 +104,7 @@ public class SignalPipeline {
         LocalDate latestDate = chronologicalCandles.get(chronologicalCandles.size() - 1).date();
 
         // Clear any stale processed signals for this symbol/date so retries can regenerate
-        persistenceService.deleteBySymbolAndDate(symbol, latestDate);
+        persistenceService.deleteBySymbolAndDateAndStrategy(symbol, latestDate, "DEFAULT");
 
         SignalResult result;
         try {
@@ -97,32 +114,24 @@ public class SignalPipeline {
             return java.util.Optional.empty();
         }
 
+        if (result.type() == Signal.SignalType.SELL) {
+            closeHeldPositionOnSell(symbol, latestDate);
+        }
+
         Signal signal = Signal.create(result.symbol(), result.date(), result.type(),
                 BigDecimal.ONE, result.reasoning());
-
-        SentimentGate.SentimentVerdict verdict = SentimentGate.SentimentVerdict.allow();
-        String sentimentScore = null;
-        String sentimentReasoning = null;
-        if (result.type() == Signal.SignalType.BUY) {
-            verdict = sentimentGate.evaluate(symbol, latestDate);
-            sentimentReasoning = verdict.reason();
-            if (verdict.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
-                return java.util.Optional.empty();
-            }
-            sentimentScore = switch (verdict.action()) {
-                case FLAG_NEUTRAL -> "NEUTRAL";
-                case ALLOW_GRACEFUL -> "UNKNOWN";
-                default -> "POSITIVE";
-            };
-        }
 
         BigDecimal atr = RiskCalculator.calculateATR(chronologicalCandles);
         String indicators = buildPriceActionIndicators(result);
 
-        String warningFlag = warningFlag(result, latestDate, verdict);
+        // Sentiment score/reasoning are filled in later by the SENTIMENT stage's own
+        // write path (see JobOrchestratorService), not here.
+        String warningFlag = (result.type() == Signal.SignalType.BUY
+            ? SignalEntity.WarningFlag.PENDING_SENTIMENT
+            : SignalEntity.WarningFlag.NONE).code();
         Signal saved = persistenceService.buildAndSaveWithWarning(
                 symbol, latestDate, result.type(), BigDecimal.ONE,
-                indicators, indicators, atr, warningFlag, sentimentScore, sentimentReasoning);
+                result.reasoning(), indicators, atr, warningFlag, null, null);
 
         logger.info("Generated {} signal for {} on {} (reasoning: {})",
                 result.type(), symbol, latestDate, result.reasoning());
@@ -136,6 +145,7 @@ public class SignalPipeline {
      * @param symbol the stock symbol
      * @return the saved signal, or empty if skipped
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public java.util.Optional<Signal> generatePriceActionSignal(String symbol) {
         logger.debug("Generating price-action signal for {}", symbol);
 
@@ -145,6 +155,10 @@ public class SignalPipeline {
         } catch (IllegalStateException e) {
             logger.debug("Not enough candles for price-action signal on {}: {}", symbol, e.getMessage());
             return java.util.Optional.empty();
+        }
+
+        if (result.type() == Signal.SignalType.SELL) {
+            closeHeldPositionOnSell(symbol, result.date());
         }
 
         SentimentGate.SentimentVerdict verdict = SentimentGate.SentimentVerdict.allow();
@@ -192,20 +206,32 @@ public class SignalPipeline {
 
     // ---- Private helpers ----
 
+    /**
+     * Closes any held position for {@code symbol} on a SELL signal. Shared by
+     * both the primary and price-action pipelines so a SELL from either
+     * strategy actually exits a live position, not just one of them.
+     */
+    private void closeHeldPositionOnSell(String symbol, LocalDate date) {
+        boolean held = positionStore.findBySymbol(symbol).isPresent();
+        if (held) {
+            try {
+                positionService.closePosition(symbol, ExitReason.SIGNAL_EXIT.name());
+                logger.info("SELL signal closed held position for {} on {} (reason={})", symbol, date,
+                    ExitReason.SIGNAL_EXIT.name());
+            } catch (Exception e) {
+                logger.warn("SELL signal for {} on {} failed to close held position - signal still "
+                    + "persisted for audit; position remains open: {}", symbol, date, e.getMessage());
+            }
+        } else {
+            logger.debug("SELL signal for {} on {} - no held position; persisting informational "
+                + "SELL signal only", symbol, date);
+        }
+    }
+
     private String buildPriceActionIndicators(SignalResult result) {
         return String.format(
                 "RSI=%.2f,EMA20=%.2f,EMA50=%.2f,ATR=%.2f",
                 result.rsi(), result.ema20(), result.ema50(), result.atr());
     }
 
-    private String warningFlag(SignalResult result, LocalDate date, SentimentGate.SentimentVerdict verdict) {
-        if (result.type() != Signal.SignalType.BUY) {
-            return "NONE";
-        }
-        return switch (verdict.action()) {
-            case FLAG_NEUTRAL -> "NEUTRAL_SENTIMENT";
-            case ALLOW_GRACEFUL -> "SENTIMENT_ERROR";
-            default -> "NONE";
-        };
-    }
 }

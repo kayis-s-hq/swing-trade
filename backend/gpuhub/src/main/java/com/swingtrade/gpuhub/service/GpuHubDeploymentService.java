@@ -1,7 +1,6 @@
 package com.swingtrade.gpuhub.service;
 
 import com.swingtrade.gpuhub.client.GpuHubDeploymentClient;
-import com.swingtrade.gpuhub.client.GpuHubDeploymentClient.GpuHubApiException;
 import com.swingtrade.gpuhub.dto.ContainerInfo;
 import com.swingtrade.gpuhub.dto.ContainerTemplate;
 import com.swingtrade.gpuhub.dto.CreateDeploymentRequest;

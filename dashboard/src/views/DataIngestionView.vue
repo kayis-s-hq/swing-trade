@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 animate-fade-in">
+  <div class="view-shell p-6 animate-fade-in">
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
@@ -62,6 +62,58 @@
           Cancel Pull
         </button>
       </div>
+    </div>
+
+    <div class="mb-6 card-panel p-5">
+      <div class="mb-3 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-text-primary">Data pull options</p>
+          <p class="text-xs text-text-muted">
+            Use a full range to repair historical gaps or pull one date.
+          </p>
+        </div>
+        <select
+          v-model="pullMode"
+          class="rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary"
+        >
+          <option value="history">Default history</option>
+          <option value="range">Custom date range</option>
+          <option value="date">Single date</option>
+        </select>
+      </div>
+      <div v-if="pullMode === 'range'" class="grid gap-3 sm:grid-cols-2">
+        <label class="text-xs text-text-muted"
+          >From
+          <input
+            v-model="rangeFrom"
+            type="date"
+            class="mt-1 block w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary"
+        /></label>
+        <label class="text-xs text-text-muted"
+          >To
+          <input
+            v-model="rangeTo"
+            type="date"
+            class="mt-1 block w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary"
+        /></label>
+      </div>
+      <div v-if="pullMode === 'date'" class="grid gap-3 sm:grid-cols-2">
+        <label class="text-xs text-text-muted"
+          >Symbol
+          <input
+            v-model="selectedSymbol"
+            placeholder="e.g. RELIANCE"
+            class="mt-1 block w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm uppercase text-text-primary"
+        /></label>
+        <label class="text-xs text-text-muted"
+          >Date
+          <input
+            v-model="selectedDate"
+            type="date"
+            class="mt-1 block w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary"
+        /></label>
+      </div>
+      <p v-if="pullValidation" class="mt-2 text-xs text-danger">{{ pullValidation }}</p>
     </div>
 
     <!-- Broker Connection Status -->
@@ -127,10 +179,36 @@
       </p>
     </div>
 
-    <ErrorBoundary :error="error">
+    <div
+      v-if="operationNotice"
+      role="alert"
+      class="mb-4 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning"
+    >
+      <p>{{ operationNotice }}</p>
+      <button
+        v-if="offerPullStatusRefresh"
+        class="mt-2 text-xs font-medium underline"
+        @click="refreshPullStatus"
+      >
+        Refresh pull status
+      </button>
+    </div>
+
+    <div
+      v-if="pollingWarning"
+      role="status"
+      class="mb-4 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning"
+    >
+      <p>Progress refresh failed. The last progress may be stale.</p>
+      <button class="mt-2 text-xs font-medium underline" @click="retryPollNow">Retry now</button>
+    </div>
+
+    <ErrorBoundary :error="Boolean(error)">
       <template #error>
         <div class="flex flex-col items-center justify-center py-20">
-          <p class="text-sm text-danger">{{ errorMessage }}</p>
+          <p class="text-sm text-danger">
+            {{ errorMessage }}
+          </p>
           <button
             class="mt-2 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white"
             @click="loadStatus"
@@ -262,21 +340,40 @@ import {
   triggerDataPull,
   getPullProgress,
   cancelDataPull,
-  getFyersStatus,
-  getFyersLoginUrl,
-  setBroker as apiSetBroker,
-} from '../api/client'
+  triggerDataPullRange,
+  ingestSelectedDate,
+} from '../api/ingestion'
+import { getFyersStatus, getFyersLoginUrl, setBroker as apiSetBroker } from '../api/client'
 import type { IngestionStatus, PullProgress } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import { useAsyncData } from '../composables/useAsyncData'
-import { getSettings } from '../stores/settings'
+import { safeHumanMessage } from '../errors/appError'
+import { getSettings, loadSettings } from '../stores/settings'
 
 const settings = getSettings()
 const backendBroker = ref(settings.selectedBroker)
-const { loading, error, errorMessage, execute } = useAsyncData()
+const { loading, error, errorMessage, execute } = useAsyncData<void>()
 const status = ref<IngestionStatus[]>([])
 const fyersConnected = ref(false)
+const operationNotice = ref('')
+const offerPullStatusRefresh = ref(false)
+const pollingWarning = ref(false)
+const pullMode = ref<'history' | 'range' | 'date'>('history')
+const rangeFrom = ref('')
+const rangeTo = ref('')
+const selectedSymbol = ref('')
+const selectedDate = ref('')
+
+const pullValidation = computed(() => {
+  if (pullMode.value === 'range' && (!rangeFrom.value || !rangeTo.value))
+    return 'Select both dates.'
+  if (pullMode.value === 'range' && rangeFrom.value > rangeTo.value)
+    return 'The start date must be before the end date.'
+  if (pullMode.value === 'date' && (!selectedSymbol.value.trim() || !selectedDate.value))
+    return 'Select a symbol and date.'
+  return ''
+})
 
 const pulling = ref(false)
 const pullProgress = ref<PullProgress | null>(null)
@@ -326,28 +423,30 @@ const syncBroker = async () => {
   }
 }
 
-const loadStatus = () => {
-  execute(async () => {
+const loadStatus = async () => {
+  await execute(async () => {
     await syncBroker()
-    const [statusResult, fyersResult, progressResult] = await Promise.all([
+    const [statusResult, progressResult] = await Promise.all([
       getIngestionStatus(),
-      getFyersStatus(),
       getPullProgress(),
     ])
-    if (statusResult.success && statusResult.data && Array.isArray(statusResult.data)) {
-      status.value = statusResult.data
+    status.value = statusResult
+    if (needsAuth.value) {
+      const fyersResult = await getFyersStatus()
+      const fyersData =
+        typeof fyersResult === 'object' && fyersResult !== null && 'data' in fyersResult
+          ? fyersResult.data
+          : fyersResult
+      if (typeof fyersData === 'object' && fyersData !== null && 'connected' in fyersData) {
+        fyersConnected.value = fyersData.connected === true
+      }
     } else {
-      status.value = []
-      throw new Error(statusResult.error || 'Failed to load ingestion status')
+      fyersConnected.value = false
     }
-    if (fyersResult.success && fyersResult.data) {
-      fyersConnected.value = fyersResult.data.connected
-    }
-    // Check for active pull in progress
-    if (progressResult.success && progressResult.data && progressResult.data.status === 'running') {
+    if (progressResult.status === 'running') {
       pulling.value = true
-      pullProgress.value = progressResult.data
-      startPolling(progressResult.data.pullId)
+      pullProgress.value = progressResult
+      startPolling(progressResult.pullId)
     }
   })
 }
@@ -357,26 +456,35 @@ const refreshStatus = () => {
 }
 
 const startPull = async () => {
+  if (pullValidation.value) return
   pulling.value = true
   pullComplete.value = false
   pullProgress.value = null
+  operationNotice.value = ''
   try {
-    const result = await triggerDataPull(1)
-    if (result.success && result.data) {
-      startPolling(result.data.pullId)
-    } else {
+    if (pullMode.value === 'date') {
+      await ingestSelectedDate(selectedSymbol.value.trim(), selectedDate.value)
       pulling.value = false
-      console.error('[Ingestion] Pull failed:', result.error, result)
-      alert(result.error || 'Failed to start data pull')
+      await loadStatus()
+    } else {
+      const result =
+        pullMode.value === 'range'
+          ? await triggerDataPullRange(rangeFrom.value, rangeTo.value)
+          : await triggerDataPull(3)
+      startPolling(result.pullId)
     }
   } catch (err: unknown) {
     pulling.value = false
-    console.error('[Ingestion] Pull error:', err)
-    alert(err instanceof Error ? err.message : 'Failed to start data pull')
+    operationNotice.value = safeHumanMessage(
+      err instanceof Error ? err.message : undefined,
+      'The data pull could not be started.'
+    )
   }
 }
 
 const cancelPull = async () => {
+  operationNotice.value = ''
+  offerPullStatusRefresh.value = false
   try {
     await cancelDataPull()
     pulling.value = false
@@ -385,42 +493,63 @@ const cancelPull = async () => {
       pollTimer = null
     }
   } catch (err: unknown) {
-    alert(err instanceof Error ? err.message : 'Failed to cancel pull')
+    const outcomeUnknown =
+      typeof err === 'object' &&
+      err !== null &&
+      'outcomeUnknown' in err &&
+      err.outcomeUnknown === true
+    operationNotice.value = outcomeUnknown
+      ? 'Cancellation could not be confirmed. Refresh pull status before taking another action.'
+      : safeHumanMessage(
+          err instanceof Error ? err.message : undefined,
+          'The data pull could not be cancelled.'
+        )
+    offerPullStatusRefresh.value = outcomeUnknown
+  }
+}
+
+async function pollProgress(pullId: string) {
+  try {
+    const result = await getPullProgress(pullId)
+    pullProgress.value = result
+    pollingWarning.value = false
+    if (result.status === 'completed' || result.status === 'cancelled') {
+      pulling.value = false
+      pullComplete.value = result.status === 'completed'
+      pullCompleted.value = result
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+      if (result.status === 'completed') await loadStatus()
+    }
+  } catch {
+    pollingWarning.value = true
   }
 }
 
 const startPolling = (pullId: string) => {
   if (pollTimer) clearInterval(pollTimer)
-  pollTimer = setInterval(async () => {
-    try {
-      const result = await getPullProgress(pullId)
-      if (result.success && result.data) {
-        pullProgress.value = result.data
-        if (result.data.status === 'completed' || result.data.status === 'cancelled') {
-          pulling.value = false
-          pullComplete.value = result.data.status === 'completed'
-          pullCompleted.value = result.data
-          if (pollTimer) {
-            clearInterval(pollTimer)
-            pollTimer = null
-          }
-          // Refresh status after pull completes
-          if (result.data.status === 'completed') {
-            await loadStatus()
-          }
-        }
-      }
-    } catch {
-      // Ignore polling errors
-    }
-  }, 1000)
+  pollTimer = setInterval(() => void pollProgress(pullId), 1000)
+}
+
+async function retryPollNow() {
+  if (pullProgress.value?.pullId) await pollProgress(pullProgress.value.pullId)
+}
+
+async function refreshPullStatus() {
+  if (pullProgress.value?.pullId) await pollProgress(pullProgress.value.pullId)
+  if (!pollingWarning.value) {
+    operationNotice.value = ''
+    offerPullStatusRefresh.value = false
+  }
 }
 
 const openFyersAuth = async () => {
   try {
     const result = await getFyersLoginUrl()
-    if (result.success && result.data?.url) {
-      const authWindow = window.open(result.data.url, 'fyers-auth', 'width=500,height=600')
+    if (result.url) {
+      const authWindow = window.open(result.url, 'fyers-auth', 'width=500,height=600')
 
       // Poll for auth completion — callback redirects to settings, we detect via status
       let attempts = 0
@@ -431,7 +560,7 @@ const openFyersAuth = async () => {
           await loadStatus()
         } else {
           const status = await getFyersStatus()
-          if (status.success && status.data?.connected) {
+          if (status.connected) {
             clearInterval(pollInterval)
             fyersConnected.value = true
             await loadStatus()
@@ -440,7 +569,10 @@ const openFyersAuth = async () => {
       }, 2000)
     }
   } catch (err: unknown) {
-    alert(err instanceof Error ? err.message : 'Failed to get Fyers login URL')
+    operationNotice.value = safeHumanMessage(
+      err instanceof Error ? err.message : undefined,
+      'The broker login URL could not be loaded.'
+    )
   }
 }
 
@@ -469,8 +601,9 @@ const formatDate = (dateStr: string): string => {
   }
 }
 
-onMounted(() => {
-  loadStatus()
+onMounted(async () => {
+  await loadSettings()
+  await loadStatus()
 })
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)

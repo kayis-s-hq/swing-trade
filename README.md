@@ -6,28 +6,31 @@ Automated swing trading system for NSE/BSE Indian equities. Implements 1-4 week 
 
 ```
 swing-trade/
-├── backend/                # Multi-module Gradle project (Spring Boot 3.3.1)
+├── backend/                # Multi-module Gradle project (Spring Boot 4.1.1)
 │   ├── core/               # Domain models (Stock, OhlcvCandle, Signal, Position, Trade)
-│   ├── data/               # Data ingestion & storage (Upstox client, JPA, Flyway)
+│   ├── data/               # Data ingestion & storage (Upstox/Fyers/Yahoo clients, JPA, Flyway)
 │   ├── strategy/           # TA with TA4j, signal generation, backtesting
 │   ├── llm/                # LLM client (vLLM/OpenAI), sentiment analysis, news
 │   ├── broker/             # Paper trading engine, order/position management
+│   ├── gpuhub/             # GPUHub elastic deployment API client
 │   └── api/                # REST endpoints, scheduled jobs
 ├── dashboard/              # Vue 3 + TypeScript frontend
 │   ├── src/                # Components, views, router, stores
 │   └── tests/              # Vitest unit + Playwright E2E tests
+├── infra/                  # Docker, env files, monitoring, nginx
 ├── docs/                   # Project documentation
-└── dev-stack.sh            # Dev stack orchestration
+└── dev-stack.sh            # Dev stack orchestration (see also bin/swingdev)
 ```
 
 ### Module Dependencies
 
 ```
-api → strategy, llm, broker, data, core
-broker → data, core
-strategy → data, core
-llm → core
+api → strategy, llm, broker, gpuhub, data, core
+broker → strategy, data, core
+strategy → data, llm, core
+llm → data, core
 data → core
+gpuhub → (none — standalone)
 core → (none)
 ```
 
@@ -36,15 +39,17 @@ core → (none)
 | Component | Technology |
 |-----------|------------|
 | Language | Java 21 |
-| Framework | Spring Boot 3.3.1 |
+| Framework | Spring Boot 4.1.1 |
 | Build | Gradle 9.6.1 (Kotlin DSL, multi-module) |
 | Database | PostgreSQL 16 + TimescaleDB |
 | TA | TA4j 0.16 |
-| LLM | LangChain4j 0.34.0 + vLLM |
+| LLM | LangChain4j 1.18.1 + vLLM |
 | Frontend | Vue 3.5 + TypeScript + Tailwind CSS |
 | DB Migrations | Flyway |
 
 ## Quick Start
+
+Agent guidance: [`AGENTS.md`](AGENTS.md) is shared by Codex and Claude Code. [`CLAUDE.md`](CLAUDE.md) contains Claude Code-specific routing and skills.
 
 ### 1. Start Infrastructure
 
@@ -83,14 +88,17 @@ API: http://localhost:8080
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/health` | GET | System health (DB/Upstox states) |
-| `/api/signals` | GET | Latest signals |
-| `/api/signals/{symbol}` | GET | Signal for specific stock |
-| `/api/scan` | GET | Scan stocks (`?days=30&marketCap=min`) |
-| `/api/trade` | POST | Execute market order (paper) |
+| `/api/health` | GET | System health and component checks |
+| `/api/signals/latest` | GET | Latest signal per symbol |
+| `/api/signals/symbol/{symbol}` | GET | Signals for one symbol |
+| `/api/signals/generate-all` | POST | Generate price-action signals for the active watchlist |
+| `/api/signals/generate-all/stream` | POST | Stream signal-generation progress |
+| `/api/positions` | POST | Open a paper-trading position |
 | `/api/positions` | GET | View positions |
 | `/api/positions/{symbol}/close` | POST | Close position |
-| `/api/performance` | GET | P&L, win rate, trade stats |
+| `/api/positions/performance` | GET | P&L and trade performance |
+| `/api/watchlist` | GET/POST | Read or add active watchlist symbols |
+| `/api/data/pull` | POST | Pull historical data for active watchlist symbols |
 
 ## Trading Strategy
 
@@ -124,7 +132,7 @@ cd dashboard && yarn playwright test
 
 ## Configuration
 
-Environment in `backend/.env` (loaded by `dev-stack.sh`). Spring profiles: `local` (dev), `dev`, `fyers` (broker integration).
+Environment in `infra/env/.env` (loaded by `dev-stack.sh` / `bin/swingdev`). Spring profiles: `local` (dev), `dev`, `fyers` (broker integration), `stage`.
 
 ## Disclaimer
 

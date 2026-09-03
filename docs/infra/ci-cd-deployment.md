@@ -13,14 +13,15 @@ Stage runs entirely in Docker containers on pi-node. Monitoring is built in — 
 | Prometheus | `pi-prometheus` | 9090 | pi-stack_monitoring + swing-trade-stage_swingtrade-network |
 | Grafana | `pi-grafana` | 3001 | pi-stack_monitoring |
 
-### Dev Environment (pi-node infra + local Mac app)
-Dev runs infra on pi-node but the Spring Boot app runs locally via Maven. No monitoring for dev.
+### Dev Environment (pi-node infra + local app)
+Dev runs PostgreSQL on pi-node and the Spring Boot API plus Vue dashboard locally through `dev-stack.sh`. Use the Gradle-built API jar or the stack wrapper; Maven is not the local runtime path. Dev monitoring is available through the API actuator endpoints and local dashboard.
 
 | Component | Location | Port (pi-node) |
 |-----------|----------|----------------|
 | PostgreSQL | pi-node container | 5435 |
 | Redis | pi-node container | 6379 |
-| Spring Boot | Local Mac (mvn spring-boot:run) | 8080 |
+| Spring Boot API | Local machine (`dev-stack.sh`) | 8080 |
+| Vue dashboard | Local machine (`dev-stack.sh`) | 3003 |
 
 ## Stage Deployment
 

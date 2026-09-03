@@ -1,6 +1,6 @@
 package com.swingtrade.llm.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.NewsArticle;
 import com.swingtrade.domain.store.NewsArticleStore;
 import org.apache.commons.lang3.StringEscapeUtils;

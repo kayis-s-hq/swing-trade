@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const BASE = 'http://piworm.local:8080'
+const BASE = process.env.STAGE_DASHBOARD_URL ?? 'http://localhost:3000'
 
 test.describe('Stage Dashboard — Feature Tests', () => {
   test('dashboard loads with title and shell', async ({ page }) => {
@@ -82,15 +82,16 @@ test.describe('Stage Dashboard — Feature Tests', () => {
     expect(Array.isArray(body)).toBe(true)
   })
 
-  test('trades API returns array', async ({ request }) => {
-    const resp = await request.get(`${BASE}/api/trades`)
+  test('positions API returns a paginated response', async ({ request }) => {
+    const resp = await request.get(`${BASE}/api/positions`)
     expect(resp.status()).toBe(200)
     const body = await resp.json()
-    expect(Array.isArray(body)).toBe(true)
+    expect(Array.isArray(body.content)).toBe(true)
+    expect(body).toHaveProperty('totalElements')
   })
 
-  test('performance API returns trade stats', async ({ request }) => {
-    const resp = await request.get(`${BASE}/api/trades/performance`)
+  test('positions performance API returns trade stats', async ({ request }) => {
+    const resp = await request.get(`${BASE}/api/positions/performance`)
     expect(resp.status()).toBe(200)
     const body = await resp.json()
     expect(body).toHaveProperty('totalTrades')

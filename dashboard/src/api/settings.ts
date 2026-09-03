@@ -1,147 +1,155 @@
-import { rawFetch, unwrap, errResponse } from './shared'
-import type { ApiResponse } from './types'
+import { apiRequest } from './shared'
 
-export async function getSettings(): Promise<ApiResponse<{ selectedBroker: string }>> {
-  const raw = await rawFetch('/settings')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<{ selectedBroker: string }>(raw) }
+export async function getSettings(): Promise<{ selectedBroker: string }> {
+  return apiRequest<{ selectedBroker: string }>('/settings', { responseContract: 'envelope' })
 }
 
-export async function setBroker(broker: string): Promise<ApiResponse<{ selectedBroker: string }>> {
-  const raw = await rawFetch('/settings/broker', {
+export async function setBroker(broker: string): Promise<{ selectedBroker: string }> {
+  return apiRequest<{ selectedBroker: string }>('/settings/broker', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ broker }),
+    responseContract: 'envelope',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<{ selectedBroker: string }>(raw) }
 }
 
-export async function getLlmSettings(): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/llm')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<Record<string, string>>(raw) }
+export async function getLlmSettings(): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/llm', { responseContract: 'envelope' })
 }
 
 export async function setLlmSettings(
   settings: Record<string, string>
-): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/llm', {
+): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/llm', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
+    responseContract: 'envelope',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
-export async function getDiscordSettings(): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/discord')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<Record<string, string>>(raw) }
+export async function getDiscordSettings(): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/discord', { responseContract: 'envelope' })
 }
 
 export async function setDiscordSettings(
   settings: Record<string, string>
-): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/discord', {
+): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/discord', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
+    responseContract: 'envelope',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
-export async function testDiscordWebhook(): Promise<ApiResponse<{ success: boolean }>> {
-  const raw = await rawFetch('/settings/test/discord', { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<{ success: boolean }>(raw) }
+export async function testDiscordWebhook(): Promise<{ success: boolean }> {
+  return apiRequest<{ success: boolean }>('/settings/test/discord', {
+    method: 'POST',
+    responseContract: 'envelope',
+  })
 }
 
-export async function testPiConnection(): Promise<
-  ApiResponse<{ success: boolean; message: string }>
-> {
-  const raw = await rawFetch('/settings/test/pi', { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
+export async function testPiConnection(): Promise<{ success: boolean; message: string }> {
+  return apiRequest<{ success: boolean; message: string }>('/settings/test/pi', {
+    method: 'POST',
+    responseContract: 'envelope',
+  })
 }
 
-export async function testOpenAiConnection(): Promise<
-  ApiResponse<{ success: boolean; message: string }>
-> {
-  const raw = await rawFetch('/settings/test/openai', { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<{ success: boolean; message: string }>(raw) }
+export async function testOpenAiConnection(): Promise<{ success: boolean; message: string }> {
+  return apiRequest<{ success: boolean; message: string }>('/settings/test/openai', {
+    method: 'POST',
+    responseContract: 'envelope',
+  })
 }
 
-export async function getGpuHubSettings(): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/gpuhub')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<Record<string, string>>(raw) }
+export async function testOllamaConnection(): Promise<{ success: boolean; message: string }> {
+  return apiRequest<{ success: boolean; message: string }>('/settings/test/ollama', {
+    method: 'POST',
+    timeoutMs: 130_000,
+    responseContract: 'envelope',
+  })
+}
+
+export async function getGpuHubSettings(): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/gpuhub', { responseContract: 'envelope' })
 }
 
 export async function setGpuHubSettings(
   settings: Record<string, string>
-): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/gpuhub', {
+): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/gpuhub', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
+    responseContract: 'envelope',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }
 
-export async function startPiServer(): Promise<
-  ApiResponse<{ success: boolean; running: boolean; message: string }>
-> {
-  const raw = await rawFetch('/settings/pi/start', { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return {
-    success: true,
-    data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
-  }
+export async function startPiServer(): Promise<{
+  success: boolean
+  running: boolean
+  message: string
+}> {
+  return apiRequest<{ success: boolean; running: boolean; message: string }>('/settings/pi/start', {
+    method: 'POST',
+    responseContract: 'envelope',
+  })
 }
 
-export async function stopPiServer(): Promise<
-  ApiResponse<{ success: boolean; running: boolean; message: string }>
-> {
-  const raw = await rawFetch('/settings/pi/stop', { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return {
-    success: true,
-    data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
-  }
+export async function stopPiServer(): Promise<{
+  success: boolean
+  running: boolean
+  message: string
+}> {
+  return apiRequest<{ success: boolean; running: boolean; message: string }>('/settings/pi/stop', {
+    method: 'POST',
+    responseContract: 'envelope',
+  })
 }
 
-export async function getPiServerStatus(): Promise<
-  ApiResponse<{ success: boolean; running: boolean; message: string }>
-> {
-  const raw = await rawFetch('/settings/pi/status')
-  if (!raw.ok) return errResponse(raw.error!)
-  return {
-    success: true,
-    data: unwrap<{ success: boolean; running: boolean; message: string }>(raw),
-  }
+export async function getPiServerStatus(): Promise<{
+  success: boolean
+  running: boolean
+  message: string
+}> {
+  return apiRequest<{ success: boolean; running: boolean; message: string }>(
+    '/settings/pi/status',
+    {
+      responseContract: 'envelope',
+    }
+  )
 }
 
-export async function getTradingSettings(): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/trading')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<Record<string, string>>(raw) }
+export async function getTradingSettings(): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/trading', { responseContract: 'envelope' })
 }
 
 export async function setTradingSettings(
   settings: Record<string, string>
-): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/trading', {
+): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/trading', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
+    responseContract: 'envelope',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<Record<string, string>>(raw) }
+}
+
+export async function getScanningSettings(): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/scanning', { responseContract: 'envelope' })
+}
+
+export async function setScanningSettings(
+  settings: Record<string, string>
+): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/scanning', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+    responseContract: 'envelope',
+  })
 }
 
 export async function saveAllSettings(body: {
@@ -149,12 +157,12 @@ export async function saveAllSettings(body: {
   llm?: Record<string, string>
   discord?: Record<string, string>
   trading?: Record<string, string>
-}): Promise<ApiResponse<Record<string, string>>> {
-  const raw = await rawFetch('/settings/save', {
+  scanning?: Record<string, string>
+}): Promise<Record<string, string>> {
+  return apiRequest<Record<string, string>>('/settings/save', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    responseContract: 'envelope',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: unwrap<Record<string, string>>(raw) }
 }

@@ -15,17 +15,22 @@ import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.broker.util.OptimisticLockRetryHelper;
+import com.swingtrade.strategy.ExitReason;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 
 import java.util.ArrayList;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Bridges in-memory PaperTradingEngine with DB persistence.
@@ -38,6 +43,8 @@ public class PaperTradingStateService {
     private static final Logger logger = LoggerFactory.getLogger(PaperTradingStateService.class);
 
     private static final String BROKER_TYPE_PAPER = "PAPER";
+
+    private static final Pattern POSITION_ID_PATTERN = Pattern.compile("^POS_(\\d+)$");
 
     private final PaperTradingEngine engine;
     private final PositionManager positionManager;
@@ -71,6 +78,48 @@ public class PaperTradingStateService {
             logger.info("Paper trading state loaded from DB");
         } catch (Exception e) {
             logger.warn("Failed to load paper trading state from DB, starting fresh: {}", e.getMessage());
+        } finally {
+            // Always attempt to reseed the position ID counter, even if the
+            // loads above partially failed — otherwise a fresh restart would
+            // keep generating IDs from 0 and collide with (and corrupt) an
+            // existing DB row via savePosition()'s upsert-by-positionId.
+            seedPositionCounterFromDb();
+        }
+    }
+
+    /**
+     * Reseeds {@link PaperTradingEngine}'s in-memory position ID counter from
+     * the historical maximum POS_ suffix found in the database (across ALL
+     * statuses and broker types, not just currently-open positions — closed
+     * positions' IDs are still occupied rows). Without this, the counter
+     * always restarts at 0 after a JVM restart, so newly generated IDs would
+     * collide with old (already CLOSED) position_id rows and silently
+     * corrupt them via the upsert in {@link #savePosition(Position)}.
+     */
+    private void seedPositionCounterFromDb() {
+        try {
+            long maxSuffix = 0L;
+            for (String positionId : unifiedPositionRepo.findAllPositionIds()) {
+                if (positionId == null) {
+                    continue;
+                }
+                Matcher matcher = POSITION_ID_PATTERN.matcher(positionId);
+                if (!matcher.matches()) {
+                    continue;
+                }
+                try {
+                    long suffix = Long.parseLong(matcher.group(1));
+                    if (suffix > maxSuffix) {
+                        maxSuffix = suffix;
+                    }
+                } catch (NumberFormatException e) {
+                    logger.warn("Skipping malformed position ID during counter seed: {}", positionId);
+                }
+            }
+            engine.seedPositionCounter(maxSuffix);
+            logger.info("Seeded position ID counter to {} (max POS_ suffix found in DB)", maxSuffix);
+        } catch (Exception e) {
+            logger.warn("Failed to seed position ID counter from DB, starting from 0: {}", e.getMessage());
         }
     }
 
@@ -126,58 +175,77 @@ public class PaperTradingStateService {
         logger.info("Loaded {} closed positions, total realized P&L: {}", closedEntities.size(), totalRealized);
     }
 
+    // REQUIRES_NEW so this commits (and releases the row) immediately when the method
+    // returns, instead of joining the caller's often much longer-lived transaction (e.g.
+    // SignalPipeline.generatePrimarySignal's REQUIRES_NEW). Without this, PaperTradingEngine's
+    // portfolioLock only serializes the in-JVM critical section - the version bump it wrote
+    // is still uncommitted when the lock releases, so the next thread's read-modify-write
+    // still races against it and loses at commit time.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void savePortfolio() {
         try {
-            PaperTradingPortfolioEntity entity = portfolioRepo.findById(1L).orElse(new PaperTradingPortfolioEntity());
-            entity.setId(1L);
-            entity.setPortfolioId("default");
-            entity.setCurrentCapital(engine.getPortfolio().getCurrentCapital());
-            entity.setInitialCapital(engine.getPortfolio().getInitialCapital());
-            entity.setTotalRealizedPnl(engine.getTotalRealizedPnL());
-            entity.setTotalUnrealizedPnL(engine.getTotalUnrealizedPnL());
-            entity.setOpenPositionCount(engine.getOpenPositionCount());
-            portfolioRepo.save(entity);
-        } catch (Exception e) {
+            OptimisticLockRetryHelper.execute(() -> {
+                PaperTradingPortfolioEntity entity = portfolioRepo.findById(1L).orElse(new PaperTradingPortfolioEntity());
+                entity.setId(1L);
+                entity.setPortfolioId("default");
+                entity.setCurrentCapital(engine.getPortfolio().getCurrentCapital());
+                entity.setInitialCapital(engine.getPortfolio().getInitialCapital());
+                entity.setTotalRealizedPnl(engine.getTotalRealizedPnL());
+                entity.setTotalUnrealizedPnL(engine.getTotalUnrealizedPnL());
+                entity.setOpenPositionCount(engine.getOpenPositionCount());
+                portfolioRepo.save(entity);
+            }, "PaperTradingPortfolioEntity");
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof RuntimeException) {
+                throw e;
+            }
             throw new RuntimeException("Failed to save portfolio state", e);
         }
     }
 
     public void savePosition(Position position) {
         try {
-            PositionEntity entity = unifiedPositionRepo.findByPositionId(position.positionId()).orElse(null);
-            if (entity == null) {
-                entity = new PositionEntity(position);
-                entity.setBrokerType(BROKER_TYPE_PAPER);
-            } else {
-                entity.setCurrentPrice(position.currentPrice());
-                entity.setUnrealizedPnL(position.unrealizedPnL());
-                entity.setRealizedPnL(position.realizedPnL());
-                entity.setStatus(position.status() != null ? position.status().name() : "OPEN");
-                if (position.status() != PositionStatus.OPEN) {
-                    entity.setExitTime(LocalDateTime.now());
-                    entity.setExitReason("auto");
+            OptimisticLockRetryHelper.execute(() -> {
+                PositionEntity entity = unifiedPositionRepo.findByPositionId(position.positionId()).orElse(null);
+                if (entity == null) {
+                    entity = new PositionEntity(position);
+                    entity.setBrokerType(BROKER_TYPE_PAPER);
+                } else {
+                    entity.setCurrentPrice(position.currentPrice());
+                    entity.setUnrealizedPnL(position.unrealizedPnL());
+                    entity.setRealizedPnL(position.realizedPnL());
+                    entity.setStatus(position.status() != null ? position.status().name() : "OPEN");
+                    if (position.status() != PositionStatus.OPEN && entity.getExitTime() == null) {
+                        entity.setExitTime(LocalDateTime.now());
+                        entity.setExitReason(position.exitReason() != null
+                            ? position.exitReason() : ExitReason.MANUAL.name());
+                    }
                 }
-            }
-            unifiedPositionRepo.save(entity);
+                unifiedPositionRepo.save(entity);
+            }, "PositionEntity");
         } catch (Exception e) {
             throw new RuntimeException("Failed to save position " + position.positionId(), e);
         }
     }
 
-    @Transactional
+    // REQUIRES_NEW for the same reason as savePortfolio() - this must commit before
+    // portfolioLock releases, not join the caller's longer-lived ambient transaction.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void closePosition(String positionId, Position closedPos) {
         try {
-            PositionEntity entity = unifiedPositionRepo.findByPositionId(positionId).orElse(null);
-            if (entity != null) {
-                entity.setStatus("CLOSED");
-                entity.setCurrentPrice(closedPos.currentPrice());
-                entity.setUnrealizedPnL(closedPos.unrealizedPnL());
-                entity.setRealizedPnL(closedPos.realizedPnL());
-                entity.setExitTime(LocalDateTime.now());
-                entity.setExitReason("manual");
-                unifiedPositionRepo.save(entity);
-                logger.info("Closed position {} updated in unified table", positionId);
-            }
+            OptimisticLockRetryHelper.execute(() -> {
+                PositionEntity entity = unifiedPositionRepo.findByPositionId(positionId).orElse(null);
+                if (entity != null) {
+                    entity.setStatus("CLOSED");
+                    entity.setCurrentPrice(closedPos.currentPrice());
+                    entity.setUnrealizedPnL(closedPos.unrealizedPnL());
+                    entity.setRealizedPnL(closedPos.realizedPnL());
+                    entity.setExitTime(LocalDateTime.now());
+                    entity.setExitReason(closedPos.exitReason() != null ? closedPos.exitReason() : ExitReason.MANUAL.name());
+                    unifiedPositionRepo.save(entity);
+                    logger.info("Closed position {} updated in unified table", positionId);
+                }
+            }, "PositionEntity");
         } catch (Exception e) {
             throw new RuntimeException("Failed to close position " + positionId + " in DB", e);
         }
@@ -185,17 +253,19 @@ public class PaperTradingStateService {
 
     public void saveOrder(Order order) {
         try {
-            PaperTradingOrderEntity entity = orderRepo.findByOrderId(order.getOrderId()).orElse(null);
-            if (entity == null) {
-                entity = new PaperTradingOrderEntity(order);
-            } else {
-                entity.setStatus(order.getStatus() != null ? order.getStatus().name() : entity.getStatus());
-                entity.setUpdatedAt(LocalDateTime.now());
-                if (order.getStatus() == OrderStatus.FILLED) {
-                    entity.setExecutedAt(order.getExecutionTime());
+            OptimisticLockRetryHelper.execute(() -> {
+                PaperTradingOrderEntity entity = orderRepo.findByOrderId(order.getOrderId()).orElse(null);
+                if (entity == null) {
+                    entity = new PaperTradingOrderEntity(order);
+                } else {
+                    entity.setStatus(order.getStatus() != null ? order.getStatus().name() : entity.getStatus());
+                    entity.setUpdatedAt(LocalDateTime.now());
+                    if (order.getStatus() == OrderStatus.FILLED) {
+                        entity.setExecutedAt(order.getExecutionTime());
+                    }
                 }
-            }
-            orderRepo.save(entity);
+                orderRepo.save(entity);
+            }, "PaperTradingOrderEntity");
         } catch (Exception e) {
             throw new RuntimeException("Failed to save order " + order.getOrderId(), e);
         }
@@ -203,16 +273,18 @@ public class PaperTradingStateService {
 
     public void saveSnapshot() {
         try {
-            PaperTradingSnapshotEntity entity = new PaperTradingSnapshotEntity();
-            entity.setTotalValue(engine.getPortfolio().getTotalValue());
-            entity.setCashBalance(engine.getCurrentCash());
-            entity.setMarketValue(engine.getPortfolio().getTotalValue().subtract(engine.getCurrentCash()));
-            entity.setTotalPnL(engine.getTotalPnL());
-            entity.setReturnPct(engine.getReturnPercentage());
-            entity.setOpenPositions(engine.getOpenPositionCount());
-            snapshotRepo.save(entity);
-            logger.debug("Saved portfolio snapshot: total={}, cash={}, pnl={}",
-                entity.getTotalValue(), entity.getCashBalance(), entity.getTotalPnL());
+            OptimisticLockRetryHelper.execute(() -> {
+                PaperTradingSnapshotEntity entity = new PaperTradingSnapshotEntity();
+                entity.setTotalValue(engine.getPortfolio().getTotalValue());
+                entity.setCashBalance(engine.getCurrentCash());
+                entity.setMarketValue(engine.getPortfolio().getTotalValue().subtract(engine.getCurrentCash()));
+                entity.setTotalPnL(engine.getTotalPnL());
+                entity.setReturnPct(engine.getReturnPercentage());
+                entity.setOpenPositions(engine.getOpenPositionCount());
+                snapshotRepo.save(entity);
+                logger.debug("Saved portfolio snapshot: total={}, cash={}, pnl={}",
+                    entity.getTotalValue(), entity.getCashBalance(), entity.getTotalPnL());
+            }, "PaperTradingSnapshotEntity");
         } catch (Exception e) {
             throw new RuntimeException("Failed to save portfolio snapshot", e);
         }

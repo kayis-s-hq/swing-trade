@@ -1,6 +1,9 @@
 package com.swingtrade.broker.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.annotation.PostConstruct;
+import com.swingtrade.data.service.AppSettingsService;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -15,8 +18,27 @@ public class PaperTradingProperties {
 
     private boolean enabled = true;
     private int maxConcurrentPositions = 5;
-    private BigDecimal maxCapitalPerPosition = BigDecimal.valueOf(200000);
-    private BigDecimal initialBalance = BigDecimal.valueOf(1000000);
+    private BigDecimal maxCapitalPerPosition = BigDecimal.valueOf(100000);
+    private BigDecimal initialBalance = BigDecimal.valueOf(500000);
+    private AppSettingsService appSettingsService;
+
+    @Autowired(required = false)
+    public void setAppSettingsService(AppSettingsService appSettingsService) {
+        this.appSettingsService = appSettingsService;
+    }
+
+    @PostConstruct
+    void loadPersistedInitialBalance() {
+        if (appSettingsService == null) return;
+        String configured = appSettingsService.get("trading.initial_capital", null);
+        if (configured == null || configured.isBlank()) return;
+        try {
+            BigDecimal value = new BigDecimal(configured);
+            if (value.signum() > 0) initialBalance = value;
+        } catch (NumberFormatException ignored) {
+            // Keep the safe configured default when persisted settings are invalid.
+        }
+    }
     private long signalExecutionDelay = 30000;
     private boolean positionSizeLimitsEnabled = true;
     private int positionSizeAlertThreshold = 80;

@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16
     container_name: swing_trade_stage_postgres
+    restart: always
     environment:
       POSTGRES_DB: swingtrade_stage
       POSTGRES_USER: swingtrade_user
@@ -21,24 +20,15 @@ services:
       retries: 5
       start_period: 10s
 
-  redis:
-    image: redis:alpine
-    container_name: swing_trade_stage_redis
-    networks:
-      - swingtrade-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
   api:
     image: swing-trade-api:stage
     container_name: swing-trade-stage-api
+    restart: always
+    env_file:
+      - .env.stage
     build:
-      context: ..
-      dockerfile: infra/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       target: runtime-stage
     ports:
       - "8081:8080"
@@ -60,8 +50,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - swingtrade-network
     deploy:
@@ -73,6 +61,7 @@ services:
   dashboard:
     image: swing-trade-dashboard:stage
     container_name: swing-trade-stage-dashboard
+    restart: always
     build:
       context: ../dashboard
       dockerfile: Dockerfile

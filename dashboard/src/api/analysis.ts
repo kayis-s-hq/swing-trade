@@ -1,73 +1,126 @@
-import { rawFetch, errResponse } from './shared'
-import type { ApiResponse, AnalysisProgress, FullAnalysisResult, CompositeAnalysis } from './types'
+import { safeHumanMessage, type AppError } from '../errors/appError'
+import { MalformedResponseError } from '../errors/errorClasses'
+import { apiRequest, apiSseEvents } from './shared'
+import type { AnalysisProgress, FullAnalysisResult, CompositeAnalysis } from './types'
 
-export async function getCompositeAnalysis(
-  symbol: string
-): Promise<ApiResponse<CompositeAnalysis>> {
-  const raw = await rawFetch(`/analysis/analyze?symbol=${encodeURIComponent(symbol)}`, {
+export async function getCompositeAnalysis(symbol: string): Promise<CompositeAnalysis> {
+  return apiRequest<CompositeAnalysis>(`/analysis/analyze?symbol=${encodeURIComponent(symbol)}`, {
     method: 'POST',
+    responseContract: 'direct',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as CompositeAnalysis }
 }
 
-export async function* runFullAnalysis(
-  symbol: string,
-  years: number = 3
-): AsyncIterable<AnalysisProgress | FullAnalysisResult> {
-  const { API_BASE_URL, DEFAULT_HEADERS } = await import('./config')
-  const params = new URLSearchParams({
-    symbol: encodeURIComponent(symbol),
-    years: String(years),
-  })
-  const url = `${API_BASE_URL}/analysis/run-full?${params}`
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 600_000)
+export interface AnalysisStreamOptions {
+  signal?: AbortSignal
+  timeoutMs?: number
+}
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: DEFAULT_HEADERS,
-    signal: controller.signal,
-  })
+const ANALYSIS_STATUSES = new Set<AnalysisProgress['status']>([
+  'running',
+  'completed',
+  'skipped',
+  'error',
+])
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    clearTimeout(timeoutId)
-    throw new Error(`Analysis failed: ${response.statusText} ${text.slice(0, 200)}`)
+function invalidAnalysisEvent(message: string): AppError {
+  return new MalformedResponseError({
+    message,
+    retryable: false,
+    outcomeUnknown: true,
+  })
+}
+
+function safeAnalysisProgressMessage(
+  message: string,
+  stageName: string,
+  status: AnalysisProgress['status']
+): string {
+  const fallback =
+    status === 'error'
+      ? `The ${stageName || 'analysis'} stage couldn’t be completed.`
+      : 'Analysis progress was updated.'
+  return safeHumanMessage(message, fallback)
+}
+
+function analysisEventFromWire(
+  payload: unknown,
+  eventName: string
+): AnalysisProgress | FullAnalysisResult {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw invalidAnalysisEvent('The analysis stream contained an invalid event.')
   }
 
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let currentEvent = 'progress'
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-      for (const line of lines) {
-        const trimmed = line.trim()
-        const eventMatch = trimmed.match(/^event:\s*(\S+)/)
-        if (eventMatch) {
-          currentEvent = eventMatch[1]
-          continue
-        }
-        const dataPrefix = 'data:'
-        if (trimmed.startsWith(dataPrefix)) {
-          try {
-            const data = JSON.parse(trimmed.slice(dataPrefix.length).trim())
-            yield { ...data, _eventType: currentEvent }
-          } catch {
-            // Skip malformed JSON
-          }
-        }
-      }
+  const event = payload as Record<string, unknown>
+  if (eventName === 'complete') {
+    if (
+      typeof event.symbol !== 'string' ||
+      typeof event.durationMs !== 'number' ||
+      !Array.isArray(event.progress) ||
+      (event.composite !== null &&
+        (typeof event.composite !== 'object' || Array.isArray(event.composite)))
+    ) {
+      throw invalidAnalysisEvent('The analysis stream contained an invalid completion event.')
     }
-  } finally {
-    clearTimeout(timeoutId)
-    reader.releaseLock()
+
+    const progress = event.progress.map((item) => {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) return item
+      const stage = item as Record<string, unknown>
+      if (
+        typeof stage.message !== 'string' ||
+        typeof stage.stageName !== 'string' ||
+        typeof stage.status !== 'string' ||
+        !ANALYSIS_STATUSES.has(stage.status as AnalysisProgress['status'])
+      ) {
+        return item
+      }
+      return {
+        ...stage,
+        message: safeAnalysisProgressMessage(
+          stage.message,
+          stage.stageName,
+          stage.status as AnalysisProgress['status']
+        ),
+      }
+    })
+
+    return { ...event, progress, _eventType: 'complete' } as unknown as FullAnalysisResult
   }
+
+  if (
+    eventName !== 'progress' ||
+    typeof event.stageNumber !== 'number' ||
+    typeof event.stageName !== 'string' ||
+    typeof event.status !== 'string' ||
+    !ANALYSIS_STATUSES.has(event.status as AnalysisProgress['status']) ||
+    typeof event.message !== 'string' ||
+    typeof event.timestamp !== 'string'
+  ) {
+    throw invalidAnalysisEvent('The analysis stream contained an invalid progress event.')
+  }
+
+  return {
+    ...event,
+    message: safeAnalysisProgressMessage(
+      event.message,
+      event.stageName,
+      event.status as AnalysisProgress['status']
+    ),
+    _eventType: 'progress',
+  } as unknown as AnalysisProgress
+}
+
+export function runFullAnalysis(
+  symbol: string,
+  years: number = 3,
+  options: AnalysisStreamOptions = {}
+): AsyncIterable<AnalysisProgress | FullAnalysisResult> {
+  const params = new URLSearchParams({ symbol, backfillYears: String(years) })
+  return apiSseEvents(`/analysis/run-full?${params}`, {
+    method: 'POST',
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
+    ignoredEventNames: ['started', 'ping'],
+    parseEvent: analysisEventFromWire,
+    isTerminal: (_event, eventName) => eventName === 'complete',
+  })
 }

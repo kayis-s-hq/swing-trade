@@ -51,7 +51,9 @@ public class SynthesisService {
 
             return parseResponse(llmResponse, composite);
         } catch (Exception e) {
-            logger.warn("LLM synthesis failed for {}: {}, using fallback", symbol, e.getMessage());
+            logger.warn("LLM synthesis failed for {}: {}: {}, using fallback",
+                symbol, e.getClass().getName(), e.getMessage());
+            logger.debug("LLM synthesis failure stack trace for {}", symbol, e);
             return fallbackSynthesis(composite);
         }
     }
@@ -111,7 +113,9 @@ public class SynthesisService {
                 true
             );
         } catch (Exception e) {
-            logger.debug("BeanOutputConverter failed, falling back to Jackson parsing: {}", e.getMessage());
+            logger.debug("BeanOutputConverter failed, falling back to Jackson parsing: {}: {}",
+                e.getClass().getName(), e.getMessage());
+            logger.debug("BeanOutputConverter failure stack trace", e);
             return parseWithFallback(response, composite);
         }
     }
@@ -127,14 +131,16 @@ public class SynthesisService {
         }
 
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();
             LlmResponseDTO dto = mapper.readValue(json, LlmResponseDTO.class);
             return new SynthesisResult(
                 dto.getNarrative(), dto.getRecommendation(), dto.getConfidence(),
                 dto.getKeyDrivers(), dto.getBullishFactors(), dto.getBearishFactors(), true
             );
         } catch (Exception e) {
-            logger.warn("Failed to parse synthesis JSON: {}, fallback", e.getMessage());
+            logger.warn("Failed to parse synthesis JSON: {}: {}, fallback",
+                e.getClass().getName(), e.getMessage());
+            logger.debug("Synthesis JSON parse failure stack trace", e);
             return fallbackSynthesis(composite);
         }
     }
@@ -201,13 +207,19 @@ public class SynthesisService {
         return -1;
     }
 
+    private SynthesisResult fallbackSynthesis(CompositeAnalysis c) {
+        return new SynthesisResult(
+            null, null, 0.0, List.of(), List.of(), List.of(), false
+        );
+    }
+
     private static class LlmResponseDTO {
-        String narrative;
-        String recommendation;
-        double confidence;
-        List<String> keyDrivers;
-        List<String> bullishFactors;
-        List<String> bearishFactors;
+        private String narrative;
+        private String recommendation;
+        private double confidence;
+        private List<String> keyDrivers;
+        private List<String> bullishFactors;
+        private List<String> bearishFactors;
 
         public String getNarrative() { return narrative; }
         public String getRecommendation() { return recommendation; }
@@ -215,11 +227,5 @@ public class SynthesisService {
         public List<String> getKeyDrivers() { return keyDrivers; }
         public List<String> getBullishFactors() { return bullishFactors; }
         public List<String> getBearishFactors() { return bearishFactors; }
-    }
-
-    private SynthesisResult fallbackSynthesis(CompositeAnalysis c) {
-        return new SynthesisResult(
-            null, null, 0.0, List.of(), List.of(), List.of(), false
-        );
     }
 }

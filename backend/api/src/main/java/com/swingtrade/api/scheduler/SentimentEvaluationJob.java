@@ -8,6 +8,7 @@ import com.swingtrade.domain.store.SentimentAccuracyStore;
 import com.swingtrade.domain.store.SentimentStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -33,6 +34,7 @@ public class SentimentEvaluationJob {
     private final CandleStore candleStore;
     private final SentimentAccuracyStore accuracyStore;
     private final SentimentStore sentimentStore;
+    private final boolean schedulerEnabled;
 
     // Last run tracking
     private final AtomicReference<LocalDateTime> lastRun = new AtomicReference<>(null);
@@ -41,14 +43,20 @@ public class SentimentEvaluationJob {
 
     public SentimentEvaluationJob(CandleStore candleStore,
                                   SentimentAccuracyStore accuracyStore,
-                                  SentimentStore sentimentStore) {
+                                  SentimentStore sentimentStore,
+                                  @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled) {
         this.candleStore = candleStore;
         this.accuracyStore = accuracyStore;
         this.sentimentStore = sentimentStore;
+        this.schedulerEnabled = schedulerEnabled;
     }
 
-    @Scheduled(cron = "0 0 2 * * *")
+    @Scheduled(cron = "0 0 2 * * *", zone = "Asia/Kolkata")
     public void evaluatePendingSentiments() {
+        if (!schedulerEnabled) {
+            log.debug("Scheduler disabled (app.features.scheduler.enabled=false) — skipping sentiment evaluation");
+            return;
+        }
         runEvaluation();
     }
 
@@ -175,7 +183,7 @@ public class SentimentEvaluationJob {
 
     private boolean wasCorrect(String llmScore, String groundTruth) {
         if (llmScore == null || groundTruth == null) return false;
-        if ("FLAT".equals(groundTruth)) return true; // neutral prediction is always "correct" for flat
+        if ("FLAT".equals(groundTruth)) return "NEUTRAL".equals(llmScore);
         boolean llmUp = "POSITIVE".equals(llmScore);
         boolean llmDown = "NEGATIVE".equals(llmScore);
         boolean actualUp = "UP".equals(groundTruth);

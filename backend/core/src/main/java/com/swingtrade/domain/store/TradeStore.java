@@ -4,10 +4,13 @@ import com.swingtrade.domain.Trade;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface TradeStore {
 
     List<Trade> findBySymbol(String symbol);
+
+    Optional<Trade> findOpenByPositionId(Long positionId);
 
     List<Trade> findByEntryDateBetween(LocalDate start, LocalDate end);
 

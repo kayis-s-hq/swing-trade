@@ -1,74 +1,102 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { mount, VueWrapper } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import Toast from './Toast.vue'
 
-function mountToast(
-  props = { message: 'Saved', type: 'success' as const, duration: 4000 }
-): VueWrapper {
-  return mount(Toast, { props })
+interface ToastProps {
+  title?: string
+  message: string
+  type?: 'success' | 'error' | 'warning' | 'info'
+  actionLabel?: string
 }
 
-function findToast(): HTMLElement | null {
-  return document.body.querySelector('.fixed.bottom-6.right-6')
+const wrappers: VueWrapper[] = []
+
+function mountToast(props: ToastProps = { message: 'Saved', type: 'success' }) {
+  const wrapper = mount(Toast, {
+    props,
+    global: {
+      stubs: {
+        Teleport: true,
+      },
+    },
+  })
+  wrappers.push(wrapper)
+  return wrapper
 }
+
+afterEach(() => {
+  wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+  vi.useRealTimers()
+})
 
 describe('Toast', () => {
-  beforeEach(() => {
-    document.body.innerHTML = ''
+  describe('presentational lifecycle', () => {
+    it('renders until its owner removes it and does not change after time passes', async () => {
+      vi.useFakeTimers()
+      const wrapper = mountToast({ message: 'Portfolio refreshed', type: 'success' })
+      await nextTick()
+      const notification = wrapper.get('[role="status"]')
+      const renderedNotification = notification.html()
+
+      vi.advanceTimersByTime(60_000)
+      await nextTick()
+
+      expect(notification.html()).toBe(renderedNotification)
+      expect(wrapper.emitted('dismiss')).toBeUndefined()
+    })
   })
 
-  afterEach(() => {
-    vi.useRealTimers()
+  describe('live-region semantics', () => {
+    it('uses an assertive alert for errors', () => {
+      const wrapper = mountToast({ message: 'Order failed', type: 'error' })
+      const notification = wrapper.get('[role="alert"]')
+
+      expect(notification.attributes('aria-live')).toBe('assertive')
+      expect(notification.text()).toContain('Order failed')
+    })
+
+    it.each(['success', 'warning', 'info'] as const)(
+      'uses a polite status for %s notifications',
+      (type) => {
+        const wrapper = mountToast({ message: `${type} message`, type })
+        const notification = wrapper.get('[role="status"]')
+
+        expect(notification.attributes('aria-live')).toBe('polite')
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      }
+    )
   })
 
-  it('renders message with correct type styling', async () => {
-    const wrapper = mountToast({ message: 'Saved', type: 'success' })
-    await nextTick()
-    const toast = findToast()
-    expect(toast?.textContent).toContain('Saved')
-    expect(toast?.querySelector('svg')).toBeTruthy()
-    wrapper.unmount()
-  })
+  describe('notification controls', () => {
+    it('provides a labeled dismiss control and delegates dismissal to its owner', async () => {
+      const wrapper = mountToast({
+        title: 'Couldn’t refresh signals',
+        message: 'The last successful values are still shown.',
+        type: 'warning',
+      })
 
-  it('auto-dismisses after duration', async () => {
-    vi.useFakeTimers()
-    const wrapper = mountToast({ message: 'Dismiss', type: 'info', duration: 100 })
-    await nextTick()
-    let toast = findToast()
-    expect(toast).toBeTruthy()
-    expect(toast?.className).toContain('opacity-100')
-    await vi.advanceTimersByTimeAsync(150)
-    toast = findToast()
-    expect(toast?.className).toContain('opacity-0')
-    wrapper.unmount()
-  })
+      const dismiss = wrapper.get('button[aria-label]')
+      expect(dismiss.attributes('aria-label')).toMatch(/dismiss notification/i)
 
-  it('shows error type with danger styling', () => {
-    const wrapper = mountToast({ message: 'Error!', type: 'error' })
-    const toast = findToast()
-    expect(toast?.className).toContain('danger')
-    wrapper.unmount()
-  })
+      await dismiss.trigger('click')
 
-  it('aria-live set to assertive for errors', () => {
-    const wrapper = mountToast({ message: 'Error!', type: 'error' })
-    const toast = findToast() as HTMLElement
-    expect(toast.getAttribute('role')).toBe('alert')
-    expect(toast.getAttribute('aria-live')).toBe('assertive')
-    wrapper.unmount()
-  })
+      expect(wrapper.emitted('dismiss')).toHaveLength(1)
+    })
 
-  it('aria-live set to polite for non-errors', () => {
-    const wrapper = mountToast({ message: 'Info', type: 'info' })
-    const toast = findToast() as HTMLElement
-    expect(toast.getAttribute('aria-live')).toBe('polite')
-    wrapper.unmount()
-  })
+    it('renders an optional contextual action and emits it without executing store logic', async () => {
+      const wrapper = mountToast({
+        message: 'The request took too long.',
+        type: 'error',
+        actionLabel: 'Retry',
+      })
 
-  it('teleports to body', () => {
-    const wrapper = mountToast({ message: 'Teleport', type: 'success' })
-    expect(document.body.contains(findToast()!)).toBe(true)
-    wrapper.unmount()
+      const action = wrapper.get('button:not([aria-label])')
+      expect(action.text()).toBe('Retry')
+
+      await action.trigger('click')
+
+      expect(wrapper.emitted('action')).toHaveLength(1)
+    })
   })
 })

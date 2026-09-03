@@ -4,12 +4,14 @@ import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.FyersAuthService;
 import com.swingtrade.data.service.FyersServiceClient;
 import com.swingtrade.data.service.FyersSymbolMasterService;
+import com.swingtrade.data.service.MarketDataClientProvider;
 import io.github.resilience4j.bulkhead.Bulkhead;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClient.Builder;
 
@@ -35,8 +37,9 @@ public class FyersResilienceConfig {
 
     @Bean
     public FyersSymbolMasterService fyersSymbolMasterService(WebClient.Builder webClientBuilder,
-                                                             FyersSymbolRepository symbolRepository) {
-        return new FyersSymbolMasterService(webClientBuilder, symbolRepository);
+                                                             FyersSymbolRepository symbolRepository,
+                                                             @Lazy MarketDataClientProvider marketDataClientProvider) {
+        return new FyersSymbolMasterService(webClientBuilder, symbolRepository, marketDataClientProvider);
     }
 
     @Bean

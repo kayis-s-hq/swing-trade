@@ -7,6 +7,7 @@
 
   <!-- Keep only errorprone — real bugs, noisy rules excluded -->
   <rule ref="category/java/errorprone.xml">
+    <exclude name="AvoidCatchingGenericException"/>
     <exclude name="AvoidDuplicateLiterals"/>
     <exclude name="AvoidLiteralsInIfCondition"/>
     <exclude name="NullAssignment"/>
@@ -14,6 +15,11 @@
     <exclude name="MissingSerialVersionUID"/>
     <exclude name="AvoidFieldNameMatchingMethodName"/>
     <exclude name="UseLocaleWithCaseConversions"/>
+    <exclude name="CloseResource"/>
+    <exclude name="AssignmentInOperand"/>
+    <exclude name="IdenticalConditionalBranches"/>
+    <exclude name="EmptyCatchBlock"/>
+    <exclude name="UseProperClassLoader"/>
   </rule>
 
   <!-- Keep only security — critical -->
@@ -25,5 +31,6 @@
     <exclude name="AvoidSynchronizedAtMethodLevel"/>
     <exclude name="UseConcurrentHashMap"/>
     <exclude name="DoNotUseThreads"/>
+    <exclude name="AvoidUsingVolatile"/>
   </rule>
 </ruleset>

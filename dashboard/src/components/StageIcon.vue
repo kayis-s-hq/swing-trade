@@ -1,5 +1,5 @@
 <template>
-  <span>
+  <span class="inline-flex h-4 w-4 items-center justify-center">
     <!-- COMPLETED: checkmark -->
     <svg
       v-if="status === 'COMPLETED'"

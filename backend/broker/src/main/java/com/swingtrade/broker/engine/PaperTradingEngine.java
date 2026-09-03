@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -46,6 +45,14 @@ public class PaperTradingEngine implements TradingService {
 
     // Portfolio state
     private final Portfolio portfolio;
+
+    // Guards every read-modify-write of portfolio.currentCapital plus its immediate DB
+    // persist, so concurrent symbol-processing threads (e.g. JobOrchestratorService
+    // closing several SELL signals at once) serialize onto the single shared
+    // PaperTradingPortfolioEntity row instead of racing on it — the optimistic-lock
+    // retries in OptimisticLockRetryHelper only tolerate occasional contention, not a
+    // handful of threads hitting the same row in the same instant.
+    private final Object portfolioLock = new Object();
 
     // Configuration
     private final PaperTradingProperties properties;
@@ -250,19 +257,21 @@ public class PaperTradingEngine implements TradingService {
 
         // Create position from filled order
         if (order.getStatus() == OrderStatus.FILLED) {
-            Position position = createPositionFromOrder(order);
+            synchronized (portfolioLock) {
+                Position position = createPositionFromOrder(order);
 
-            // Update portfolio
-            updatePortfolioAfterEntry(order);
+                // Update portfolio
+                updatePortfolioAfterEntry(order);
 
-            logger.info("Position {} created from order {} at {}",
-                position.positionId(), orderId, executionPrice);
+                logger.info("Position {} created from order {} at {}",
+                    position.positionId(), orderId, executionPrice);
 
-            // Persist
-            if (stateService != null) {
-                stateService.saveOrder(order);
-                stateService.savePosition(position);
-                stateService.savePortfolio();
+                // Persist
+                if (stateService != null) {
+                    stateService.saveOrder(order);
+                    stateService.savePosition(position);
+                    stateService.savePortfolio();
+                }
             }
         }
 
@@ -401,6 +410,11 @@ public class PaperTradingEngine implements TradingService {
         return quantity.multiply(commissionRate);
     }
 
+    @Override
+    public BigDecimal calculateEntryCommission(int quantity) {
+        return BigDecimal.valueOf(quantity).multiply(commissionRate);
+    }
+
     /**
      * Performs partial exit of a position.
      *
@@ -410,27 +424,29 @@ public class PaperTradingEngine implements TradingService {
      * @return the updated position
      */
     public Position partialExitPosition(String positionId, BigDecimal exitRatio, BigDecimal exitPrice) {
-        // Capture quantity before partial exit (this is the original at call time)
-        BigDecimal currentQty = BigDecimal.valueOf(positionManager.getPosition(positionId).quantity());
-        BigDecimal exitedQuantity = currentQty.multiply(exitRatio);
+        synchronized (portfolioLock) {
+            // Capture quantity before partial exit (this is the original at call time)
+            BigDecimal currentQty = BigDecimal.valueOf(positionManager.getPosition(positionId).quantity());
+            BigDecimal exitedQuantity = currentQty.multiply(exitRatio);
 
-        Position position = positionManager.partialExitPosition(positionId, exitRatio, exitPrice);
+            Position position = positionManager.partialExitPosition(positionId, exitRatio, exitPrice);
 
-        // Update portfolio with cash proceeds from exited shares
-        BigDecimal exitValue = exitedQuantity.multiply(exitPrice);
-        BigDecimal commission = exitedQuantity.multiply(commissionRate);
-        portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(exitValue.subtract(commission)));
+            // Update portfolio with cash proceeds from exited shares
+            BigDecimal exitValue = exitedQuantity.multiply(exitPrice);
+            BigDecimal commission = exitedQuantity.multiply(commissionRate);
+            portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(exitValue.subtract(commission)));
 
-        logger.info("Partial exit completed for position {}: exited={}, remaining={}",
-            positionId, exitedQuantity, position.quantity());
+            logger.info("Partial exit completed for position {}: exited={}, remaining={}",
+                positionId, exitedQuantity, position.quantity());
 
-        // Persist
-        if (stateService != null) {
-            stateService.savePosition(position);
-            stateService.savePortfolio();
+            // Persist
+            if (stateService != null) {
+                stateService.savePosition(position);
+                stateService.savePortfolio();
+            }
+
+            return position;
         }
-
-        return position;
     }
 
     /**
@@ -438,11 +454,20 @@ public class PaperTradingEngine implements TradingService {
      * Looks up the persisted position from DB to get its positionId string
      * (the in-memory counter may have reset on restart).
      *
+     * <p>Intentionally NOT {@code @Transactional}: this method only performs
+     * an in-memory lookup before delegating to {@link #closePosition(String, BigDecimal, String)}
+     * for the actual (already transactional) close-and-persist logic. Callers
+     * (e.g. {@code PositionService}) run their own outer transaction and rely
+     * on catching failures from this method without having the outer
+     * transaction marked rollback-only — annotating this wrapper would cause
+     * any exception thrown here (e.g. an unresolved in-memory position) to be
+     * intercepted by Spring's transaction advice and poison the caller's
+     * transaction even though the caller catches it.
+     *
      * @param positionId the database position ID
      * @return the closed position
-     * @throws IllegalArgumentException if position not found
+     * @throws IllegalArgumentException if position not found (in DB or in memory)
      */
-    @Transactional
     public Position closePosition(Long positionId) {
         // Load position from DB to get its positionId (counter may have reset)
         PositionEntity entity = stateService.getPositionById(positionId);
@@ -450,6 +475,11 @@ public class PaperTradingEngine implements TradingService {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
         String posId = entity.getPositionId();
+        if (posId == null || posId.isBlank()) {
+            throw new IllegalArgumentException(
+                "Position " + positionId + " has no linked in-memory positionId "
+                    + "(was persisted without engine linkage); cannot close via engine");
+        }
         Position position = positionManager.getPosition(posId);
         if (position == null) {
             throw new IllegalArgumentException("Position not found in memory: " + posId);
@@ -466,20 +496,27 @@ public class PaperTradingEngine implements TradingService {
      * Closes a position by its database ID with explicit exit price and reason.
      * Implements TradingService interface method.
      *
+     * <p>Intentionally NOT {@code @Transactional} — see {@link #closePosition(Long)}
+     * for rationale.
+     *
      * @param positionId the database position ID
      * @param exitPrice the exit price
      * @param reason the reason for closing
      * @return the closed position
-     * @throws IllegalArgumentException if position not found
+     * @throws IllegalArgumentException if position not found (in DB or in memory)
      */
     @Override
-    @Transactional
     public Position closePosition(Long positionId, BigDecimal exitPrice, String reason) {
         PositionEntity entity = stateService.getPositionById(positionId);
         if (entity == null) {
             throw new IllegalArgumentException("Position not found: " + positionId);
         }
         String posId = entity.getPositionId();
+        if (posId == null || posId.isBlank()) {
+            throw new IllegalArgumentException(
+                "Position " + positionId + " has no linked in-memory positionId "
+                    + "(was persisted without engine linkage); cannot close via engine");
+        }
         Position position = positionManager.getPosition(posId);
         if (position == null) {
             throw new IllegalArgumentException("Position not found in memory: " + posId);
@@ -492,29 +529,40 @@ public class PaperTradingEngine implements TradingService {
     /**
      * Closes a position completely.
      *
+     * <p>Intentionally NOT {@code @Transactional}: {@link PositionManager} is a
+     * pure in-memory store with no JPA/DB participation, so there is no
+     * transactional resource here to protect. If this method were annotated
+     * (directly or transitively via a transactional {@code PositionManager}
+     * method), a failure here (e.g. an unresolved in-memory position lookup)
+     * would mark the caller's ambient transaction (e.g.
+     * {@code PositionService.closePosition()}) rollback-only — surfacing as an
+     * {@code UnexpectedRollbackException} even when the caller catches and
+     * handles the failure gracefully.
+     *
      * @param positionId the position to close
      * @param exitPrice the exit price
      * @param reason the reason for closing
      */
-    @Transactional
     public void closePosition(String positionId, BigDecimal exitPrice, String reason) {
-        Position position = positionManager.closePosition(positionId, exitPrice, reason);
-        tradeMetrics.recordTradeClose(reason);
+        synchronized (portfolioLock) {
+            Position position = positionManager.closePosition(positionId, exitPrice, reason);
+            tradeMetrics.recordTradeClose(reason);
 
-        // Update portfolio
-        BigDecimal exitValue = exitPrice.multiply(BigDecimal.valueOf(position.quantity()));
-        BigDecimal commission = calculateCommissionForPosition(position);
-        BigDecimal netProceeds = exitValue.subtract(commission);
+            // Update portfolio
+            BigDecimal exitValue = exitPrice.multiply(BigDecimal.valueOf(position.quantity()));
+            BigDecimal commission = calculateCommissionForPosition(position);
+            BigDecimal netProceeds = exitValue.subtract(commission);
 
-        portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(netProceeds));
+            portfolio.setCurrentCapital(portfolio.getCurrentCapital().add(netProceeds));
 
-        logger.info("Position {} closed: P&L={}, Reason={}",
-            positionId, position.unrealizedPnL(), reason);
+            logger.info("Position {} closed: P&L={}, Reason={}",
+                positionId, position.realizedPnL(), reason);
 
-        // Persist
-        if (stateService != null) {
-            stateService.closePosition(positionId, position);
-            stateService.savePortfolio();
+            // Persist
+            if (stateService != null) {
+                stateService.closePosition(positionId, position);
+                stateService.savePortfolio();
+            }
         }
     }
 
@@ -536,6 +584,26 @@ public class PaperTradingEngine implements TradingService {
      */
     private String generatePositionId() {
         return "POS_" + String.format("%08d", positionCounter.incrementAndGet());
+    }
+
+    /**
+     * Seeds the position ID counter so that subsequently generated IDs never
+     * collide with any position (open or closed) already persisted in the
+     * database. The counter always starts at 0 on JVM startup (in-memory
+     * state), so without this seeding step every restart would reissue IDs
+     * from POS_00000001 and silently overwrite unrelated historical rows via
+     * {@code PaperTradingStateService.savePosition()}'s upsert-by-positionId
+     * logic. Called once by {@code PaperTradingStateService.loadState()}
+     * during {@link #initState()}, before any new position can be created.
+     *
+     * <p>Only raises the counter — never lowers it — so repeated or
+     * out-of-order calls are safe.
+     *
+     * @param minValue the minimum counter value, typically the max POS_
+     *     numeric suffix found in the database
+     */
+    public void seedPositionCounter(long minValue) {
+        positionCounter.updateAndGet(current -> Math.max(current, minValue));
     }
 
     /**
@@ -636,7 +704,26 @@ public class PaperTradingEngine implements TradingService {
     }
 
     public BigDecimal getTotalValue() {
-        return portfolio.getTotalValue();
+        Portfolio p = getPortfolio();
+        return p != null ? p.getTotalValue() : null;
+    }
+
+    @Override
+    public BigDecimal getPortfolioMaxDrawdown() {
+        if (stateService == null) return null;
+        BigDecimal peak = null;
+        BigDecimal maxDrawdown = BigDecimal.ZERO;
+        List<com.swingtrade.broker.entity.PaperTradingSnapshotEntity> snapshots = stateService.getSnapshots();
+        for (int i = snapshots.size() - 1; i >= 0; i--) {
+            BigDecimal value = snapshots.get(i).getTotalValue();
+            if (value == null || value.signum() <= 0) continue;
+            if (peak == null || value.compareTo(peak) > 0) peak = value;
+            BigDecimal drawdown = peak.subtract(value)
+                .divide(peak, 8, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100));
+            if (drawdown.compareTo(maxDrawdown) > 0) maxDrawdown = drawdown;
+        }
+        return peak == null ? null : maxDrawdown.setScale(2, RoundingMode.HALF_UP);
     }
 
     /**
@@ -712,9 +799,11 @@ public class PaperTradingEngine implements TradingService {
                 position.positionId(), position.status());
 
             // Persist closed position
-            if (stateService != null) {
-                stateService.closePosition(position.positionId(), position);
-                stateService.savePortfolio();
+            synchronized (portfolioLock) {
+                if (stateService != null) {
+                    stateService.closePosition(position.positionId(), position);
+                    stateService.savePortfolio();
+                }
             }
             tradeMetrics.recordTradeClose(position.status().name().toLowerCase());
         }

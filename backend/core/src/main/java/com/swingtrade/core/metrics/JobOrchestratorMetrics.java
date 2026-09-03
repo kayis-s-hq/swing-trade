@@ -58,4 +58,25 @@ public class JobOrchestratorMetrics {
         runsFailed.increment();
         runDuration.record(Duration.ofMillis(durationMs));
     }
+
+    /**
+     * Records a run that the watchdog force-failed because it was found orphaned
+     * (RUNNING past its staleness threshold, e.g. abandoned by a JVM restart). Unlike
+     * {@link #recordRunFailed}, this does not touch {@code activeRuns} — the orphaned run's
+     * start was never recorded as active in this JVM instance.
+     */
+    public void recordRunReaped() {
+        runsFailed.increment();
+    }
+
+    /**
+     * Records a run cancelled by user request via {@code cancelRun()}. Unlike
+     * {@link #recordRunFailed}, cancellation is not counted as a failure, but
+     * {@code activeRuns} must still be decremented — cancelRun() previously called neither
+     * recordRunCompleted nor recordRunFailed, permanently leaking +1 on the
+     * {@code job.runs.active} gauge for every cancelled run.
+     */
+    public void recordRunCancelled() {
+        activeRuns.decrementAndGet();
+    }
 }

@@ -10,7 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.io.IOException;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = PromptLoaderTestConfig.class)
@@ -61,5 +61,15 @@ class SentimentPromptLoaderTest {
         assertThat(prompt).contains("{newsContent}");
         assertThat(prompt).contains("swing trade entry");
         assertThat(prompt).contains("1-4 week");
+    }
+
+    @Test
+    @DisplayName("User prompt ends with Qwen3 /no_think soft switch")
+    void userPromptEndsWithNoThinkSwitch() throws IOException {
+        String prompt = loader.getUserPrompt();
+        // Qwen3 only honours /no_think when it is the last token of the user turn.
+        assertThat(prompt).endsWith("/no_think");
+        // The JSON-only instruction must survive alongside the switch.
+        assertThat(prompt).contains("Respond with ONLY a JSON object");
     }
 }

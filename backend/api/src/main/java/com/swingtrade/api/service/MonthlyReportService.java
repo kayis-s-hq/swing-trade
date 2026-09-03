@@ -8,6 +8,7 @@ import com.swingtrade.domain.Signal;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -25,14 +26,17 @@ public class MonthlyReportService {
 
     private final PositionRepository positionRepository;
     private final SignalRepository signalRepository;
+    private final boolean schedulerEnabled;
 
     private final ZoneId istZone = ZoneId.of("Asia/Kolkata");
 
     public MonthlyReportService(
             PositionRepository positionRepository,
-            SignalRepository signalRepository) {
+            SignalRepository signalRepository,
+            @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled) {
         this.positionRepository = positionRepository;
         this.signalRepository = signalRepository;
+        this.schedulerEnabled = schedulerEnabled;
     }
 
     @PostConstruct
@@ -42,6 +46,11 @@ public class MonthlyReportService {
 
     @Scheduled(cron = "0 0 3 1-7 * SUN", zone = "Asia/Kolkata")
     public void generateMonthlyReport() {
+        if (!schedulerEnabled) {
+            log.debug("Scheduler disabled (app.features.scheduler.enabled=false) — skipping monthly report");
+            return;
+        }
+
         log.info("Generating monthly strategy review report");
 
         try {

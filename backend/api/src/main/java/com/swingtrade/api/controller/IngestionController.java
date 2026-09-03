@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -30,11 +32,32 @@ import java.util.Optional;
 @RequestMapping("/api")
 public class IngestionController {
 
+    private enum OperationStatus {
+        STARTED, COMPLETED, ADDED, REMOVED, UNKNOWN;
+
+        @Override
+        public String toString() {
+            return name().toLowerCase(java.util.Locale.ROOT);
+        }
+
+        static OperationStatus from(String value) {
+            try {
+                return value == null ? UNKNOWN : valueOf(value.toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException ignored) {
+                return UNKNOWN;
+            }
+        }
+    }
+
     private static final Logger logger = LoggerFactory.getLogger(IngestionController.class);
 
     private final DataIngestionService dataIngestionService;
     private final WatchlistService watchlistService;
     private final NseHolidayService holidayService;
+    @Value("${ingestion.reconcile.apply.enabled:false}")
+    private boolean reconcileApplyEnabled;
+    @Value("${reconcile.apply.token:}")
+    private String reconcileApplyToken;
 
     public IngestionController(DataIngestionService dataIngestionService, WatchlistService watchlistService, NseHolidayService holidayService) {
         this.dataIngestionService = dataIngestionService;
@@ -65,7 +88,7 @@ public class IngestionController {
                 "symbol", symbol,
                 "years", years,
                 "candleCount", count,
-                "status", "completed"
+                "status", OperationStatus.COMPLETED
             );
             return ResponseEntity.ok(ApiResponse.ok(data));
 
@@ -80,20 +103,49 @@ public class IngestionController {
      * Backfill all watchlist stocks.
      */
     @PostMapping("/ingestion/backfill-all")
-    public ResponseEntity<ApiResponse<Map<String, String>>> backfillAll(@RequestParam(defaultValue = "3") int years) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> backfillAll(@RequestParam(defaultValue = "3") int years) {
         logger.info("Manual backfill-all requested ({} years)", years);
 
         try {
             String pullId = watchlistService.startPullAll(years);
             return ResponseEntity.ok(ApiResponse.ok(Map.of(
                 "pullId", pullId,
-                "status", "started"
+                "status", OperationStatus.STARTED
             )));
 
         } catch (Exception e) {
             logger.error("Backfill-all failed: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
                 .body(ApiResponse.error("Failed to start backfill: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/ingestion/range")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> ingestRange(
+            @RequestParam LocalDate from, @RequestParam LocalDate to) {
+        logger.info("Manual range pull requested from {} to {}", from, to);
+        try {
+            String pullId = watchlistService.startPullAll(from, to);
+            return ResponseEntity.ok(ApiResponse.ok(Map.of("pullId", pullId, "status", OperationStatus.STARTED)));
+        } catch (Exception e) {
+            logger.error("Range pull failed: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(ApiResponse.error("Failed to start range pull: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/ingestion/date")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> ingestDate(
+            @RequestParam String symbol, @RequestParam LocalDate date) {
+        logger.info("Manual single-date pull requested for {} on {}", symbol, date);
+        try {
+            String normalizedSymbol = symbol.trim().toUpperCase();
+            dataIngestionService.processSingleStock(normalizedSymbol, date);
+            return ResponseEntity.ok(ApiResponse.ok(Map.of(
+                "symbol", normalizedSymbol, "date", date, "status", OperationStatus.COMPLETED)));
+        } catch (Exception e) {
+            logger.error("Single-date pull failed for {} on {}: {}", symbol, date, e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                .body(ApiResponse.error("Failed to pull selected date: " + e.getMessage()));
         }
     }
 
@@ -113,7 +165,7 @@ public class IngestionController {
             Map<String, Object> data = Map.of(
                 "symbol", symbol,
                 "exchange", exchange,
-                "status", "completed"
+                "status", OperationStatus.COMPLETED
             );
             return ResponseEntity.ok(ApiResponse.ok(data));
 
@@ -137,6 +189,37 @@ public class IngestionController {
             return ResponseEntity.internalServerError()
                 .body(ApiResponse.error("Failed to get status: " + e.getMessage()));
         }
+    }
+
+    @GetMapping("/ingestion/reconcile")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> reconcile(
+            @RequestParam LocalDate from, @RequestParam LocalDate to,
+            @RequestParam(required = false) String symbol) {
+        if (symbol != null) {
+            return ResponseEntity.ok(ApiResponse.ok(dataIngestionService.reconcile(symbol.toUpperCase(), from, to, false)));
+        }
+        List<Map<String, Object>> reports = watchlistService.getActiveWatchlist().stream()
+            .map(w -> dataIngestionService.reconcile(w.getSymbol(), from, to, false)).toList();
+        OperationStatus status = reports.stream()
+            .map(r -> OperationStatus.from(String.valueOf(r.get("status"))))
+            .filter(s -> s != OperationStatus.COMPLETED)
+            .findFirst().orElse(OperationStatus.COMPLETED);
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("reports", reports, "status", status)));
+    }
+
+    @PostMapping("/ingestion/reconcile")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> applyReconcile(
+            @RequestParam LocalDate from, @RequestParam LocalDate to,
+            @RequestParam String symbol, @RequestParam boolean apply,
+            @RequestHeader(value = "X-Reconcile-Token", required = false) String token) {
+        if (!apply || !reconcileApplyEnabled || !watchlistService.getActiveWatchlist().stream()
+                .anyMatch(w -> w.getSymbol().equalsIgnoreCase(symbol))) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("apply requires one active symbol and the local/stage feature gate"));
+        }
+        if (!reconcileApplyToken.isBlank() && !reconcileApplyToken.equals(token)) {
+            return ResponseEntity.status(403).body(ApiResponse.error("invalid reconciliation token"));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(dataIngestionService.reconcile(symbol.toUpperCase(), from, to, true)));
     }
 
     /**
@@ -216,7 +299,7 @@ public class IngestionController {
                 "date", entity.getHolidayDate().toString(),
                 "occasion", entity.getOccasion(),
                 "type", entity.getHolidayType(),
-                "status", "added"
+                "status", OperationStatus.ADDED
             );
             return ResponseEntity.ok(ApiResponse.ok(data));
         } catch (Exception e) {
@@ -236,7 +319,7 @@ public class IngestionController {
             if (removed) {
                 return ResponseEntity.ok(ApiResponse.ok(Map.of(
                     "date", date.toString(),
-                    "status", "removed"
+                    "status", OperationStatus.REMOVED
                 )));
             }
             return ResponseEntity.badRequest()

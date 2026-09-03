@@ -1,7 +1,9 @@
 package com.swingtrade.data.service;
 
+import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
+import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.data.repository.WatchlistRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +28,7 @@ public class WatchlistService {
     private static final Logger logger = LoggerFactory.getLogger(WatchlistService.class);
 
     private final WatchlistRepository watchlistRepository;
+    private final StockRepository stockRepository;
     private final OhlcvCandleRepository candleRepository;
     private final DataIngestionService dataIngestionService;
     private final MarketDataClientProvider marketDataClientProvider;
@@ -36,11 +39,13 @@ public class WatchlistService {
 
     public WatchlistService(
             WatchlistRepository watchlistRepository,
+            StockRepository stockRepository,
             OhlcvCandleRepository candleRepository,
             DataIngestionService dataIngestionService,
             MarketDataClientProvider marketDataClientProvider
     ) {
         this.watchlistRepository = watchlistRepository;
+        this.stockRepository = stockRepository;
         this.candleRepository = candleRepository;
         this.dataIngestionService = dataIngestionService;
         this.marketDataClientProvider = marketDataClientProvider;
@@ -64,6 +69,8 @@ public class WatchlistService {
 
     @Transactional
     public WatchlistEntity addToWatchlist(String symbol, String name, String exchange) {
+        ensureStockExists(symbol, name, exchange);
+
         Optional<WatchlistEntity> existing = watchlistRepository.findBySymbol(symbol);
         if (existing.isPresent()) {
             WatchlistEntity entity = existing.get();
@@ -74,6 +81,26 @@ public class WatchlistService {
         WatchlistEntity entity = new WatchlistEntity(symbol, name);
         entity.setExchange(exchange != null ? exchange : "NSE");
         return watchlistRepository.save(entity);
+    }
+
+    /**
+     * Ensures a {@code stocks} row exists for the symbol before it's added to the
+     * watchlist. {@code signals.symbol} has a foreign key to {@code stocks.symbol}
+     * (see V1__swing_trade_schema.sql), so a watchlist symbol with no matching stock row
+     * would let the SIGNAL stage fail with a DataIntegrityViolationException the first
+     * time it tries to persist a signal for that symbol - a failure mode discovered while
+     * testing with a hand-added symbol that had never gone through stock-master seeding.
+     */
+    private void ensureStockExists(String symbol, String name, String exchange) {
+        if (stockRepository.existsBySymbol(symbol)) {
+            return;
+        }
+        StockEntity stock = new StockEntity();
+        stock.setSymbol(symbol);
+        stock.setName(name != null && !name.isBlank() ? name : symbol);
+        stock.setExchange(exchange != null ? exchange : "NSE");
+        stock.setAddedOn(LocalDate.now());
+        stockRepository.save(stock);
     }
 
     @Transactional
@@ -157,6 +184,15 @@ public class WatchlistService {
 
     @Transactional
     public String startPullAll(int yearsBack) {
+        LocalDate toDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        return startPullAll(toDate.minusYears(yearsBack), toDate);
+    }
+
+    @Transactional
+    public String startPullAll(LocalDate fromDate, LocalDate toDate) {
+        if (fromDate == null || toDate == null || fromDate.isAfter(toDate)) {
+            throw new IllegalArgumentException("fromDate must be on or before toDate");
+        }
         String pullId = "pull-" + System.currentTimeMillis();
         activePullId.set(pullId);
 
@@ -165,34 +201,25 @@ public class WatchlistService {
         pullProgressMap.put(pullId, progress);
 
         // Run in a separate thread to not block the HTTP request
-        Thread pullThread = new Thread(() -> executePull(pullId, watchlist, yearsBack));
+        Thread pullThread = new Thread(() -> executePull(pullId, watchlist, fromDate, toDate));
         pullThread.setDaemon(true);
         pullThread.start();
 
         return pullId;
     }
 
-    private void executePull(String pullId, List<WatchlistEntity> watchlist, int yearsBack) {
+    private void executePull(String pullId, List<WatchlistEntity> watchlist,
+                             LocalDate fromDate, LocalDate toDate) {
         PullProgress progress = pullProgressMap.get(pullId);
         if (progress == null) return;
-
-        LocalDate toDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
-        LocalDate backfillFromDate = toDate.minusYears(yearsBack);
 
         for (WatchlistEntity entry : watchlist) {
             progress.updateCurrent(entry.getSymbol());
             try {
-                // Only fetch what's missing since the last pull — full range is just for
-                // symbols that have never been pulled before.
-                Optional<com.swingtrade.data.entity.OhlcvCandleEntity> latest =
-                        candleRepository.findLatestBySymbol(entry.getSymbol());
-                LocalDate fromDate = latest.map(c -> c.getDate().plusDays(1)).orElse(backfillFromDate);
-
-                if (!fromDate.isAfter(toDate)) {
-                    dataIngestionService.processStockData(entry.getSymbol(), fromDate, toDate);
-                } else {
-                    logger.info("Skipping {}: already up to date (latest candle {})", entry.getSymbol(), latest.get().getDate());
-                }
+                // Request the complete configured range in one provider call. The database
+                // upsert makes this idempotent while allowing the provider response to repair
+                // internal gaps, not just append after the latest stored candle.
+                dataIngestionService.processStockData(entry.getSymbol(), fromDate, toDate);
 
                 // Update watchlist entry
                 entry.setLastSyncedAt(LocalDateTime.now());

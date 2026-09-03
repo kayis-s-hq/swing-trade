@@ -2,7 +2,24 @@
 // New code should import from domain-specific modules directly.
 
 // Shared infrastructure
-export { rawFetch, unwrap, toNum, errResponse } from './shared'
+export { apiRequest, apiSseEvents, toNum } from './shared'
+export type { ApiRequestOptions, ApiSseEventOptions, ResponseContract } from './shared'
+export { AppError, asAppError, formatAppError, isAppError } from '../errors/appError'
+export {
+  CancelledError,
+  MalformedResponseError,
+  NetworkError,
+  RuntimeAppError,
+  TimeoutError,
+  isErrorKind,
+} from '../errors/errorClasses'
+export type {
+  AppErrorKind,
+  AppErrorOperation,
+  AppErrorOptions,
+  FormatAppErrorOptions,
+  FormattedAppError,
+} from '../errors/appError'
 
 // Health
 export { checkHealth, getHealthStatus } from './health'
@@ -20,12 +37,13 @@ export {
   generatePriceActionSignal,
   triggerScan,
 } from './signals'
-export type { SignalGenerationProgress } from './signals'
+export type { SignalGenerationProgress, SignalStreamOptions } from './signals'
 
 // Positions
 export {
   getPortfolioSummary,
   getMarketOverview,
+  getRiskSummary,
   getPositions,
   getClosedPositions,
   getTradeHistory,
@@ -44,12 +62,7 @@ export {
 } from './watchlist'
 
 // Ingestion
-export {
-  getIngestionStatus,
-  triggerDataPull,
-  getPullProgress,
-  cancelDataPull,
-} from './ingestion'
+export { getIngestionStatus, triggerDataPull, getPullProgress, cancelDataPull } from './ingestion'
 
 // Settings
 export {
@@ -62,6 +75,7 @@ export {
   testDiscordWebhook,
   testPiConnection,
   testOpenAiConnection,
+  testOllamaConnection,
   startPiServer,
   stopPiServer,
   getPiServerStatus,
@@ -69,6 +83,8 @@ export {
   setGpuHubSettings,
   getTradingSettings,
   setTradingSettings,
+  getScanningSettings,
+  setScanningSettings,
   saveAllSettings,
 } from './settings'
 
@@ -90,41 +106,20 @@ export {
 } from './sentiment'
 
 // Backtest
-export {
-  runBacktest,
-  runBacktestAll,
-  listBacktestReports,
-  getBacktestReport,
-} from './backtest'
+export { runBacktest, runBacktestAll, listBacktestReports, getBacktestReport } from './backtest'
 
 // Analysis
-export {
-  getCompositeAnalysis,
-  runFullAnalysis,
-} from './analysis'
+export { getCompositeAnalysis, runFullAnalysis } from './analysis'
+export type { AnalysisStreamOptions } from './analysis'
 
 // Job
-export {
-  startJobRun,
-  getJobRunProgress,
-  getJobRunSummary,
-  listJobRuns,
-  cancelJobRun,
-} from './job'
+export { startJobRun, getJobRunProgress, getJobRunSummary, listJobRuns, cancelJobRun } from './job'
 
 // Holidays
-export {
-  getTodayHolidayStatus,
-  getUpcomingHolidays,
-} from './holidays'
+export { getTodayHolidayStatus, getUpcomingHolidays } from './holidays'
 
 // Fyers
-export {
-  getFyersLoginUrl,
-  fyersAuthCode,
-  getFyersStatus,
-  fyersLogout,
-} from './fyers'
+export { getFyersLoginUrl, fyersAuthCode, getFyersStatus, fyersLogout } from './fyers'
 
 // Backfill
 export { backfillSymbol } from './backfill'

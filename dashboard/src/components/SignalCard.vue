@@ -1,12 +1,19 @@
 <template>
   <div
-    class="card-panel transition-all hover:border-border-default hover:shadow-lg cursor-pointer"
+    class="signal-card card-panel cursor-pointer transition-all hover:border-border-default hover:shadow-lg"
+    role="button"
+    tabindex="0"
+    :aria-label="`View full analysis for ${signal.symbol}`"
     @click="navigateToSentiment"
+    @keydown.enter="navigateToSentiment"
+    @keydown.space.prevent="navigateToSentiment"
   >
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-border-subtle/50 px-4 py-3">
-      <div class="flex items-center gap-2">
-        <span class="text-sm font-bold text-text-primary">{{ signal.symbol }}</span>
+      <div class="flex min-w-0 items-center gap-2">
+        <span class="truncate text-sm font-bold tracking-wide text-text-primary">{{
+          signal.symbol
+        }}</span>
         <span
           class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
           :class="
@@ -30,7 +37,44 @@
           >{{ strategyLabel }}</span
         >
       </div>
-      <span class="text-xs font-medium" :class="statusColor">{{ signal.status }}</span>
+      <div class="flex shrink-0 items-center gap-3">
+        <span
+          class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"
+          :class="statusColor"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+          {{ signal.status }}
+        </span>
+        <label
+          class="signal-select-control"
+          :class="{ 'signal-select-control-selected': selected }"
+          :aria-label="selected ? `Deselect ${signal.symbol}` : `Select ${signal.symbol}`"
+          @click.stop
+        >
+          <input
+            type="checkbox"
+            :checked="selected"
+            class="sr-only"
+            @change="emit('toggle-selection')"
+          />
+          <span class="signal-select-check" aria-hidden="true">
+            <svg
+              v-if="selected"
+              class="h-3 w-3"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="3"
+                d="m5 12 4 4L19 6"
+              />
+            </svg>
+          </span>
+        </label>
+      </div>
     </div>
 
     <!-- Body -->
@@ -38,8 +82,11 @@
       <!-- Confidence -->
       <div class="mb-3 flex items-center gap-2">
         <span class="text-xs font-medium text-text-muted">Confidence</span>
-        <div class="h-1.5 flex-1 rounded-full bg-bg-primary/50">
-          <div class="h-full rounded-full bg-brand" :style="{ width: signal.confidence + '%' }" />
+        <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-primary/50">
+          <div
+            class="h-full rounded-full bg-brand transition-[width] duration-300 ease-out"
+            :style="{ width: signal.confidence + '%' }"
+          />
         </div>
         <span class="text-xs font-semibold text-text-primary">{{ signal.confidence }}%</span>
       </div>
@@ -92,7 +139,7 @@
 
     <!-- Technical Reason -->
     <div class="border-t border-border-subtle/50 px-4 py-3">
-      <p class="text-xs leading-relaxed text-text-muted">
+      <p class="text-xs leading-relaxed text-text-secondary">
         {{ signal.reason }}
       </p>
     </div>
@@ -107,7 +154,9 @@
 
     <!-- Click hint -->
     <div class="border-t border-border-subtle/50 px-4 py-2">
-      <p class="text-[10px] text-text-muted/60 text-center">Click for full sentiment analysis</p>
+      <p class="text-center text-[10px] text-text-muted/60">
+        Click for full sentiment analysis <span aria-hidden="true">→</span>
+      </p>
     </div>
   </div>
 </template>
@@ -119,6 +168,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 const props = defineProps<{
+  selected?: boolean
   signal: {
     symbol: string
     direction: 'BUY' | 'SELL' | 'HOLD'
@@ -134,6 +184,10 @@ const props = defineProps<{
     sentimentScore?: string
     sentimentReasoning?: string
   }
+}>()
+
+const emit = defineEmits<{
+  'toggle-selection': []
 }>()
 
 const navigateToSentiment = () => {

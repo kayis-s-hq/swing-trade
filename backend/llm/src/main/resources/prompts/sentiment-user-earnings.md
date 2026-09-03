@@ -16,3 +16,5 @@ Respond in this exact JSON format only, no other text:
   "red_flags": ["list any specific risks"],
   "catalysts": ["list any upcoming catalysts"]
 }
+
+/no_think

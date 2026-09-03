@@ -14,13 +14,13 @@ import java.math.BigDecimal;
 public class BrokerProperties {
 
     // Position limits
-    private int maxConcurrentPositions = 3;
-    private BigDecimal maxCapitalPerPosition = BigDecimal.valueOf(200000);
+    private int maxConcurrentPositions = 5;
+    private BigDecimal maxCapitalPerPosition = BigDecimal.valueOf(100000);
 
     // Trade sizing
-    private BigDecimal maxCapitalPerTrade = BigDecimal.valueOf(50000);
-    private BigDecimal initialCapital = BigDecimal.valueOf(1000000);
-    private BigDecimal maxPositionSizePercentage = BigDecimal.valueOf(10);
+    private BigDecimal maxCapitalPerTrade = BigDecimal.valueOf(100000);
+    private BigDecimal initialCapital = BigDecimal.valueOf(500000);
+    private BigDecimal maxPositionSizePercentage = BigDecimal.valueOf(20);
     private BigDecimal minPositionSizePercentage = BigDecimal.valueOf(1);
 
     // Kill switch

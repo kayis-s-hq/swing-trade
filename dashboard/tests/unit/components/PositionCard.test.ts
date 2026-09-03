@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent } from 'vue'
 import PositionCard from '../../../src/components/PositionCard.vue'
-
-const TestComponent = defineComponent({
-  components: { PositionCard },
-  props: ['props'],
-  template: '<PositionCard v-bind="props" />',
-})
 
 describe('PositionCard', () => {
   const samplePosition = {
@@ -36,21 +29,21 @@ describe('PositionCard', () => {
     const wrapper = mount(PositionCard, {
       props: { position: samplePosition },
     })
-    expect(wrapper.text()).toContain('₹2500')
+    expect(wrapper.text()).toContain('₹2,500')
   })
 
   it('renders current price', () => {
     const wrapper = mount(PositionCard, {
       props: { position: samplePosition },
     })
-    expect(wrapper.text()).toContain('₹2600')
+    expect(wrapper.text()).toContain('₹2,600')
   })
 
   it('calculates and displays P&L percentage', () => {
     const wrapper = mount(PositionCard, {
       props: { position: samplePosition },
     })
-    expect(wrapper.text()).toContain('1000')
+    expect(wrapper.text()).toContain('1,000')
     expect(wrapper.text()).toContain('4.00%')
   })
 
@@ -101,5 +94,20 @@ describe('PositionCard', () => {
       props: { position: samplePosition },
     })
     expect(wrapper.classes()).toContain('group')
+  })
+
+  it('falls back to a placeholder instead of rendering NaN/Infinity for bad numeric data', () => {
+    const badPosition = {
+      ...samplePosition,
+      currentPrice: NaN,
+      pnl: Infinity,
+      pnlPercent: NaN,
+    }
+    const wrapper = mount(PositionCard, {
+      props: { position: badPosition },
+    })
+    expect(wrapper.text()).not.toContain('NaN')
+    expect(wrapper.text()).not.toContain('Infinity')
+    expect(wrapper.text()).toContain('—')
   })
 })

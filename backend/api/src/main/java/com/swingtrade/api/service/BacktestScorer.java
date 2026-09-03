@@ -53,7 +53,7 @@ public class BacktestScorer {
      * Calculate profit factor from backtest result.
      * profitFactor = abs(winning trades' total pnl) / abs(losing trades' total pnl)
      */
-    private double calculateProfitFactor(BacktestResult result) {
+    public static double calculateProfitFactor(BacktestResult result) {
         if (result.trades() == null || result.trades().isEmpty()) {
             return 0;
         }

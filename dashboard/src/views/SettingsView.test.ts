@@ -1,6 +1,7 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
+import type { Component } from 'vue'
 
 function createRouterMock() {
   return createRouter({
@@ -9,11 +10,11 @@ function createRouterMock() {
   })
 }
 
-function mountSettings(SettingsView: any) {
+function mountSettings(SettingsView: Component) {
   const router = createRouterMock()
   return mount(SettingsView, {
     global: {
-      router,
+      plugins: [router],
       stubs: {
         LoadingSpinner: true,
         ErrorBoundary: {
@@ -37,7 +38,7 @@ describe('SettingsView — Tabs', () => {
     const wrapper = mountSettings(SettingsView)
     const llmTab = wrapper.find('[aria-label="AI/LLM"]')
     await llmTab.trigger('click')
-    expect(wrapper.text()).toContain('vLLM Endpoint')
+    expect(wrapper.text()).toContain('OpenAI-compatible LLM')
     wrapper.unmount()
   })
 
@@ -63,7 +64,7 @@ describe('SettingsView — Tabs', () => {
     const SettingsView = (await import('./SettingsView.vue')).default
     const wrapper = mountSettings(SettingsView)
     expect(wrapper.find('[role="tablist"]').exists()).toBe(true)
-    expect(wrapper.findAll('[role="tab"]').length).toBe(4)
+    expect(wrapper.findAll('[role="tab"]').length).toBe(5)
     wrapper.unmount()
   })
 })
@@ -97,11 +98,11 @@ describe('SettingsView — Broker Section', () => {
 })
 
 describe('SettingsView — LLM Section', () => {
-  it('renders vLLM endpoint input with test button', async () => {
+  it('renders OpenAI-compatible LLM section with test button', async () => {
     const SettingsView = (await import('./SettingsView.vue')).default
     const wrapper = mountSettings(SettingsView)
     await wrapper.find('[aria-label="AI/LLM"]').trigger('click')
-    expect(wrapper.text()).toContain('vLLM Endpoint')
+    expect(wrapper.text()).toContain('OpenAI-compatible LLM')
     expect(wrapper.text()).toContain('Test')
     wrapper.unmount()
   })
@@ -181,7 +182,7 @@ describe('SettingsView — Save Flow', () => {
     const SettingsView = (await import('./SettingsView.vue')).default
     const wrapper = mount(SettingsView, {
       global: {
-        router: createRouterMock(),
+        plugins: [createRouterMock()],
         stubs: {
           LoadingSpinner: true,
           ErrorBoundary: {
@@ -205,7 +206,7 @@ describe('SettingsView — Save Flow', () => {
     const SettingsView = (await import('./SettingsView.vue')).default
     const wrapper = mount(SettingsView, {
       global: {
-        router: createRouterMock(),
+        plugins: [createRouterMock()],
         stubs: {
           LoadingSpinner: true,
           ErrorBoundary: {

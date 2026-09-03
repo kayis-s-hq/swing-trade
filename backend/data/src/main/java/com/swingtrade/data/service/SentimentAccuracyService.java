@@ -28,7 +28,7 @@ public class SentimentAccuracyService {
     public AccuracyStats getAccuracyStats() {
         long total = accuracyRepo.countAll();
         long correct = accuracyRepo.countCorrect();
-        double accuracyPct = total > 0 ? (double) correct / total * 100 : 0.0;
+        double accuracy = total > 0 ? (double) correct / total : 0.0;
 
         Map<String, Integer> bySentiment = new HashMap<>();
         Map<String, Integer> bySymbol = new HashMap<>();
@@ -41,7 +41,7 @@ public class SentimentAccuracyService {
         return new AccuracyStats(
             (int) total,
             (int) correct,
-            Math.round(accuracyPct * 100.0) / 100.0,
+            Math.round(accuracy * 10000.0) / 10000.0,
             bySentiment,
             bySymbol
         );
@@ -52,18 +52,17 @@ public class SentimentAccuracyService {
         Map<String, List<SentimentAccuracyEntity>> windows = new LinkedHashMap<>();
 
         for (SentimentAccuracyEntity e : all) {
-            String window;
-            if (e.getActualReturn1d() != null) window = "1-day";
-            else if (e.getActualReturn5d() != null) window = "5-day";
-            else window = "21-day";
-            windows.computeIfAbsent(window, k -> new ArrayList<>()).add(e);
+            if (e.getActualReturn1d() != null) windows.computeIfAbsent("1-day", k -> new ArrayList<>()).add(e);
+            if (e.getActualReturn5d() != null) windows.computeIfAbsent("5-day", k -> new ArrayList<>()).add(e);
+            if (e.getActualReturn21d() != null) windows.computeIfAbsent("21-day", k -> new ArrayList<>()).add(e);
         }
 
         List<AccuracyByWindow> result = new ArrayList<>();
         for (var entry : windows.entrySet()) {
             var list = entry.getValue();
             int total = list.size();
-            long correct = list.stream().filter(e -> Boolean.TRUE.equals(e.getWasCorrect())).count();
+            long correct = list.stream().filter(e -> isCorrect(e.getLlmScore(),
+                classifyReturn(returnForWindow(e, entry.getKey())))).count();
             double accuracy = total > 0 ? (double) correct / total : 0.0;
             double avgReturn = list.stream()
                 .filter(e -> e.getActualReturn5d() != null)
@@ -71,8 +70,8 @@ public class SentimentAccuracyService {
                 .average().orElse(0.0);
 
             result.add(new AccuracyByWindow(
-                entry.getKey(), total, Math.round(accuracy * 10000.0) / 100.0,
-                Math.round(avgReturn * 10000.0) / 100.0
+                entry.getKey(), total, Math.round(accuracy * 10000.0) / 10000.0,
+                Math.round(avgReturn * 10000.0) / 10000.0
             ));
         }
         return result;
@@ -109,8 +108,8 @@ public class SentimentAccuracyService {
         List<CalibrationData> result = new ArrayList<>();
         for (Object[] row : rows) {
             double bin = ((Number) row[0]).doubleValue();
-            double actualAcc = Math.round(((Number) row[1]).doubleValue() * 10000.0) / 100.0;
-            double predConf = Math.round(((Number) row[2]).doubleValue() * 10000.0) / 100.0;
+            double actualAcc = Math.round(((Number) row[1]).doubleValue() * 10000.0) / 10000.0;
+            double predConf = Math.round(((Number) row[2]).doubleValue() * 10000.0) / 10000.0;
             double error = Math.round(Math.abs(predConf - actualAcc) * 10000.0) / 100.0;
             long count = ((Number) row[3]).longValue();
             result.add(new CalibrationData(bin, predConf, actualAcc, error, count));
@@ -202,7 +201,7 @@ public class SentimentAccuracyService {
         if (totalWeight > 0) ece /= totalWeight;
 
         return new ECEStats(
-            Math.round(ece * 10000.0) / 100.0,
+            Math.round(ece * 10000.0) / 10000.0,
             rows.size()
         );
     }
@@ -224,6 +223,28 @@ public class SentimentAccuracyService {
             .mapToDouble(e -> e.getLlmConfidence())
             .sum();
         return Math.round((sum / total) * 10000.0) / 100.0;
+    }
+
+    private BigDecimal returnForWindow(SentimentAccuracyEntity e, String window) {
+        return switch (window) {
+            case "1-day" -> e.getActualReturn1d();
+            case "5-day" -> e.getActualReturn5d();
+            default -> e.getActualReturn21d();
+        };
+    }
+
+    private String classifyReturn(BigDecimal value) {
+        if (value == null) return null;
+        if (value.compareTo(new BigDecimal("0.005")) >= 0) return "UP";
+        if (value.compareTo(new BigDecimal("-0.005")) <= 0) return "DOWN";
+        return "FLAT";
+    }
+
+    private boolean isCorrect(String score, String truth) {
+        if (score == null || truth == null) return false;
+        return "POSITIVE".equals(score) && "UP".equals(truth)
+            || "NEGATIVE".equals(score) && "DOWN".equals(truth)
+            || "NEUTRAL".equals(score) && "FLAT".equals(truth);
     }
 
     // Inner record types — kept in data module to avoid circular dependency with api module

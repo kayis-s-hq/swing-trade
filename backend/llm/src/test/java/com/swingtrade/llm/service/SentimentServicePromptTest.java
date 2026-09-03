@@ -19,9 +19,13 @@ import java.util.Map;
 import java.util.Optional;
 import reactor.core.publisher.Mono;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class SentimentServicePromptTest {
@@ -42,7 +46,9 @@ class SentimentServicePromptTest {
     void setUp() {
         service = new SentimentService(
                 clientProvider, serverManagerProvider, promptLoader, null,
-                newsIngestionService, sentimentStore, stockStore, appSettingsStore, 0.75);
+                newsIngestionService, sentimentStore, stockStore, appSettingsStore,
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.LlmMetrics.class),
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.SentimentMetrics.class), 0.75);
         when(serverManagerProvider.getManager()).thenReturn(serverManager);
         doNothing().when(serverManager).ensureRunning();
         when(clientProvider.getClient()).thenReturn(llmClient);

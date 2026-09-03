@@ -1,3 +1,5 @@
+/* This diagnostic script intentionally prints browser diagnostics. */
+/* eslint-disable no-console */
 import { chromium } from 'playwright'
 ;(async () => {
   const browser = await chromium.launch({ headless: true })
@@ -23,6 +25,5 @@ import { chromium } from 'playwright'
     console.log(`Card ${i}: ${height}px, bg=${bg}, symbol=${symbol}`)
   }
 
-  await page.screenshot({ path: '/tmp/signals-dark.png', fullPage: true })
   await browser.close()
 })()

@@ -2,7 +2,8 @@ package com.swingtrade.broker.service;
 
 import com.swingtrade.broker.factory.LiveTradingService;
 import com.swingtrade.broker.kite.BrokerClient;
-import com.swingtrade.broker.model.*;
+import com.swingtrade.broker.model.OrderResponse;
+import com.swingtrade.broker.model.Portfolio;
 import com.swingtrade.broker.risk.RiskCheckResult;
 import com.swingtrade.broker.risk.RiskControls;
 import com.swingtrade.domain.Order;
@@ -24,7 +25,9 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for LiveTradingService.

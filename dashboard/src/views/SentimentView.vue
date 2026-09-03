@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 animate-fade-in">
+  <div class="view-shell p-6 animate-fade-in">
     <!-- Page Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
@@ -227,11 +227,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import {
-  getSentimentLatest,
-  getSentimentHistory,
-  getLatestNews,
-} from '../api/sentiment'
+import { getSentimentLatest, getSentimentHistory, getLatestNews } from '../api/sentiment'
 import { getWatchlist } from '../api/watchlist'
 import { runFullAnalysis } from '../api/analysis'
 import type {
@@ -265,10 +261,10 @@ onMounted(async () => {
     await nextTick()
     symbolInput.value = symbol.toUpperCase()
   }
-  const wr = await getWatchlist()
-  if (wr.success && wr.data) watchlistSymbols.value = wr.data
+  watchlistSymbols.value = await getWatchlist()
 })
 const loading = ref(false)
+let quickRequestSequence = 0
 const error = ref('')
 const sentiment = ref<SentimentResult | null>(null)
 const newsArticles = ref<NewsArticle[]>([])
@@ -292,30 +288,37 @@ const hasMore = ref(true)
 
 const showHistoricalSentiment = ref(false)
 const watchlistSymbols = ref<WatchlistEntry[]>([])
+function confirmed<T>(value: T | { success: boolean; data?: T }): T | undefined {
+  if (typeof value === 'object' && value !== null && 'success' in value)
+    return value.success ? value.data : undefined
+  return value as T
+}
 
 const loadQuick = async () => {
-  if (!symbolInput.value.trim()) return
+  const symbol = symbolInput.value.trim().toUpperCase()
+  if (!symbol) return
+  const sequence = ++quickRequestSequence
   loading.value = true
   error.value = ''
-  sentiment.value = null
-  newsArticles.value = []
   try {
     const [sentRes, newsRes] = await Promise.all([
-      getSentimentLatest(symbolInput.value),
-      getLatestNews(symbolInput.value),
+      getSentimentLatest(symbol),
+      getLatestNews(symbol),
     ])
+    if (sequence !== quickRequestSequence) return
 
-    if (sentRes.success && sentRes.data) {
-      sentiment.value = sentRes.data
+    const sentimentData = confirmed<SentimentResult>(sentRes)
+    const newsData = confirmed<NewsArticle[]>(newsRes)
+    if (sentimentData) {
+      sentiment.value = sentimentData
+      if (newsData) newsArticles.value = newsData
     } else {
-      error.value = sentRes.error || 'Failed to load sentiment'
+      error.value = 'Couldn’t load sentiment. Try again.'
     }
-
-    if (newsRes.success && newsRes.data) {
-      newsArticles.value = newsRes.data
-    }
+  } catch {
+    if (sequence === quickRequestSequence) error.value = 'Couldn’t load sentiment. Try again.'
   } finally {
-    loading.value = false
+    if (sequence === quickRequestSequence) loading.value = false
   }
 }
 
@@ -330,7 +333,7 @@ const runAnalysis = async () => {
   analysisError.value = null
   try {
     for await (const data of runFullAnalysis(symbolInput.value)) {
-      const evt = (data as any)._eventType
+      const evt = (data as { _eventType?: string })._eventType
       if (evt === 'complete') {
         const result = data as FullAnalysisResult
         composite.value = result.composite
@@ -364,8 +367,9 @@ const loadHistory = async () => {
   historyLoading.value = true
   try {
     const res = await getSentimentHistory(symbolInput.value, historyPage.value)
-    if (res.success && res.data) {
-      history.value = res.data
+    const data = confirmed<SentimentResult[]>(res)
+    if (data) {
+      history.value = data
       hasMore.value = history.value.length === 20
     }
   } finally {
@@ -383,13 +387,14 @@ const loadNews = async () => {
   error.value = ''
   try {
     const res = await getLatestNews(symbolInput.value)
-    if (res.success && res.data) {
-      newsArticles.value = res.data
+    const data = confirmed<NewsArticle[]>(res)
+    if (data) {
+      newsArticles.value = data
     } else {
-      error.value = res.error || 'Failed to fetch news'
+      error.value = 'Couldn’t fetch news. Try again.'
     }
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to fetch news'
+  } catch {
+    error.value = 'Couldn’t fetch news. Try again.'
   } finally {
     newsLoading.value = false
   }

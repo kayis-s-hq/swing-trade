@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DashboardView from '../views/DashboardView.vue'
+import { reportRuntimeError } from '../stores/runtimeErrors'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -33,6 +34,11 @@ const router = createRouter({
       path: '/watchlist',
       name: 'Watchlist',
       component: () => import('../views/WatchlistView.vue'),
+    },
+    {
+      path: '/candidate-explorer',
+      name: 'Candidate Explorer',
+      component: () => import('../views/CandidateExplorerView.vue'),
     },
     {
       path: '/backtest',
@@ -70,6 +76,13 @@ const router = createRouter({
       component: () => import('../views/NotFoundView.vue'),
     },
   ],
+})
+
+router.onError((error, to) => {
+  reportRuntimeError(error, {
+    source: 'router',
+    ...(to?.fullPath ? { route: to.fullPath } : {}),
+  })
 })
 
 export default router

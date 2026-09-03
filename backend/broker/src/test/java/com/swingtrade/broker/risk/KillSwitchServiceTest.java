@@ -2,9 +2,14 @@ package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.risk.KillSwitchService.KillSwitchState;
+import com.swingtrade.core.metrics.KillSwitchMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDateTime;
 
@@ -14,7 +19,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Unit tests for KillSwitchService covering enable/disable, state queries,
  * toggle, state persistence, config integration, and edge cases.
  */
+@ExtendWith(MockitoExtension.class)
 class KillSwitchServiceTest {
+
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+
+    @Mock
+    private KillSwitchMetrics killSwitchMetrics;
 
     private BrokerProperties props;
     private KillSwitchService service;
@@ -24,7 +36,7 @@ class KillSwitchServiceTest {
         props = new BrokerProperties();
         props.setKillSwitchEnabled(true);
         props.setKillSwitchActive(false);
-        service = new KillSwitchService(props);
+        service = new KillSwitchService(jdbcTemplate, props, killSwitchMetrics);
     }
 
     // ==================== Enable / Disable ====================
@@ -327,7 +339,7 @@ class KillSwitchServiceTest {
         void isKillSwitchEnabled_true() {
             // Given: Config has kill switch enabled
             props.setKillSwitchEnabled(true);
-            service = new KillSwitchService(props);
+            service = new KillSwitchService(jdbcTemplate, props, killSwitchMetrics);
 
             // When
             boolean enabled = service.isKillSwitchEnabled();
@@ -340,7 +352,7 @@ class KillSwitchServiceTest {
         void isKillSwitchEnabled_false() {
             // Given: Config has kill switch disabled
             props.setKillSwitchEnabled(false);
-            service = new KillSwitchService(props);
+            service = new KillSwitchService(jdbcTemplate, props, killSwitchMetrics);
 
             // When
             boolean enabled = service.isKillSwitchEnabled();
@@ -354,7 +366,7 @@ class KillSwitchServiceTest {
             // Given: Config enabled but service not yet activated
             props.setKillSwitchEnabled(true);
             props.setKillSwitchActive(false);
-            service = new KillSwitchService(props);
+            service = new KillSwitchService(jdbcTemplate, props, killSwitchMetrics);
 
             // When / Then
             assertThat(service.isKillSwitchEnabled()).isTrue();
@@ -366,7 +378,7 @@ class KillSwitchServiceTest {
             // Given: Config enabled, service disabled
             props.setKillSwitchEnabled(true);
             props.setKillSwitchActive(false);
-            service = new KillSwitchService(props);
+            service = new KillSwitchService(jdbcTemplate, props, killSwitchMetrics);
 
             // When
             KillSwitchState state = service.getKillSwitchState();

@@ -95,7 +95,11 @@ class LlamaCppServerManagerIdleTest {
             manager.setIdleCheckTime(fixedTime);
 
             // Act
-            try { Thread.sleep(100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
 
             // Assert
             long idleSeconds = manager.getIdleSeconds();

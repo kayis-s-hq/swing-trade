@@ -7,21 +7,17 @@ import com.swingtrade.llm.client.SpringAiLlmClient;
 import com.swingtrade.llm.service.NewsFilterService;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
-import com.swingtrade.llm.config.SentimentPromptLoader;
-import com.swingtrade.llm.config.PdfExtractionPromptLoader;
-import com.swingtrade.llm.config.SynthesisPromptLoader;
 import com.swingtrade.llm.service.SentimentAnalyzer;
 import com.swingtrade.llm.service.LlmBackendSelector;
 import com.swingtrade.llm.service.LlmClientProvider;
 import com.swingtrade.llm.service.LlmServerManagerProvider;
 import org.springframework.ai.openai.OpenAiChatModel;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+import org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration;
+import org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Primary;
@@ -39,19 +35,19 @@ import java.util.Properties;
 @TestConfiguration
 @EnableAutoConfiguration(
     exclude = {
-        JpaRepositoriesAutoConfiguration.class,
-        HibernateJpaAutoConfiguration.class,
-        FlywayAutoConfiguration.class
-    }
+        DataJpaRepositoriesAutoConfiguration.class,
+        HibernateJpaAutoConfiguration.class
+    },
+    excludeName = "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration"
 )
-@ComponentScan(basePackages = {"com.swingtrade.llm", "com.swingtrade.data"})
+@ComponentScan(basePackages = {"com.swingtrade.llm", "com.swingtrade.data", "com.swingtrade.core.metrics"})
 @EnableJpaRepositories(basePackages = "com.swingtrade.data.repository")
 public class TestLlmConfig {
 
-    @MockBean
+    @MockitoBean
     private AppSettingsStore appSettingsStore;
 
-    @MockBean
+    @MockitoBean
     private SentimentStore sentimentStore;
 
     // LlmServerManagerProvider handles server lifecycle now
@@ -82,7 +78,7 @@ public class TestLlmConfig {
     @Primary
     @Bean
     public SentimentAnalyzer sentimentAnalyzer() {
-        return new SentimentAnalyzer(new com.fasterxml.jackson.databind.ObjectMapper());
+        return new SentimentAnalyzer(new tools.jackson.databind.ObjectMapper());
     }
 
     @Primary
@@ -134,8 +130,9 @@ public class TestLlmConfig {
             LlmBackendSelector selector,
             OpenAiChatModel localChatModel,
             OpenAiChatModel piSshChatModel,
-            OpenAiChatModel openAiChatModel) {
-        return new LlmClientProvider(selector, localChatModel, piSshChatModel, openAiChatModel);
+            OpenAiChatModel openAiChatModel,
+            OpenAiChatModel ollamaChatModel) {
+        return new LlmClientProvider(selector, localChatModel, piSshChatModel, openAiChatModel, ollamaChatModel);
     }
 
     // ===== H2 Database Configuration for Testing =====
@@ -182,7 +179,9 @@ public class TestLlmConfig {
             NewsIngestionService newsIngestionService,
             SentimentStore sentimentStore,
             StockStore stockStore,
-            AppSettingsStore appSettingsStore) {
+            AppSettingsStore appSettingsStore,
+            com.swingtrade.core.metrics.LlmMetrics llmMetrics,
+            com.swingtrade.core.metrics.SentimentMetrics sentimentMetrics) {
         return new SentimentService(
                 clientProvider,
                 serverManagerProvider,
@@ -192,6 +191,8 @@ public class TestLlmConfig {
                 sentimentStore,
                 stockStore,
                 appSettingsStore,
+                llmMetrics,
+                sentimentMetrics,
                 0.75
         );
     }

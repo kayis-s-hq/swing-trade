@@ -4,7 +4,6 @@ import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.core.metrics.KillSwitchMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -29,14 +28,9 @@ public class KillSwitchService {
     private final BrokerProperties props;
     private final KillSwitchMetrics killSwitchMetrics;
 
-    public KillSwitchService(BrokerProperties props) {
-        this(null, props, null);
-    }
-
     /**
      * Constructor with JdbcTemplate for persistence.
      */
-    @Autowired
     public KillSwitchService(JdbcTemplate jdbcTemplate, BrokerProperties props, KillSwitchMetrics killSwitchMetrics) {
         this.jdbcTemplate = jdbcTemplate;
         this.props = props;

@@ -10,7 +10,7 @@
           <div class="flex h-7 w-7 items-center justify-center rounded-md bg-brand/10">
             <span class="text-sm font-bold text-brand">S</span>
           </div>
-          <span class="font-display text-base font-semibold text-text-primary">SwingTrade</span>
+          <span class="font-display text-base font-semibold text-text-primary">Swing Trade</span>
         </div>
       </template>
       <template v-else>
@@ -34,6 +34,8 @@
         "
         :title="collapsed ? item.label : undefined"
       >
+        <!-- iconPaths is a static, internal SVG path map; no user input reaches v-html. -->
+        <!-- eslint-disable-next-line vue/no-v-html -->
         <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" v-html="item.icon" />
         <template v-if="!collapsed">
           <span class="flex-1">{{ item.label }}</span>
@@ -50,35 +52,17 @@
     <div class="border-t border-border-subtle p-3">
       <div v-if="!collapsed" class="rounded-md border border-border-subtle bg-bg-primary/50 p-3">
         <div class="mb-1 flex items-center gap-2">
-          <span
-            class="inline-block h-2 w-2 rounded-full"
-            :class="
-              healthStatus === 'down'
-                ? 'bg-error'
-                : healthStatus === 'degraded'
-                  ? 'bg-warning'
-                  : 'bg-success pulse-dot'
-            "
-          />
+          <span class="inline-block h-2 w-2 rounded-full" :class="healthDotClass" />
           <span class="text-xs font-medium text-text-muted">System Status</span>
         </div>
         <div
+          role="status"
+          aria-live="polite"
+          :aria-label="`Backend health: ${healthLabel}`"
           class="text-xs font-medium"
-          :class="
-            healthStatus === 'down'
-              ? 'text-error'
-              : healthStatus === 'degraded'
-                ? 'text-warning'
-                : 'text-success'
-          "
+          :class="healthTextClass"
         >
-          {{
-            healthStatus === 'down'
-              ? 'Backend Down'
-              : healthStatus === 'degraded'
-                ? 'Degraded'
-                : 'Engine Active'
-          }}
+          {{ healthLabel }}
         </div>
         <div class="mt-0.5 text-[10px] text-text-muted">Sync {{ lastSync }}</div>
         <div class="mt-2 border-t border-border-subtle pt-2 text-[10px] text-text-muted">
@@ -120,15 +104,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { iconPaths } from './Icons'
 import { getSettings, brokerLabels } from '../stores/settings'
+import type { BackendHealthStatus } from '../stores/appState'
+import { getSignals } from '../api/signals'
 
 const settings = getSettings()
-const props = defineProps<{
-  collapsed: boolean
-  healthStatus?: '' | 'healthy' | 'degraded' | 'down'
-}>()
+const props = withDefaults(
+  defineProps<{
+    collapsed: boolean
+    healthStatus?: BackendHealthStatus
+  }>(),
+  { healthStatus: 'checking' }
+)
 defineEmits<{ toggle: [] }>()
 
 const lastSync = computed(() => {
@@ -141,23 +130,77 @@ const lastSync = computed(() => {
   })
 })
 
-const healthStatus = computed(
-  () => (props.healthStatus || 'healthy') as '' | 'healthy' | 'degraded' | 'down'
-)
+const healthLabel = computed(() => {
+  const labels: Record<BackendHealthStatus, string> = {
+    checking: 'Checking',
+    healthy: 'Healthy',
+    degraded: 'Degraded',
+    unavailable: 'Unavailable',
+  }
+  return labels[props.healthStatus]
+})
+
+const healthDotClass = computed(() => {
+  if (props.healthStatus === 'unavailable') return 'bg-error'
+  if (props.healthStatus === 'degraded') return 'bg-warning'
+  if (props.healthStatus === 'checking') return 'bg-text-muted pulse-dot'
+  return 'bg-success pulse-dot'
+})
+
+const healthTextClass = computed(() => {
+  if (props.healthStatus === 'unavailable') return 'text-error'
+  if (props.healthStatus === 'degraded') return 'text-warning'
+  if (props.healthStatus === 'checking') return 'text-text-muted'
+  return 'text-success'
+})
 
 const brokerLabel = computed(() => brokerLabels[settings.selectedBroker] || 'Unknown')
 
-const navItems = [
+const buySignalCount = ref<number | null>(null)
+let signalCountTimer: ReturnType<typeof setInterval> | undefined
+
+const refreshBuySignalCount = async () => {
+  try {
+    const signals = await getSignals()
+    buySignalCount.value = signals.filter((signal) => signal.direction === 'BUY').length
+  } catch {
+    // A stale/unavailable count is worse than no badge.
+    buySignalCount.value = null
+  }
+}
+
+const navItems = computed(() => [
   { path: '/', label: 'Dashboard', icon: iconPaths.dashboard, badge: undefined },
-  { path: '/positions', label: 'Positions', icon: iconPaths.positions, badge: undefined },
-  { path: '/signals', label: 'Signals', icon: iconPaths.signals, badge: '6' },
-  { path: '/sentiment', label: 'Sentiment', icon: iconPaths.intelligence, badge: undefined },
-  { path: '/monitoring', label: 'Monitoring', icon: iconPaths.intelligence, badge: undefined },
-  { path: '/portfolio', label: 'Portfolio', icon: iconPaths.portfolio, badge: undefined },
-  { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
-  { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
   { path: '/data', label: 'Data', icon: iconPaths.data, badge: undefined },
+  {
+    path: '/candidate-explorer',
+    label: 'Candidate Explorer',
+    icon: iconPaths.search,
+    badge: undefined,
+  },
+  {
+    path: '/signals',
+    label: 'Signals',
+    icon: iconPaths.signals,
+    badge: buySignalCount.value ? String(buySignalCount.value) : undefined,
+  },
+  { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
+  { path: '/news', label: 'News', icon: iconPaths.intelligence, badge: undefined },
+  { path: '/sentiment', label: 'Sentiment', icon: iconPaths.intelligence, badge: undefined },
+  { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
+  { path: '/portfolio', label: 'Portfolio', icon: iconPaths.portfolio, badge: undefined },
+  { path: '/positions', label: 'Positions', icon: iconPaths.positions, badge: undefined },
+  { path: '/monitoring', label: 'Monitoring', icon: iconPaths.intelligence, badge: undefined },
   { path: '/orchestrator', label: 'Orchestrator', icon: iconPaths.dashboard, badge: undefined },
   { path: '/settings', label: 'Settings', icon: iconPaths.settings, badge: undefined },
-]
+])
+
+onMounted(() => {
+  void refreshBuySignalCount()
+  signalCountTimer = setInterval(() => void refreshBuySignalCount(), 30_000)
+})
+
+onBeforeUnmount(() => {
+  if (signalCountTimer) clearInterval(signalCountTimer)
+})
 </script>

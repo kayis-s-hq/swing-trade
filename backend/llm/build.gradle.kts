@@ -3,57 +3,36 @@ plugins {
     id("io.spring.dependency-management")
 }
 
-dependencyManagement {
-    imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")
-        mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
-    }
-}
-
 dependencies {
     implementation(project(":core"))
     implementation(project(":data"))
 
     implementation("org.springframework.boot:spring-boot-starter")
-    implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 
-implementation("org.springframework.ai:spring-ai-starter-model-openai:1.1.0") {
-        exclude(group = "org.eclipse.jetty", module = "jetty-client")
-        exclude(group = "org.eclipse.jetty", module = "jetty-http")
-        exclude(group = "org.eclipse.jetty", module = "jetty-io")
-        exclude(group = "org.eclipse.jetty", module = "jetty-util")
-        exclude(group = "org.eclipse.jetty", module = "jetty-alpn-client")
-    }
-    implementation("org.springframework.ai:spring-ai-openai:1.1.0") {
-        exclude(group = "org.eclipse.jetty", module = "jetty-client")
-        exclude(group = "org.eclipse.jetty", module = "jetty-http")
-        exclude(group = "org.eclipse.jetty", module = "jetty-io")
-        exclude(group = "org.eclipse.jetty", module = "jetty-util")
-        exclude(group = "org.eclipse.jetty", module = "jetty-alpn-client")
-    }
-    // Jetty 11 — Spring AI 1.1.0's JettyClientHttpRequestFactory expects Jetty 11 API
-    implementation("org.eclipse.jetty:jetty-client:11.0.25")
-    implementation("org.eclipse.jetty:jetty-http:11.0.25")
-    implementation("org.eclipse.jetty:jetty-io:11.0.25")
-    implementation("org.eclipse.jetty:jetty-util:11.0.25")
-    implementation("org.eclipse.jetty:jetty-alpn-client:11.0.25")
+    // Spring AI 2.0.1 — uses OkHttp (no Jetty dependency). Spring AI 1.1.0 (main's prior
+    // pin, with Jetty 11 forced to match its JettyClientHttpRequestFactory) does not support
+    // Spring Boot 4, so this upgrade keeps the Jetty-free 2.0.1 client instead.
+    implementation("org.springframework.ai:spring-ai-starter-model-openai:2.0.1")
 
-    // Resilience4j — circuit breaker, retry, bulkhead, time limiter
-    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-retry:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-bulkhead:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-timelimiter:2.2.0")
-    implementation("io.github.resilience4j:resilience4j-micrometer:2.2.0")
+    implementation("com.fasterxml.jackson.core:jackson-annotations")
+
+    // Resilience4j — circuit breaker, retry, bulkhead, time limiter.
+    // 2.4.0+ is required for the resilience4j-spring-boot4 autoconfiguration module.
+    implementation("io.github.resilience4j:resilience4j-spring-boot4:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-retry:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-bulkhead:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-timelimiter:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-micrometer:2.4.0")
     implementation("commons-codec:commons-codec:1.16.0")
     implementation("org.apache.commons:commons-lang3:3.14.0")
     implementation("org.jsoup:jsoup:1.18.3")
     implementation("com.jcraft:jsch:0.1.55")
 
-    testImplementation("org.testcontainers:testcontainers")
-    testImplementation("org.testcontainers:postgresql")
-    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers:1.21.3")
+    testImplementation("org.testcontainers:postgresql:1.21.3")
+    testImplementation("org.testcontainers:junit-jupiter:1.21.3")
     testImplementation("com.h2database:h2")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.junit.platform:junit-platform-launcher")

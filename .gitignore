@@ -12,6 +12,7 @@
 target/
 
 # Gradle build output
+backend/build/
 backend/*/build/
 backend/.gradle/
 .gradle/

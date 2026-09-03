@@ -27,7 +27,11 @@ public class CorsConfig {
             "http://localhost:3005",
             "http://127.0.0.1:3003",
             "http://127.0.0.1:3005",
-            "http://localhost:8080"
+            "http://localhost:8080",
+            "http://piworm.local:8081",
+            "http://piworm.local:8082",
+            "http://127.0.0.1:8081",
+            "http://127.0.0.1:8082"
         ));
         
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));

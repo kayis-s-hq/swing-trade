@@ -2,6 +2,7 @@ package com.swingtrade.broker.risk;
 
 import com.swingtrade.broker.config.BrokerProperties;
 import com.swingtrade.broker.manager.PositionManager;
+import com.swingtrade.broker.util.OptimisticLockRetryHelper;
 import com.swingtrade.data.entity.DailyLossCircuitBreakerStateEntity;
 import com.swingtrade.data.repository.DailyLossCircuitBreakerStateRepository;
 import com.swingtrade.domain.Position;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -24,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DailyLossCircuitBreaker {
 
     private static final Logger logger = LoggerFactory.getLogger(DailyLossCircuitBreaker.class);
+    private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
 
     private final PositionManager positionManager;
     private final BrokerProperties props;
@@ -70,7 +73,7 @@ public class DailyLossCircuitBreaker {
      * Check if trading is allowed today (circuit is closed).
      */
     public boolean isTradingAllowed() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(MARKET_ZONE);
 
         // Reset tracker if new day
         if (!dailyPnLTracker.containsKey(today)) {
@@ -134,7 +137,7 @@ public class DailyLossCircuitBreaker {
         BigDecimal totalRealizedPnL = calculateTotalRealizedPnL();
 
         BigDecimal dailyPnL = totalUnrealizedPnL.add(totalRealizedPnL);
-        dailyPnLTracker.put(LocalDate.now(), dailyPnL);
+        dailyPnLTracker.put(LocalDate.now(MARKET_ZONE), dailyPnL);
 
         logger.info("Updated daily P&L: ₹{} ({}%)", dailyPnL, calculateLossPercent());
 
@@ -153,7 +156,7 @@ public class DailyLossCircuitBreaker {
 
     private void openCircuit(BigDecimal lossAmount) {
         isCircuitOpen = true;
-        circuitOpenTime = LocalDateTime.now();
+        circuitOpenTime = LocalDateTime.now(MARKET_ZONE);
         lossAtCircuitOpen = lossAmount;
         persistState();
 
@@ -176,7 +179,7 @@ public class DailyLossCircuitBreaker {
      * Get current daily P&L.
      */
     public BigDecimal getCurrentDailyPnL() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(MARKET_ZONE);
         return dailyPnLTracker.getOrDefault(today, BigDecimal.ZERO);
     }
 
@@ -227,27 +230,33 @@ public class DailyLossCircuitBreaker {
 
     private void persistState() {
         if (stateRepository == null) return;
-        stateRepository.findFirstByOrderByUpdatedAtDesc().ifPresentOrElse(entity -> {
-            entity.setCircuitOpen(isCircuitOpen);
-            entity.setCircuitOpenedAt(circuitOpenTime);
-            entity.setLossAtOpen(lossAtCircuitOpen);
-            entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now() : dailyPnLTracker.keySet().iterator().next());
-            entity.setUpdatedAt(LocalDateTime.now());
-            stateRepository.save(entity);
-        }, () -> {
-            DailyLossCircuitBreakerStateEntity entity = new DailyLossCircuitBreakerStateEntity();
-            entity.setCircuitOpen(isCircuitOpen);
-            entity.setCircuitOpenedAt(circuitOpenTime);
-            entity.setLossAtOpen(lossAtCircuitOpen);
-            entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now() : dailyPnLTracker.keySet().iterator().next());
-            stateRepository.save(entity);
-        });
+        try {
+            OptimisticLockRetryHelper.execute(() -> {
+                stateRepository.findFirstByOrderByUpdatedAtDesc().ifPresentOrElse(entity -> {
+                    entity.setCircuitOpen(isCircuitOpen);
+                    entity.setCircuitOpenedAt(circuitOpenTime);
+                    entity.setLossAtOpen(lossAtCircuitOpen);
+                    entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now(MARKET_ZONE) : dailyPnLTracker.keySet().iterator().next());
+                    entity.setUpdatedAt(LocalDateTime.now(MARKET_ZONE));
+                    stateRepository.save(entity);
+                }, () -> {
+                    DailyLossCircuitBreakerStateEntity entity = new DailyLossCircuitBreakerStateEntity();
+                    entity.setCircuitOpen(isCircuitOpen);
+                    entity.setCircuitOpenedAt(circuitOpenTime);
+                    entity.setLossAtOpen(lossAtCircuitOpen);
+                    entity.setLastResetDate(dailyPnLTracker.isEmpty() ? LocalDate.now(MARKET_ZONE) : dailyPnLTracker.keySet().iterator().next());
+                    stateRepository.save(entity);
+                });
+            }, "DailyLossCircuitBreakerStateEntity");
+        } catch (Exception e) {
+            logger.error("Failed to persist circuit breaker state: {}", e.getMessage());
+        }
     }
 
     private void resetDailyTracker() {
         dailyPnLTracker.clear();
-        dailyPnLTracker.put(LocalDate.now(), BigDecimal.ZERO);
-        logger.info("Daily P&L tracker reset for {}", LocalDate.now());
+        dailyPnLTracker.put(LocalDate.now(MARKET_ZONE), BigDecimal.ZERO);
+        logger.info("Daily P&L tracker reset for {}", LocalDate.now(MARKET_ZONE));
     }
 
     private BigDecimal calculateTotalUnrealizedPnL() {

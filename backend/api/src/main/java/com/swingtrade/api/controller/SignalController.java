@@ -38,9 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -211,7 +209,7 @@ public class SignalController {
                     .max(java.util.Comparator.comparing(s -> s.date()))
                     .orElse(null);
                 if (latest != null) {
-                    cleared += signalStore.deleteByDate(latest.date());
+                    cleared += signalStore.deleteBySymbolAndDateAndStrategy(symbol, latest.date(), "PRICE_ACTION");
                 }
             }
         }
@@ -257,6 +255,24 @@ public class SignalController {
     @PostMapping("/generate-all/stream")
     public SseEmitter generateAllSignalsStream() {
         SseEmitter emitter = new SseEmitter(300_000L); // 5 min timeout
+        AtomicBoolean clientConnected = new AtomicBoolean(true);
+
+        emitter.onCompletion(() -> {
+            clientConnected.set(false);
+            logger.debug("Generate-all stream completed");
+        });
+        emitter.onTimeout(() -> {
+            clientConnected.set(false);
+            logger.warn("Generate-all stream timed out");
+        });
+        emitter.onError(e -> {
+            clientConnected.set(false);
+            if (isClientDisconnect(e)) {
+                logger.debug("Generate-all stream client disconnected: {}", e.getMessage());
+            } else {
+                logger.error("Generate-all stream error: {}", e.getMessage());
+            }
+        });
 
         try {
             List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
@@ -273,7 +289,7 @@ public class SignalController {
                         .max(java.util.Comparator.comparing(s -> s.date()))
                         .orElse(null);
                     if (latest != null) {
-                        signalStore.deleteByDate(latest.date());
+                        signalStore.deleteBySymbolAndDateAndStrategy(symbol, latest.date(), "PRICE_ACTION");
                     }
                 }
             }
@@ -282,6 +298,7 @@ public class SignalController {
                 .name("progress")
                 .data(SignalGenerationProgress.started(total)));
         } catch (IOException e) {
+            clientConnected.set(false);
             logger.warn("Failed to send start event: {}", e.getMessage());
             return emitter;
         }
@@ -294,15 +311,37 @@ public class SignalController {
                 final int[] skipCount = {0};
 
                 for (int i = 0; i < symbols.size(); i++) {
+                    if (!clientConnected.get()) {
+                        logger.debug("Stopping signal generation because the client disconnected");
+                        return;
+                    }
                     String symbol = symbols.get(i);
                     int current = i + 1;
+
                     try {
                         emitter.send(SseEmitter.event()
                             .name("progress")
                             .data(SignalGenerationProgress.generating(symbol, current, total)));
+                    } catch (IOException e) {
+                        clientConnected.set(false);
+                        logger.debug("Stopping signal generation after client disconnect");
+                        return;
+                    }
 
-                        java.util.Optional<Signal> result = signalService.generatePriceActionSignal(symbol);
-                        if (result.isPresent()) {
+                    // Business failures (e.g. a data-provider IOException) are never a
+                    // client disconnect signal - only a failure to write to the emitter
+                    // itself is. Keep the two error sources apart so a routine failure
+                    // for one symbol doesn't abandon the rest of the batch.
+                    java.util.Optional<Signal> result = java.util.Optional.empty();
+                    String errorMessage = null;
+                    try {
+                        result = signalService.generatePriceActionSignal(symbol);
+                    } catch (Exception e) {
+                        errorMessage = "Error: " + e.getMessage();
+                    }
+
+                    try {
+                        if (errorMessage == null && result.isPresent()) {
                             signalCount[0]++;
                             SignalResponse response = new SignalResponse(result.get());
                             emitter.send(SseEmitter.event()
@@ -310,31 +349,39 @@ public class SignalController {
                                 .data(SignalGenerationProgress.signalDone(symbol, response, current, total)));
                         } else {
                             skipCount[0]++;
-                            List<com.swingtrade.domain.OhlcvCandle> candles = signalService.getCandleCount(symbol);
-                            String reason = (candles.isEmpty() || candles.size() < 50)
-                                ? "Insufficient candle data (" + candles.size() + " available)"
-                                : "No signal conditions met";
+                            String reason = errorMessage;
+                            if (reason == null) {
+                                List<com.swingtrade.domain.OhlcvCandle> candles =
+                                    signalService.getCandleCount(symbol);
+                                reason = (candles.isEmpty() || candles.size() < 50)
+                                    ? "Insufficient candle data (" + candles.size() + " available)"
+                                    : "No signal conditions met";
+                            }
                             emitter.send(SseEmitter.event()
                                 .name("progress")
                                 .data(SignalGenerationProgress.skipped(symbol, reason, current, total)));
                         }
-                    } catch (Exception e) {
-                        try {
-                            skipCount[0]++;
-                            emitter.send(SseEmitter.event()
-                                .name("progress")
-                                .data(SignalGenerationProgress.skipped(symbol, "Error: " + e.getMessage(), current, total)));
-                        } catch (IOException ioEx) {
-                            logger.warn("Failed to send error event for {}: {}", symbol, ioEx.getMessage());
-                        }
+                    } catch (IOException ioEx) {
+                        clientConnected.set(false);
+                        logger.debug("Stopping signal generation after client disconnect while reporting {}",
+                            symbol);
+                        return;
                     }
                 }
 
+                if (!clientConnected.get()) {
+                    return;
+                }
                 emitter.send(SseEmitter.event()
                     .name("progress")
                     .data(SignalGenerationProgress.complete(signalCount[0], skipCount[0], total)));
                 emitter.complete();
             } catch (Exception e) {
+                if (!clientConnected.get() || isClientDisconnect(e)) {
+                    clientConnected.set(false);
+                    logger.debug("Generate-all stream ended after client disconnect");
+                    return;
+                }
                 try {
                     emitter.send(SseEmitter.event()
                         .name("error")
@@ -346,11 +393,27 @@ public class SignalController {
             }
         });
 
-        emitter.onCompletion(() -> logger.info("Client disconnected from generate-all stream"));
-        emitter.onTimeout(() -> logger.warn("Generate-all stream timed out"));
-        emitter.onError(e -> logger.error("Generate-all stream error: {}", e.getMessage()));
-
         return emitter;
+    }
+
+    /**
+     * Heuristic for "the client went away" vs. a genuine failure, used only for
+     * classifying how to log framework-level {@link SseEmitter} errors (its
+     * {@code onError} callback and the outer catch-all below). Deliberately
+     * does NOT match on {@code instanceof IOException} alone - a data
+     * provider's own IOException (e.g. a market-data client) is a business
+     * failure, not a disconnect, and must not be misclassified as one.
+     */
+    static boolean isClientDisconnect(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            String message = current.getMessage();
+            if (message != null && (message.contains("Broken pipe")
+                || message.contains("Connection reset")
+                || message.contains("Response not usable"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -392,16 +455,33 @@ public class SignalController {
     }
 
     /**
+     * Path segments used elsewhere in this controller as literal routes (e.g.
+     * {@code GET /api/signals/latest}) rather than as a {@code {symbol}} path
+     * variable. {@code DELETE} has no matching literal mapping for these, so
+     * without this guard they'd silently fall through to
+     * {@link #clearSignalForSymbol} and be treated as a (non-existent) stock
+     * symbol instead of being rejected.
+     */
+    private static final java.util.Set<String> RESERVED_SIGNAL_PATH_SEGMENTS =
+        java.util.Set.of("latest", "date-range", "scan");
+
+    /**
      * Clear signals for a specific symbol.
      */
     @DeleteMapping("/{symbol}")
     @Transactional
     public ResponseEntity<Map<String, Object>> clearSignalForSymbol(@PathVariable String symbol) {
+        if (RESERVED_SIGNAL_PATH_SEGMENTS.contains(symbol.toLowerCase(java.util.Locale.ROOT))) {
+            logger.warn("Rejected DELETE /api/signals/{} — '{}' is a reserved path segment, not a stock symbol",
+                symbol, symbol);
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "'" + symbol + "' is a reserved path segment, not a stock symbol"));
+        }
         logger.info("Clearing signals for {}", symbol);
         List<Signal> signals = signalStore.findBySymbol(symbol);
         int cleared = 0;
         for (Signal s : signals) {
-            cleared += signalStore.deleteByDate(s.date());
+            cleared += signalStore.deleteBySymbolAndDate(symbol, s.date());
         }
         return ResponseEntity.ok(Map.of("cleared", cleared, "symbol", symbol));
     }

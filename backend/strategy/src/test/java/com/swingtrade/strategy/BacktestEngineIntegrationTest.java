@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
 
 @DisplayName("BacktestEngineIntegration")
 class BacktestEngineIntegration {
@@ -29,97 +28,6 @@ class BacktestEngineIntegration {
 
     @TempDir
     Path tempDir;
-
-    @Nested
-    @DisplayName("Single-symbol backtest with real fixture data")
-    class SingleSymbolBacktest {
-
-        @BeforeEach
-        void setUp() {
-            candleStore = new InMemoryCandleStore();
-            watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
-            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
-            engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
-                new com.fasterxml.jackson.databind.ObjectMapper(), tempDir.toString());
-        }
-
-        @Test
-        @DisplayName("backtestWithRealData — produces valid trade results")
-        void backtestWithRealData() {
-            // Load fixture data
-            List<OhlcvCandle> candles = loadFixture("real-ohlcv-single.csv");
-            candles.forEach(candleStore::save);
-
-            BacktestConfig config = BacktestConfig.defaults();
-            BacktestResult result = engine.runBacktest("RELIANCE", "NSE", config);
-
-            assertThat(result).isNotNull();
-            assertThat(result.trades()).isNotEmpty();
-            assertThat(result.totalTrades()).isGreaterThan(0);
-            assertThat(result.winRate()).isBetween(0.0, 100.0);
-            assertThat(result.sharpeRatio()).isNotNull();
-            assertThat(result.maxDrawdownPct()).isGreaterThanOrEqualTo(0.0);
-            assertThat(result.totalReturn()).isNotNull();
-        }
-    }
-
-    @Nested
-    @DisplayName("Multi-symbol backtest")
-    class MultiSymbolBacktest {
-
-        @BeforeEach
-        void setUp() {
-            candleStore = new InMemoryCandleStore();
-            watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
-            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
-            engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
-                new com.fasterxml.jackson.databind.ObjectMapper(), tempDir.toString());
-        }
-
-        @Test
-        @DisplayName("runBacktestAll — processes multiple symbols")
-        void runBacktestAll() {
-            // Load data for 2 symbols
-            loadFixtureAndSave("real-ohlcv-single.csv", "RELIANCE");
-            loadFixtureAndSave("real-ohlcv-single.csv", "TCS");
-
-            BacktestConfig config = BacktestConfig.defaults();
-            List<BacktestResult> results = engine.runBacktestAll(List.of("RELIANCE", "TCS"), "NSE", config);
-
-            assertThat(results).hasSize(2);
-            assertThat(results).allMatch(r -> r.totalTrades() >= 0);
-        }
-    }
-
-    @Nested
-    @DisplayName("Report generation")
-    class ReportGeneration {
-
-        @BeforeEach
-        void setUp() {
-            candleStore = new InMemoryCandleStore();
-            watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
-            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore);
-            engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine,
-                new com.fasterxml.jackson.databind.ObjectMapper(), tempDir.toString());
-        }
-
-        @Test
-        @DisplayName("generateReport — produces JSON and CSV files")
-        void generateReport() {
-            loadFixtureAndSave("real-ohlcv-single.csv", "RELIANCE");
-
-            BacktestConfig config = BacktestConfig.defaults();
-            List<BacktestResult> results = engine.runBacktestAll(List.of("RELIANCE"), "NSE", config);
-
-            BacktestReportSummary summary = engine.generateReport(results);
-
-            assertThat(summary).isNotNull();
-            assertThat(summary.results()).hasSize(1);
-            assertThat(summary.top10ByWinRate()).isNotNull();
-            assertThat(summary.top10ByTotalReturn()).isNotNull();
-        }
-    }
 
     // -----------------------------------------------------------------------
     // Helpers
@@ -159,6 +67,116 @@ class BacktestEngineIntegration {
             candleStore.save(new OhlcvCandle(symbol, c.date(), c.open(), c.high(), c.low(), c.close(), c.volume(), c.adjClose()));
         }
     }
+
+    @Nested
+    @DisplayName("Single-symbol backtest with real fixture data")
+    class SingleSymbolBacktest {
+
+        @BeforeEach
+        void setUp() {
+            candleStore = new InMemoryCandleStore();
+            watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
+            PriceActionStrategy priceActionStrategy = new PriceActionStrategy();
+            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class), priceActionStrategy);
+            StrategyRegistry strategyRegistry = new StrategyRegistry(java.util.List.of(priceActionStrategy), priceActionStrategy);
+            engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry,
+                new tools.jackson.databind.ObjectMapper(), tempDir.toString());
+        }
+
+        @Test
+        @DisplayName("backtestWithRealData — produces a trade when all 4 entry rules align")
+        void backtestWithRealData() {
+            // Fixture: a 2-up/1-down zigzag uptrend (keeps RSI in the 50-65 band and price
+            // above EMA20 above EMA50 throughout) followed by a single volume+high-proximity
+            // bump day that is the only bar meeting all 4 entry rules simultaneously —
+            // close > EMA20 > EMA50, RSI(14) in [50,65], volume surge (>1.5x 20-day avg),
+            // and price within 3% of the 52-week high — per docs/backtesting.md. This is the
+            // same construction proven in BacktestEngineTest#buildEntrySetupCandles, loaded
+            // here through the real CSV-fixture path (loadFixture -> CandleStore -> engine)
+            // to exercise the full backtest pipeline end-to-end. The flat run afterward lets
+            // the resulting position exit via TIME_STOP within BacktestConfig.defaults()'s
+            // 20-day maxHoldingDays.
+            List<OhlcvCandle> candles = loadFixture("real-ohlcv-single.csv");
+            candles.forEach(candleStore::save);
+
+            BacktestConfig config = BacktestConfig.defaults();
+            BacktestResult result = engine.runBacktest("RELIANCE", "NSE", config);
+
+            assertThat(result).isNotNull();
+            assertThat(result.trades()).isNotEmpty();
+            assertThat(result.totalTrades()).isGreaterThan(0);
+            BacktestTrade trade = result.trades().get(0);
+            assertThat(trade.exitReason()).isEqualTo(ExitReason.TIME_STOP);
+            assertThat(trade.quantity()).isPositive();
+            assertThat(result.winRate()).isBetween(0.0, 100.0);
+            assertThat(result.sharpeRatio()).isNotNull();
+            assertThat(result.maxDrawdownPct()).isGreaterThanOrEqualTo(0.0);
+            assertThat(result.totalReturn()).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Multi-symbol backtest")
+    class MultiSymbolBacktest {
+
+        @BeforeEach
+        void setUp() {
+            candleStore = new InMemoryCandleStore();
+            watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
+            PriceActionStrategy priceActionStrategy = new PriceActionStrategy();
+            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class), priceActionStrategy);
+            StrategyRegistry strategyRegistry = new StrategyRegistry(java.util.List.of(priceActionStrategy), priceActionStrategy);
+            engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry,
+                new tools.jackson.databind.ObjectMapper(), tempDir.toString());
+        }
+
+        @Test
+        @DisplayName("runBacktestAll — processes multiple symbols")
+        void runBacktestAll() {
+            // Load data for 2 symbols
+            loadFixtureAndSave("real-ohlcv-single.csv", "RELIANCE");
+            loadFixtureAndSave("real-ohlcv-single.csv", "TCS");
+
+            BacktestConfig config = BacktestConfig.defaults();
+            List<BacktestResult> results = engine.runBacktestAll(List.of("RELIANCE", "TCS"), "NSE", config);
+
+            assertThat(results).hasSize(2);
+            assertThat(results).allMatch(r -> r.totalTrades() >= 0);
+        }
+    }
+
+    @Nested
+    @DisplayName("Report generation")
+    class ReportGeneration {
+
+        @BeforeEach
+        void setUp() {
+            candleStore = new InMemoryCandleStore();
+            watchlistStore = org.mockito.Mockito.mock(WatchlistStore.class);
+            PriceActionStrategy priceActionStrategy = new PriceActionStrategy();
+            PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class), priceActionStrategy);
+            StrategyRegistry strategyRegistry = new StrategyRegistry(java.util.List.of(priceActionStrategy), priceActionStrategy);
+            engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry,
+                new tools.jackson.databind.ObjectMapper(), tempDir.toString());
+        }
+
+        @Test
+        @DisplayName("generateReport — produces JSON and CSV files")
+        void generateReport() {
+            loadFixtureAndSave("real-ohlcv-single.csv", "RELIANCE");
+
+            BacktestConfig config = BacktestConfig.defaults();
+            List<BacktestResult> results = engine.runBacktestAll(List.of("RELIANCE"), "NSE", config);
+
+            BacktestReportSummary summary = engine.generateReport(results);
+
+            assertThat(summary).isNotNull();
+            assertThat(summary.results()).hasSize(1);
+            assertThat(summary.top10ByWinRate()).isNotNull();
+            assertThat(summary.top10ByTotalReturn()).isNotNull();
+        }
+    }
+
 
     /**
      * In-memory CandleStore implementation for integration tests.

@@ -24,6 +24,14 @@ INFRA_DIR="$PROJECT_ROOT/infra"
 PIDFILE="$PROJECT_ROOT/.swing-trade-pids"
 PI_NODE_HOST="piworm.local"
 
+docker_compose() {
+    if docker compose version >/dev/null 2>&1; then
+        docker compose "$@"
+    else
+        docker-compose "$@"
+    fi
+}
+
 echo "=========================================="
 echo "  Swing Trade - Dev Stack Manager"
 echo "=========================================="
@@ -32,7 +40,7 @@ echo ""
 # PID tracking for local processes
 save_pid() {
     mkdir -p "$PROJECT_ROOT"
-    echo "$2" >> "$PIDFILE"
+    echo "$1" >> "$PIDFILE"
 }
 
 cleanup_pids() {
@@ -43,18 +51,16 @@ cleanup_pids() {
         rm -f "$PIDFILE"
     fi
 }
-trap cleanup_pids EXIT
-
 do_stage_monitoring() {
     local cmd="${2:-up}"
-    docker compose -f "$INFRA_DIR/docker-compose.monitoring-stage.yml" "$cmd"
+    docker_compose -f "$INFRA_DIR/docker-compose.monitoring-stage.yml" "$cmd"
 }
 
 do_stage_infra() {
     local cmd="${2:-up}"
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-stage.yml "$cmd"
+    docker_compose -f docker-compose.infra-stage.yml "$cmd"
     docker context use desktop-linux
 }
 
@@ -67,13 +73,13 @@ case "${1:-help}" in
     echo "📦 Starting infrastructure on pi-node..."
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml up -d
+    docker_compose -f docker-compose.infra-dev.yml up -d
     echo ""
 
     # Wait for services to be healthy
     echo "⏳ Waiting for services to be ready..."
     sleep 15
-    docker compose -f docker-compose.infra-dev.yml ps
+    docker_compose -f docker-compose.infra-dev.yml ps
     echo ""
 
     # Switch back to local context
@@ -81,7 +87,12 @@ case "${1:-help}" in
     echo ""
 
     # Start Spring Boot locally
-    echo "☕ Starting Spring Boot app locally..."
+    # NOTE: we build the jar and run it with plain `java -jar` instead of
+    # `./gradlew :api:bootRun`. bootRun (via Gradle's JavaExec + DevTools'
+    # Restarter) was found to silently die mid-startup with zero exception
+    # logged, every time, for reasons never fully diagnosed. Running the
+    # built jar directly is reliable and surfaces real startup errors.
+    echo "☕ Building and starting Spring Boot app locally..."
     # Load .env so Spring Boot picks up env vars (Spring doesn't auto-load .env)
     if [ -f "$INFRA_DIR/env/.env" ]; then
         set -a
@@ -90,9 +101,12 @@ case "${1:-help}" in
         echo "✓ Loaded environment from $INFRA_DIR/env/.env"
     fi
     export LOG_FILE="$BACKEND_DIR/logs/swing-trade-local.log"
+    mkdir -p "$BACKEND_DIR/logs"
     cd "$BACKEND_DIR"
-    export JAVA_OPTS="-Duser.timezone=Asia/Kolkata"
-    ./gradlew :api:bootRun --args='--spring.profiles.active=local' &
+    ./gradlew :api:bootJar -q
+    nohup java -Duser.timezone=Asia/Kolkata \
+        -jar "api/build/libs/api.jar" \
+        --spring.profiles.active=local > "$BACKEND_DIR/logs/dev-stack-api-console.log" 2>&1 < /dev/null &
     BACKEND_PID=$!
     save_pid "$BACKEND_PID"
     echo "✓ Backend PID: $BACKEND_PID"
@@ -101,7 +115,7 @@ case "${1:-help}" in
     # Start Vue dev server locally
     echo "🖥️  Starting Vue dev server locally..."
     cd "$DASHBOARD_DIR"
-    yarn dev &
+    nohup ./node_modules/.bin/vite --host 127.0.0.1 --port 3003 > "$BACKEND_DIR/logs/dev-stack-frontend-console.log" 2>&1 < /dev/null &
     FRONTEND_PID=$!
     save_pid "$FRONTEND_PID"
     echo "✓ Frontend PID: $FRONTEND_PID"
@@ -129,7 +143,7 @@ case "${1:-help}" in
     echo ""
 
     # Fallback: kill by pattern
-    pkill -f "spring-boot:run" 2>/dev/null || true
+    pkill -f "com.swingtrade.api.app.SwingTradeApiApplication" 2>/dev/null || true
     pkill -f "vite" 2>/dev/null || true
     echo "✓ Stopped local Spring Boot app and Vue dev server"
     echo ""
@@ -138,7 +152,7 @@ case "${1:-help}" in
     echo "📦 Stopping infrastructure on pi-node..."
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml down
+    docker_compose -f docker-compose.infra-dev.yml down
     echo ""
 
     # Switch back to local context
@@ -151,7 +165,7 @@ case "${1:-help}" in
     echo "📦 Managing infrastructure on pi-node..."
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml "${@:2}"
+    docker_compose -f docker-compose.infra-dev.yml "${@:2}"
     ;;
 
   status)
@@ -160,16 +174,18 @@ case "${1:-help}" in
     echo "Infrastructure (pi-node):"
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml ps
+    docker_compose -f docker-compose.infra-dev.yml ps
     echo ""
 
     echo "Local Spring Boot:"
     docker context use desktop-linux
-    pgrep -f "spring-boot:run" && echo "✓ Running" || echo "✗ Not running"
+    lsof -nP -iTCP:8080 -sTCP:LISTEN > /dev/null 2>&1 \
+      && echo "✓ Running" || echo "✗ Not running"
     echo ""
 
     echo "Local Vue Dev Server:"
-    pgrep -f "vite" && echo "✓ Running" || echo "✗ Not running"
+    lsof -nP -iTCP:3003 -sTCP:LISTEN > /dev/null 2>&1 \
+      && echo "✓ Running" || echo "✗ Not running"
     echo ""
 
     echo "API Health:"
@@ -182,7 +198,28 @@ case "${1:-help}" in
     echo "=== Infrastructure Logs ==="
     docker context use pi-node
     cd "$INFRA_DIR"
-    docker compose -f docker-compose.infra-dev.yml logs "${@:2}"
+    docker_compose -f docker-compose.infra-dev.yml logs "${@:2}"
+    ;;
+
+  live-logs)
+    echo "📡 Following live dev-stack logs (Ctrl-C to stop)..."
+    echo ""
+
+    # Keep the remote Compose context selected while its stream is active.
+    docker context use pi-node >/dev/null
+    cd "$INFRA_DIR"
+    docker_compose -f docker-compose.infra-dev.yml logs -f --tail=100 &
+    INFRA_LOG_PID=$!
+
+    cd "$PROJECT_ROOT"
+    mkdir -p "$BACKEND_DIR/logs"
+    tail -F -n 100 \
+      "$BACKEND_DIR/logs/dev-stack-api-console.log" \
+      "$BACKEND_DIR/logs/dev-stack-frontend-console.log" &
+    LOCAL_LOG_PID=$!
+
+    trap 'kill "$INFRA_LOG_PID" "$LOCAL_LOG_PID" 2>/dev/null || true' INT TERM EXIT
+    wait "$INFRA_LOG_PID" "$LOCAL_LOG_PID"
     ;;
 
   stage-monitoring)
@@ -241,87 +278,114 @@ case "${1:-help}" in
     echo "  Swing Trade - Stage Deployment"
     echo "=========================================="
     echo ""
-    echo "Stage runs entirely on pi-node: Docker containers for infra + API."
-    echo "Monitoring is handled by pi-prometheus (port 9090) + pi-grafana (port 3001)."
+    echo "Build happens on this Mac from a git worktree checked out to the"
+    echo "'stage' branch. pi-node only receives prebuilt artifacts and packages"
+    echo "them into a lightweight Docker image — no compilation on the Pi."
     echo ""
 
-    # --- Step 1: Switch to Java 21 for Gradle build ---
+    STAGE_PATH="/home/dietpi/swing-trade"
+    WORKTREE_DIR="$PROJECT_ROOT/.worktrees/stage"
+
+    # --- Step 1: Ensure the stage worktree exists ---
+    if [ ! -d "$WORKTREE_DIR" ]; then
+      if ! git show-ref --verify --quiet refs/heads/stage && ! git show-ref --verify --quiet refs/remotes/origin/stage; then
+        echo "✗ No local or remote 'stage' branch found."
+        echo "  Create it first (e.g. from main) and push it to origin, then retry."
+        exit 1
+      fi
+      echo "🌳 Creating stage worktree at $WORKTREE_DIR..."
+      if git show-ref --verify --quiet refs/heads/stage; then
+        git worktree add "$WORKTREE_DIR" stage
+      else
+        git worktree add "$WORKTREE_DIR" -b stage origin/stage
+      fi
+      echo ""
+    fi
+
+    # --- Step 2: Sync worktree to latest origin/stage ---
+    echo "🔄 Syncing worktree to origin/stage..."
+    if ! (cd "$WORKTREE_DIR" && git fetch origin && git merge --ff-only origin/stage); then
+      echo "✗ Worktree at $WORKTREE_DIR is not fast-forwardable to origin/stage."
+      echo "  Resolve manually in that directory (branch content is managed outside this script), then retry."
+      exit 1
+    fi
+    echo ""
+
+    # --- Step 3: Switch to Java 21 for Gradle build ---
     echo "☕ Switching to Java 21 for Gradle build..."
-    if command -v sdkman-init &> /dev/null; then
-      source "$HOME/.sdkman/bin/sdkman-init.sh" 2>/dev/null
-    elif [ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
+    if [ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
       source "$HOME/.sdkman/bin/sdkman-init.sh"
     fi
     echo "  Java: $(java -version 2>&1 | head -1)"
-    echo "  Gradle: $(./gradlew --version 2>&1 | head -1)"
     echo ""
 
-    # --- Step 2: Build JAR locally ---
-    echo "🔨 Building JAR locally (gradle build)..."
-    cd "$BACKEND_DIR"
-    ./gradlew :api:bootJar -B -x test -q
-    JAR_STATUS=$?
-    if [ $JAR_STATUS -ne 0 ]; then
-      echo "✗ Gradle build failed. Fix and retry."
-      exit 1
-    fi
-    JAR_FILE=$(ls "$BACKEND_DIR/api/build/libs/api-*.jar" 2>/dev/null | head -1)
-    if [ -z "$JAR_FILE" ]; then
-      echo "✗ JAR not found in api/build/libs/"
-      exit 1
-    fi
-    JAR_SIZE=$(du -h "$JAR_FILE" | cut -f1)
-    echo "✓ JAR built: $JAR_SIZE"
+    # --- Step 4: Build backend jar + runtime deps in the worktree ---
+    echo "🔨 Building backend (jar + runtime deps) in worktree..."
+    cd "$WORKTREE_DIR/backend"
+    ./gradlew installFyersSdk :api:jar :api:copyRuntimeDeps -x test -q
+    rm -rf "$WORKTREE_DIR/lib"
+    mkdir -p "$WORKTREE_DIR/lib"
+    cp api/build/libs/api-plain.jar "$WORKTREE_DIR/lib/"
+    cp api/build/runtimeDeps/*.jar "$WORKTREE_DIR/lib/"
+    LIB_COUNT=$(ls -1 "$WORKTREE_DIR/lib" | wc -l | xargs)
+    echo "✓ Backend built: $LIB_COUNT jars in lib/"
     echo ""
 
-    # --- Step 3: Transfer JAR + Dockerfile to pi-node for build ---
-    echo "📦 Transferring JAR + Dockerfile to pi-node..."
-    STAGE_PATH="/home/dietpi/swing-trade"
-    DASH_PATH="$PROJECT_ROOT/dashboard"
-    ssh dietpi@piworm.local "mkdir -p $STAGE_PATH/api/target $STAGE_PATH/dashboard/dist"
-    scp "$BACKEND_DIR/api/build/libs/api-*.jar" dietpi@piworm.local:"$STAGE_PATH/api/build/libs/api-1.0.0.jar"
-    scp "$INFRA_DIR/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/Dockerfile"
-    scp "$INFRA_DIR/docker-compose.infra-stage.yml" dietpi@piworm.local:"$STAGE_PATH/docker-compose.infra-stage.yml"
-    echo "✓ JAR + Dockerfile + compose transferred"
+    # --- Step 5: Build frontend dist in the worktree ---
+    echo "🖥️  Building frontend (yarn build) in worktree..."
+    cd "$WORKTREE_DIR/dashboard"
+    yarn install --frozen-lockfile --silent
+    yarn build
+    echo "✓ Frontend built"
+    echo ""
+
+    # --- Step 6: Transfer artifacts to pi-node ---
+    echo "📦 Transferring backend artifacts to pi-node..."
+    ssh dietpi@piworm.local "rm -rf $STAGE_PATH/lib && mkdir -p $STAGE_PATH/lib $STAGE_PATH/dashboard"
+    scp -r "$WORKTREE_DIR/lib/"* dietpi@piworm.local:"$STAGE_PATH/lib/"
+    scp "$WORKTREE_DIR/infra/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/Dockerfile"
+    scp "$WORKTREE_DIR/infra/docker-compose.infra-stage.yml" dietpi@piworm.local:"$STAGE_PATH/docker-compose.infra-stage.yml"
+    echo "✓ Backend artifacts transferred"
 
     echo "📦 Transferring frontend dist..."
-    scp -r "$DASH_PATH/dist" dietpi@piworm.local:"$STAGE_PATH/dashboard/dist"
-    scp "$INFRA_DIR/dashboard/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/dashboard/Dockerfile"
-    scp "$INFRA_DIR/nginx/dashboard-nginx/default.conf" dietpi@piworm.local:"$STAGE_PATH/dashboard/nginx.conf"
+    ssh dietpi@piworm.local "rm -rf $STAGE_PATH/dashboard/dist"
+    scp -r "$WORKTREE_DIR/dashboard/dist" dietpi@piworm.local:"$STAGE_PATH/dashboard/dist"
+    scp "$WORKTREE_DIR/infra/dashboard/Dockerfile" dietpi@piworm.local:"$STAGE_PATH/dashboard/Dockerfile"
+    scp "$WORKTREE_DIR/infra/nginx/dashboard-nginx/default.conf" dietpi@piworm.local:"$STAGE_PATH/dashboard/nginx.conf"
     echo "✓ Frontend transferred"
 
     echo "📋 Transferring .env.stage to pi-node..."
-    scp "$INFRA_DIR/env/.env.stage" dietpi@piworm.local:"$STAGE_PATH/.env.stage"
+    scp "$WORKTREE_DIR/infra/env/.env.stage" dietpi@piworm.local:"$STAGE_PATH/.env.stage"
     echo "✓ Env file transferred"
     echo ""
 
-    # --- Step 4: Stop existing stage deployment ---
+    # --- Step 7: Stop existing stage deployment ---
     echo "🛑 Stopping existing stage deployment on pi-node..."
     ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml down" 2>/dev/null || true
+    # Belt-and-suspenders: force-remove by exact name too. `compose down` only
+    # matches containers carrying this project's compose labels — a container
+    # left over from a prior deploy under a different project name (e.g. a
+    # different CWD basename) won't be touched by it and blocks `up` with a
+    # "name already in use" conflict.
+    ssh dietpi@piworm.local "docker rm -f swing-trade-stage-api swing-trade-stage-dashboard swing_trade_stage_postgres" 2>/dev/null || true
     echo "✓ Existing deployment stopped"
     echo ""
 
-    # --- Step 5: Build Docker images on pi-node ---
-    echo "🐳 Building backend image (runtime-stage)..."
-    ssh dietpi@piworm.local "cd $STAGE_PATH && docker build --target runtime-stage -t swing-trade-api:stage -f Dockerfile ."
-    echo "✓ Backend image built"
+    # --- Step 8: Build + start stage stack on pi-node ---
+    echo "🐳 Building images on pi-node (packaging only, no compilation)..."
+    ssh dietpi@piworm.local "cd $STAGE_PATH && DOCKER_BUILDKIT=1 docker compose -f docker-compose.infra-stage.yml build"
+    echo "✓ Images built"
     IMAGE_SIZE=$(ssh dietpi@piworm.local "docker image inspect swing-trade-api:stage --format='{{.Size}}'" 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}')
-    echo "  Image size: ~${IMAGE_SIZE}MB"
-
-    echo "🐳 Building frontend image (nginx)..."
-    ssh dietpi@piworm.local "cd $STAGE_PATH/dashboard && docker build -t swing-trade-dashboard:stage ."
-    echo "✓ Frontend image built"
     DASH_SIZE=$(ssh dietpi@piworm.local "docker image inspect swing-trade-dashboard:stage --format='{{.Size}}'" 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}')
-    echo "  Image size: ~${DASH_SIZE}MB"
+    echo "  API image: ~${IMAGE_SIZE}MB   Dashboard image: ~${DASH_SIZE}MB"
     echo ""
 
-    # --- Step 6: Start stage stack on pi-node ---
     echo "🚀 Starting stage stack on pi-node..."
     ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml up -d"
     echo "✓ Stage stack started"
     echo ""
 
-    # --- Step 7: Wait for infra to be healthy ---
+    # --- Step 9: Wait for infra to be healthy ---
     echo "⏳ Waiting for stage infrastructure to be ready..."
     for i in $(seq 1 30); do
       PG_HEALTH=$(ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml ps --filter health=healthy postgres 2>/dev/null | wc -l")
@@ -334,7 +398,7 @@ case "${1:-help}" in
     done
     echo ""
 
-    # --- Step 8: Wait for API startup ---
+    # --- Step 10: Wait for API startup ---
     echo "⏳ Waiting for Spring Boot startup (~30s)..."
     for i in $(seq 1 30); do
       HEALTH=$(curl -sf "http://piworm.local:8081/actuator/health" 2>/dev/null || true)
@@ -347,7 +411,7 @@ case "${1:-help}" in
     done
     echo ""
 
-    # --- Step 9: Health check ---
+    # --- Step 11: Health check ---
     echo "🏥 API Health Check:"
     HEALTH=$(curl -s "http://piworm.local:8081/actuator/health" 2>/dev/null)
     if [ -n "$HEALTH" ]; then
@@ -357,13 +421,13 @@ case "${1:-help}" in
     fi
     echo ""
 
-    # --- Step 10: Connect pi-prometheus to stage network ---
+    # --- Step 12: Connect pi-prometheus to stage network ---
     echo "📊 Connecting pi-prometheus to stage network..."
-    ssh dietpi@piworm.local "docker network connect swing-trade-stage_swingtrade-network pi-prometheus" 2>/dev/null || true
+    ssh dietpi@piworm.local "docker network connect swing-trade_swingtrade-network pi-prometheus" 2>/dev/null || true
     echo "✓ Prometheus can now scrape stage API"
     echo ""
 
-    # --- Step 11: Verify Prometheus scrape ---
+    # --- Step 13: Verify Prometheus scrape ---
     echo "📊 Checking Prometheus scrape target..."
     sleep 5
     PROM_TARGETS=$(curl -sf "http://piworm.local:9090/api/v1/targets" 2>/dev/null || true)
@@ -404,11 +468,11 @@ case "${1:-help}" in
     ;;
 
   *)
-    echo "Usage: $0 {start|stage|stage-down|stage-logs|stage-restart|stop|infra|status|logs|logs-json|stage-monitoring|frontend|frontend-logs}"
+    echo "Usage: $0 {start|stage|stage-down|stage-logs|stage-restart|stop|infra|status|logs|live-logs|logs-json|stage-monitoring|frontend|frontend-logs}"
     echo ""
     echo "Commands:"
     echo "  start            - Start dev infra on pi-node + Spring Boot + Vue locally"
-    echo "  stage            - Build JAR + Docker image locally, deploy to pi-node"
+    echo "  stage            - Build in .worktrees/stage (branch 'stage'), deploy artifacts to pi-node"
     echo "  stage-down       - Stop stage stack on pi-node"
     echo "  stage-logs       - View stage API logs (pass --tail=N for limit)"
     echo "  stage-restart    - Stop and restart stage stack (full rebuild)"
@@ -416,6 +480,7 @@ case "${1:-help}" in
     echo "  infra            - Manage dev infrastructure (pass docker compose commands)"
     echo "  status           - Check status of all services"
     echo "  logs             - View infrastructure logs"
+    echo "  live-logs        - Follow infrastructure, API, and frontend logs"
     echo "  logs-json        - View structured JSON logs (requires jq)"
     echo "  stage-monitoring - Start/stop local Grafana (scrapes pi-node Prometheus)"
     echo "  frontend         - Manage Vue dev server (start|stop|logs)"
@@ -435,6 +500,7 @@ case "${1:-help}" in
     echo "  $0 infra up -d"
     echo "  $0 status"
     echo "  $0 logs --tail=100"
+    echo "  $0 live-logs"
     echo "  $0 logs-json 50"
     echo "  $0 stage-monitoring up -d"
     echo "  $0 frontend start"

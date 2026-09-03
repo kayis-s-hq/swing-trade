@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
@@ -48,6 +47,13 @@ class SpringAiLlmClientTest {
         org.mockito.Mockito.lenient().when(generation.getOutput()).thenReturn(assistantMessage);
 
         client = new SpringAiLlmClient(chatClient, false);
+    }
+
+    private void verifyChatClientCalled() {
+        // Verify the fluent chain was called
+        org.mockito.Mockito.verify(chatClient).prompt();
+        org.mockito.Mockito.verify(requestSpec).call();
+        org.mockito.Mockito.verify(callSpec).chatResponse();
     }
 
     // ===== ChatClient Integration Tests =====
@@ -332,12 +338,5 @@ class SpringAiLlmClientTest {
             // Assert
             assertThat(result).isNotNull();
         }
-    }
-
-    private void verifyChatClientCalled() {
-        // Verify the fluent chain was called
-        org.mockito.Mockito.verify(chatClient).prompt();
-        org.mockito.Mockito.verify(requestSpec).call();
-        org.mockito.Mockito.verify(callSpec).chatResponse();
     }
 }

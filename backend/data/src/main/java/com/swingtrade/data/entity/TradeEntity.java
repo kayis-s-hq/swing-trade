@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -28,6 +29,9 @@ public class TradeEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    private Integer version = 0;
 
     @Column(name = "position_id", nullable = false)
     private Long positionId;
@@ -97,6 +101,8 @@ public class TradeEntity {
         this.exitReason = trade.exitReason();
         this.fees = trade.fees();
         this.direction = trade.direction() != null ? trade.direction().name() : TradeDirection.LONG.name();
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = this.createdAt;
     }
 
     public static TradeEntity fromDomain(Trade trade) {

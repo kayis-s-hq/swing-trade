@@ -1,5 +1,5 @@
-import { rawFetch, toNum, errResponse } from './shared'
-import type { ApiResponse, Position, PortfolioSummary, MarketOverview, EquityPoint } from './types'
+import { apiRequest, toNum } from './shared'
+import type { Position, PortfolioSummary, MarketOverview, EquityPoint, RiskSummary } from './types'
 
 interface BackendPosition {
   id: number
@@ -49,6 +49,8 @@ interface BackendPositionStats {
   closedPositions: number
   totalValue: number
   totalPnL: number
+  todayPnL?: number | string | null
+  todayPnLPercent?: number | string | null
 }
 
 const mapPosition = (p: BackendPosition): Position => ({
@@ -71,66 +73,68 @@ const mapPosition = (p: BackendPosition): Position => ({
   totalValue: toNum(p.totalValue),
 })
 
-export async function getPortfolioSummary(): Promise<ApiResponse<PortfolioSummary>> {
-  const raw = await rawFetch('/positions/performance')
-  if (!raw.ok) return errResponse(raw.error!)
-  const perf = raw.data as BackendPerformance
+export async function getPortfolioSummary(): Promise<PortfolioSummary> {
+  const perf = await apiRequest<BackendPerformance>('/positions/performance', {
+    responseContract: 'direct',
+  })
   const totalPnL = toNum(perf.totalPnL ?? 0)
   const totalReturn = toNum(perf.totalReturn)
   return {
-    success: true,
-    data: {
-      totalValue: toNum(perf.totalValue),
-      totalPnl: totalPnL,
-      totalPnlPercent: totalReturn,
-      winRate: toNum(perf.winRate),
-      totalTrades: perf.totalTrades ?? perf.closedTrades ?? 0,
-      averageWin: toNum(perf.averageWin),
-      averageLoss: toNum(perf.averageLoss),
-      profitFactor: toNum(perf.profitFactor),
-      maxDrawdown: toNum(perf.maxDrawdown),
-      sharpeRatio: toNum(perf.sharpeRatio),
-    },
+    totalValue: toNum(perf.totalValue),
+    totalPnl: totalPnL,
+    totalPnlPercent: totalReturn,
+    winRate: toNum(perf.winRate),
+    totalTrades: perf.totalTrades ?? perf.closedTrades ?? 0,
+    averageWin: toNum(perf.averageWin),
+    averageLoss: toNum(perf.averageLoss),
+    profitFactor: toNum(perf.profitFactor),
+    maxDrawdown: toNum(perf.maxDrawdown),
+    sharpeRatio: toNum(perf.sharpeRatio),
   }
 }
 
-export async function getMarketOverview(): Promise<ApiResponse<MarketOverview>> {
-  const raw = await rawFetch('/positions/stats')
-  if (!raw.ok) return errResponse(raw.error!)
-  const stats = raw.data as BackendPositionStats
+export async function getMarketOverview(): Promise<MarketOverview> {
+  const stats = await apiRequest<BackendPositionStats>('/positions/stats', {
+    responseContract: 'direct',
+  })
   return {
-    success: true,
-    data: {
-      totalPositions: stats.totalPositions,
-      openPositions: stats.openPositions,
-      todayPnl: toNum(stats.totalPnL),
-      todayPnlPercent: 0,
-    },
+    totalPositions: stats.totalPositions,
+    openPositions: stats.openPositions,
+    todayPnl: toNum(stats.todayPnL ?? stats.totalPnL),
+    todayPnlPercent: toNum(stats.todayPnLPercent),
+    todayPnLSource: stats.todayPnL != null ? 'DAILY' : 'FALLBACK_TOTAL',
   }
 }
 
-export async function getPositions(): Promise<ApiResponse<Position[]>> {
-  const raw = await rawFetch('/positions')
-  if (!raw.ok) return errResponse(raw.error!)
-  const paginated = raw.data as BackendPaginated<BackendPosition>
-  const positions: BackendPosition[] = paginated.content ?? []
-  return { success: true, data: positions.map(mapPosition) }
+export async function getRiskSummary(): Promise<RiskSummary> {
+  return apiRequest<RiskSummary>('/positions/risk-summary', {
+    responseContract: 'direct',
+  })
 }
 
-export async function getClosedPositions(): Promise<ApiResponse<Position[]>> {
-  const raw = await rawFetch('/positions/closed')
-  if (!raw.ok) return errResponse(raw.error!)
-  const paginated = raw.data as BackendPaginated<BackendPosition>
-  const positions: BackendPosition[] = paginated.content ?? []
-  return { success: true, data: positions.map(mapPosition) }
+export async function getPositions(): Promise<Position[]> {
+  const paginated = await apiRequest<BackendPaginated<BackendPosition>>('/positions', {
+    method: 'GET',
+    responseContract: 'direct',
+  })
+  return (paginated.content ?? []).map(mapPosition)
 }
 
-export async function getTradeHistory(limit: number = 10): Promise<ApiResponse<Position[]>> {
-  const raw = await rawFetch('/positions/closed?page=0&size=' + limit)
-  if (!raw.ok) return errResponse(raw.error!)
-  const paginated = raw.data as BackendPaginated<BackendPosition>
+export async function getClosedPositions(): Promise<Position[]> {
+  const paginated = await apiRequest<BackendPaginated<BackendPosition>>('/positions/closed', {
+    method: 'GET',
+    responseContract: 'direct',
+  })
+  return (paginated.content ?? []).map(mapPosition)
+}
+
+export async function getTradeHistory(limit: number = 10): Promise<Position[]> {
+  const paginated = await apiRequest<BackendPaginated<BackendPosition>>(
+    '/positions/closed?page=0&size=' + limit,
+    { responseContract: 'direct' }
+  )
   const positions: BackendPosition[] = paginated.content ?? []
-  return { success: true, data: positions.map(mapPosition) }
+  return positions.map(mapPosition)
 }
 
 export interface ExecuteTradeParams {
@@ -145,19 +149,16 @@ export interface ExecuteTradeParams {
   entryReason?: string
 }
 
-export async function closePosition(
-  symbol: string,
-  exitReason?: string
-): Promise<ApiResponse<Position>> {
-  const raw = await rawFetch(`/positions/${symbol}/close`, {
+export async function closePosition(symbol: string, exitReason?: string): Promise<Position> {
+  const position = await apiRequest<BackendPosition>(`/positions/${symbol}/close`, {
     method: 'POST',
     body: exitReason ? JSON.stringify({ exitReason }) : undefined,
+    responseContract: 'direct',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: mapPosition(raw.data as BackendPosition) }
+  return mapPosition(position)
 }
 
-export async function executeTrade(params: ExecuteTradeParams): Promise<ApiResponse<Position>> {
+export async function executeTrade(params: ExecuteTradeParams): Promise<Position> {
   const body: Record<string, unknown> = {
     symbol: params.symbol.toUpperCase().trim(),
     quantity: params.quantity,
@@ -170,27 +171,25 @@ export async function executeTrade(params: ExecuteTradeParams): Promise<ApiRespo
   if (params.target != null) body.target = params.target
   if (params.entryReason) body.entryReason = params.entryReason
 
-  const raw = await rawFetch('/positions', {
+  const position = await apiRequest<BackendPosition>('/positions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    responseContract: 'direct',
   })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: mapPosition(raw.data as BackendPosition) }
+  return mapPosition(position)
 }
 
-export async function getEquityCurve(
-  _range: string = '1M'
-): Promise<ApiResponse<{ data: EquityPoint[] }>> {
-  const raw = await rawFetch('/positions/closed')
-  if (!raw.ok) return errResponse(raw.error!)
-  const paginated = raw.data as BackendPaginated<BackendPosition>
+export async function getEquityCurve(_range: string = '1M'): Promise<{ data: EquityPoint[] }> {
+  const paginated = await apiRequest<BackendPaginated<BackendPosition>>('/positions/closed', {
+    responseContract: 'direct',
+  })
   const positions: BackendPosition[] = paginated.content ?? []
   const sorted = positions
     .filter((p) => p.status === 'CLOSED' || p.status === 'STOPPED' || p.status === 'TARGET_HIT')
     .sort((a, b) => a.entryDate.localeCompare(b.entryDate))
   if (sorted.length === 0) {
-    return { success: true, data: { data: [] } }
+    return { data: [] }
   }
   let cumulative = 0
   const points: EquityPoint[] = sorted.map((p) => {
@@ -198,5 +197,5 @@ export async function getEquityCurve(
     cumulative += pnl
     return { date: p.entryDate, value: cumulative }
   })
-  return { success: true, data: { data: points } }
+  return { data: points }
 }

@@ -1,14 +1,22 @@
-import { rawFetch, errResponse } from './shared'
-import type { ApiResponse, HealthStatus } from './types'
+import { apiRequest } from './shared'
+import type { HealthStatus } from './types'
 
-export async function checkHealth(): Promise<ApiResponse<{ status: string; components: Record<string, any> }>> {
-  const raw = await rawFetch('/health')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as { status: string; components: Record<string, any> } }
+export interface BackendHealthResponse {
+  status: string
+  components: Record<string, unknown>
 }
 
-export async function getHealthStatus(): Promise<ApiResponse<HealthStatus>> {
-  const raw = await rawFetch('/health/full')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as HealthStatus }
+export async function checkHealth(): Promise<BackendHealthResponse> {
+  return apiRequest<BackendHealthResponse>('/health', {
+    method: 'GET',
+    responseContract: 'direct',
+  })
+}
+
+export async function getHealthStatus(): Promise<HealthStatus> {
+  return apiRequest<HealthStatus>('/health/full', {
+    // HealthController.fullHealth returns HealthStatus directly, unlike the
+    // application endpoints that use the { success, data } envelope.
+    responseContract: 'direct',
+  })
 }

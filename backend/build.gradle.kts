@@ -33,29 +33,26 @@ repositories {
 }
 
 dependencyManagement {
-    imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")
-        mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
-    }
+    // Managed in subprojects — root project has no dependencies
 }
 
-// Force Jetty 11 — Spring AI 1.1.0 uses JettyClientHttpRequestFactory which expects Jetty 11 API
-// Spring Boot 3.5.9 BOM manages Jetty 12 which has breaking API changes (newRequest(URI) removed)
 subprojects {
-    configurations.all {
-        resolutionStrategy {
-            eachDependency {
-                if (requested.group == "org.eclipse.jetty") {
-                    useVersion("11.0.25")
-                    because("Spring AI 1.1.0 requires Jetty 11 API; Boot 3.5.9 BOM pulls Jetty 12")
-                }
-            }
-        }
-    }
     apply(plugin = "java")
     apply(plugin = "jacoco")
     apply(plugin = "checkstyle")
     apply(plugin = "pmd")
+    apply(plugin = "io.spring.dependency-management")
+
+    dependencyManagement {
+        imports {
+            mavenBom("org.springframework.boot:spring-boot-dependencies:4.1.1")
+            mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
+            mavenBom("tools.jackson:jackson-bom:3.1.5")
+        }
+        dependencies {
+            dependency("org.projectlombok:lombok:1.18.34")
+        }
+    }
 
     java {
         toolchain {
@@ -76,17 +73,28 @@ subprojects {
     }
 
     // JaCoCo coverage threshold (80% line coverage)
-    tasks.named<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>("jacocoTestCoverageVerification") {
-        dependsOn("test")
-        violationRules {
-            rule {
-                limit {
-                    counter = "LINE"
-                    value = "COVEREDRATIO"
-                    minimum = BigDecimal("0.80")
+    val jacocoTestCoverageVerification =
+        tasks.named<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+            dependsOn("test")
+            violationRules {
+                rule {
+                    limit {
+                        counter = "LINE"
+                        value = "COVEREDRATIO"
+                        minimum = BigDecimal("0.80")
+                    }
                 }
             }
         }
+
+    // Wire the gate into `check` so it's actually enforced, not just configured.
+    // Current measured line coverage (2026-08-29) is well under 80% in every
+    // module (core 39.5%, data 22.0%, strategy 71.3%, llm 31.2%, broker 71.3%,
+    // gpuhub 2.6%, api 31.8%) - `check` fails on this today, deliberately: the
+    // gap is now visible in CI output instead of a configured-but-unenforced
+    // threshold silently doing nothing.
+    tasks.named("check") {
+        dependsOn(jacocoTestCoverageVerification)
     }
 
     // Checkstyle configuration
@@ -94,7 +102,12 @@ subprojects {
         configDirectory.set(file("../config/checkstyle"))
     }
 
-    // PMD configuration (uses default rule sets; custom rules via config/pmd/)
+    // PMD configuration
+    pmd {
+        isConsoleOutput = false
+        ruleSetConfig = resources.text.fromFile(file("../config/pmd/pmd-ruleset.xml"))
+        ruleSets = listOf()
+    }
 
     // ArchUnit: enforce module boundary rules (runs as unit test)
     dependencies {
@@ -105,10 +118,18 @@ subprojects {
     val integrationTestSourceSet = sourceSets.create("integrationTest") {
         java.srcDir("src/integrationTest/java")
         resources.srcDir("src/integrationTest/resources")
+        // Custom source sets don't automatically see main/test project classes like the
+        // built-in "test" source set does — wire them in explicitly so integration tests can
+        // reference production classes and shared test helpers (e.g. DatabaseTestContainer).
+        compileClasspath += sourceSets["main"].output + sourceSets["test"].output
+        runtimeClasspath += sourceSets["main"].output + sourceSets["test"].output
     }
 
     val integrationTestImplementation = configurations.getByName("integrationTestImplementation")
     integrationTestImplementation.extendsFrom(configurations.getByName("testImplementation"))
+
+    val integrationTestRuntimeOnly = configurations.getByName("integrationTestRuntimeOnly")
+    integrationTestRuntimeOnly.extendsFrom(configurations.getByName("testRuntimeOnly"))
 
     val integrationTestTask = tasks.register<Test>("integrationTest") {
         description = "Runs integration tests"

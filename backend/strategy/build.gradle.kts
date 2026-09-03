@@ -3,27 +3,21 @@ plugins {
     id("io.spring.dependency-management")
 }
 
-dependencyManagement {
-    imports {
-        mavenBom("org.springframework.boot:spring-boot-dependencies:3.5.9")
-        mavenBom("dev.langchain4j:langchain4j-bom:1.18.1")
-    }
-}
-
 dependencies {
     implementation(project(":core"))
 
     implementation("org.springframework.boot:spring-boot-starter")
     implementation("org.ta4j:ta4j-core:0.16")
 
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.1")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.1")
+    // Jackson 3 — versions managed by jackson-bom
+    implementation("tools.jackson.core:jackson-databind")
 
     testImplementation(project(":data"))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
-    testImplementation("org.mockito:mockito-core:5.12.0")
-    testImplementation("org.assertj:assertj-core:3.26.3")
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-core")
+    testImplementation("org.assertj:assertj-core")
     testImplementation("org.wiremock:wiremock:3.8.0")
 }
 

@@ -1,7 +1,7 @@
 package com.swingtrade.broker.kite;
 
 import com.swingtrade.broker.config.BrokerProperties;
-import com.swingtrade.broker.model.*;
+import com.swingtrade.broker.model.OrderResponse;
 import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.domain.OrderType;
 import com.swingtrade.domain.Exchange;

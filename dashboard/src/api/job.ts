@@ -1,35 +1,33 @@
-import { rawFetch, errResponse } from './shared'
-import type { ApiResponse, JobRunResponse, JobRunProgressResponse, JobRunSummaryResponse } from './types'
+import { apiRequest } from './shared'
+import type { JobRunResponse, JobRunProgressResponse, JobRunSummaryResponse } from './types'
 
-export async function startJobRun(triggerType = 'MANUAL'): Promise<ApiResponse<JobRunResponse>> {
+export async function startJobRun(triggerType = 'MANUAL'): Promise<JobRunResponse> {
   const params = new URLSearchParams({ triggerType })
-  const raw = await rawFetch(`/job/runs/start?${params}`, { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as JobRunResponse }
+  return apiRequest<JobRunResponse>(`/job/runs/start?${params}`, {
+    method: 'POST',
+    responseContract: 'direct',
+  })
 }
 
-export async function getJobRunProgress(
-  runId: string
-): Promise<ApiResponse<JobRunProgressResponse>> {
-  const raw = await rawFetch(`/job/runs/${runId}/progress`)
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as JobRunProgressResponse }
+export async function getJobRunProgress(runId: string): Promise<JobRunProgressResponse> {
+  return apiRequest<JobRunProgressResponse>(`/job/runs/${runId}/progress`, {
+    responseContract: 'direct',
+  })
 }
 
-export async function getJobRunSummary(runId: string): Promise<ApiResponse<JobRunSummaryResponse>> {
-  const raw = await rawFetch(`/job/runs/${runId}/summary`)
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as JobRunSummaryResponse }
+export async function getJobRunSummary(runId: string): Promise<JobRunSummaryResponse> {
+  return apiRequest<JobRunSummaryResponse>(`/job/runs/${runId}/summary`, {
+    responseContract: 'direct',
+  })
 }
 
-export async function listJobRuns(): Promise<ApiResponse<JobRunResponse[]>> {
-  const raw = await rawFetch('/job/runs')
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: raw.data as JobRunResponse[] }
+export async function listJobRuns(): Promise<JobRunResponse[]> {
+  return apiRequest<JobRunResponse[]>('/job/runs', { responseContract: 'direct' })
 }
 
-export async function cancelJobRun(runId: string): Promise<ApiResponse<void>> {
-  const raw = await rawFetch(`/job/runs/${runId}/cancel`, { method: 'POST' })
-  if (!raw.ok) return errResponse(raw.error!)
-  return { success: true, data: undefined }
+export async function cancelJobRun(runId: string): Promise<void> {
+  await apiRequest<unknown>(`/job/runs/${runId}/cancel`, {
+    method: 'POST',
+    responseContract: 'direct',
+  })
 }

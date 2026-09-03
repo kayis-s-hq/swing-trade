@@ -2,6 +2,7 @@ package com.swingtrade.data.service;
 
 import com.swingtrade.data.entity.FyersSymbolEntity;
 import com.swingtrade.data.repository.FyersSymbolRepository;
+import com.swingtrade.domain.store.AppSettingsStore;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -9,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,13 +50,28 @@ public class FyersSymbolMasterService {
 
     private final WebClient webClient;
     private final FyersSymbolRepository repository;
+    private final MarketDataClientProvider marketDataClientProvider;
 
     public FyersSymbolMasterService(WebClient.Builder webClientBuilder, FyersSymbolRepository repository) {
+        this(webClientBuilder, repository, null);
+    }
+
+    /**
+     * @param marketDataClientProvider the single source of truth for the active broker
+     *     (not {@link AppSettingsStore} - that only holds the persisted setting, while
+     *     this provider is what {@code MarketDataClient} lookups actually use at
+     *     runtime; the two used to be read independently here and in
+     *     {@code MarketDataClientProvider}, which could disagree after a restart).
+     */
+    public FyersSymbolMasterService(WebClient.Builder webClientBuilder,
+                                    FyersSymbolRepository repository,
+                                    @Lazy MarketDataClientProvider marketDataClientProvider) {
         ExchangeStrategies strategies = ExchangeStrategies.builder()
             .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
             .build();
         this.webClient = webClientBuilder.exchangeStrategies(strategies).build();
         this.repository = repository;
+        this.marketDataClientProvider = marketDataClientProvider;
     }
 
     @Transactional
@@ -139,6 +156,11 @@ public class FyersSymbolMasterService {
 
     @Scheduled(cron = "0 45 8 * * MON-FRI", zone = "Asia/Kolkata")
     public void scheduledRefresh() {
+        if (!isFyersActive()) {
+            logger.debug("Skipping scheduled Fyers symbol master refresh: active broker is {}",
+                activeBroker());
+            return;
+        }
         try {
             refresh();
         } catch (Exception e) {
@@ -148,6 +170,11 @@ public class FyersSymbolMasterService {
 
     @EventListener(ApplicationReadyEvent.class)
     public void refreshIfEmpty() {
+        if (!isFyersActive()) {
+            logger.info("Skipping startup Fyers symbol master refresh: active broker is {}",
+                activeBroker());
+            return;
+        }
         try {
             if (repository.count() == 0) {
                 refresh();
@@ -155,6 +182,15 @@ public class FyersSymbolMasterService {
         } catch (Exception e) {
             logger.warn("Startup Fyers symbol master refresh failed: {}", e.getMessage());
         }
+    }
+
+    private boolean isFyersActive() {
+        // The two-argument constructor is retained for manual admin refreshes and tests.
+        return marketDataClientProvider == null || "fyers".equalsIgnoreCase(activeBroker());
+    }
+
+    private String activeBroker() {
+        return marketDataClientProvider == null ? "unknown" : marketDataClientProvider.getActiveBroker();
     }
 
     private static String blankToNull(String s) {

@@ -5,13 +5,10 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -38,11 +35,14 @@ class LlmClientProviderRoutingTest {
     @Mock
     private OpenAiChatModel openAiModel;
 
+    @Mock
+    private OpenAiChatModel ollamaModel;
+
     private LlmClientProvider provider;
 
     @BeforeEach
     void setUp() {
-        provider = new LlmClientProvider(selector, localModel, piSshModel, openAiModel);
+        provider = new LlmClientProvider(selector, localModel, piSshModel, openAiModel, ollamaModel);
     }
 
     @Nested
@@ -90,6 +90,24 @@ class LlmClientProviderRoutingTest {
         void shouldReturnOpenAiClientWhenBackendIsOpenai() {
             // Arrange
             when(selector.resolve()).thenReturn(LlmBackendSelector.Backend.OPENAI);
+
+            // Act
+            com.swingtrade.llm.client.LlmClient client = provider.getClient();
+
+            // Assert
+            assertThat(client).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Routing — OLLAMA backend")
+    class OllamaRouting {
+
+        @Test
+        @DisplayName("should return ollama client when backend is ollama")
+        void shouldReturnOllamaClientWhenBackendIsOllama() {
+            // Arrange
+            when(selector.resolve()).thenReturn(LlmBackendSelector.Backend.OLLAMA);
 
             // Act
             com.swingtrade.llm.client.LlmClient client = provider.getClient();

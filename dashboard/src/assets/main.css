@@ -93,6 +93,155 @@ html {
   outline-offset: 2px;
 }
 
+/* ─── Interaction polish ─── */
+:root {
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+button,
+a,
+select,
+input,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+a {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-out-strong);
+}
+
+button:not(:disabled):active,
+a:active {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Form controls share one quiet, tactile language across every view. */
+.view-shell input:not([type='checkbox']):not([type='radio']),
+.view-shell select,
+.view-shell textarea {
+  border-color: var(--color-border-subtle);
+  transition-property: border-color, background-color, box-shadow, color;
+  transition-duration: 180ms;
+  transition-timing-function: var(--ease-out-strong);
+}
+
+/* Native selects use one consistent control height across every view. */
+select {
+  height: 2.5rem;
+  min-height: 2.5rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .view-shell input:not([type='checkbox']):not([type='radio']):hover,
+  .view-shell select:hover,
+  .view-shell textarea:hover {
+    border-color: var(--color-border-default);
+  }
+}
+
+.view-shell input:not([type='checkbox']):not([type='radio']):focus,
+.view-shell select:focus,
+.view-shell textarea:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-brand-glow);
+}
+
+.view-shell input:not([type='checkbox']):not([type='radio']):disabled,
+.view-shell select:disabled,
+.view-shell textarea:disabled {
+  cursor: not-allowed;
+  background-color: color-mix(in srgb, var(--color-bg-primary) 65%, transparent);
+  color: var(--color-text-muted);
+}
+
+.view-shell input:not([type='checkbox']):not([type='radio']):user-invalid,
+.view-shell textarea:user-invalid,
+.view-shell select:user-invalid {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px var(--color-danger-bg);
+}
+
+.view-shell input[type='checkbox'],
+.view-shell input[type='radio'] {
+  accent-color: var(--color-brand);
+  transition:
+    box-shadow 160ms var(--ease-out-strong),
+    transform 160ms var(--ease-out-strong);
+}
+
+.view-shell input[type='checkbox']:active,
+.view-shell input[type='radio']:active {
+  transform: scale(0.94);
+}
+
+.view-shell input[type='checkbox']:focus-visible,
+.view-shell input[type='radio']:focus-visible {
+  box-shadow: 0 0 0 3px var(--color-brand-glow);
+}
+
+.view-shell [role='listbox'] {
+  transform-origin: top left;
+  animation: listbox-enter 180ms var(--ease-out-strong);
+}
+
+@keyframes listbox-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.view-shell {
+  min-height: 100%;
+}
+
+.view-shell .card-panel {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms var(--ease-out-strong);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .view-shell .card-panel:hover {
+    border-color: color-mix(in srgb, var(--color-border-default) 72%, transparent);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+    transform: translateY(-1px);
+  }
+}
+
+.route-enter-active,
+.route-leave-active {
+  transition:
+    opacity 160ms ease,
+    transform 220ms var(--ease-out-strong),
+    filter 160ms ease;
+}
+
+.route-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+  filter: blur(2px);
+}
+
+.route-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+  filter: blur(1px);
+}
+
 /* ─── Typography ─── */
 .font-display {
   font-family: var(--font-display);
@@ -120,6 +269,133 @@ html {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
+}
+
+/* Signals are scanned repeatedly, so motion stays quick and functional. */
+.signal-stat {
+  display: flex;
+  min-height: 84px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg-surface) 82%, transparent);
+  padding: 12px 14px;
+  transition:
+    border-color 180ms var(--ease-out-strong),
+    transform 180ms var(--ease-out-strong);
+}
+
+.signal-stat:hover {
+  border-color: var(--color-border-default);
+  transform: translateY(-1px);
+}
+
+.signal-stat-label {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.signal-stat-value {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.signal-stat-meta {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.signal-filter-group button {
+  transition:
+    color 160ms var(--ease-out-strong),
+    background-color 160ms var(--ease-out-strong),
+    transform 160ms var(--ease-out-strong);
+}
+
+.signal-card-wrapper {
+  transition:
+    transform 180ms var(--ease-out-strong),
+    opacity 180ms ease;
+}
+
+.signal-card:focus-visible {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-brand-glow);
+}
+
+.signal-select-control {
+  display: inline-flex;
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 3px;
+  transition:
+    background-color 160ms var(--ease-out-strong),
+    transform 160ms var(--ease-out-strong);
+}
+
+.signal-select-control:hover,
+.signal-select-control:focus-within {
+  background: var(--color-brand-subtle);
+}
+
+.signal-select-control:active {
+  transform: scale(0.94);
+}
+
+.signal-select-check {
+  display: flex;
+  height: 18px;
+  width: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border-default);
+  border-radius: 999px;
+  color: var(--color-text-inverse);
+  transition:
+    background-color 160ms var(--ease-out-strong),
+    border-color 160ms var(--ease-out-strong),
+    transform 160ms var(--ease-out-strong);
+}
+
+.signal-select-control-selected .signal-select-check {
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  transform: scale(1.05);
+}
+
+.signal-card-enter-active,
+.signal-card-leave-active {
+  transition:
+    opacity 180ms ease,
+    transform 180ms var(--ease-out-strong);
+}
+
+.signal-card-enter-from,
+.signal-card-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+}
+
+.signal-card-move {
+  transition: transform 220ms var(--ease-in-out-strong);
+}
+
+.signal-empty-state {
+  background: color-mix(in srgb, var(--color-bg-surface) 42%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signal-stat:hover {
+    transform: none;
+  }
 }
 
 /* ─── Pulse Dot ─── */
@@ -150,5 +426,28 @@ html {
 }
 
 .animate-fade-in {
-  animation: fade-in 0.4s ease-out;
+  animation: fade-in 0.28s var(--ease-out-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .view-shell .card-panel:hover,
+  button:not(:disabled):active,
+  a:active,
+  .view-shell input[type='checkbox']:active,
+  .view-shell input[type='radio']:active {
+    transform: none;
+  }
+
+  .view-shell [role='listbox'] {
+    animation: none;
+  }
 }

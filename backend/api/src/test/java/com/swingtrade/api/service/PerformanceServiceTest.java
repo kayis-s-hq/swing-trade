@@ -40,6 +40,15 @@ class PerformanceServiceTest {
             Portfolio portfolio = new Portfolio("test", BigDecimal.valueOf(1000000));
             PaperTradingEngine engine = mock(PaperTradingEngine.class);
             when(engine.getPortfolio()).thenReturn(portfolio);
+            // PerformanceService depends on the TradingService interface (not the concrete
+            // PaperTradingEngine), so it can only reach totalValue via
+            // TradingService.getTotalValue() — getPortfolio() isn't on that interface and
+            // can't be, since core (where TradingService lives) can't depend on broker's
+            // Portfolio type. In production PaperTradingEngine.getTotalValue() delegates to
+            // portfolio.getTotalValue(), which for a fresh portfolio with no positions equals
+            // the initial capital — stub that directly instead of the unreachable
+            // getPortfolio().
+            when(engine.getTotalValue()).thenReturn(portfolio.getTotalValue());
             when(engine.getTotalPnL()).thenReturn(BigDecimal.valueOf(50000));
             when(engine.getInitialCapital()).thenReturn(BigDecimal.valueOf(1000000));
 
@@ -74,6 +83,24 @@ class PerformanceServiceTest {
             var response = service.getPortfolioPerformance();
 
             assertThat(response.getTotalPnL()).isEqualTo(BigDecimal.valueOf(75000));
+        }
+
+        @Test
+        void whenSnapshotDrawdownExists_usesPortfolioEquityCurve() {
+            PaperTradingEngine engine = mock(PaperTradingEngine.class);
+            when(engine.getTotalPnL()).thenReturn(BigDecimal.ZERO);
+            when(engine.getTotalValue()).thenReturn(BigDecimal.valueOf(950000));
+            when(engine.getInitialCapital()).thenReturn(BigDecimal.valueOf(1000000));
+            when(engine.getPortfolioMaxDrawdown()).thenReturn(BigDecimal.valueOf(8.25));
+
+            PositionRepository positionRepo = mock(PositionRepository.class);
+            when(positionRepo.findByStatus("CLOSED")).thenReturn(List.of());
+            when(positionRepo.findByStatus("STOPPED")).thenReturn(List.of());
+            when(positionRepo.findByStatus("TARGET_HIT")).thenReturn(List.of());
+
+            var response = new PerformanceService(engine, positionRepo).getPortfolioPerformance();
+
+            assertThat(response.getMaxDrawdown()).isEqualByComparingTo("8.25");
         }
 
         @Test

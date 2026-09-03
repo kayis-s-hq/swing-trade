@@ -16,12 +16,6 @@ test.describe('Settings View', () => {
   test('shows loading state then resolves', async ({ page }) => {
     await page.goto(`${DASHBOARD}/settings`)
 
-    // Loading spinner should appear briefly
-    const loadingVisible = await page
-      .locator('text=Checking system')
-      .isVisible()
-      .catch(() => false)
-
     await page.waitForLoadState('networkidle')
 
     // Loading should be gone after networkidle
@@ -367,17 +361,16 @@ test.describe('Settings View', () => {
   })
 
   test('no JavaScript errors on page load', async ({ page }) => {
-    await page.goto(`${DASHBOARD}/settings`)
-    await page.waitForLoadState('networkidle')
-
-    const consoleErrors = []
+    const consoleErrors: string[] = []
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
         consoleErrors.push(msg.text())
       }
     })
 
-    await page.waitForTimeout(1000)
+    await page.goto(`${DASHBOARD}/settings`)
+    await page.waitForLoadState('networkidle')
+    await expect(page.locator('h1', { hasText: 'Settings' })).toBeVisible()
 
     expect(consoleErrors).toHaveLength(0)
   })

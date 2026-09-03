@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Repository interface for SignalEntity operations.
@@ -26,7 +25,7 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * @param pageable pagination
      * @return list of signals
      */
-    @Query("SELECT s FROM SignalEntity s WHERE s.symbol = :symbol ORDER BY s.date DESC, s.createdAt DESC")
+    @Query("SELECT s FROM SignalEntity s WHERE s.symbol = :symbol ORDER BY s.date DESC, s.createdAt DESC, s.id DESC")
     List<SignalEntity> findBySymbolOrderByDateDesc(
         @Param("symbol") String symbol,
         Pageable pageable
@@ -109,7 +108,7 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * @return optional containing the latest signal
      */
     @Query("SELECT s FROM SignalEntity s WHERE s.symbol = :symbol ORDER BY s.date DESC, s.createdAt DESC")
-    Optional<SignalEntity> findLatestBySymbol(@Param("symbol") String symbol);
+    List<SignalEntity> findLatestBySymbol(@Param("symbol") String symbol, Pageable pageable);
 
     /**
      * Counts signals by date and symbol.
@@ -188,6 +187,11 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
     @Modifying
     @Query("DELETE FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date")
     int deleteBySymbolAndDate(@Param("symbol") String symbol, @Param("date") LocalDate date);
+
+    @Modifying
+    @Query("DELETE FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date AND s.strategy = :strategy")
+    int deleteBySymbolAndDateAndStrategy(@Param("symbol") String symbol, @Param("date") LocalDate date,
+                                         @Param("strategy") String strategy);
 
     /**
      * Deletes all signals for a specific date.
