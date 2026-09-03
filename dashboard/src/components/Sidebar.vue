@@ -1,10 +1,16 @@
 <template>
+  <div
+    v-if="mobileOpen"
+    class="fixed inset-0 z-30 bg-black/50 lg:hidden"
+    aria-hidden="true"
+    @click="$emit('close')"
+  />
   <aside
-    class="flex flex-col border-r border-border-subtle bg-bg-surface transition-all duration-300"
-    :class="collapsed ? 'w-16' : 'w-56'"
+    class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border-subtle bg-bg-surface transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 lg:transition-[width]"
+    :class="[mobileOpen ? 'translate-x-0' : '-translate-x-full', collapsed ? 'lg:w-16' : 'lg:w-56']"
   >
     <!-- Logo -->
-    <div class="flex h-14 items-center border-b border-border-subtle px-4">
+    <div class="flex h-14 items-center justify-between border-b border-border-subtle px-4">
       <template v-if="!collapsed">
         <div class="flex items-center gap-2">
           <div class="flex h-7 w-7 items-center justify-center rounded-md bg-brand/10">
@@ -18,10 +24,24 @@
           <span class="text-sm font-bold text-brand">S</span>
         </div>
       </template>
+      <button
+        class="flex h-9 w-9 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary lg:hidden"
+        aria-label="Close navigation"
+        @click="$emit('close')"
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M6 18L18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-1 space-y-1 px-2 py-3">
+    <nav class="flex-1 space-y-1 overflow-y-auto px-2 py-3">
       <router-link
         v-for="item in navItems"
         :key="item.path"
@@ -33,6 +53,7 @@
             : 'text-text-muted hover:bg-bg-hover hover:text-text-primary'
         "
         :title="collapsed ? item.label : undefined"
+        @click="$emit('close')"
       >
         <!-- iconPaths is a static, internal SVG path map; no user input reaches v-html. -->
         <!-- eslint-disable-next-line vue/no-v-html -->
@@ -71,7 +92,7 @@
       </div>
       <button
         v-else
-        class="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary"
+        class="hidden h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary lg:flex"
         @click="$emit('toggle')"
       >
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -88,7 +109,7 @@
     <!-- Collapse Toggle -->
     <button
       v-if="!collapsed"
-      class="absolute right-0 top-16 -translate-x-1/2 rounded-l-md border border-border-subtle bg-bg-surface px-1 py-1 text-text-muted transition-colors hover:text-text-primary"
+      class="absolute right-0 top-16 hidden -translate-x-1/2 rounded-l-md border border-border-subtle bg-bg-surface px-1 py-1 text-text-muted transition-colors hover:text-text-primary lg:block"
       @click="$emit('toggle')"
     >
       <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -114,11 +135,12 @@ const settings = getSettings()
 const props = withDefaults(
   defineProps<{
     collapsed: boolean
+    mobileOpen?: boolean
     healthStatus?: BackendHealthStatus
   }>(),
-  { healthStatus: 'checking' }
+  { healthStatus: 'checking', mobileOpen: false }
 )
-defineEmits<{ toggle: [] }>()
+defineEmits<{ toggle: []; close: [] }>()
 
 const lastSync = computed(() => {
   const now = new Date()
