@@ -115,4 +115,74 @@ class PiLlamaServerManagerIdleTest {
             assertThat(idleSeconds).isLessThan(3);
         }
     }
+
+    @Nested
+    @DisplayName("In-flight tracking — a busy server must not be auto-stopped")
+    class InFlightTracking {
+
+        @Test
+        @DisplayName("beginRequest resets the idle clock so a starting request isn't seen as idle")
+        void beginRequestResetsIdleClock() {
+            manager.setIdleCheckTime(System.currentTimeMillis() - 60_000);
+            assertThat(manager.getIdleSeconds()).isGreaterThanOrEqualTo(manager.getIdleTimeoutSec());
+
+            manager.beginRequest();
+
+            assertThat(manager.getIdleSeconds()).isLessThan(manager.getIdleTimeoutSec());
+        }
+
+        @Test
+        @DisplayName("server counts as busy while a request is in flight, even once idle time is exceeded")
+        void staysBusyWhileRequestInFlight() {
+            manager.beginRequest();
+
+            // Simulate a long generation: the idle clock runs past the timeout while
+            // the request is still going. This is the regression — the idle monitor
+            // used to stop llama-server here, killing the in-flight request.
+            manager.setIdleCheckTime(System.currentTimeMillis() - 60_000);
+
+            assertThat(manager.getIdleSeconds()).isGreaterThanOrEqualTo(manager.getIdleTimeoutSec());
+            assertThat(manager.hasInFlightRequests()).isTrue();
+        }
+
+        @Test
+        @DisplayName("endRequest clears the in-flight marker and refreshes the idle clock")
+        void endRequestReleasesServer() {
+            manager.beginRequest();
+            manager.setIdleCheckTime(System.currentTimeMillis() - 60_000);
+
+            manager.endRequest();
+
+            assertThat(manager.hasInFlightRequests()).isFalse();
+            // The idle clock restarts on completion, so the server gets a fresh
+            // idle window rather than being stopped immediately after a long call.
+            assertThat(manager.getIdleSeconds()).isLessThan(manager.getIdleTimeoutSec());
+        }
+
+        @Test
+        @DisplayName("concurrent requests only release the server once all have finished")
+        void nestedRequestsTrackedIndependently() {
+            manager.beginRequest();
+            manager.beginRequest();
+
+            manager.endRequest();
+            assertThat(manager.hasInFlightRequests()).isTrue();
+
+            manager.endRequest();
+            assertThat(manager.hasInFlightRequests()).isFalse();
+        }
+
+        @Test
+        @DisplayName("unbalanced endRequest calls never drive the counter negative")
+        void endRequestDoesNotUnderflow() {
+            manager.endRequest();
+            manager.endRequest();
+
+            assertThat(manager.hasInFlightRequests()).isFalse();
+
+            // A subsequent real request must still register as busy.
+            manager.beginRequest();
+            assertThat(manager.hasInFlightRequests()).isTrue();
+        }
+    }
 }

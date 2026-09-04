@@ -35,6 +35,8 @@ class SynthesisServiceTest {
     private com.swingtrade.llm.client.LlmClient llmClient;
     @Mock
     private SynthesisPromptLoader promptLoader;
+    @Mock
+    private LlmServerManagerProvider serverManagerProvider;
 
     private SynthesisService service;
     private CompositeAnalysis composite;
@@ -43,7 +45,7 @@ class SynthesisServiceTest {
     void setUp() {
         when(promptLoader.getSystemPrompt()).thenReturn("You are a financial analyst.");
 
-        service = new SynthesisService(llmClientProvider, promptLoader);
+        service = new SynthesisService(llmClientProvider, promptLoader, serverManagerProvider);
 
         composite = new CompositeAnalysis(
                 "RELIANCE",

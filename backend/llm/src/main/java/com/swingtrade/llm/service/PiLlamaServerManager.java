@@ -54,6 +54,11 @@ public class PiLlamaServerManager implements LlmServerManager {
     });
     private final AtomicLong idleCheckTime = new AtomicLong(0);
 
+    // Requests currently being served. The idle monitor refuses to stop the
+    // server while this is non-zero (see beginRequest/endRequest).
+    private final java.util.concurrent.atomic.AtomicInteger inFlightRequests =
+            new java.util.concurrent.atomic.AtomicInteger(0);
+
     public PiLlamaServerManager(AppSettingsStore appSettingsStore,
                                 @Value("${llamacpp.ssh.user:dietpi}") String sshUser,
                                 @Value("${llamacpp.ssh.host:192.168.0.100}") String sshHost,
@@ -72,6 +77,11 @@ public class PiLlamaServerManager implements LlmServerManager {
 
     @Override
     public void ensureRunning() {
+        // Every LLM request calls this first, so it doubles as the "last used"
+        // marker — without it the idle clock only ever measured time since
+        // startup, and a busy server got stopped mid-request.
+        idleCheckTime.set(System.currentTimeMillis());
+
         if (isRunning()) {
             logger.debug("llama-server already running on {} port {}", sshHost, port);
             return;
@@ -184,12 +194,24 @@ public class PiLlamaServerManager implements LlmServerManager {
         ScheduledFuture<?> future = scheduler.scheduleWithFixedDelay(() -> {
             if (!isRunning()) return;
             try {
-                // Refresh idle time by checking health — only stop if truly idle
-                long idleSeconds = getIdleSeconds();
-                if (idleSeconds >= idleTimeoutSec) {
-                    logger.info("llama-server on Pi idle for {}s >= {}s and unhealthy, auto-stopping", idleSeconds, idleTimeoutSec);
-                    stop();
+                // Never stop a server that is mid-request. This cannot be inferred
+                // from /health — llama.cpp serves several slots and answers health
+                // checks happily while one slot is generating, so "responsive" does
+                // not mean "idle".
+                int active = inFlightRequests.get();
+                if (active > 0) {
+                    logger.debug("llama-server on Pi has {} in-flight request(s), deferring auto-stop", active);
+                    return;
                 }
+
+                long idleSeconds = getIdleSeconds();
+                if (idleSeconds < idleTimeoutSec) {
+                    return;
+                }
+
+                logger.info("llama-server on Pi idle for {}s >= {}s, auto-stopping",
+                        idleSeconds, idleTimeoutSec);
+                stop();
             } catch (Exception e) {
                 logger.debug("Idle monitor check failed: {}", e.getMessage());
             }
@@ -200,6 +222,23 @@ public class PiLlamaServerManager implements LlmServerManager {
     private void cancelIdleMonitor() {
         ScheduledFuture<?> f = idleMonitor.getAndSet(null);
         if (f != null) f.cancel(false);
+    }
+
+    @Override
+    public void beginRequest() {
+        inFlightRequests.incrementAndGet();
+        idleCheckTime.set(System.currentTimeMillis());
+    }
+
+    @Override
+    public void endRequest() {
+        inFlightRequests.updateAndGet(n -> n > 0 ? n - 1 : 0);
+        idleCheckTime.set(System.currentTimeMillis());
+    }
+
+    /** True while at least one request is being served. */
+    boolean hasInFlightRequests() {
+        return inFlightRequests.get() > 0;
     }
 
     long getIdleSeconds() {

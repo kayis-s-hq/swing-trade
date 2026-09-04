@@ -72,6 +72,11 @@ public class LlamaCppServerManager implements LlmServerManager {
      * @throws IllegalStateException if the server fails to start
      */
     public void ensureRunning() {
+        // Every LLM request calls this first, so it doubles as the "last used"
+        // marker — without it the idle clock only ever measured time since
+        // startup, and a busy server got stopped mid-request.
+        idleCheckTime.set(System.currentTimeMillis());
+
         if (isRunning()) {
             logger.debug("llama-server already running on port {}", port);
             return;
@@ -238,11 +243,23 @@ public class LlamaCppServerManager implements LlmServerManager {
         ScheduledFuture<?> future = scheduler.scheduleWithFixedDelay(() -> {
             if (!isRunning()) return;
             try {
-                long idleSeconds = getIdleSeconds();
-                if (idleSeconds >= idleTimeoutSec) {
-                    logger.info("llama-server idle for {}s >= {}s, auto-stopping", idleSeconds, idleTimeoutSec);
-                    stop();
+                // Never stop a server that is mid-request. This cannot be inferred
+                // from /health — llama.cpp serves several slots and answers health
+                // checks happily while one slot is generating, so "responsive" does
+                // not mean "idle".
+                int active = inFlightRequests.get();
+                if (active > 0) {
+                    logger.debug("llama-server has {} in-flight request(s), deferring auto-stop", active);
+                    return;
                 }
+
+                long idleSeconds = getIdleSeconds();
+                if (idleSeconds < idleTimeoutSec) {
+                    return;
+                }
+
+                logger.info("llama-server idle for {}s >= {}s, auto-stopping", idleSeconds, idleTimeoutSec);
+                stop();
             } catch (Exception e) {
                 logger.debug("Idle monitor check failed: {}", e.getMessage());
             }
@@ -255,10 +272,28 @@ public class LlamaCppServerManager implements LlmServerManager {
         if (f != null) f.cancel(false);
     }
 
+    @Override
+    public void beginRequest() {
+        inFlightRequests.incrementAndGet();
+        idleCheckTime.set(System.currentTimeMillis());
+    }
+
+    @Override
+    public void endRequest() {
+        inFlightRequests.updateAndGet(n -> n > 0 ? n - 1 : 0);
+        idleCheckTime.set(System.currentTimeMillis());
+    }
+
+    /** True while at least one request is being served. */
+    boolean hasInFlightRequests() {
+        return inFlightRequests.get() > 0;
+    }
+
     long getIdleSeconds() {
-        // Use the last health check time as a proxy for "last activity"
-        // Since llama.cpp doesn't expose a request timestamp in /health,
-        // we track the last successful health check as a conservative proxy
+        // "Last activity" = the most recent ensureRunning()/beginRequest()/
+        // endRequest(). llama.cpp doesn't expose a request timestamp, and its
+        // /health stays responsive mid-generation, so activity has to be tracked
+        // on this side rather than inferred from the server.
         return idleCheckTime.get() > 0 ? (System.currentTimeMillis() - idleCheckTime.get()) / 1000 : 0;
     }
 
@@ -308,4 +343,9 @@ public class LlamaCppServerManager implements LlmServerManager {
 
     /** Last successful health check timestamp (milliseconds). */
     private final AtomicLong idleCheckTime = new AtomicLong(0);
+
+    // Requests currently being served. The idle monitor refuses to stop the
+    // server while this is non-zero (see beginRequest/endRequest).
+    private final java.util.concurrent.atomic.AtomicInteger inFlightRequests =
+            new java.util.concurrent.atomic.AtomicInteger(0);
 }

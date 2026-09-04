@@ -26,10 +26,13 @@ public class SynthesisService {
 
     private final LlmClientProvider clientProvider;
     private final SynthesisPromptLoader promptLoader;
+    private final LlmServerManagerProvider serverManagerProvider;
 
-    public SynthesisService(LlmClientProvider clientProvider, SynthesisPromptLoader promptLoader) {
+    public SynthesisService(LlmClientProvider clientProvider, SynthesisPromptLoader promptLoader,
+                            LlmServerManagerProvider serverManagerProvider) {
         this.clientProvider = clientProvider;
         this.promptLoader = promptLoader;
+        this.serverManagerProvider = serverManagerProvider;
     }
 
     public SynthesisResult synthesize(CompositeAnalysis composite) {
@@ -44,8 +47,25 @@ public class SynthesisService {
         );
 
         try {
-            String llmResponse = clientProvider.getClient().generateChatCompletion(messages, MAX_TOKENS, TEMPERATURE)
-                .block(Duration.ofSeconds(TIMEOUT_SECONDS));
+            // Synthesis is the longest generation in the pipeline, so it needs the
+            // same in-flight protection as sentiment — previously it didn't even
+            // call ensureRunning(), and the idle monitor could stop llama-server
+            // mid-synthesis.
+            LlmServerManager manager = serverManagerProvider.getManager();
+            if (manager != null) {
+                manager.ensureRunning();
+                manager.beginRequest();
+            }
+            String llmResponse;
+            try {
+                llmResponse = clientProvider.getClient()
+                    .generateChatCompletion(messages, MAX_TOKENS, TEMPERATURE)
+                    .block(Duration.ofSeconds(TIMEOUT_SECONDS));
+            } finally {
+                if (manager != null) {
+                    manager.endRequest();
+                }
+            }
 
             if (llmResponse == null || llmResponse.isBlank()) {
                 logger.warn("Empty LLM response for synthesis: {}", symbol);

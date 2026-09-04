@@ -305,10 +305,19 @@ public class SentimentService {
             LlmServerManager manager = serverManagerProvider.getManager();
             if (manager != null) {
                 manager.ensureRunning();
+                manager.beginRequest();
             }
             LlmClient client = clientProvider.getClient();
-            llmResponse = client.generateChatCompletion(messages, 512, 0.3)
-                    .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+            try {
+                llmResponse = client.generateChatCompletion(messages, 512, 0.3)
+                        .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+            } finally {
+                // Release the in-flight marker so the idle monitor can retire the
+                // server again; without the pairing it would stay pinned forever.
+                if (manager != null) {
+                    manager.endRequest();
+                }
+            }
             long latencyMs = System.currentTimeMillis() - llmStart;
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), true);
             llmMetrics.recordSentimentAnalyzed();
