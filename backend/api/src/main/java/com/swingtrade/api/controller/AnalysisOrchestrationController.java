@@ -5,6 +5,7 @@ import com.swingtrade.api.service.AnalysisOrchestratorService;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,8 +27,21 @@ public class AnalysisOrchestrationController {
 
     private final AnalysisOrchestratorService orchestrator;
 
-    public AnalysisOrchestrationController(AnalysisOrchestratorService orchestrator) {
+    /**
+     * SSE stream lifetime. Must exceed the worst case of the whole pipeline, not
+     * just one stage: sentiment and synthesis each allow up to
+     * ANALYSIS_TIMEOUT_SECONDS (930s) against the CPU-bound local backend, so a
+     * slow run legitimately outlives the old hardcoded 10 minutes. When it did,
+     * the emitter closed underneath the still-running analysis and every later
+     * stage failed with "ResponseBodyEmitter has already completed".
+     */
+    private final long streamTimeoutMs;
+
+    public AnalysisOrchestrationController(
+            AnalysisOrchestratorService orchestrator,
+            @Value("${analysis.stream.timeout-ms:2400000}") long streamTimeoutMs) {
         this.orchestrator = orchestrator;
+        this.streamTimeoutMs = streamTimeoutMs;
     }
 
     @PostMapping("/analysis/run-full")
@@ -36,7 +50,7 @@ public class AnalysisOrchestrationController {
             @RequestParam String symbol,
             @RequestParam(defaultValue = "3") int backfillYears) {
 
-        SseEmitter emitter = new SseEmitter(600_000L); // 10 min timeout (Pi llama-server can be slow)
+        SseEmitter emitter = new SseEmitter(streamTimeoutMs);
 
         // Send keep-alive pings every 30s to prevent connection drop
         ScheduledExecutorService keepAlive = Executors.newSingleThreadScheduledExecutor();
