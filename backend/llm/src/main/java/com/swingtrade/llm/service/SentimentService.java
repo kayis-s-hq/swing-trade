@@ -65,12 +65,23 @@ public class SentimentService {
     // (a margin caveat or downgrade after a positive lead), so trimming too hard
     // biases the result toward whatever the opening sentence frames.
     //
-    // Sized from measured data: this scraped news text tokenizes at ~1.9
-    // chars/token on this model (vs ~3.7 for clean prose — URLs, entities and
-    // punctuation tokenize poorly). 10 articles x 1000 chars ~= 5300 tokens, plus
-    // the ~755-char system prompt (~400 tokens) ~= 5700, leaving ~2400 tokens of
-    // headroom in the 8192 context for the 512-token completion.
-    private static final int MAX_ARTICLE_CHARS = 1000;
+    // Sized from measured throughput, not from the context limit. Two numbers
+    // measured on this Pi (Qwen3-4B, llamacpp.threads=2):
+    //   * prompt eval runs at ~7 tokens/sec
+    //   * this scraped news text tokenizes at ~1.9 chars/token (vs ~3.7 for clean
+    //     prose — URLs, entities and punctuation tokenize poorly)
+    //
+    // Prompt length therefore sets the wall-clock cost almost entirely, and it is
+    // the dominant CPU/heat cost per request:
+    //   10 x 1000 chars -> ~5300 tokens -> ~13 min of prompt eval alone, which
+    //   overran ANALYSIS_TIMEOUT_SECONDS and failed outright.
+    //   10 x  450 chars -> ~2400 tokens -> ~6 min, plus ~1 min to generate.
+    //
+    // 450 is a real quality trade-off — catalysts and red flags sometimes sit
+    // past the lead — but full article bodies cost ~22 min of pegged CPU per
+    // symbol, which across a watchlist is hours of sustained load. Raise this
+    // only alongside more threads or a smaller sentiment model.
+    private static final int MAX_ARTICLE_CHARS = 450;
 
     // Thread pool for async operations
     private final ExecutorService analysisExecutor;
@@ -144,7 +155,7 @@ public class SentimentService {
         }
         String truncated = text.substring(0, MAX_ARTICLE_CHARS);
         int lastSpace = truncated.lastIndexOf(' ');
-        if (lastSpace > MAX_ARTICLE_CHARS - 100) {
+        if (lastSpace > MAX_ARTICLE_CHARS - 60) {
             truncated = truncated.substring(0, lastSpace);
         }
         return truncated + "...";
