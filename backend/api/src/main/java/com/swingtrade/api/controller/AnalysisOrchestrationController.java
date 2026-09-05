@@ -29,17 +29,25 @@ public class AnalysisOrchestrationController {
 
     /**
      * SSE stream lifetime. Must exceed the worst case of the whole pipeline, not
-     * just one stage: sentiment and synthesis each allow up to
-     * ANALYSIS_TIMEOUT_SECONDS (930s) against the CPU-bound local backend, so a
-     * slow run legitimately outlives the old hardcoded 10 minutes. When it did,
-     * the emitter closed underneath the still-running analysis and every later
-     * stage failed with "ResponseBodyEmitter has already completed".
+     * just one stage: sentiment and synthesis each allow up to their own
+     * ANALYSIS_TIMEOUT_SECONDS/TIMEOUT_SECONDS (2880s each) against the CPU-bound
+     * local backend, so a slow run legitimately outlives the old hardcoded 10
+     * minutes. When it did, the emitter closed underneath the still-running
+     * analysis and every later stage failed with "ResponseBodyEmitter has
+     * already completed".
+     *
+     * 120 min = both LLM stages at their worst case back-to-back (~96 min, sized
+     * from measured decode throughput INCLUDING mid-request thermal-throttling
+     * decay — see LlmConfig.LOCAL_LLAMA_TIMEOUT's javadoc) plus headroom for the
+     * non-LLM pipeline stages around them. A real observed run finished in well
+     * under a quarter of this (36 min); this ceiling exists for the rare
+     * worst-case run, not the typical one.
      */
     private final long streamTimeoutMs;
 
     public AnalysisOrchestrationController(
             AnalysisOrchestratorService orchestrator,
-            @Value("${analysis.stream.timeout-ms:2400000}") long streamTimeoutMs) {
+            @Value("${analysis.stream.timeout-ms:7200000}") long streamTimeoutMs) {
         this.orchestrator = orchestrator;
         this.streamTimeoutMs = streamTimeoutMs;
     }

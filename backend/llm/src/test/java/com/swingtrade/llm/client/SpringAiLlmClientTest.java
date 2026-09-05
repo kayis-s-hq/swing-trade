@@ -41,6 +41,8 @@ class SpringAiLlmClientTest {
         org.mockito.Mockito.lenient().when(chatClient.prompt()).thenReturn(requestSpec);
         org.mockito.Mockito.lenient().when(requestSpec.system(anyString())).thenReturn(requestSpec);
         org.mockito.Mockito.lenient().when(requestSpec.user(anyString())).thenReturn(requestSpec);
+        org.mockito.Mockito.lenient().when(requestSpec.options(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(requestSpec);
         org.mockito.Mockito.lenient().when(requestSpec.call()).thenReturn(callSpec);
         org.mockito.Mockito.lenient().when(callSpec.chatResponse()).thenReturn(chatResponse);
         org.mockito.Mockito.lenient().when(chatResponse.getResult()).thenReturn(generation);

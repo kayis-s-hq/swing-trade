@@ -3,6 +3,7 @@ package com.swingtrade.llm.client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -49,9 +50,17 @@ public class SpringAiLlmClient implements LlmClient {
         logger.debug("Generating chat completion (CoT: {}, maxTokens: {}, temperature: {})",
                 enableCoT, maxTokens, temperature);
 
+        // maxTokens/temperature must be set per-call via .options(), not just logged:
+        // without this, no max_tokens is sent at all and llama-server falls back to
+        // its own (effectively unbounded) default, so generation only stops at EOS
+        // or by running the KV cache into the context ceiling — indistinguishable
+        // from a genuine "prompt too long" 400 once the prompt leaves little headroom.
         var promptBuilder = chatClient.prompt()
                 .system(effectiveSystemPrompt)
-                .user(userPrompt);
+                .user(userPrompt)
+                .options(OpenAiChatOptions.builder()
+                        .maxTokens(maxTokens)
+                        .temperature(temperature));
 
         // Get the full ChatResponse to handle vLLM reasoning field quirk
         var response = promptBuilder

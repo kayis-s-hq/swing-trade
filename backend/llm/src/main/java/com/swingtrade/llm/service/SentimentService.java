@@ -53,35 +53,38 @@ public class SentimentService {
 
     private static final Logger logger = LoggerFactory.getLogger(SentimentService.class);
 
-    // Must stay comfortably above LlmConfig's LOCAL_LLAMA_TIMEOUT (900s) for the
+    // Must stay comfortably above LlmConfig's LOCAL_LLAMA_TIMEOUT (2850s) for the
     // CPU-bound local backends, or this outer deadline cuts the call off before
-    // the client's own timeout ever gets a chance to fire.
-    private static final long ANALYSIS_TIMEOUT_SECONDS = 930;
+    // the client's own timeout ever gets a chance to fire. See LOCAL_LLAMA_TIMEOUT's
+    // javadoc for the measured prompt-eval-vs-decode throughput this is sized
+    // from — including the mid-request thermal-throttling decay that made the
+    // first two attempts at this number (930s, then 1830s) both too tight.
+    private static final long ANALYSIS_TIMEOUT_SECONDS = 2880;
     private static final int MAX_ARTICLES_FOR_LLM = 10;
 
-    // Per-article character cap. This is a safety bound to keep the prompt inside
-    // llamacpp.context (8192), NOT a quality knob to be tightened casually: the
+    // Per-article character cap. This exists ONLY to keep the worst case (10
+    // articles, all at the cap) under llamacpp.context (8192) — it is not a
+    // throughput/heat knob. Deliberately NOT sized from prompt-eval speed: the
     // prompt asks for catalysts and red flags, and those often sit mid-article
-    // (a margin caveat or downgrade after a positive lead), so trimming too hard
-    // biases the result toward whatever the opening sentence frames.
+    // (a margin caveat or downgrade after a positive lead), so trimming for
+    // speed biases the result toward whatever the opening sentence frames.
+    // Longer analysis time is the accepted trade-off, backstopped by
+    // PiThermalGuard (temperature-based backoff) rather than by cutting content.
     //
-    // Sized from measured throughput, not from the context limit. Two numbers
-    // measured on this Pi (Qwen3-4B, llamacpp.threads=2):
-    //   * prompt eval runs at ~7 tokens/sec
-    //   * this scraped news text tokenizes at ~1.9 chars/token (vs ~3.7 for clean
-    //     prose — URLs, entities and punctuation tokenize poorly)
-    //
-    // Prompt length therefore sets the wall-clock cost almost entirely, and it is
-    // the dominant CPU/heat cost per request:
-    //   10 x 1000 chars -> ~5300 tokens -> ~13 min of prompt eval alone, which
-    //   overran ANALYSIS_TIMEOUT_SECONDS and failed outright.
-    //   10 x  450 chars -> ~2400 tokens -> ~6 min, plus ~1 min to generate.
-    //
-    // 450 is a real quality trade-off — catalysts and red flags sometimes sit
-    // past the lead — but full article bodies cost ~22 min of pegged CPU per
-    // symbol, which across a watchlist is hours of sustained load. Raise this
-    // only alongside more threads or a smaller sentiment model.
-    private static final int MAX_ARTICLE_CHARS = 450;
+    // Math, from measured throughput on this Pi (Qwen3-4B, llamacpp.threads=2):
+    //   * this scraped news text tokenizes at ~1.9 chars/token
+    //   * fixed prompt scaffolding (system + user template, no articles) is
+    //     ~1341 chars
+    //   * budget = context(8192) - response(512 max_tokens) = 7680 tokens
+    //     -> ~14,592 chars total prompt -> ~13,251 chars left for article
+    //     content after scaffolding -> ~1325 chars/article across 10 articles
+    // 1200 leaves an ~8% margin under that ceiling for token-ratio variance,
+    // instead of cutting into it. At 7 tok/s prompt eval that's a worst case of
+    // ~17 min of prompt eval alone (ANALYSIS_TIMEOUT_SECONDS and
+    // LlmConfig.LOCAL_LLAMA_TIMEOUT are both sized to cover it) — slower, not
+    // shallower. Raising this further needs a larger llamacpp.context, not a
+    // smaller margin.
+    private static final int MAX_ARTICLE_CHARS = 1200;
 
     // Thread pool for async operations
     private final ExecutorService analysisExecutor;
@@ -214,7 +217,7 @@ public class SentimentService {
             try {
                 analysisResult = performSentimentAnalysis(stockSymbol, date, newsContent);
             } catch (Exception llmEx) {
-                logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", stockSymbol, llmEx.getMessage());
+                logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", stockSymbol, LlmErrorUtils.describeError(llmEx));
                 // Build a simple result from headlines
                 List<String> headlines = newsContent.stream().toList();
                 SentimentResult fallback = keywordBasedSentiment(stockSymbol, headlines);
@@ -346,8 +349,9 @@ public class SentimentService {
                     startedAt, latencyMs);
             return parsed;
         } catch (Exception e) {
+            String errorDetail = LlmErrorUtils.describeError(e);
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion, promptHash,
-                    messages, null, null, "FAILED", e.getMessage(), startedAt,
+                    messages, null, null, "FAILED", errorDetail, startedAt,
                     System.currentTimeMillis() - llmStart);
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), false);
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
@@ -359,7 +363,7 @@ public class SentimentService {
                         0.2
                 );
             }
-            logger.error("Error during LLM sentiment analysis: {}", e.getMessage(), e);
+            logger.error("Error during LLM sentiment analysis: {}", errorDetail, e);
             throw e;
         }
 

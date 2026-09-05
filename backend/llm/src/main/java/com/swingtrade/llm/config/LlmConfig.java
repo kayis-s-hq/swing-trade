@@ -71,11 +71,43 @@ public class LlmConfig {
      * practice: generation time on this Pi varies run to run (289s one run, >570s
      * the next, same prompt shape) — with zero retries, hitting the ceiling
      * discards an almost-finished generation, wasting the CPU/heat already spent
-     * for nothing. 900s gives real, slow-but-working calls room to finish; the
-     * outer Mono#block deadlines in SentimentService/SynthesisService are widened
-     * to 930s to match (see their TIMEOUT_SECONDS/ANALYSIS_TIMEOUT_SECONDS).
+     * for nothing. 900s gave real, slow-but-working calls room to finish at the
+     * time.
+     *
+     * Raised again to 2850s when SentimentService.MAX_ARTICLE_CHARS went from a
+     * throughput-driven 450 to a context-budget-driven 1200 chars/article: full
+     * (uncapped-for-speed) article content is worth more prompt-eval time, not
+     * less content — see MAX_ARTICLE_CHARS's javadoc for the token math.
+     *
+     * Two earlier attempts at this number (1400s, then 1800s) were both measured
+     * too tight, for two compounding reasons:
+     *
+     * 1. Decode ("eval") throughput on this Pi is NOT the same as prompt-eval
+     *    throughput — decode is single-token/sequential (no batching benefit),
+     *    so it is far more memory-latency-bound. A real run's llama-server
+     *    timing log measured decode as slow as 0.54 tokens/sec.
+     * 2. Prompt-eval throughput is not even CONSTANT within one request: the run
+     *    that produced the 0.54 tok/s decode number started prompt eval at 8.28
+     *    tokens/sec and had degraded to a 4.34 tokens/sec cumulative average by
+     *    the time its ~6680-token prompt finished evaluating 26 minutes later —
+     *    consistent with thermal throttling building up over a single long call,
+     *    not just run-to-run noise.
+     *
+     * That run got lucky: the model stopped at 111 decoded tokens, not the 512
+     * the request allowed. Sizing for the real worst case — MAX_ARTICLE_CHARS's
+     * ~7000-token prompt ceiling, decoding the full 512-token response, at the
+     * worst sustained rates actually observed (~4.0 tok/s eval, ~0.5 tok/s
+     * decode) — gives:
+     *   prompt eval 7000/4.0 ~= 1750s, decode 512/0.5 ~= 1024s, total ~= 2774s.
+     * 2850s leaves a small margin over that. The outer Mono#block deadlines in
+     * SentimentService/SynthesisService are widened to 2880s to match (see their
+     * TIMEOUT_SECONDS/ANALYSIS_TIMEOUT_SECONDS), and
+     * AnalysisOrchestrationController's SSE emitter timeout covers both stages
+     * back-to-back at that ceiling. Yes, this means a genuinely worst-case run
+     * can legitimately take well over an hour — that is the real cost of not
+     * trimming article content for speed on this hardware, not a bug.
      */
-    private static final Duration LOCAL_LLAMA_TIMEOUT = Duration.ofSeconds(900);
+    private static final Duration LOCAL_LLAMA_TIMEOUT = Duration.ofSeconds(2850);
     private static final int LOCAL_LLAMA_MAX_RETRIES = 0;
 
     @Bean

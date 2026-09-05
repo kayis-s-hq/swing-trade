@@ -87,6 +87,22 @@ public class PiLlamaServerManager implements LlmServerManager {
             return;
         }
 
+        // `running` only reflects what THIS JVM instance itself started — it
+        // resets to false on every app restart, even though llama-server is a
+        // detached ("nohup ... & disown") process on the Pi that keeps running
+        // across app restarts. Without checking the real Pi state here, every
+        // restart re-attempted a fresh SSH launch that failed to bind the
+        // already-used port, silently masked because the health poll right
+        // after found the pre-existing server healthy anyway — wasted, noisy
+        // "Starting llama-server..." + bind-failure log churn on every restart.
+        if (healthCheck()) {
+            logger.info("llama-server on Pi already running and healthy on {}:{} (adopting existing process)",
+                    sshHost, port);
+            running = true;
+            startIdleMonitor();
+            return;
+        }
+
         if (!starting.compareAndSet(false, true)) {
             logger.debug("Another thread is starting llama-server on Pi, waiting...");
             while (!isRunning()) {

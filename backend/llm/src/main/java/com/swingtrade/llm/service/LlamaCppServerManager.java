@@ -82,6 +82,18 @@ public class LlamaCppServerManager implements LlmServerManager {
             return;
         }
 
+        // `isRunning()` tracks a Process handle owned by THIS JVM instance — it
+        // is null after every app restart even though llama-server is a
+        // separate OS process that outlives the JVM that spawned it. Without
+        // this check, a restart with a still-alive server from the previous
+        // instance would hit startServer()'s "port already in use by another
+        // process" IllegalStateException instead of just working.
+        if (healthCheck()) {
+            logger.info("llama-server already running and healthy on port {} (adopting existing process)", port);
+            startIdleMonitor();
+            return;
+        }
+
         if (!starting.compareAndSet(false, true)) {
             // Another thread is already starting — wait for it
             logger.debug("Another thread is starting llama-server, waiting...");
