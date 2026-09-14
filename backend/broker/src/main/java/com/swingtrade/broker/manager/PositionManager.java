@@ -57,22 +57,17 @@ public class PositionManager {
         BigDecimal stopLoss = calculateStopLoss(entryPrice, direction, atr);
         BigDecimal target = calculateTarget(entryPrice, stopLoss, direction);
 
-        Position position = new Position(
-            null,
-            "PAPER",
+        Position position = Position.openPaper(
+            positionId,
             symbol,
-            entryPrice,
-            LocalDate.now(),
+            direction,
             quantity,
+            entryPrice,
             stopLoss,
             target,
-            PositionStatus.OPEN,
             entryReason,
-            entryPrice,
-            positionId, null, null,
-            direction,
-            null, BigDecimal.ZERO, BigDecimal.ZERO, null,
-            LocalDateTime.now(), null, null, null
+            LocalDate.now(),
+            LocalDateTime.now()
         );
 
         positions.put(positionId, position);
@@ -136,31 +131,7 @@ public class PositionManager {
             unrealizedPnL = position.entryPrice().subtract(currentPrice).multiply(BigDecimal.valueOf(position.quantity()));
         }
 
-        Position updated = new Position(
-            position.id(),
-            position.brokerType(),
-            position.symbol(),
-            position.entryPrice(),
-            position.entryDate(),
-            position.quantity(),
-            position.stopLoss(),
-            position.target(),
-            position.status(),
-            position.entryReason(),
-            currentPrice,
-            position.positionId(),
-            position.brokerPositionId(),
-            position.exchange(),
-            position.direction(),
-            position.averagePrice(),
-            unrealizedPnL,
-            position.realizedPnL(),
-            position.marginUtilized(),
-            position.entryTime(),
-            position.exitTime(),
-            position.exitReason(),
-            position.orders()
-        );
+        Position updated = position.withValuation(currentPrice, unrealizedPnL);
 
         positions.put(positionId, updated);
         return updated;
@@ -281,58 +252,19 @@ public class PositionManager {
         BigDecimal currentUnrealized = position.unrealizedPnL();
 
         // Update quantity and track realized P&L
-        Position updated = new Position(
-            position.id(),
-            position.brokerType(),
-            position.symbol(),
-            position.entryPrice(),
-            position.entryDate(),
+        Position updated = position.withQuantityAndRealizedPnL(
             remainingQuantity,
-            position.stopLoss(),
-            position.target(),
-            position.status(),
-            position.entryReason(),
-            position.currentPrice(),
-            position.positionId(),
-            position.brokerPositionId(),
-            position.exchange(),
-            position.direction(),
-            position.averagePrice(),
-            currentUnrealized,
-            position.realizedPnL().add(realizedPnL),
-            position.marginUtilized(),
-            position.entryTime(),
-            position.exitTime(),
-            position.exitReason(),
-            position.orders()
-        );
+            position.realizedPnL().add(realizedPnL)
+        ).withValuation(position.currentPrice(), currentUnrealized);
 
         if (remainingQuantity == 0) {
             // Full exit
-            updated = new Position(
-                updated.id(),
-                updated.brokerType(),
-                updated.symbol(),
-                updated.entryPrice(),
-                updated.entryDate(),
-                updated.quantity(),
-                updated.stopLoss(),
-                null,
+            updated = updated.close(
                 PositionStatus.CLOSED,
-                updated.entryReason(),
-                updated.currentPrice(),
-                updated.positionId(),
-                updated.brokerPositionId(),
-                updated.exchange(),
-                updated.direction(),
-                updated.averagePrice(),
-                updated.unrealizedPnL(),
                 updated.realizedPnL(),
-                updated.marginUtilized(),
-                updated.entryTime(),
                 LocalDateTime.now(),
                 "Position fully exited at " + exitPrice,
-                updated.orders()
+                null
             );
             positions.put(positionId, updated);
             logger.info("Closed position {} (full exit) at {} - Realized P&L: {}",
@@ -440,31 +372,7 @@ public class PositionManager {
 
         BigDecimal realizedPnL = calculatePositionPnL(position, exitPrice);
 
-        Position updated = new Position(
-            position.id(),
-            position.brokerType(),
-            position.symbol(),
-            position.entryPrice(),
-            position.entryDate(),
-            position.quantity(),
-            position.stopLoss(),
-            position.target(),
-            status,
-            position.entryReason(),
-            position.currentPrice(),
-            position.positionId(),
-            position.brokerPositionId(),
-            position.exchange(),
-            position.direction(),
-            position.averagePrice(),
-            position.unrealizedPnL(),
-            realizedPnL,
-            position.marginUtilized(),
-            position.entryTime(),
-            LocalDateTime.now(),
-            reason,
-            position.orders()
-        );
+        Position updated = position.close(status, realizedPnL, LocalDateTime.now(), reason, position.target());
 
         positions.put(position.positionId(), updated);
 

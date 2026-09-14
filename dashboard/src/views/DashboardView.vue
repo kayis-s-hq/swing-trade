@@ -323,7 +323,7 @@
                 >
               </div>
               <svg
-                v-if="equityPath"
+                v-if="equityPath && !equityError"
                 class="dashboard-sparkline mt-3"
                 viewBox="0 0 320 48"
                 preserveAspectRatio="none"
@@ -335,8 +335,18 @@
                   stroke="currentColor"
                   stroke-width="2"
                   stroke-linecap="round"
-                />
+                  />
               </svg>
+              <div v-else-if="equityError" class="mt-3 flex items-center justify-between gap-3">
+                <p class="text-xs text-text-muted">Equity curve is temporarily unavailable.</p>
+                <button
+                  class="text-xs font-medium text-brand hover:underline"
+                  type="button"
+                  @click="refreshEquityCurve"
+                >
+                  Retry
+                </button>
+              </div>
               <p v-else class="mt-3 text-xs text-text-muted">
                 Not enough closed-trade data for a curve yet.
               </p>
@@ -393,6 +403,7 @@ const riskSummary = ref<RiskSummary | null>(null)
 const signals = ref<Signal[]>([])
 const watchlist = ref<WatchlistEntry[]>([])
 const equityPoints = ref<EquityPoint[]>([])
+const equityError = ref<AppError | null>(null)
 const lastUpdated = ref('--:--')
 
 const pnlClass = (value?: number | null) =>
@@ -416,6 +427,17 @@ const equityPath = computed(() => {
     .join(' ')
 })
 
+const refreshEquityCurve = async () => {
+  equityError.value = null
+  try {
+    const value = await getEquityCurve('1M')
+    equityPoints.value = value.data
+  } catch (cause) {
+    equityPoints.value = []
+    equityError.value = asAppError(cause)
+  }
+}
+
 const loadPositions = async () => {
   positionsError.value = null
   try {
@@ -435,7 +457,7 @@ const refreshDashboard = async () => {
     getRiskSummary().then((value) => (riskSummary.value = value)),
     getSignals().then((value) => (signals.value = value)),
     getWatchlist().then((value) => (watchlist.value = value)),
-    getEquityCurve('1M').then((value) => (equityPoints.value = value.data)),
+    refreshEquityCurve(),
   ])
   lastUpdated.value = new Date().toLocaleTimeString('en-IN', {
     hour: '2-digit',

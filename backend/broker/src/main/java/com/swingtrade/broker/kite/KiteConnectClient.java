@@ -7,6 +7,9 @@ import com.swingtrade.domain.Exchange;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.OrderType;
 import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionEntry;
+import com.swingtrade.domain.PositionRisk;
+import com.swingtrade.domain.PositionValuation;
 import com.swingtrade.domain.TradeDirection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -407,17 +410,30 @@ public class KiteConnectClient implements BrokerClient {
      */
     private Position mapHoldingToPosition(Map<String, Object> holding) {
         String exchangeValue = holding.get("exchange") != null ? (String) holding.get("exchange") : "NSE";
+        BigDecimal averagePrice = holding.get("average_price") != null
+                ? new BigDecimal(holding.get("average_price").toString())
+                : BigDecimal.ZERO;
         return new Position(
-                null, "Fyers",
-                (String) holding.get("tradingsymbol"),
-                holding.get("average_price") != null ? new BigDecimal(holding.get("average_price").toString()) : BigDecimal.ZERO,
                 null,
-                holding.get("quantity") != null ? Integer.valueOf(holding.get("quantity").toString()) : 0,
-                null, null, null, null, null,
-                (String) holding.get("instrument_key"), null,
-                exchangeValue.equals("NSE") ? Exchange.NSE : Exchange.BSE,
-                TradeDirection.LONG,
-                null, null, null, null, null, null, null, null
+                "Fyers",
+                PositionEntry.of(
+                        (String) holding.get("tradingsymbol"),
+                        averagePrice,
+                        null,
+                        holding.get("quantity") != null ? Integer.valueOf(holding.get("quantity").toString()) : 0,
+                        null,
+                        null,
+                        (String) holding.get("instrument_key"),
+                        null,
+                        exchangeValue.equals("NSE") ? Exchange.NSE : Exchange.BSE,
+                        TradeDirection.LONG,
+                        averagePrice
+                ),
+                new PositionRisk(null, null, BigDecimal.ZERO),
+                new PositionValuation(averagePrice, BigDecimal.ZERO, BigDecimal.ZERO),
+                null,
+                null,
+                null
         );
     }
 

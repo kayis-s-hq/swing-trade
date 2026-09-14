@@ -142,7 +142,7 @@ Verified via Playwright 2026-08-30 against a running dev stack.
 
 - [x] Dashboard loading at localhost:3003 (Vue dev server; backend API is 8080)
 - [x] Application branding uses “Swing Trade” in the browser tab, sidebar, settings copy, and monitoring dashboard metadata.
-- [x] Equity curve rendering — but only on `/portfolio` (`PortfolioView.vue` + `PerformanceMetrics.vue`), not on `/`. Decide: fix checklist to point at `/portfolio`, or add the curve to the Dashboard route.
+- [x] Equity curve rendering — `/` now shows a one-month sparkline from `getEquityCurve('1M')`, while `/portfolio` provides the full range-selectable chart. Dashboard tests cover populated, empty, and isolated error/retry states (verified 2026-09-14).
 - [x] Open positions showing with live LTP — field is wired end-to-end (`GET /api/positions` → 200, CURRENT column populated). "Live" itself unverified: checked while market closed, `currentPrice == entryPrice` for all open positions with no tick to observe. Re-check during live market hours.
 - [x] Signals table showing today's signals — `/signals` renders 42 signals, today's (`generatedAt: 2026-08-29`, ids 422–435, mostly SELL from the new exit-confluence logic) are present. Not strictly date-filtered — shows today mixed with recent history, not a today-only view.
 - [x] **Auto-refresh working every 60 seconds.** Dashboard, portfolio, positions, and signals views refresh their live data on a 60-second timer and clean up timers on navigation.

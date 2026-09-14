@@ -148,4 +148,71 @@ describe('DashboardView — independent section failures', () => {
 
     wrapper.unmount()
   })
+
+  it('renders the one-month equity curve when enough points are available', async () => {
+    apiMocks.getPositions.mockResolvedValue([position])
+    apiMocks.getEquityCurve.mockResolvedValue({
+      data: [
+        { date: '2026-08-01', value: 250000 },
+        { date: '2026-08-15', value: 252000 },
+      ],
+    })
+
+    const wrapper = await mountDashboard()
+    await flushPromises()
+
+    const chart = wrapper.find('svg[aria-label="One month equity curve"]')
+    expect(chart.exists()).toBe(true)
+    expect(chart.find('path').attributes('d')).toContain('M')
+
+    wrapper.unmount()
+  })
+
+  it('shows the empty equity state when fewer than two points are available', async () => {
+    apiMocks.getPositions.mockResolvedValue([position])
+
+    const wrapper = await mountDashboard()
+    await flushPromises()
+
+    expect(wrapper.find('svg[aria-label="One month equity curve"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Not enough closed-trade data for a curve yet.')
+
+    wrapper.unmount()
+  })
+
+  it('keeps the dashboard visible and retries only the failed equity section', async () => {
+    apiMocks.getPositions.mockResolvedValue([position])
+    apiMocks.getEquityCurve
+      .mockRejectedValueOnce(
+        new AppError({
+          kind: 'network',
+          message: 'Equity endpoint unavailable',
+          retryable: true,
+        })
+      )
+      .mockResolvedValueOnce({
+        data: [
+          { date: '2026-08-01', value: 250000 },
+          { date: '2026-08-15', value: 252000 },
+        ],
+      })
+
+    const wrapper = await mountDashboard()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Portfolio at a glance')
+    expect(wrapper.text()).toContain('Equity curve is temporarily unavailable.')
+    const retry = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === 'Retry' && button.element.closest('.border-t'))
+    expect(retry).toBeDefined()
+
+    await retry!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('svg[aria-label="One month equity curve"]').exists()).toBe(true)
+    expect(apiMocks.getEquityCurve).toHaveBeenCalledTimes(2)
+
+    wrapper.unmount()
+  })
 })

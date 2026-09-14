@@ -2,7 +2,11 @@ package com.swingtrade.data.entity;
 
 import com.swingtrade.domain.Exchange;
 import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PositionEntry;
+import com.swingtrade.domain.PositionExit;
+import com.swingtrade.domain.PositionRisk;
 import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.PositionValuation;
 import com.swingtrade.domain.TradeDirection;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -158,28 +162,26 @@ public class PositionEntity {
     }
 
     public Position toDomain() {
-        return Position.of(
-            id, brokerType,
-            symbol,
-            entryPrice,
-            entryDate,
-            quantity,
-            stopLoss,
-            target,
+        return new Position(
+            id,
+            brokerType,
+            PositionEntry.of(
+                symbol,
+                entryPrice,
+                entryDate,
+                quantity,
+                entryTime,
+                entryReason,
+                positionId,
+                brokerPositionId,
+                exchange != null ? Exchange.fromCode(exchange) : null,
+                direction != null ? TradeDirection.valueOf(direction) : TradeDirection.LONG,
+                averagePrice
+            ),
+            new PositionRisk(stopLoss, target, marginUtilized),
+            new PositionValuation(currentPrice, unrealizedPnL, realizedPnL),
             status != null ? PositionStatus.valueOf(status) : PositionStatus.OPEN,
-            entryReason,
-            currentPrice,
-            positionId,
-            brokerPositionId,
-            exchange != null ? Exchange.fromCode(exchange) : null,
-            direction != null ? TradeDirection.valueOf(direction) : TradeDirection.LONG,
-            averagePrice,
-            unrealizedPnL,
-            realizedPnL,
-            marginUtilized,
-            entryTime,
-            exitTime,
-            exitReason,
+            exitTime == null && exitReason == null ? null : new PositionExit(exitTime, exitReason),
             null
         );
     }
