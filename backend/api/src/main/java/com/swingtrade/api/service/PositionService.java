@@ -22,6 +22,7 @@ import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.data.entity.StockEntity;
 import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.strategy.ExitReason;
+import jakarta.persistence.EntityManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -53,11 +54,13 @@ public class PositionService {
     private final OrderService orderService;
     private final CandleStore candleStore;
     private final TradeStore tradeStore;
+    private final EntityManager entityManager;
 
     public PositionService(PositionStore positionStore, StockStore stockStore,
                            PositionRepository positionRepository,
                            TradingService tradingService, OrderService orderService,
-                           CandleStore candleStore, TradeStore tradeStore) {
+                           CandleStore candleStore, TradeStore tradeStore,
+                           EntityManager entityManager) {
         this.positionStore = positionStore;
         this.stockStore = stockStore;
         this.positionRepository = positionRepository;
@@ -65,6 +68,7 @@ public class PositionService {
         this.orderService = orderService;
         this.candleStore = candleStore;
         this.tradeStore = tradeStore;
+        this.entityManager = entityManager;
     }
 
     /**
@@ -302,7 +306,15 @@ public class PositionService {
 
         PositionEntity savedEntity;
         if (closedInEngine) {
-            savedEntity = positionRepository.findById(entity.getId()).orElse(entity);
+            // tradingService.closePosition() above committed its update via a
+            // REQUIRES_NEW transaction on a *different* persistence context, so this
+            // method's own EntityManager still has `entity` cached (by id) from the
+            // findById at the top of this method and would otherwise hand back that
+            // stale, pre-close snapshot instead of hitting the DB. Refresh the managed
+            // entity from the DB so we return/persist-on-top-of the row the engine
+            // just committed (correct status/currentPrice/realizedPnL/exitReason).
+            entityManager.refresh(entity);
+            savedEntity = entity;
         } else {
             entity.setStatus(PositionStatus.CLOSED.name());
             entity.setCurrentPrice(exitPrice);

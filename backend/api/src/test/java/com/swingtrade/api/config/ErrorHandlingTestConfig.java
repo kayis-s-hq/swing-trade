@@ -8,11 +8,21 @@ import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.domain.store.WatchlistStore;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
-@SpringBootApplication
+// Deliberately @TestConfiguration, not @SpringBootApplication: this class lives under
+// com.swingtrade.api.config, inside SwingTradeApiApplication's explicit @ComponentScan
+// basePackages. @TestConfiguration is excluded from Spring Boot's app-level component
+// scanning (SpringBootExcludeFilter), so it stays invisible to any @SpringBootTest that
+// loads the real application context (e.g. full-stack integration tests) while remaining
+// usable here via explicit @ContextConfiguration(classes = ErrorHandlingTestConfig.class).
+// Previously being @SpringBootApplication made it a scannable @Configuration whose mock
+// @Bean definitions (positionService, performanceService, signalService, scanService)
+// silently replaced the real beans in unrelated integration tests, because
+// spring.main.allow-bean-definition-overriding=true is set for the app.
+@TestConfiguration
 @Import({PositionController.class, SignalController.class})
 public class ErrorHandlingTestConfig {
 

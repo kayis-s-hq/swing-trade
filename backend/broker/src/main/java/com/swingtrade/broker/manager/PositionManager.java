@@ -372,7 +372,13 @@ public class PositionManager {
 
         BigDecimal realizedPnL = calculatePositionPnL(position, exitPrice);
 
-        Position updated = position.close(status, realizedPnL, LocalDateTime.now(), reason, position.target());
+        // Refresh the valuation's currentPrice to the actual exit price before closing.
+        // Position.close() carries forward whatever currentPrice() already holds, which
+        // is only refreshed by the EOD mark-to-market cron - so without this, a
+        // signal-triggered close persists the stale (possibly never-updated entry) price
+        // instead of the real market price that triggered the exit.
+        Position priced = position.withValuation(exitPrice, position.calculateUnrealizedPnL(exitPrice));
+        Position updated = priced.close(status, realizedPnL, LocalDateTime.now(), reason, position.target());
 
         positions.put(position.positionId(), updated);
 

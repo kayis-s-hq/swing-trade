@@ -2,8 +2,6 @@ package com.swingtrade.broker.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
@@ -14,12 +12,25 @@ import java.math.BigDecimal;
 @Table(name = "paper_trading_portfolio")
 public class PaperTradingPortfolioEntity {
 
+    // Deliberately no @GeneratedValue: this table is a fixed singleton row and every
+    // caller (PaperTradingStateService.loadPortfolio()/savePortfolio()) always sets id=1L
+    // explicitly rather than letting Hibernate generate it. Combining a manually-assigned
+    // id with GenerationType.IDENTITY made Hibernate's unsaved-value heuristic treat a
+    // brand-new instance as a "detached" (already-persisted) entity as soon as
+    // entity.setId(1L) ran, so persist() on the very first insert (empty table) failed with
+    // "Detached entity with generated id '1' has an uninitialized version value".
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Must stay null (no default initializer) for a transient instance: Spring Data's
+    // isNew() check for @Version entities is "version == null" to decide persist() vs
+    // merge(). A "= 0" default made every brand-new instance (e.g. the
+    // .orElse(new PaperTradingPortfolioEntity()) fallback in
+    // PaperTradingStateService.savePortfolio()) look already-persisted, so save() routed
+    // it through merge() instead of persist() on its very first write, and Hibernate threw
+    // StaleObjectStateException because no row with that id/version actually existed yet.
     @Version
-    private Integer version = 0;
+    private Integer version;
 
     @Column(name = "portfolio_id", length = 32)
     private String portfolioId;

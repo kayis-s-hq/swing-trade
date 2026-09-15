@@ -162,9 +162,43 @@ cd backend
 
 ## Phase 3 — Provide Docker-capable SELL integration verification
 
-**Status: deferred.** The test remains ready, but it has not been run because
-this environment uses a remote Docker context and no GitHub Actions workflow is
-being added.
+**Status: complete.** A local Docker daemon (colima) was installed and
+configured on this machine. `SignalPipelineSellExitIntegrationTest` now runs
+and passes green. Getting it running and green surfaced and fixed four real
+pre-existing bugs (none related to Docker/Testcontainers infrastructure once
+that was wired up):
+
+1. `ErrorHandlingTestConfig` (a `@WebMvcTest`-only mock-bean config) was
+   annotated `@SpringBootApplication`, so it was picked up by the full
+   `@SpringBootTest` component scan and silently replaced the real
+   `PositionService` bean with a mock (`allow-bean-definition-overriding=true`
+   masked this). Fixed by changing it to `@TestConfiguration` and adding an
+   explicit `@ComponentScan` exclude filter for `TestConfiguration` classes in
+   `SwingTradeApiApplication`.
+2. `PaperTradingPortfolioEntity.version` had a `= 0` default that broke Spring
+   Data's new-vs-existing detection for `@Version` entities, routing the first
+   write through `merge()` instead of `persist()`.
+3. Same entity's `@GeneratedValue` on `id` conflicted with application code
+   that always manually assigns `id = 1L` for this singleton row.
+4. The SELL close-out path (`PositionManager.closePosition` →
+   `PositionService.closePosition`) persisted the stale entry price instead of
+   the real market close that triggered the exit — `Position.close()` carries
+   forward whatever `currentPrice()` it already has rather than the exit
+   price, and a JPA-context caching issue meant the re-fetch after close
+   returned a stale, pre-close object. Additionally, `PositionEntity` and
+   `TradeEntity` decimal columns were missing `scale = 4`, so Hibernate
+   rounded persisted prices to whole numbers regardless of the above fixes.
+
+Also removed a stale, pre-consolidation duplicate Flyway migration file
+(`api/src/test/resources/db/migration/V1__swing_trade_schema.sql`, dead
+scaffolding never exercised by any test) that conflicted with the
+authoritative `data` module's `V1` migration once `data.jar` was on the
+`integrationTest` classpath — this was blocking Spring context startup before
+any of the above bugs could even be reached.
+
+No REST response shapes, the `positions` table, or Flyway migrations changed.
+No dev/stage PostgreSQL was touched — everything ran through Testcontainers
+against a local colima daemon.
 
 ### Decision
 
@@ -224,6 +258,6 @@ completed stage deployment.
 - [x] Dashboard equity states are covered and `docs/status.md` is corrected.
 - [x] Position is decomposed without API, persistence, or trading-behavior drift.
 - [x] Unused API Position DTO is removed.
-- [ ] SELL integration test has a green report from a local-Docker environment.
+- [x] SELL integration test has a green report from a local-Docker environment.
 - [ ] Full relevant backend/dashboard verification is recorded before any stage
       promotion.

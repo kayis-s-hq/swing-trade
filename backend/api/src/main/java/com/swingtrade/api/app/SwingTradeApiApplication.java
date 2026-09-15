@@ -3,7 +3,9 @@ package com.swingtrade.api.app;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import java.util.Locale;
@@ -17,9 +19,18 @@ import java.util.Locale;
  * Boot's default JPA repository/entity auto-configuration only scans the package of this
  * class (com.swingtrade.api.app) and below, not the extra @ComponentScan base packages -
  * repositories/entities under com.swingtrade.data were never being registered as beans.
+ * <p>
+ * basePackages includes com.swingtrade.api, which also contains test-only @TestConfiguration
+ * classes (e.g. com.swingtrade.api.config.ErrorHandlingTestConfig) once the test source set is
+ * on the classpath, as it is for full @SpringBootTest / integrationTest runs. Without this
+ * explicit exclude filter, those classes' mock @Bean definitions (Mockito mocks of
+ * PositionService, SignalService, etc.) get auto-detected and, because
+ * spring.main.allow-bean-definition-overriding=true, silently replace the real service beans
+ * in any full-context test - even ones that never reference the test config class.
  */
 @ComponentScan(
-    basePackages = {"com.swingtrade.api", "com.swingtrade.broker", "com.swingtrade.data", "com.swingtrade.strategy", "com.swingtrade.llm", "com.swingtrade.core"}
+    basePackages = {"com.swingtrade.api", "com.swingtrade.broker", "com.swingtrade.data", "com.swingtrade.strategy", "com.swingtrade.llm", "com.swingtrade.core"},
+    excludeFilters = @ComponentScan.Filter(type = FilterType.ANNOTATION, classes = TestConfiguration.class)
 )
 @EnableJpaRepositories(basePackages = {
         "com.swingtrade.data.repository",

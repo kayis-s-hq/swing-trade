@@ -44,7 +44,8 @@ public class PositionEntity {
     @Column(name = "broker_type", length = 10, nullable = false, columnDefinition = "VARCHAR(10) DEFAULT 'PAPER'")
     private String brokerType = "PAPER";
 
-    @Column(name = "entry_price", nullable = false, precision = 15)
+    // scale = 4, see the note on currentPrice below - same truncation bug applies here.
+    @Column(name = "entry_price", nullable = false, precision = 15, scale = 4)
     private BigDecimal entryPrice;
 
     @Column(name = "entry_date", nullable = false)
@@ -64,7 +65,12 @@ public class PositionEntity {
     @Column(columnDefinition = "TEXT")
     private String entryReason;
 
-    @Column(name = "current_price", precision = 15)
+    // scale = 4 matches the actual DB column (NUMERIC(15,4) in
+    // V1__swing_trade_schema.sql). Without an explicit scale, JPA's @Column
+    // default (scale = 0) makes Hibernate round every write to this column to
+    // a whole number - silently truncating a real exit price like 105.1572 to
+    // 105 on save, regardless of the DB schema's actual precision.
+    @Column(name = "current_price", precision = 15, scale = 4)
     private BigDecimal currentPrice;
 
     @Column(name = "created_at", updatable = false)

@@ -45,15 +45,20 @@ public class TradeEntity {
     @Column(name = "exit_date")
     private LocalDate exitDate;
 
-    @Column(name = "entry_price", nullable = false, precision = 15)
+    // scale = 4 matches the actual DB columns (NUMERIC(15,4) in
+    // V1__swing_trade_schema.sql). Without an explicit scale, JPA's @Column
+    // default (scale = 0) makes Hibernate round every write to a whole
+    // number, silently truncating real entry/exit prices (e.g. 105.1572 -> 105)
+    // regardless of the DB schema's actual precision.
+    @Column(name = "entry_price", nullable = false, precision = 15, scale = 4)
     private BigDecimal entryPrice;
 
-    @Column(name = "exit_price", precision = 15)
+    @Column(name = "exit_price", precision = 15, scale = 4)
     private BigDecimal exitPrice;
 
     private Integer quantity;
 
-    @Column(name = "total_pnl", precision = 15)
+    @Column(name = "total_pnl", precision = 15, scale = 4)
     private BigDecimal totalPnL;
 
     @Column(name = "duration_days")

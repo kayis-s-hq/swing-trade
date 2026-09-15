@@ -35,6 +35,7 @@ import com.swingtrade.domain.store.PositionStore;
 import com.swingtrade.domain.store.StockStore;
 import com.swingtrade.domain.store.TradeStore;
 import com.swingtrade.strategy.ExitReason;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -93,12 +94,15 @@ class PositionServiceTest {
     @Mock
     private TradeStore tradeStore;
 
+    @Mock
+    private EntityManager entityManager;
+
     private PositionService positionService;
 
     @BeforeEach
     void setUp() {
         positionService = new PositionService(positionStore, stockStore, positionRepository,
-                tradingService, orderService, candleStore, tradeStore);
+                tradingService, orderService, candleStore, tradeStore, entityManager);
     }
 
     private Position makeDomainPosition(Long id, String symbol, BigDecimal entryPrice,
@@ -144,15 +148,17 @@ class PositionServiceTest {
 
             PositionEntity entity = makePositionEntity(10L, "WIPRO", new BigDecimal("450"),
                     new BigDecimal("450"), "POS_00000010", "Test");
+            when(positionRepository.findById(10L)).thenReturn(Optional.of(entity));
             // PaperTradingStateService.closePosition() persists the close in its own
-            // REQUIRES_NEW transaction, so on a successful engine close this method
-            // re-fetches rather than saving its own (now stale) in-memory copy - simulate
-            // that by returning the pre-close entity on the first lookup and a distinct
-            // post-close entity on the re-fetch.
-            PositionEntity closedEntity = makePositionEntity(10L, "WIPRO", new BigDecimal("450"),
-                    new BigDecimal("585"), "POS_00000010", "Test");
-            closedEntity.setStatus("CLOSED");
-            when(positionRepository.findById(10L)).thenReturn(Optional.of(entity), Optional.of(closedEntity));
+            // REQUIRES_NEW transaction on a *different* persistence context, so this
+            // method's EntityManager.refresh(entity) re-syncs the managed `entity`
+            // from the DB instead of handing back its now-stale in-memory snapshot -
+            // simulate that DB-side update taking effect on refresh().
+            org.mockito.Mockito.doAnswer(invocation -> {
+                entity.setStatus("CLOSED");
+                entity.setCurrentPrice(new BigDecimal("585"));
+                return null;
+            }).when(entityManager).refresh(entity);
 
             OhlcvCandle latestCandle = OhlcvCandle.of("WIPRO", LocalDate.now(),
                     new BigDecimal("580"), new BigDecimal("590"),
@@ -168,7 +174,8 @@ class PositionServiceTest {
             // Then: the engine close uses the fresh candle close (585), not the stale
             // currentPrice field (450), and the response reflects the re-fetched entity
             verify(tradingService).closePosition(eq(10L), eq(new BigDecimal("585")), eq(ExitReason.SIGNAL_EXIT.name()));
-            verify(positionRepository, times(2)).findById(10L);
+            verify(positionRepository, times(1)).findById(10L);
+            verify(entityManager).refresh(entity);
             verify(positionRepository, never()).save(any());
             assertThat(response).isNotNull();
         }
@@ -194,7 +201,8 @@ class PositionServiceTest {
             // and re-fetches rather than saving its own copy (see usesLatestCandleClose_
             // notStaleCurrentPrice for why)
             verify(tradingService).closePosition(eq(11L), eq(new BigDecimal("3550")), eq(ExitReason.MANUAL.name()));
-            verify(positionRepository, times(2)).findById(11L);
+            verify(positionRepository, times(1)).findById(11L);
+            verify(entityManager).refresh(entity);
             verify(positionRepository, never()).save(any());
         }
 

@@ -106,6 +106,11 @@ class SignalPipelineSellExitIntegrationTest {
         // 2. Open a real position for TESTCO via the same order pipeline production code uses.
         TradeRequest request = new TradeRequest(SYMBOL, 10, TradeDirection.LONG, OrderType.MARKET);
         request.setPrice(entryPrice);
+        // TradeRequest.setPrice() rounds every incoming price to 2 decimal places (money
+        // convention), so the price actually submitted/persisted downstream is this rounded
+        // value, not the raw multi-decimal candle-derived double. Compare against the
+        // rounded value everywhere below so the assertions reflect what the system really did.
+        entryPrice = request.getPrice();
         PositionResponse opened = positionService.createPosition(request);
 
         // 3. Capture the DB position id.

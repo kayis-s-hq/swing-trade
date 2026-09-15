@@ -146,6 +146,8 @@ subprojects {
             "--add-opens", "java.base/java.math=ALL-UNNAMED",
             "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED"
         )
+        System.getenv("DOCKER_HOST")?.let { environment("DOCKER_HOST", it) }
+        systemProperty("api.version", System.getProperty("api.version") ?: "1.41")
     }
 
     tasks.named("check") {
