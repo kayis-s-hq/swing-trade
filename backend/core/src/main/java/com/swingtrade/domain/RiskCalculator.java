@@ -53,7 +53,7 @@ public final class RiskCalculator {
         }
 
         BigDecimal atr = null;
-        int count = 0;
+        List<BigDecimal> trueRanges = new java.util.ArrayList<>();
         for (int i = 1; i < candles.size(); i++) {
             OhlcvCandle current = candles.get(i);
             OhlcvCandle previous = candles.get(i - 1);
@@ -63,19 +63,12 @@ public final class RiskCalculator {
             BigDecimal highGap = current.high().subtract(previous.close()).abs();
             BigDecimal lowGap = current.low().subtract(previous.close()).abs();
             BigDecimal trueRange = range.max(highGap).max(lowGap);
-            count++;
+            trueRanges.add(trueRange);
             if (atr == null) {
-                if (count < DEFAULT_ATR_CANDLES) continue;
-                // Reconstruct the initial Wilder average from the first 14 TR values.
-                BigDecimal sum = BigDecimal.ZERO;
-                for (int j = i - DEFAULT_ATR_CANDLES + 1; j <= i; j++) {
-                    OhlcvCandle c = candles.get(j);
-                    OhlcvCandle p = candles.get(j - 1);
-                    BigDecimal r = c.high().subtract(c.low())
-                        .max(c.high().subtract(p.close()).abs())
-                        .max(c.low().subtract(p.close()).abs());
-                    sum = sum.add(r);
-                }
+                if (trueRanges.size() < DEFAULT_ATR_CANDLES) continue;
+                // The first Wilder value is the average of the first 14 valid TR observations.
+                BigDecimal sum = trueRanges.stream().limit(DEFAULT_ATR_CANDLES)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
                 atr = sum.divide(BigDecimal.valueOf(DEFAULT_ATR_CANDLES), 8, RoundingMode.HALF_UP);
             } else {
                 atr = atr.multiply(BigDecimal.valueOf(DEFAULT_ATR_CANDLES - 1)).add(trueRange)

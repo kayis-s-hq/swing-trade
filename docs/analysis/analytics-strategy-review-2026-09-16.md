@@ -55,6 +55,9 @@ Additional verified slice — 2026-09-16:
   as the live signal path; only indicator object construction remains duplicated.
 - Candidate scans now run a configurable 60–1000-day OOS window (252 days by default), persist its
   dates and metrics separately, and require both full-history and OOS gates before activation.
+- Sentiment point-in-time filtering now rejects articles without publication timestamps, since their
+  position relative to the decision cutoff cannot be proven. This favors a safe UNKNOWN/neutral result
+  over admitting potentially future information.
 
 Verification: `./bin/verify-changes` passed on 2026-09-16. It ran the backend test task selected
 from changed paths; the explicit affected-module suite also passed:
@@ -240,8 +243,8 @@ Every BUY is stored and the SUPPRESS verdict is recorded, but nobody measures fo
 `SentimentService.analyzeStockSentiment(symbol, date)` calls `fetchStockNews(symbol)` and ignores `date`. Backfills and accuracy
 evaluation can use news published after the decision date (look-ahead).
 `SentimentService` now filters fetched articles to `publishedAt ≤ date 15:30 IST` and ≥ date − 7d
-before cleaning, truncation, and prompting. Articles without timestamps remain for legacy-feed
-compatibility. Persisted article IDs and historical reconstruction remain open.
+before cleaning, truncation, and prompting. Articles without timestamps are rejected because their
+point-in-time position cannot be proven. Persisted article IDs and historical reconstruction remain open.
 
 ### 15. PARTIALLY FIXED — Plain-text fallback misclassifies
 `SentimentAnalyzer.parsePlainText`: contains "positive" and not "negative" → POSITIVE (0.4). "Not positive", "positive for peers" and similar also become POSITIVE.

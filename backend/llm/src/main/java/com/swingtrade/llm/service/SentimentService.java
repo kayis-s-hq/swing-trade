@@ -467,9 +467,8 @@ public class SentimentService {
     }
 
     /**
-     * Enforces the information boundary for historical sentiment analyses. Articles without a
-     * publication timestamp are retained for compatibility with legacy feeds, but any timestamp
-     * after the decision-day market close is never allowed into the prompt.
+     * Enforces the information boundary for sentiment analyses. An article without a publication
+     * timestamp is not admissible because its relationship to the decision cutoff is unknowable.
      */
     private List<NewsArticle> filterPointInTimeArticles(List<NewsArticle> articles, LocalDate date) {
         if (articles == null || articles.isEmpty() || date == null) return List.of();
@@ -477,8 +476,9 @@ public class SentimentService {
         var cutoff = date.atTime(15, 30).atZone(MARKET_ZONE);
         return articles.stream()
             .filter(Objects::nonNull)
-            .filter(article -> article.publishedDate() == null
-                || (!article.publishedDate().isBefore(from) && !article.publishedDate().isAfter(cutoff)))
+            .filter(article -> article.publishedDate() != null
+                && !article.publishedDate().isBefore(from)
+                && !article.publishedDate().isAfter(cutoff))
             .toList();
     }
 
