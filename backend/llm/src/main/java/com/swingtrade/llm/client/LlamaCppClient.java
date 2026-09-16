@@ -3,6 +3,7 @@ package com.swingtrade.llm.client;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.swingtrade.domain.store.AppSettingsStore;
+import com.swingtrade.llm.config.LlmProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -27,20 +28,20 @@ public class LlamaCppClient implements LlmClient {
 
     static final Duration LLAMA_READ_TIMEOUT = Duration.ofSeconds(2850);
 
-    private static final String DEFAULT_BASE_URL = "http://localhost:8080/v1";
-    private static final String DEFAULT_MODEL = "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf";
-
     private final WebClient webClient;
     private final AppSettingsStore appSettingsStore;
+    private final LlmProperties properties;
 
     public LlamaCppClient(WebClient.Builder webClientBuilder,
-                          AppSettingsStore appSettingsStore) {
+                          AppSettingsStore appSettingsStore,
+                          LlmProperties properties) {
         this.webClient = webClientBuilder
                 .defaultHeader("Content-Type", "application/json")
                 .clientConnector(new ReactorClientHttpConnector(
                     HttpClient.create().responseTimeout(LLAMA_READ_TIMEOUT)))
                 .build();
         this.appSettingsStore = appSettingsStore;
+        this.properties = properties;
     }
 
     /**
@@ -54,7 +55,7 @@ public class LlamaCppClient implements LlmClient {
                 messages.size(), getModelName(), maxTokens);
 
         String baseUrl = appSettingsStore.get("llm.base_url")
-                .orElse(DEFAULT_BASE_URL);
+                .orElseGet(() -> properties.getProviders().getPiSsh().getBaseUrl().toString());
 
         Map<String, Object> request = Map.of(
                 "model", getModelName(),
@@ -106,7 +107,7 @@ public class LlamaCppClient implements LlmClient {
 
     private String getModelName() {
         return appSettingsStore.get("llamacpp.model")
-                .orElse(DEFAULT_MODEL);
+                .orElseGet(() -> properties.getLlamaCpp().getModel());
     }
 
     // ========== Response DTOs ==========

@@ -285,7 +285,7 @@
               </td>
               <td class="px-3 py-3.5">
                 <span
-                  v-if="item.activated"
+                  v-if="item.qualified"
                   class="rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success"
                   >Qualified</span
                 >

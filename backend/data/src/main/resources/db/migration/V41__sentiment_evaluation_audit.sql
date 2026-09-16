@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS sentiment_evaluation_audits (
+CREATE TABLE sentiment_evaluation_audits (
     id BIGSERIAL PRIMARY KEY,
     trigger VARCHAR(16) NOT NULL,
     status VARCHAR(16) NOT NULL,
