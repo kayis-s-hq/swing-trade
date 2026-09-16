@@ -73,8 +73,11 @@ public class SignalEntity {
     @Column(name = "generated_at")
     private LocalDate generatedAt;
 
-    @Column(name = "strategy", nullable = false, length = 30)
+    @Column(name = "strategy", nullable = false, length = 40)
     private String strategy = STRATEGY_DEFAULT;
+
+    @Column(name = "strategy_version")
+    private Integer strategyVersion = 1;
 
     // Warning flag constants
     public static final String WARNING_NONE = "";
@@ -103,8 +106,14 @@ public class SignalEntity {
         }
     }
 
-    // Strategy constants identifying which engine produced this signal
-    public static final String STRATEGY_DEFAULT = "DEFAULT";
+    // Strategy constants identifying which engine produced this signal.
+    // STRATEGY_DEFAULT's value changed from "DEFAULT" to "BREAKOUT_STRICT" as part of the
+    // configurable multi-strategy framework (plan docs/plans/2026-09-16-configurable-multi-
+    // strategy.md §4.2, task item 7): V47's one-time backfill of existing "DEFAULT" rows to
+    // "BREAKOUT_STRICT" only stays correct if new rows stop being written as "DEFAULT" too,
+    // and this default field value is what every new signal picks up when SignalPipeline
+    // doesn't set strategy explicitly.
+    public static final String STRATEGY_DEFAULT = "BREAKOUT_STRICT";
     public static final String STRATEGY_PRICE_ACTION = "PRICE_ACTION";
 
     @Column(name = "created_at", updatable = false)
@@ -325,6 +334,14 @@ public class SignalEntity {
 
     public void setStrategy(String strategy) {
         this.strategy = strategy;
+    }
+
+    public Integer getStrategyVersion() {
+        return strategyVersion;
+    }
+
+    public void setStrategyVersion(Integer strategyVersion) {
+        this.strategyVersion = strategyVersion;
     }
 
     public Boolean getProcessed() {

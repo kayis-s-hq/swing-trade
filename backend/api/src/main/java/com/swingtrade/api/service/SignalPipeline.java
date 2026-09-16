@@ -103,8 +103,11 @@ public class SignalPipeline {
 
         LocalDate latestDate = chronologicalCandles.get(chronologicalCandles.size() - 1).date();
 
-        // Clear any stale processed signals for this symbol/date so retries can regenerate
-        persistenceService.deleteBySymbolAndDateAndStrategy(symbol, latestDate, "DEFAULT");
+        // Clear any stale processed signals for this symbol/date so retries can regenerate.
+        // Uses SignalEntity.STRATEGY_DEFAULT (now "BREAKOUT_STRICT", not the literal "DEFAULT" -
+        // see V47's migration comment and SignalEntity's Javadoc) so this delete stays in sync
+        // with whatever value the entity's default field/new writes actually use.
+        persistenceService.deleteBySymbolAndDateAndStrategy(symbol, latestDate, SignalEntity.STRATEGY_DEFAULT);
 
         SignalResult result;
         try {

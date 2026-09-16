@@ -1,5 +1,6 @@
 package com.swingtrade.strategy;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -39,4 +40,14 @@ public interface SignalStrategy {
      * bar after {@code barIndex} (enforce via {@code ctx.view(barIndex)}).
      */
     ExitDecision evaluateExit(MarketContext ctx, int barIndex, OpenPosition position, StrategyParamsView params);
+
+    /**
+     * Cross-field validation rules for this type's params (plan §4.3), e.g. "emaFast &lt;
+     * emaSlow". Evaluated by {@code ParamSchemaValidator} in addition to each {@link ParamDef}'s
+     * own type/min/max checks. Default method (rather than a required one) so existing/future
+     * types with no cross-field constraints don't need to implement it.
+     */
+    default List<CrossFieldRule> crossFieldRules() {
+        return List.of();
+    }
 }

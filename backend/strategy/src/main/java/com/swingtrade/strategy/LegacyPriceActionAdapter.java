@@ -110,6 +110,20 @@ public class LegacyPriceActionAdapter implements SignalStrategy {
     }
 
     @Override
+    public List<CrossFieldRule> crossFieldRules() {
+        return List.of(
+            new CrossFieldRule("emaFast must be less than emaSlow", p ->
+                toBigDecimal(p.get("emaFast")).compareTo(toBigDecimal(p.get("emaSlow"))) < 0),
+            new CrossFieldRule("rsiMin must be less than rsiMax", p ->
+                toBigDecimal(p.get("rsiMin")).compareTo(toBigDecimal(p.get("rsiMax"))) < 0)
+        );
+    }
+
+    private static BigDecimal toBigDecimal(Object value) {
+        return value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString());
+    }
+
+    @Override
     public Set<IndicatorKey> requiredIndicators(StrategyParamsView params) {
         return EnumSet.of(IndicatorKey.EMA, IndicatorKey.RSI, IndicatorKey.ATR,
             IndicatorKey.VOLUME, IndicatorKey.VOLUME_MA, IndicatorKey.HIGHEST_HIGH);
