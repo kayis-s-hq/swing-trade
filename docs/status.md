@@ -26,6 +26,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   persistence/policies cover paper and backtest circuit-limit behavior. `./bin/verify-changes` and
   affected backend module tests passed; portfolio-level backtesting, historical universe snapshots,
   and exchange-band ingestion/API population remain follow-ups.
+- [x] Extended analytics validation verified 2026-09-16: bounded shared-capital portfolio results,
+  chronological walk-forward folds, adjusted-price gap quarantine, same-window benchmark/excess
+  returns, sentiment gate-effectiveness summaries, and bounded earnings/NSE/BSE filing prompt context.
+  `./bin/verify-changes` passed across the affected backend modules.
 
 - Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
 - Candle uniqueness, market-session validation, reconciliation, and audit logging are implemented.
