@@ -34,6 +34,9 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   V50, the API health endpoint returned `UP`, and `/api/signals/gate-effectiveness` returned HTTP 200.
   The local API was run in the foreground for this check because the background launcher terminated
   during startup under concurrent worker resource pressure; no database data was reset.
+- [x] Strategy expansion verification: pullback and volatility-squeeze beans, market-policy contracts,
+  strategy configuration API/dashboard, and portfolio-backtest endpoint passed focused tests plus the
+  sequential affected-module backend suite. Current default live behavior remains unchanged.
 
 - Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
 - Candle uniqueness, market-session validation, reconciliation, and audit logging are implemented.

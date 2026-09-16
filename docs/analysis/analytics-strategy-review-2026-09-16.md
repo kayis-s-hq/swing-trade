@@ -81,6 +81,10 @@ Additional verified slice — 2026-09-16:
 - Historical universe snapshots, corporate actions, NIFTY benchmark data contracts, and immutable
   strategy-configuration persistence are now available as explicit data-layer contracts/migrations;
   live strategy fan-out and provider population remain separate follow-ups.
+- The current platform now exposes opt-in pullback and volatility-squeeze strategy beans, bounded
+  regime/relative-strength and liquidity/event eligibility policies, strategy-config CRUD/version/mode
+  endpoints, a Strategies dashboard view, and a portfolio-backtest endpoint. The existing default live
+  strategy remains unchanged.
 
 Verification: `./bin/verify-changes` passed on 2026-09-16. It ran the backend test task selected
 from changed paths; the explicit affected-module suite also passed:
@@ -118,7 +122,7 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 - [x] 19 No minimum trade count
 - [~] 20 Survivorship bias and corporate-action checks
 - [~] 21 No benchmark / risk-adjusted metrics
-- [ ] 22 Circuit limits not modelled
+- [~] 22 Circuit limits not modelled
 - [~] 23 Accuracy metrics not fed back; IC ignores ties; raw vs excess return
 - [~] 24 No gate-effectiveness or strategy attribution
 
@@ -135,10 +139,10 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 
 ### P4 — Multi-strategy, regime, risk
 - [~] 34 Live fixed to one strategy
-- [ ] 35 Add standard NSE swing setups
-- [ ] 36 Market-regime filter
-- [ ] 37 Relative strength vs Nifty/sector
-- [ ] 38 Liquidity / surveillance / event filters
+- [~] 35 Add standard NSE swing setups
+- [~] 36 Market-regime filter
+- [~] 37 Relative strength vs Nifty/sector
+- [~] 38 Liquidity / surveillance / event filters
 - [ ] 39 Exit management (trailing, partial, breakeven)
 - [ ] 40 Sector / correlation exposure limits
 - [ ] 41 Parameter optimization with overfit control
@@ -343,10 +347,11 @@ gate/composite weight consumes trailing IC.
 ### 34. PARTIALLY FIXED — Live fixed to one strategy
 Immutable, versioned `StrategyConfig` persistence now supports OFF, BACKTEST_ONLY, SHADOW, and CHAMPION
 modes with one current row per variant and one champion constraint. Live signal fan-out, champion
-gating, per-variant portfolios, and dashboard/API management remain open.
-`StrategyRegistry` supports many strategies but live signals and the orchestrator use only `defaultStrategy()`. The signal
-strategy label is the string `"DEFAULT"`.
-**Fix:** Add `strategy_config` (enabled, capital %, params). Loop enabled strategies in SIGNAL stage and persist `strategy` on signals and positions.
+gating, and per-variant portfolios remain open.
+
+The configuration API and dashboard management surface are now available, and two additional strategy
+families can run through the existing strategy registry. Live fan-out and SHADOW portfolio isolation
+remain intentionally opt-in follow-ups.
 
 ### 35. GAP — Add standard NSE swing setups
 **Fix:** Add `TradingStrategy` beans, backtest each, and enable only those passing out-of-sample:
@@ -356,9 +361,15 @@ strategy label is the string `"DEFAULT"`.
 - RSI(2) < 10 mean reversion above the 200-day moving average, exit on close > SMA5
 - Sector rotation: buy RS leaders in top-3 sectors by 3-month return
 
+Pullback-in-uptrend and volatility-squeeze strategy beans are now available for backtest evaluation;
+the remaining setups and live enablement are open.
+
 ### 36. GAP — Market-regime filter
 No index-trend or volatility gate exists; momentum breakouts lose heavily in falling markets.
 **Fix:** `RegimeService`: Nifty vs 200-day average, India VIX band, and breadth (% of NIFTY 500 above 50-day average). Each strategy declares allowed regimes.
+
+Bounded fail-closed market-regime and relative-strength policy contracts now exist; Nifty history,
+VIX/breadth ingestion, and live wiring remain open.
 
 ### 37. GAP — Relative strength
 Entry rules ignore performance vs the index and sector.
@@ -366,6 +377,10 @@ Entry rules ignore performance vs the index and sector.
 
 ### 38. GAP — Liquidity, surveillance and event filters
 **Fix:** Reject if 20-day average traded value < ₹5 Cr, the stock is in ASM/GSM or F&O ban, it has a 5%/10% price band, or results or a board meeting falls within 5 trading days.
+
+An explicit eligibility policy now evaluates liquidity, surveillance flags, price-band input, and
+results/board-meeting windows without inferring unavailable external facts. Data population and live
+wiring remain open.
 
 ### 39. GAP — Exit management
 Exits use a fixed 2×ATR stop, 2.5R target, EMA trend-break and time stop. Partial exit exists in `PaperTradingEngine` but the strategy never uses it.
