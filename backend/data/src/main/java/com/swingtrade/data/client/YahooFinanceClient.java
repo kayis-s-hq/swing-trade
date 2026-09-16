@@ -163,7 +163,7 @@ public class YahooFinanceClient implements MarketDataClient {
         }
         mono = mono.retryWhen(Retry.backoff(MAX_RETRIES, RETRY_BACKOFF)
                 .scheduler(reactor.core.scheduler.Schedulers.boundedElastic())
-                .filter(error -> error instanceof YahooHttpException yahoo && yahoo.isRetryable()));
+                .filter(this::isRetryableFailure));
         if (yahooTimeout != null) {
             mono = mono.timeout(yahooTimeout);
         }
@@ -184,6 +184,22 @@ public class YahooFinanceClient implements MarketDataClient {
                             return Mono.empty();
                         })
                 .block();
+    }
+
+    /** Retry transient DNS/connectivity failures as well as retryable HTTP responses. */
+    private boolean isRetryableFailure(Throwable error) {
+        if (error instanceof YahooHttpException yahoo) return yahoo.isRetryable();
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof java.net.UnknownHostException
+                    || current instanceof java.net.ConnectException
+                    || current instanceof java.net.SocketTimeoutException
+                    || current instanceof java.io.IOException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     /**

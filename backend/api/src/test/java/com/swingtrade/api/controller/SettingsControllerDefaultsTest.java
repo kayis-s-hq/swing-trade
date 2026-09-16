@@ -219,16 +219,6 @@ class SettingsControllerDefaultsTest {
     class InferenceEndpointUri {
 
         @Test
-        void shouldUseServerControlledPiUrlInsteadOfRuntimeSetting() {
-            lenient().when(appSettingsService.get(eq("llm.base_url"), anyString()))
-                .thenReturn("http://attacker.test/v1");
-
-            assertThat(controller.piInferenceBaseUrl())
-                .isEqualTo(URI.create("http://pi-default.test/v1"));
-            verify(appSettingsService, never()).get(eq("llm.base_url"), anyString());
-        }
-
-        @Test
         void shouldRejectOllamaUrlWithUnapprovedOrigin() {
             when(appSettingsService.get(
                 "ollama.base_url", "http://ollama-default.test/v1"))

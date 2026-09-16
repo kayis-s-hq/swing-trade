@@ -122,4 +122,21 @@ class SentimentServicePromptTest {
             eq(0.3)
         );
     }
+
+    @Test
+    @DisplayName("SentimentService uses the bounded Pi response budget")
+    void usesBoundedPiResponseBudget() {
+        when(clientProvider.getBackend()).thenReturn(LlmBackendSelector.Backend.PI_SSH);
+        when(promptLoader.getSystemPrompt()).thenReturn("System prompt");
+        when(promptLoader.getUserPrompt()).thenReturn("Analyse {symbol}. News: {newsContent}.");
+        when(llmClient.generateChatCompletion(anyList(), eq(128), eq(0.3)))
+                .thenReturn(Mono.just("{\"score\":\"NEUTRAL\",\"confidence\":0.5,\"summary\":\"Mixed\",\"red_flags\":[],\"catalysts\":[]}"));
+        when(newsIngestionService.fetchStockNews("TCS")).thenReturn(List.of(
+                new NewsArticle("TCS", "Test headline", "Test URL", null, null, "Test source", null)));
+        when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("news content");
+
+        service.analyzeStockSentiment("TCS", LocalDate.now());
+
+        verify(llmClient).generateChatCompletion(anyList(), eq(128), eq(0.3));
+    }
 }

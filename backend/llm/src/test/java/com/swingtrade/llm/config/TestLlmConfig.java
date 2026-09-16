@@ -128,11 +128,13 @@ public class TestLlmConfig {
     @Bean
     public LlmClientProvider llmClientProvider(
             LlmBackendSelector selector,
+            com.swingtrade.llm.client.LlamaCppClient llamaCppClient,
             OpenAiChatModel localChatModel,
             OpenAiChatModel piSshChatModel,
             OpenAiChatModel openAiChatModel,
             OpenAiChatModel ollamaChatModel) {
-        return new LlmClientProvider(selector, localChatModel, piSshChatModel, openAiChatModel, ollamaChatModel);
+        return new LlmClientProvider(selector, llamaCppClient,
+                localChatModel, piSshChatModel, openAiChatModel, ollamaChatModel);
     }
 
     // ===== H2 Database Configuration for Testing =====

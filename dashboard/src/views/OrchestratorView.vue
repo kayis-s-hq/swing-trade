@@ -126,10 +126,9 @@
                   >
                     {{ index + 1 }}
                   </span>
-                  <span
-                    class="truncate text-center text-[11px] font-semibold text-text-primary"
-                    >{{ stageLabel(stage) }}</span
-                  >
+                  <span class="truncate text-center text-[11px] font-semibold text-text-primary">{{
+                    stageLabel(stage)
+                  }}</span>
                 </div>
               </template>
               <div aria-hidden="true" />

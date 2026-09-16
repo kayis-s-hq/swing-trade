@@ -102,6 +102,24 @@ class SettingsControllerPiLifecycleTest {
     }
 
     @Nested
+    @DisplayName("POST /api/settings/test/pi")
+    class PiInferenceTestEndpoint {
+
+        @Test
+        @DisplayName("reports success only after a Pi completion responds")
+        void shouldRequireSuccessfulInference() throws Exception {
+            when(piServerManager.isRunning()).thenReturn(true);
+            when(piServerManager.testInferenceConnection()).thenReturn(true);
+
+            mockMvc.perform(post("/api/settings/test/pi"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.success").value(true))
+                .andExpect(jsonPath("$.data.message")
+                    .value("Pi SSH connection successful, llama-server started and responded to inference"));
+        }
+    }
+
+    @Nested
     @DisplayName("GET /api/settings/pi/status")
     class StatusEndpoint {
 

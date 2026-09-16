@@ -19,6 +19,15 @@ public class SentimentOutput {
     @JsonProperty("catalysts")
     private List<String> catalysts = new ArrayList<>();
 
+    /**
+     * No-arg constructor required by Jackson/Spring AI's BeanOutputConverter.
+     * Without it every structured-output parse failed with "no Creators, like
+     * default constructor, exist" and fell through to the manual JSON-extraction
+     * fallback on each sentiment call.
+     */
+    public SentimentOutput() {
+    }
+
     public SentimentOutput(SentimentType sentiment, String reasoning, Double confidence) {
         this(sentiment, reasoning, confidence, List.of(), List.of());
     }
@@ -50,6 +59,30 @@ public class SentimentOutput {
 
     public List<String> getCatalysts() {
         return catalysts;
+    }
+
+    // Setters exist for Jackson/BeanOutputConverter population. The @JsonProperty
+    // names on the fields ("score", "summary", "red_flags") are what the model
+    // actually emits, so binding happens through those rather than the Java names.
+
+    public void setSentiment(SentimentType sentiment) {
+        this.sentiment = sentiment;
+    }
+
+    public void setReasoning(String reasoning) {
+        this.reasoning = reasoning;
+    }
+
+    public void setConfidence(Double confidence) {
+        this.confidence = confidence;
+    }
+
+    public void setRedFlags(List<String> redFlags) {
+        this.redFlags = redFlags != null ? redFlags : List.of();
+    }
+
+    public void setCatalysts(List<String> catalysts) {
+        this.catalysts = catalysts != null ? catalysts : List.of();
     }
 
     @Override

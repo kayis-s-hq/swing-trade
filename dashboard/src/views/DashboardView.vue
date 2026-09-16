@@ -335,7 +335,7 @@
                   stroke="currentColor"
                   stroke-width="2"
                   stroke-linecap="round"
-                  />
+                />
               </svg>
               <div v-else-if="equityError" class="mt-3 flex items-center justify-between gap-3">
                 <p class="text-xs text-text-muted">Equity curve is temporarily unavailable.</p>

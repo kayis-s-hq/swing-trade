@@ -63,10 +63,12 @@ public class JobOrchestratorService {
     // Per-stage timeouts (seconds)
     private static final long TIMEOUT_DATA_FETCH = 30L;
     private static final long TIMEOUT_NEWS = 30L;
-    // Matches SentimentService.ANALYSIS_TIMEOUT_SECONDS: CPU-only local LLM generation
-    // can legitimately run for minutes, so the outer stage must not cut the inner wait short.
-    private static final long TIMEOUT_SENTIMENT = 600L;
-    private static final long TIMEOUT_LLM_ANALYSIS = 600L;
+    // Matches the CPU-only local LLM deadlines in SentimentService and
+    // SynthesisService. The Pi can take up to 48 minutes for a large prompt;
+    // a 10-minute stage timeout cancels the work before the inner client wait
+    // can complete.
+    private static final long TIMEOUT_SENTIMENT = 2880L;
+    private static final long TIMEOUT_LLM_ANALYSIS = 2880L;
     private static final long TIMEOUT_SIGNAL = 30L;
     private static final long TIMEOUT_BACKTEST = 120L;
     private static final long TIMEOUT_PAPER_TRADE = 30L;

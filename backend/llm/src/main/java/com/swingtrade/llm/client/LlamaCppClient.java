@@ -21,11 +21,11 @@ import java.util.Map;
  * Reads model config from AppSettingsStore so changes persist at runtime.
  */
 @Component
-public class LlamaCppClient {
+public class LlamaCppClient implements LlmClient {
 
     private static final Logger logger = LoggerFactory.getLogger(LlamaCppClient.class);
 
-    static final Duration LLAMA_READ_TIMEOUT = Duration.ofSeconds(60);
+    static final Duration LLAMA_READ_TIMEOUT = Duration.ofSeconds(2850);
 
     private static final String DEFAULT_BASE_URL = "http://localhost:8080/v1";
     private static final String DEFAULT_MODEL = "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf";
@@ -46,6 +46,7 @@ public class LlamaCppClient {
     /**
      * Generates chat completion using the local llama.cpp server.
      */
+    @Override
     public Mono<String> generateChatCompletion(List<Map<String, String>> messages,
                                                 int maxTokens,
                                                 double temperature) {

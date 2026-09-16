@@ -19,14 +19,24 @@ public class SynthesisService {
     private static final Logger logger = LoggerFactory.getLogger(SynthesisService.class);
     private static final int MAX_TOKENS = 1024;
     private static final double TEMPERATURE = 0.2;
-    private static final long TIMEOUT_SECONDS = 600;
+    // Must stay comfortably above LlmConfig's LOCAL_LLAMA_TIMEOUT (2850s) for the
+    // CPU-bound local backends, or this outer deadline cuts the call off before
+    // the client's own timeout ever gets a chance to fire. Widened alongside
+    // SentimentService.ANALYSIS_TIMEOUT_SECONDS — see LOCAL_LLAMA_TIMEOUT's
+    // javadoc for the measured prompt-eval-vs-decode throughput this is sized
+    // from, including mid-request thermal-throttling decay (decode measured as
+    // low as 0.54 tok/s on this Pi under sustained load).
+    private static final long TIMEOUT_SECONDS = 2880;
 
     private final LlmClientProvider clientProvider;
     private final SynthesisPromptLoader promptLoader;
+    private final LlmServerManagerProvider serverManagerProvider;
 
-    public SynthesisService(LlmClientProvider clientProvider, SynthesisPromptLoader promptLoader) {
+    public SynthesisService(LlmClientProvider clientProvider, SynthesisPromptLoader promptLoader,
+                            LlmServerManagerProvider serverManagerProvider) {
         this.clientProvider = clientProvider;
         this.promptLoader = promptLoader;
+        this.serverManagerProvider = serverManagerProvider;
     }
 
     public SynthesisResult synthesize(CompositeAnalysis composite) {
@@ -41,8 +51,25 @@ public class SynthesisService {
         );
 
         try {
-            String llmResponse = clientProvider.getClient().generateChatCompletion(messages, MAX_TOKENS, TEMPERATURE)
-                .block(Duration.ofSeconds(TIMEOUT_SECONDS));
+            // Synthesis is the longest generation in the pipeline, so it needs the
+            // same in-flight protection as sentiment — previously it didn't even
+            // call ensureRunning(), and the idle monitor could stop llama-server
+            // mid-synthesis.
+            LlmServerManager manager = serverManagerProvider.getManager();
+            if (manager != null) {
+                manager.ensureRunning();
+                manager.beginRequest();
+            }
+            String llmResponse;
+            try {
+                llmResponse = clientProvider.getClient()
+                    .generateChatCompletion(messages, MAX_TOKENS, TEMPERATURE)
+                    .block(Duration.ofSeconds(TIMEOUT_SECONDS));
+            } finally {
+                if (manager != null) {
+                    manager.endRequest();
+                }
+            }
 
             if (llmResponse == null || llmResponse.isBlank()) {
                 logger.warn("Empty LLM response for synthesis: {}", symbol);
@@ -52,7 +79,7 @@ public class SynthesisService {
             return parseResponse(llmResponse, composite);
         } catch (Exception e) {
             logger.warn("LLM synthesis failed for {}: {}: {}, using fallback",
-                symbol, e.getClass().getName(), e.getMessage());
+                symbol, e.getClass().getName(), LlmErrorUtils.describeError(e));
             logger.debug("LLM synthesis failure stack trace for {}", symbol, e);
             return fallbackSynthesis(composite);
         }

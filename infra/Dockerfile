@@ -25,7 +25,8 @@ WORKDIR /app
 COPY --from=artifacts /lib/ ./lib/
 
 # Set timezone to Asia/Kolkata for correct scheduling
-RUN ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
+RUN apk add --no-cache openssh-client && \
+    ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
     echo "Asia/Kolkata" > /etc/timezone
 
 EXPOSE 8080

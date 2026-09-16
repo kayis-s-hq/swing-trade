@@ -53,8 +53,42 @@ public class SentimentService {
 
     private static final Logger logger = LoggerFactory.getLogger(SentimentService.class);
 
-    private static final long ANALYSIS_TIMEOUT_SECONDS = 600;
+    // Must stay comfortably above LlmConfig's LOCAL_LLAMA_TIMEOUT (2850s) for the
+    // CPU-bound local backends, or this outer deadline cuts the call off before
+    // the client's own timeout ever gets a chance to fire. See LOCAL_LLAMA_TIMEOUT's
+    // javadoc for the measured prompt-eval-vs-decode throughput this is sized
+    // from — including the mid-request thermal-throttling decay that made the
+    // first two attempts at this number (930s, then 1830s) both too tight.
+    private static final long ANALYSIS_TIMEOUT_SECONDS = 2880;
     private static final int MAX_ARTICLES_FOR_LLM = 10;
+    private static final int PI_MAX_ARTICLES_FOR_LLM = 6;
+    private static final int PI_MAX_ARTICLE_CHARS = 450;
+    private static final int DEFAULT_MAX_RESPONSE_TOKENS = 512;
+    private static final int PI_MAX_RESPONSE_TOKENS = 128;
+
+    // Per-article character cap. This exists ONLY to keep the worst case (10
+    // articles, all at the cap) under llamacpp.context (8192) — it is not a
+    // throughput/heat knob. Deliberately NOT sized from prompt-eval speed: the
+    // prompt asks for catalysts and red flags, and those often sit mid-article
+    // (a margin caveat or downgrade after a positive lead), so trimming for
+    // speed biases the result toward whatever the opening sentence frames.
+    // Longer analysis time is the accepted trade-off, backstopped by
+    // PiThermalGuard (temperature-based backoff) rather than by cutting content.
+    //
+    // Math, from measured throughput on this Pi (Qwen3-4B, llamacpp.threads=2):
+    //   * this scraped news text tokenizes at ~1.9 chars/token
+    //   * fixed prompt scaffolding (system + user template, no articles) is
+    //     ~1341 chars
+    //   * budget = context(8192) - response(512 max_tokens) = 7680 tokens
+    //     -> ~14,592 chars total prompt -> ~13,251 chars left for article
+    //     content after scaffolding -> ~1325 chars/article across 10 articles
+    // 1200 leaves an ~8% margin under that ceiling for token-ratio variance,
+    // instead of cutting into it. At 7 tok/s prompt eval that's a worst case of
+    // ~17 min of prompt eval alone (ANALYSIS_TIMEOUT_SECONDS and
+    // LlmConfig.LOCAL_LLAMA_TIMEOUT are both sized to cover it) — slower, not
+    // shallower. Raising this further needs a larger llamacpp.context, not a
+    // smaller margin.
+    private static final int MAX_ARTICLE_CHARS = 1200;
 
     // Thread pool for async operations
     private final ExecutorService analysisExecutor;
@@ -118,6 +152,23 @@ public class SentimentService {
     }
 
     /**
+     * Trims a cleaned article to {@link #MAX_ARTICLE_CHARS}, cutting on a word
+     * boundary where one is available near the limit so the text doesn't end
+     * mid-token.
+     */
+    private static String capArticleLength(String text, int maxArticleChars) {
+        if (text.length() <= maxArticleChars) {
+            return text;
+        }
+        String truncated = text.substring(0, maxArticleChars);
+        int lastSpace = truncated.lastIndexOf(' ');
+        if (lastSpace > maxArticleChars - 60) {
+            truncated = truncated.substring(0, lastSpace);
+        }
+        return truncated + "...";
+    }
+
+    /**
      * Analyzes sentiment for a single stock using news from RSS feeds.
      *
      * @param stockSymbol the stock symbol (e.g., "RELIANCE", "TCS")
@@ -140,10 +191,20 @@ public class SentimentService {
 
             logger.info("Found {} articles for {}: {}", articles.size(), stockSymbol, stockSymbol);
 
-            // Clean and prepare news content
+            boolean piBackend = clientProvider.getBackend() == LlmBackendSelector.Backend.PI_SSH;
+            int maxArticleChars = piBackend ? PI_MAX_ARTICLE_CHARS : MAX_ARTICLE_CHARS;
+            int maxArticles = piBackend ? PI_MAX_ARTICLES_FOR_LLM : MAX_ARTICLES_FOR_LLM;
+
+            // Clean and prepare news content. Each article is capped: capping the
+            // article *count* alone isn't enough, since full article bodies pushed
+            // the prompt to ~8.5k tokens and llama.cpp rejected it outright with
+            // "request (8556 tokens) exceeds the available context size (4096)".
+            // The lead of an article carries the sentiment signal, so trimming the
+            // tail costs little and cuts prompt-eval time (and heat) substantially.
             List<String> newsContent = articles.stream()
                     .map(a -> newsIngestionService.cleanNewsText(a))
                     .filter(s -> s != null && !s.trim().isEmpty())
+                    .map(text -> capArticleLength(text, maxArticleChars))
                     .toList();
 
             if (newsContent.isEmpty()) {
@@ -153,10 +214,10 @@ public class SentimentService {
 
             // Limit articles to fit within LLM context window
             int articleCountForLlm = newsContent.size();
-            if (newsContent.size() > MAX_ARTICLES_FOR_LLM) {
-                logger.info("Truncating {} articles to {} for LLM analysis (Pi context limit)",
-                        newsContent.size(), MAX_ARTICLES_FOR_LLM);
-                newsContent = newsContent.subList(0, MAX_ARTICLES_FOR_LLM);
+            if (newsContent.size() > maxArticles) {
+                logger.info("Truncating {} articles to {} for {} LLM analysis",
+                        newsContent.size(), maxArticles, piBackend ? "Pi" : "configured");
+                newsContent = newsContent.subList(0, maxArticles);
             }
 
             // Perform sentiment analysis
@@ -164,7 +225,7 @@ public class SentimentService {
             try {
                 analysisResult = performSentimentAnalysis(stockSymbol, date, newsContent);
             } catch (Exception llmEx) {
-                logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", stockSymbol, llmEx.getMessage());
+                logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", stockSymbol, LlmErrorUtils.describeError(llmEx));
                 // Build a simple result from headlines
                 List<String> headlines = newsContent.stream().toList();
                 SentimentResult fallback = keywordBasedSentiment(stockSymbol, headlines);
@@ -252,8 +313,10 @@ public class SentimentService {
                 Map.of("role", "user", "content", formattedUser)
         );
 
-        String requestId = UUID.randomUUID().toString();
         var backend = clientProvider.getBackend();
+        int maxResponseTokens = backend == LlmBackendSelector.Backend.PI_SSH
+                ? PI_MAX_RESPONSE_TOKENS : DEFAULT_MAX_RESPONSE_TOKENS;
+        String requestId = UUID.randomUUID().toString();
         String provider = backend != null ? backend.getKey() : "unknown";
         String modelVersion = configuredModel(provider);
         String promptHash = computePromptHash();
@@ -266,10 +329,19 @@ public class SentimentService {
             LlmServerManager manager = serverManagerProvider.getManager();
             if (manager != null) {
                 manager.ensureRunning();
+                manager.beginRequest();
             }
             LlmClient client = clientProvider.getClient();
-            llmResponse = client.generateChatCompletion(messages, 512, 0.3)
-                    .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+            try {
+                llmResponse = client.generateChatCompletion(messages, maxResponseTokens, 0.3)
+                        .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+            } finally {
+                // Release the in-flight marker so the idle monitor can retire the
+                // server again; without the pairing it would stay pinned forever.
+                if (manager != null) {
+                    manager.endRequest();
+                }
+            }
             long latencyMs = System.currentTimeMillis() - llmStart;
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), true);
             llmMetrics.recordSentimentAnalyzed();
@@ -277,18 +349,19 @@ public class SentimentService {
                 SentimentOutput empty = new SentimentOutput(SentimentType.NEUTRAL,
                         "No valid response from LLM", 0.1);
                 persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
-                        promptHash, messages, llmResponse, empty, "SUCCESS", null,
+                        promptHash, messages, llmResponse, empty, "SUCCESS", null, maxResponseTokens,
                         startedAt, latencyMs);
                 return empty;
             }
             SentimentOutput parsed = sentimentAnalyzer.parseResponse(llmResponse);
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
-                    promptHash, messages, llmResponse, parsed, "SUCCESS", null,
+                    promptHash, messages, llmResponse, parsed, "SUCCESS", null, maxResponseTokens,
                     startedAt, latencyMs);
             return parsed;
         } catch (Exception e) {
+            String errorDetail = LlmErrorUtils.describeError(e);
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion, promptHash,
-                    messages, null, null, "FAILED", e.getMessage(), startedAt,
+                    messages, null, null, "FAILED", errorDetail, maxResponseTokens, startedAt,
                     System.currentTimeMillis() - llmStart);
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), false);
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
@@ -300,7 +373,7 @@ public class SentimentService {
                         0.2
                 );
             }
-            logger.error("Error during LLM sentiment analysis: {}", e.getMessage(), e);
+            logger.error("Error during LLM sentiment analysis: {}", errorDetail, e);
             throw e;
         }
 
@@ -310,14 +383,14 @@ public class SentimentService {
                               String provider, String model,
                               String promptHash, List<Map<String, String>> messages,
                               String rawResponse, SentimentOutput parsed, String status,
-                              String error, OffsetDateTime startedAt, long latencyMs) {
+                              String error, int maxResponseTokens, OffsetDateTime startedAt, long latencyMs) {
         if (auditRepository == null) return;
         String score = parsed == null ? null : parsed.getSentiment().name();
         Double confidence = parsed == null ? null : parsed.getConfidence();
         auditRepository.save(new LlmAnalysisAuditEntity(requestId, symbol, analysisDate,
                 provider, model, promptHash, messages.get(0).get("content"),
                 messages.get(1).get("content"), rawResponse, score, confidence, status,
-                error, false, 512, 0.3, startedAt,
+                    error, false, maxResponseTokens, 0.3, startedAt,
                 OffsetDateTime.now(ZoneOffset.UTC), latencyMs));
     }
 
