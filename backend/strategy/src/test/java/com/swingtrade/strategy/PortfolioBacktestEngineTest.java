@@ -99,6 +99,31 @@ class PortfolioBacktestEngineTest {
         assertThat(result.equityCurve().get(3).settledCash()).isEqualTo(110.0);
     }
 
+    @Test
+    void appliesBreakevenAndTrailingStopBeforeScheduledExit() {
+        BacktestTrade candidate = new BacktestTrade("AAA", LocalDate.of(2024, 1, 2),
+                LocalDate.of(2024, 1, 5), BigDecimal.valueOf(100), BigDecimal.valueOf(120),
+                BigDecimal.valueOf(90), BigDecimal.valueOf(125), 1, ExitReason.TIME_STOP, 20, 20, 3);
+        Map<String, List<OhlcvCandle>> candles = Map.of("AAA", List.of(
+                candle("AAA", LocalDate.of(2024, 1, 2), 100),
+                candle("AAA", LocalDate.of(2024, 1, 3), 110),
+                candle("AAA", LocalDate.of(2024, 1, 4), 100, 100),
+                candle("AAA", LocalDate.of(2024, 1, 5), 120)));
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", candidate)),
+                new BacktestConfig(0, 0, .01, 100, 2, 2, 2, 20, false, 21,
+                        new TrailingBreakevenPolicy(1.0, .05)),
+                LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 5), candles);
+
+        assertThat(result.trades()).singleElement().satisfies(trade -> {
+            assertThat(trade.exitDate()).isEqualTo(LocalDate.of(2024, 1, 4));
+            assertThat(trade.exitReason()).isEqualTo(ExitReason.TRAILING_STOP);
+            assertThat(trade.exitPrice()).isEqualByComparingTo("104.5");
+        });
+        assertThat(result.finalCapital()).isEqualTo(104.5);
+    }
+
     private static BacktestConfig config(double capital) {
         return new BacktestConfig(0, 0, .01, capital, 2, 2, 2, 20, false, 21);
     }
@@ -117,7 +142,12 @@ class PortfolioBacktestEngineTest {
     }
 
     private static OhlcvCandle candle(String symbol, LocalDate date, double close) {
+        return candle(symbol, date, close, close);
+    }
+
+    private static OhlcvCandle candle(String symbol, LocalDate date, double close, double low) {
         BigDecimal price = BigDecimal.valueOf(close);
-        return OhlcvCandle.of(symbol, date, price, price, price, price, 1L);
+        return OhlcvCandle.of(symbol, date, price, BigDecimal.valueOf(Math.max(close, low)),
+                BigDecimal.valueOf(Math.min(close, low)), price, 1L);
     }
 }

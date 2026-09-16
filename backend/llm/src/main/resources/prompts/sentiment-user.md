@@ -14,8 +14,12 @@ Start your response with { and end with }.
   "score": "POSITIVE|NEUTRAL|NEGATIVE",
   "confidence": 0.0-1.0,
   "summary": "2 sentence max reasoning",
-  "red_flags": ["list any specific risks"],
-  "catalysts": ["list any upcoming catalysts"]
+  "red_flags": ["[article index] specific risk, or [] if none"],
+  "catalysts": ["[article index] upcoming catalyst, or [] if none"]
 }
+
+Every red flag and catalyst MUST cite at least one supplied article using its
+exact index in square brackets, such as [1] or [2]. Do not infer or invent
+details. If no supplied article supports an item, omit it.
 
 /no_think

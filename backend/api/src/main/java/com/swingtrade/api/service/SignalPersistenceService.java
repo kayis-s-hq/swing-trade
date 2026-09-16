@@ -170,6 +170,14 @@ public class SignalPersistenceService {
     public Signal buildAndSaveWithWarning(String symbol, LocalDate date, Signal.SignalType type,
                                           BigDecimal confidence, String reasoning,
                                           String indicators, BigDecimal atr, String warningFlag, String sentimentScore, String sentimentReasoning) {
+        return buildAndSaveWithWarning(symbol, date, type, confidence, reasoning, indicators, atr,
+            warningFlag, sentimentScore, sentimentReasoning, "PRICE_ACTION");
+    }
+
+    public Signal buildAndSaveWithWarning(String symbol, LocalDate date, Signal.SignalType type,
+                                          BigDecimal confidence, String reasoning,
+                                          String indicators, BigDecimal atr, String warningFlag,
+                                          String sentimentScore, String sentimentReasoning, String strategy) {
         Signal baseSignal = Signal.create(symbol, date, type, confidence, reasoning);
 
         OhlcvCandle latestCandle = candleStore.findLatestBySymbol(symbol).orElse(null);
@@ -209,7 +217,7 @@ public class SignalPersistenceService {
             );
         }
 
-        return signalStore.save(toSave, warningFlag);
+        return signalStore.save(toSave, warningFlag, strategy);
     }
 
     /**

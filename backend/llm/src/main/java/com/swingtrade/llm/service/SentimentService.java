@@ -388,7 +388,7 @@ public class SentimentService {
             }
             LlmClient client = clientProvider.getClient();
             try {
-                llmResponse = client.generateChatCompletion(messages, maxResponseTokens, 0.3)
+                llmResponse = client.generateChatCompletion(messages, maxResponseTokens, 0.0)
                         .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
             } finally {
                 // Release the in-flight marker so the idle monitor can retire the
@@ -408,7 +408,7 @@ public class SentimentService {
                         startedAt, latencyMs);
                 return empty;
             }
-            SentimentOutput parsed = sentimentAnalyzer.parseResponse(llmResponse);
+            SentimentOutput parsed = sentimentAnalyzer.parseResponse(llmResponse, newsContent.size());
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
                     promptHash, messages, llmResponse, parsed, "SUCCESS", null, maxResponseTokens,
                     startedAt, latencyMs);

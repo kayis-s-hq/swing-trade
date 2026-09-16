@@ -1,9 +1,11 @@
 package com.swingtrade.strategy;
 
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.RiskManagementPolicy;
 
 import java.time.LocalDate;
 import java.time.DayOfWeek;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -53,6 +55,7 @@ final class PortfolioBacktestEngine {
         List<BacktestTrade> accepted = new ArrayList<>();
         List<PortfolioEquityPoint> equityCurve = new ArrayList<>();
         Map<String, BacktestTrade> open = new HashMap<>();
+        Map<String, Double> highestClose = new HashMap<>();
         Map<LocalDate, Double> unsettledByDate = new HashMap<>();
         List<LocalDate> observationDates = observationDates(effectiveMarketData, evaluationStart, evaluationEnd);
         Map<LocalDate, LocalDate> nextTradingDate = effectiveMarketData.isEmpty()
@@ -65,11 +68,39 @@ final class PortfolioBacktestEngine {
             if (settled != null) {
                 cash += settled;
             }
+
+            // Apply policy stops before the candidate's original exit. The highest close is
+            // deliberately from a completed prior bar, avoiding same-bar look-ahead.
+            for (BacktestTrade held : List.copyOf(open.values())) {
+                OhlcvCandle candle = candleOn(effectiveMarketData, held.symbol(), date);
+                if (candle == null) continue;
+                RiskManagementPolicy.RiskManagementDecision decision = config.riskManagementPolicy()
+                        .evaluate(new RiskManagementPolicy.RiskManagementContext(
+                                held.entryPrice(), held.stopLoss(), held.target(), candle.close(), candle.low(),
+                                BigDecimal.valueOf(highestClose.getOrDefault(held.symbol(),
+                                        held.entryPrice().doubleValue())),
+                                (int) (date.toEpochDay() - held.entryDate().toEpochDay())));
+                if (decision.exit()) {
+                    open.remove(held.symbol());
+                    BacktestTrade managed = managedExit(held, date, decision.stopPrice(), decision.reason());
+                    unsettledByDate.merge(nextSettlementDate(date, nextTradingDate),
+                            entryNotional(managed) + managed.pnl(), Double::sum);
+                    replaceAccepted(accepted, held, managed);
+                }
+            }
+
             for (BacktestTrade trade : exitsByDate.getOrDefault(date, List.of())) {
                 BacktestTrade held = open.remove(trade.symbol());
                 if (held != null) {
                     double proceeds = entryNotional(held) + held.pnl();
                     unsettledByDate.merge(nextSettlementDate(date, nextTradingDate), proceeds, Double::sum);
+                }
+            }
+
+            for (BacktestTrade held : open.values()) {
+                OhlcvCandle candle = candleOn(effectiveMarketData, held.symbol(), date);
+                if (candle != null) {
+                    highestClose.merge(held.symbol(), candle.close().doubleValue(), Math::max);
                 }
             }
 
@@ -111,6 +142,32 @@ final class PortfolioBacktestEngine {
 
     private static double entryNotional(BacktestTrade trade) {
         return trade.entryPrice().doubleValue() * trade.quantity();
+    }
+
+    private static OhlcvCandle candleOn(Map<String, List<OhlcvCandle>> marketData,
+                                         String symbol, LocalDate date) {
+        List<OhlcvCandle> candles = marketData.get(symbol);
+        if (candles == null) return null;
+        return candles.stream().filter(candle -> candle.date().equals(date)).findFirst().orElse(null);
+    }
+
+    private static BacktestTrade managedExit(BacktestTrade original, LocalDate exitDate,
+                                             BigDecimal exitPrice, String reason) {
+        double pnl = original.pnl()
+                + exitPrice.subtract(original.exitPrice()).doubleValue() * original.quantity();
+        ExitReason exitReason = "TRAILING_STOP".equals(reason)
+                ? ExitReason.TRAILING_STOP : ExitReason.BREAKEVEN_STOP;
+        return new BacktestTrade(original.symbol(), original.entryDate(), exitDate, original.entryPrice(),
+                exitPrice, original.stopLoss(), original.target(), original.quantity(), exitReason, pnl,
+                original.entryPrice().signum() == 0 ? 0.0
+                        : pnl / entryNotional(original) * 100.0,
+                (int) (exitDate.toEpochDay() - original.entryDate().toEpochDay()));
+    }
+
+    private static void replaceAccepted(List<BacktestTrade> accepted, BacktestTrade original,
+                                        BacktestTrade replacement) {
+        int index = accepted.indexOf(original);
+        if (index >= 0) accepted.set(index, replacement);
     }
 
     private static double marketValue(BacktestTrade trade, LocalDate date,

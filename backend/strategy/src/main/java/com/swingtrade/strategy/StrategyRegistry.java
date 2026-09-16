@@ -13,9 +13,8 @@ import java.util.stream.Collectors;
  * every {@code TradingStrategy} bean here automatically - adding a new strategy means
  * registering another {@code @Component} implementation, nothing else.
  *
- * <p>Only backtest/testing paths (e.g. {@code BacktestController}) select a strategy by
- * name through this registry. Live signal generation and the daily job orchestration stay
- * pinned to {@link #defaultStrategy()}.
+     * <p>Backtest paths and configured live orchestration select a strategy by name through
+     * this registry. The default remains the compatibility fallback for unconfigured installs.
  */
 @Component
 public class StrategyRegistry {
@@ -29,7 +28,7 @@ public class StrategyRegistry {
         this.defaultStrategy = defaultStrategy;
     }
 
-    /** The strategy live signal generation and job orchestration are pinned to. */
+    /** The compatibility strategy used when no live configuration is active. */
     public TradingStrategy defaultStrategy() {
         return defaultStrategy;
     }

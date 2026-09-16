@@ -1,5 +1,7 @@
 package com.swingtrade.strategy;
 
+import com.swingtrade.domain.RiskManagementPolicy;
+
 /**
  * Tunable parameters for a swing-trade backtest run.
  *
@@ -40,14 +42,31 @@ public record BacktestConfig(
     double rewardRiskRatio,
     int maxHoldingDays,
     boolean signalExitEnabled,
-    int trendBreakStreakDays
+        int trendBreakStreakDays,
+        RiskManagementPolicy riskManagementPolicy
 ) {
+
+    /** Source-compatible constructor retaining the pre-risk-policy configuration shape. */
+    public BacktestConfig(double slippagePct, double brokeragePerTrade, double riskPerTradePct,
+                          double initialCapital, int maxConcurrentPositions, double atrMultiplierStop,
+                          double rewardRiskRatio, int maxHoldingDays, boolean signalExitEnabled,
+                          int trendBreakStreakDays) {
+        this(slippagePct, brokeragePerTrade, riskPerTradePct, initialCapital, maxConcurrentPositions,
+                atrMultiplierStop, rewardRiskRatio, maxHoldingDays, signalExitEnabled, trendBreakStreakDays,
+                RiskManagementPolicy.none());
+    }
+
+    public BacktestConfig {
+        if (riskManagementPolicy == null) {
+            riskManagementPolicy = RiskManagementPolicy.none();
+        }
+    }
 
     public static BacktestConfig defaults() {
         return new BacktestConfig(
                 0.001, 20.0, 0.01,
                 500_000.0, 5, 2.0,
-                2.5, 20, false, 21
+                2.5, 20, false, 21, RiskManagementPolicy.none()
         );
     }
 }

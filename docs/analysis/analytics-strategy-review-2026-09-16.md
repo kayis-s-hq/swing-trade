@@ -128,11 +128,11 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 
 ### P3 — Better LLM inputs and calibration
 - [x] 25 Sentiment mapped to fixed ±75, confidence ignored
-- [ ] 26 "Fundamentals" is price-only and duplicates Tech
+- [~] 26 "Fundamentals" is price-only and duplicates Tech
 - [x] 27 Headlines lack date/source; `{symbol}` placeholder unfilled
 - [~] 28 No structured Indian-market data in prompt
 - [~] 29 Article truncation before ranking/dedupe
-- [ ] 30 No determinism or grounding checks
+- [~] 30 No determinism or grounding checks
 - [ ] 31 Synthesis LLM adds little decision value
 - [~] 32 Hard-coded signal confidence (1.0 / 0.5)
 - [~] 33 LLM failure silently becomes NEUTRAL / keyword result
@@ -143,7 +143,7 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 - [~] 36 Market-regime filter
 - [~] 37 Relative strength vs Nifty/sector
 - [~] 38 Liquidity / surveillance / event filters
-- [ ] 39 Exit management (trailing, partial, breakeven)
+- [~] 39 Exit management (trailing, partial, breakeven)
 - [ ] 40 Sector / correlation exposure limits
 - [ ] 41 Parameter optimization with overfit control
 - [ ] 42 Entry strictness produces almost no BUYs
@@ -182,9 +182,11 @@ snapshot for efficiency, but it is no longer a correctness discrepancy.
 `buildNewsScore` now maps direction to `±100 × confidence`; article-count shrinkage remains a
 follow-up calibration choice.
 
-### 26. IMP — "Fundamentals" is price-only
-`FundamentalScorer` = ATR%, 30-day momentum, volume trend and SMA50. This overlaps Tech, so price momentum is about 70% of the composite.
-**Fix:** Rename it "Price Quality" for now. Add a real fundamentals score (EPS/revenue growth, ROE, D/E, promoter pledge) from filings or a data vendor.
+### 26. PARTIALLY FIXED — "Fundamentals" is price-only
+`FundamentalScorer` now consumes a separate `FundamentalDataSource` and scores persisted market-cap
+and valuation inputs with fail-closed handling, rather than duplicating technical candle indicators.
+Authoritative EPS/revenue growth, ROE, D/E, promoter pledge, filing freshness, and historical
+point-in-time population remain open.
 
 ### 32. PARTIALLY FIXED — Hard-coded signal confidence
 `SignalPipeline` now derives bounded confidence from RSI location and EMA separation, so BUY/SELL/HOLD
@@ -325,9 +327,10 @@ News ingestion now applies deterministic source/date ranking, prioritizes NSE/BS
 near-duplicate normalized headlines, and only then applies the bounded article budget. Cross-source
 semantic deduplication and richer relevance scoring remain open.
 
-### 30. IMP — No determinism or grounding
-A single sample at non-zero temperature. Red flags and catalysts can be invented.
-**Fix:** Temperature 0; optional 3-sample majority vote (disagreement lowers confidence). Require each flag or catalyst to cite a headline index and drop uncited items.
+### 30. PARTIALLY FIXED — No determinism or grounding
+LLM defaults and sentiment calls now request temperature 0, prompts require article-index citations,
+and uncited or out-of-range flags/catalysts are removed before persistence. Provider-level
+nondeterminism, multi-sample disagreement scoring, and grounding for every synthesized statement remain open.
 
 ### 31. IMP — Synthesis LLM adds little decision value
 `SynthesisService` restates numbers already computed. Its recommendation isn't measured.
@@ -356,8 +359,9 @@ modes with one current row per variant and one champion constraint. Live signal 
 gating, and per-variant portfolios remain open.
 
 The configuration API and dashboard management surface are now available, and two additional strategy
-families can run through the existing strategy registry. Live fan-out and SHADOW portfolio isolation
-remain intentionally opt-in follow-ups.
+families can run through the existing strategy registry. Live orchestration now treats CHAMPION configs
+as trade-authoritative, fans out SHADOW signals without trading, and excludes OFF/BACKTEST_ONLY configs;
+per-variant portfolio isolation and production data population remain open.
 
 ### 35. GAP — Add standard NSE swing setups
 **Fix:** Add `TradingStrategy` beans, backtest each, and enable only those passing out-of-sample:
@@ -388,9 +392,11 @@ An explicit eligibility policy now evaluates liquidity, surveillance flags, pric
 results/board-meeting windows without inferring unavailable external facts. Data population and live
 wiring remain open.
 
-### 39. GAP — Exit management
+### 39. PARTIALLY FIXED — Exit management
 Exits use a fixed 2×ATR stop, 2.5R target, EMA trend-break and time stop. Partial exit exists in `PaperTradingEngine` but the strategy never uses it.
-**Fix:** Take 50% off at 1.5–2R, move the stop to breakeven, and trail the rest with a chandelier (3×ATR) stop. Backtest against the current exits.
+An opt-in trailing/breakeven policy now evaluates completed bars in portfolio simulation and records
+explicit exit reasons. Partial exits, paper-engine wiring, and a default policy decision remain open.
+**Remaining:** Take 50% off at 1.5–2R and trail the rest with a chandelier (3×ATR) stop across paper and backtest paths.
 
 ### 40. GAP — Sector and correlation limits
 Nothing stops all positions landing in one sector (already noted in `docs/plans/2026-09-03-strategy-and-platform-roadmap.md`).

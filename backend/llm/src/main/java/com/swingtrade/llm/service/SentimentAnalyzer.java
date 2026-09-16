@@ -170,6 +170,14 @@ public class SentimentAnalyzer {
     }
 
     /**
+     * Parses and grounds model-generated flags and catalysts against the
+     * numbered articles supplied in the prompt.
+     */
+    public SentimentOutput parseResponse(String jsonResponse, int articleCount) {
+        return SentimentOutputValidator.validate(parseResponse(jsonResponse), articleCount);
+    }
+
+    /**
      * Falls back to Jackson-based JSON parsing when BeanOutputConverter fails.
      */
     private SentimentOutput parseWithJackson(String jsonResponse) {

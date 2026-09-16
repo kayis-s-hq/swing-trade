@@ -96,13 +96,25 @@ public class PriceActionSignalEngine {
      * @throws IllegalStateException    if there isn't enough candle history to compute EMA50
      */
     public SignalResult generateSignal(String symbol) {
+        return generateSignal(symbol, strategy);
+    }
+
+    /**
+     * Generates a signal using an explicitly selected strategy. The indicator
+     * calculation remains shared with the default live path; only rule
+     * evaluation is selected per call.
+     */
+    public SignalResult generateSignal(String symbol, TradingStrategy selectedStrategy) {
         if (symbol == null || symbol.isBlank()) {
             throw new IllegalArgumentException("Symbol cannot be null or blank");
+        }
+        if (selectedStrategy == null) {
+            throw new IllegalArgumentException("Strategy cannot be null");
         }
 
         var candles = BacktestEngine.getDescendingCandles(symbol, candleStore, MIN_REQUIRED_CANDLES);
 
-        return analyze(symbol, candles);
+        return analyze(symbol, candles, selectedStrategy);
     }
 
     /**
@@ -113,6 +125,15 @@ public class PriceActionSignalEngine {
      * @return the resulting signal with the indicator readings that produced it
      */
     public SignalResult analyze(String symbol, List<OhlcvCandle> chronologicalCandles) {
+        return analyze(symbol, chronologicalCandles, strategy);
+    }
+
+    /** Analyzes candles with an explicitly selected strategy. */
+    public SignalResult analyze(String symbol, List<OhlcvCandle> chronologicalCandles,
+                                TradingStrategy selectedStrategy) {
+        if (selectedStrategy == null) {
+            throw new IllegalArgumentException("Strategy cannot be null");
+        }
         BarSeries series = buildBarSeries(symbol, chronologicalCandles);
         int lastIndex = series.getBarCount() - 1;
 
@@ -142,18 +163,18 @@ public class PriceActionSignalEngine {
         List<String> passed = new ArrayList<>();
         List<String> failed = new ArrayList<>();
 
-        boolean trendAligned = strategy.trendAligned(indicators);
+        boolean trendAligned = selectedStrategy.trendAligned(indicators);
         recordRule(trendAligned, passed, failed,
             "Price > EMA20 > EMA50 (price=" + fmt(price) + ", ema20=" + fmt(ema20) + ", ema50=" + fmt(ema50) + ")");
 
-        boolean rsiInRange = strategy.rsiInEntryRange(indicators);
+        boolean rsiInRange = selectedStrategy.rsiInEntryRange(indicators);
         recordRule(rsiInRange, passed, failed, "RSI between 50-65 (rsi=" + fmt(rsi) + ")");
 
-        boolean volumeSurge = strategy.volumeSurge(indicators);
+        boolean volumeSurge = selectedStrategy.volumeSurge(indicators);
         recordRule(volumeSurge, passed, failed,
             "Volume > 1.5x VolumeMA20 (volume=" + fmt(volume) + ", threshold=" + fmt(volumeMa.multiply(VOLUME_MULTIPLIER)) + ")");
 
-        boolean nearWeeklyHigh = strategy.nearWeeklyHigh(indicators);
+        boolean nearWeeklyHigh = selectedStrategy.nearWeeklyHigh(indicators);
         recordRule(nearWeeklyHigh, passed, failed,
             "Price within 3% of 52-week high (price=" + fmt(price) + ", 52wHigh=" + fmt(weeklyHigh) + ")");
 
@@ -161,7 +182,7 @@ public class PriceActionSignalEngine {
         // All 4 entry rules must hold — see docs/backtesting.md "Entry rules (same as the live
         // signal engine)". BacktestEngine.tryEnter evaluates entry through the same
         // TradingStrategy instance so the backtest can never drift from these thresholds.
-        boolean enoughRulesPassed = strategy.isEntrySignal(indicators);
+        boolean enoughRulesPassed = selectedStrategy.isEntrySignal(indicators);
 
         SignalType type;
         String reasoning;
@@ -176,19 +197,19 @@ public class PriceActionSignalEngine {
             List<String> exitPassed = new ArrayList<>();
             List<String> exitFailed = new ArrayList<>();
 
-            boolean closeBelowEma20 = strategy.closeBelowEma20(indicators);
+            boolean closeBelowEma20 = selectedStrategy.closeBelowEma20(indicators);
             recordRule(closeBelowEma20, exitPassed, exitFailed,
                 "Close < EMA20 (close=%s, ema20=%s)".formatted(fmt(price), fmt(ema20)));
 
-            boolean ema20BelowEma50 = strategy.ema20BelowEma50(indicators);
+            boolean ema20BelowEma50 = selectedStrategy.ema20BelowEma50(indicators);
             recordRule(ema20BelowEma50, exitPassed, exitFailed,
                 "EMA20 < EMA50 (ema20=%s, ema50=%s)".formatted(fmt(ema20), fmt(ema50)));
 
-            boolean rsiBelowLowerBound = strategy.rsiBelowLowerBound(indicators);
+            boolean rsiBelowLowerBound = selectedStrategy.rsiBelowLowerBound(indicators);
             recordRule(rsiBelowLowerBound, exitPassed, exitFailed,
                 "RSI < 50 (rsi=%s)".formatted(fmt(rsi)));
 
-            if (strategy.isSignalExit(indicators)) {
+            if (selectedStrategy.isSignalExit(indicators)) {
                 type = SignalType.SELL;
                 reasoning = "Exit rule triggered (%d of 3): %s".formatted(exitPassed.size(), String.join("; ", exitPassed));
             } else {

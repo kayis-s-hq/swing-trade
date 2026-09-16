@@ -76,7 +76,7 @@ class SentimentServicePromptTest {
             {"score": "POSITIVE", "confidence": 0.8, "summary": "Strong news",
              "red_flags": [], "catalysts": []}
             """;
-        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
+        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.0)))
             .thenReturn(Mono.just(llmResponse));
 
         List<PersistedNewsArticle> articles = List.of(
@@ -95,7 +95,7 @@ class SentimentServicePromptTest {
                     && sysMsg.get("content").contains("financial analyst specialising in Indian equity markets");
             }),
             eq(512),
-            eq(0.3)
+            eq(0.0)
         );
     }
 
@@ -110,7 +110,7 @@ class SentimentServicePromptTest {
             {"score": "NEGATIVE", "confidence": 0.6, "summary": "Bad news",
              "red_flags": ["SEBI probe"], "catalysts": []}
             """;
-        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
+        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.0)))
             .thenReturn(Mono.just(llmResponse));
 
         List<PersistedNewsArticle> articles = List.of(
@@ -129,7 +129,7 @@ class SentimentServicePromptTest {
                     && userMsg.get("content").contains("TCS");
             }),
             eq(512),
-            eq(0.3)
+            eq(0.0)
         );
     }
 
@@ -139,7 +139,7 @@ class SentimentServicePromptTest {
         when(clientProvider.getBackend()).thenReturn(LlmBackendSelector.Backend.PI_SSH);
         when(promptLoader.getSystemPrompt()).thenReturn("System prompt");
         when(promptLoader.getUserPrompt()).thenReturn("Analyse {symbol}. News: {newsContent}.");
-        when(llmClient.generateChatCompletion(anyList(), eq(128), eq(0.3)))
+        when(llmClient.generateChatCompletion(anyList(), eq(128), eq(0.0)))
                 .thenReturn(Mono.just("{\"score\":\"NEUTRAL\",\"confidence\":0.5,\"summary\":\"Mixed\",\"red_flags\":[],\"catalysts\":[]}"));
         List<PersistedNewsArticle> articles = List.of(
                 new PersistedNewsArticle(1L, new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null), null));
@@ -148,7 +148,7 @@ class SentimentServicePromptTest {
 
         service.analyzeStockSentiment("TCS", LocalDate.now(ZoneId.of("Asia/Kolkata")));
 
-        verify(llmClient).generateChatCompletion(anyList(), eq(128), eq(0.3));
+        verify(llmClient).generateChatCompletion(anyList(), eq(128), eq(0.0));
     }
 
     @Test
@@ -156,7 +156,7 @@ class SentimentServicePromptTest {
     void filtersFutureArticlesBeforePrompting() {
         when(promptLoader.getSystemPrompt()).thenReturn("System prompt");
         when(promptLoader.getUserPrompt()).thenReturn("News: {newsContent}");
-        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
+        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.0)))
             .thenReturn(Mono.just("{\"score\":\"NEUTRAL\",\"confidence\":0.5,\"summary\":\"Mixed\"}"));
 
         LocalDate decisionDate = LocalDate.of(2026, 9, 15);
@@ -180,7 +180,7 @@ class SentimentServicePromptTest {
         verify(llmClient).generateChatCompletion(
             argThat(msgs -> msgs.get(1).get("content").contains("old news")
                 && !msgs.get(1).get("content").contains("future news")),
-            eq(512), eq(0.3));
+            eq(512), eq(0.0));
         org.mockito.Mockito.verify(newsIngestionService, org.mockito.Mockito.never())
             .fetchStockNews("TCS");
     }
@@ -190,7 +190,7 @@ class SentimentServicePromptTest {
     void addsStructuredMarketContext() {
         when(promptLoader.getSystemPrompt()).thenReturn("System prompt");
         when(promptLoader.getUserPrompt()).thenReturn("News: {newsContent}\nContext: {marketContext}");
-        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
+        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.0)))
                 .thenReturn(Mono.just("{\"score\":\"NEUTRAL\",\"confidence\":0.5,\"summary\":\"Mixed\"}"));
         LocalDate decisionDate = LocalDate.of(2026, 9, 15);
         NewsArticle article = new NewsArticle("TCS", "Headline", "url", null,
@@ -213,7 +213,7 @@ class SentimentServicePromptTest {
                     && prompt.contains("Q1 FY27")
                     && prompt.contains("Dividend declared")
                     && prompt.length() < 3000;
-        }), eq(512), eq(0.3));
+        }), eq(512), eq(0.0));
     }
 
     private static ZonedDateTime todayNoon() {

@@ -20,11 +20,13 @@ import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.RiskCalculator;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.StrategyConfig;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PositionStore;
 import com.swingtrade.strategy.ExitReason;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
+import com.swingtrade.strategy.TradingStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -137,6 +139,39 @@ public class SignalPipeline {
         logger.info("Generated {} signal for {} on {} (reasoning: {})",
                 result.type(), symbol, latestDate, result.reasoning());
 
+        return java.util.Optional.of(saved);
+    }
+
+    /**
+     * Generates one configured live signal. A shadow signal is persisted for
+     * audit/analysis but is never allowed to close a position; only the
+     * champion is trade-authoritative.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public java.util.Optional<Signal> generateConfiguredSignal(String symbol, StrategyConfig config,
+                                                                TradingStrategy strategy,
+                                                                boolean champion) {
+        if (config == null || strategy == null) {
+            throw new IllegalArgumentException("Configured signal requires a config and strategy");
+        }
+        SignalResult result;
+        try {
+            result = priceActionEngine.generateSignal(symbol, strategy);
+        } catch (IllegalStateException e) {
+            logger.debug("Not enough candles for configured signal on {}: {}", symbol, e.getMessage());
+            return java.util.Optional.empty();
+        }
+
+        if (champion && result.type() == Signal.SignalType.SELL) {
+            closeHeldPositionOnSell(symbol, result.date());
+        }
+        BigDecimal confidence = deriveConfidence(result);
+        String warningFlag = result.type() == Signal.SignalType.BUY
+            ? SignalEntity.WarningFlag.PENDING_SENTIMENT.code() : SignalEntity.WarningFlag.NONE.code();
+        Signal saved = persistenceService.buildAndSaveWithWarning(
+            symbol, result.date(), result.type(), confidence, result.reasoning(),
+            buildPriceActionIndicators(result), BigDecimal.valueOf(result.atr()), warningFlag,
+            null, null, config.variantId());
         return java.util.Optional.of(saved);
     }
 
