@@ -14,6 +14,9 @@ public class SynthesisOutput {
     private List<String> keyDrivers = new ArrayList<>();
     private List<String> bullishFactors = new ArrayList<>();
     private List<String> bearishFactors = new ArrayList<>();
+    private boolean conflictDetected;
+    private boolean eventRiskDetected;
+    private String eventRiskReason;
 
     public String getNarrative() {
         return narrative;
@@ -62,6 +65,18 @@ public class SynthesisOutput {
     public void setBearishFactors(List<String> bearishFactors) {
         this.bearishFactors = bearishFactors;
     }
+
+    public boolean isConflictDetected() { return conflictDetected; }
+
+    public void setConflictDetected(boolean conflictDetected) { this.conflictDetected = conflictDetected; }
+
+    public boolean isEventRiskDetected() { return eventRiskDetected; }
+
+    public void setEventRiskDetected(boolean eventRiskDetected) { this.eventRiskDetected = eventRiskDetected; }
+
+    public String getEventRiskReason() { return eventRiskReason; }
+
+    public void setEventRiskReason(String eventRiskReason) { this.eventRiskReason = eventRiskReason; }
 
     @Override
     public String toString() {

@@ -8,5 +8,8 @@ Return ONLY a valid JSON object with this exact structure:
   "confidence": 0.0 to 1.0,
   "keyDrivers": ["top 3 factors driving the recommendation"],
   "bullishFactors": ["specific bullish points with data"],
-  "bearishFactors": ["specific bearish points with data"]
+  "bearishFactors": ["specific bearish points with data"],
+  "conflictDetected": true,
+  "eventRiskDetected": true,
+  "eventRiskReason": "results or ex-date risk within the holding window, or empty string"
 }

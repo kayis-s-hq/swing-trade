@@ -26,10 +26,23 @@ public record PortfolioBacktestResult(
         int winningTrades,
         int rejectedTrades,
         List<BacktestTrade> trades,
-        List<PortfolioEquityPoint> equityCurve
+        List<PortfolioEquityPoint> equityCurve,
+        List<String> rejectionReasons
 ) {
+    /** Source-compatible constructor for callers without rejection-reason details. */
+    public PortfolioBacktestResult(LocalDate evaluationStart, LocalDate evaluationEnd, double initialCapital,
+                                   double finalCapital, double totalReturn, double maxDrawdownPct,
+                                   double sharpeRatio, double cagrPct, double sortinoRatio, double calmarRatio,
+                                   int totalTrades, int winningTrades, int rejectedTrades,
+                                   List<BacktestTrade> trades, List<PortfolioEquityPoint> equityCurve) {
+        this(evaluationStart, evaluationEnd, initialCapital, finalCapital, totalReturn, maxDrawdownPct,
+                sharpeRatio, cagrPct, sortinoRatio, calmarRatio, totalTrades, winningTrades, rejectedTrades,
+                trades, equityCurve, List.of());
+    }
+
     public PortfolioBacktestResult {
         trades = List.copyOf(trades);
         equityCurve = List.copyOf(equityCurve);
+        rejectionReasons = List.copyOf(rejectionReasons);
     }
 }

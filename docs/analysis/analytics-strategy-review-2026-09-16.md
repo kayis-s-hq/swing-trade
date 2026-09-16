@@ -133,7 +133,7 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 - [~] 28 No structured Indian-market data in prompt
 - [~] 29 Article truncation before ranking/dedupe
 - [~] 30 No determinism or grounding checks
-- [ ] 31 Synthesis LLM adds little decision value
+- [~] 31 Synthesis LLM adds little decision value
 - [~] 32 Hard-coded signal confidence (1.0 / 0.5)
 - [~] 33 LLM failure silently becomes NEUTRAL / keyword result
 
@@ -144,8 +144,8 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 - [~] 37 Relative strength vs Nifty/sector
 - [~] 38 Liquidity / surveillance / event filters
 - [~] 39 Exit management (trailing, partial, breakeven)
-- [ ] 40 Sector / correlation exposure limits
-- [ ] 41 Parameter optimization with overfit control
+- [~] 40 Sector / correlation exposure limits
+- [~] 41 Parameter optimization with overfit control
 - [ ] 42 Entry strictness produces almost no BUYs
 
 ---
@@ -332,9 +332,10 @@ LLM defaults and sentiment calls now request temperature 0, prompts require arti
 and uncited or out-of-range flags/catalysts are removed before persistence. Provider-level
 nondeterminism, multi-sample disagreement scoring, and grounding for every synthesized statement remain open.
 
-### 31. IMP — Synthesis LLM adds little decision value
-`SynthesisService` restates numbers already computed. Its recommendation isn't measured.
-**Fix:** Narrow the job to conflict detection and event risk (results or ex-date within holding window). Track its recommendation accuracy like sentiment.
+### 31. PARTIALLY FIXED — Synthesis LLM adds little decision value
+Synthesis output now carries bounded conflict and event-risk flags, and an evaluation service can
+record 1–20-session outcomes and recommendation accuracy for later measurement. Persistent storage,
+scheduled outcome collection, and production reporting remain open.
 
 ### 33. PARTIALLY FIXED — LLM failures hidden
 Top-level exceptions return a default NEUTRAL; LLM outages fall back to keyword sentiment stored as if it were an LLM result.
@@ -371,8 +372,10 @@ per-variant portfolio isolation and production data population remain open.
 - RSI(2) < 10 mean reversion above the 200-day moving average, exit on close > SMA5
 - Sector rotation: buy RS leaders in top-3 sectors by 3-month return
 
-Pullback-in-uptrend and volatility-squeeze strategy beans are now available for backtest evaluation;
-the remaining setups and live enablement are open.
+Pullback-in-uptrend, volatility-squeeze, 52-week-high breakout, and RSI(2) mean-reversion strategy
+beans are now available through an explicit opt-in registry. The current indicator contract lacks
+the exact prior-252 high/RSI(2)/SMA5/SMA200 inputs, so these remain backtest-only until the pipeline
+supports those semantics; sector rotation remains open.
 
 ### 36. GAP — Market-regime filter
 No index-trend or volatility gate exists; momentum breakouts lose heavily in falling markets.
@@ -398,13 +401,16 @@ An opt-in trailing/breakeven policy now evaluates completed bars in portfolio si
 explicit exit reasons. Partial exits, paper-engine wiring, and a default policy decision remain open.
 **Remaining:** Take 50% off at 1.5–2R and trail the rest with a chandelier (3×ATR) stop across paper and backtest paths.
 
-### 40. GAP — Sector and correlation limits
-Nothing stops all positions landing in one sector (already noted in `docs/plans/2026-09-03-strategy-and-platform-roadmap.md`).
-**Fix:** Max N positions / X% capital per sector in `CapitalTracker`. Optionally reject entries with > 0.7 60-day correlation to an existing holding.
+### 40. PARTIALLY FIXED — Sector and correlation limits
+Portfolio simulation now accepts sector and correlation exposure policies, rejects entries with
+deterministic reasons when limits are exceeded, and exposes those rejections in the result. Production
+sector taxonomy, rolling correlation population, and live `CapitalTracker` wiring remain open.
 
-### 41. IMP — Parameter optimization with overfit control
-Thresholds are compile-time constants in `StrategyParams`.
-**Fix:** Move params into `strategy_config`. Add a grid or walk-forward optimizer reporting a stability heatmap and deflated Sharpe; reject spiky optima.
+### 41. PARTIALLY FIXED — Parameter optimization with overfit control
+Bounded Cartesian parameter grids and chronological train/validation folds now produce stability
+statistics, drawdown-spike checks, approximate deflated-Sharpe decisions, and explicit overfit flags.
+The evaluator is not yet wired to a production optimization job, heatmap report, or automatic
+strategy-config promotion.
 
 ### 42. BUG (behavioral) — Entry confluence produces almost no BUYs
 4-of-4 entry vs 1-of-3 exit. The 2026-09-03 roadmap records zero BUYs across 14 stocks. RSI 50–65 plus "within 3% of 52w high"

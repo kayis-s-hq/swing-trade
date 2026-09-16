@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -19,11 +20,20 @@ import java.util.stream.Collectors;
 @Component
 public class StrategyRegistry {
 
+    private static final Set<String> EXPLICITLY_ENABLED_NAMES = Set.of(
+        PriceActionStrategy.NAME,
+        PullbackInUptrendStrategy.NAME,
+        VolatilitySqueezeStrategy.NAME,
+        FiftyTwoWeekHighBreakoutStrategy.NAME,
+        Rsi2MeanReversionStrategy.NAME
+    );
+
     private final Map<String, TradingStrategy> strategiesByName;
     private final TradingStrategy defaultStrategy;
 
     public StrategyRegistry(List<TradingStrategy> strategies, PriceActionStrategy defaultStrategy) {
         this.strategiesByName = strategies.stream()
+            .filter(strategy -> EXPLICITLY_ENABLED_NAMES.contains(strategy.name()))
             .collect(Collectors.toMap(TradingStrategy::name, Function.identity()));
         this.defaultStrategy = defaultStrategy;
     }

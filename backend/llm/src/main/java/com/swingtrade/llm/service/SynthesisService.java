@@ -31,12 +31,21 @@ public class SynthesisService {
     private final LlmClientProvider clientProvider;
     private final SynthesisPromptLoader promptLoader;
     private final LlmServerManagerProvider serverManagerProvider;
+    private final SynthesisEvaluationService evaluationService;
 
     public SynthesisService(LlmClientProvider clientProvider, SynthesisPromptLoader promptLoader,
                             LlmServerManagerProvider serverManagerProvider) {
+        this(clientProvider, promptLoader, serverManagerProvider, new SynthesisEvaluationService());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SynthesisService(LlmClientProvider clientProvider, SynthesisPromptLoader promptLoader,
+                            LlmServerManagerProvider serverManagerProvider,
+                            SynthesisEvaluationService evaluationService) {
         this.clientProvider = clientProvider;
         this.promptLoader = promptLoader;
         this.serverManagerProvider = serverManagerProvider;
+        this.evaluationService = evaluationService;
     }
 
     public SynthesisResult synthesize(CompositeAnalysis composite) {
@@ -129,6 +138,7 @@ public class SynthesisService {
         try {
             BeanOutputConverter<SynthesisOutput> converter = new BeanOutputConverter<>(SynthesisOutput.class);
             SynthesisOutput output = converter.convert(response);
+            evaluationService.record(composite, output);
 
             return new SynthesisResult(
                 output.getNarrative(),
@@ -160,6 +170,13 @@ public class SynthesisService {
         try {
             tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();
             LlmResponseDTO dto = mapper.readValue(json, LlmResponseDTO.class);
+            SynthesisOutput output = new SynthesisOutput();
+            output.setRecommendation(dto.getRecommendation());
+            output.setConfidence(dto.getConfidence());
+            output.setConflictDetected(dto.isConflictDetected());
+            output.setEventRiskDetected(dto.isEventRiskDetected());
+            output.setEventRiskReason(dto.getEventRiskReason());
+            evaluationService.record(composite, output);
             return new SynthesisResult(
                 dto.getNarrative(), dto.getRecommendation(), dto.getConfidence(),
                 dto.getKeyDrivers(), dto.getBullishFactors(), dto.getBearishFactors(), true
@@ -247,6 +264,9 @@ public class SynthesisService {
         private List<String> keyDrivers;
         private List<String> bullishFactors;
         private List<String> bearishFactors;
+        private boolean conflictDetected;
+        private boolean eventRiskDetected;
+        private String eventRiskReason;
 
         public String getNarrative() { return narrative; }
         public String getRecommendation() { return recommendation; }
@@ -254,5 +274,8 @@ public class SynthesisService {
         public List<String> getKeyDrivers() { return keyDrivers; }
         public List<String> getBullishFactors() { return bullishFactors; }
         public List<String> getBearishFactors() { return bearishFactors; }
+        public boolean isConflictDetected() { return conflictDetected; }
+        public boolean isEventRiskDetected() { return eventRiskDetected; }
+        public String getEventRiskReason() { return eventRiskReason; }
     }
 }

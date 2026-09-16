@@ -1,6 +1,9 @@
 package com.swingtrade.strategy;
 
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.CorrelationExposureLimit;
+import com.swingtrade.domain.PortfolioExposurePolicy;
+import com.swingtrade.domain.SectorExposureLimit;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -122,6 +125,45 @@ class PortfolioBacktestEngineTest {
             assertThat(trade.exitPrice()).isEqualByComparingTo("104.5");
         });
         assertThat(result.finalCapital()).isEqualTo(104.5);
+    }
+
+    @Test
+    void rejectsEntryWhenSectorPositionLimitIsReachedAndRecordsReason() {
+        BacktestTrade first = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 5), 40, 1, 0);
+        BacktestTrade second = trade("BBB", LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 5), 40, 1, 0);
+        BacktestConfig config = new BacktestConfig(0, 0, .01, 100, 5, 2, 2, 20, false, 21,
+                com.swingtrade.domain.RiskManagementPolicy.none(), PortfolioExposurePolicy.limits(
+                        new SectorExposureLimit(1, 1.0), new CorrelationExposureLimit(1.0, 2)));
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", first), result("BBB", second)), config,
+                LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 5), Map.of(),
+                Map.of("AAA", "IT", "BBB", "IT"));
+
+        assertThat(result.totalTrades()).isEqualTo(1);
+        assertThat(result.rejectionReasons()).containsExactly("SECTOR_POSITION_LIMIT");
+    }
+
+    @Test
+    void rejectsEntryWhenCorrelationExceedsLimitWithStableReason() {
+        BacktestTrade first = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 5), 40, 1, 0);
+        BacktestTrade second = trade("BBB", LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 5), 40, 1, 0);
+        List<OhlcvCandle> prices = List.of(
+                candle("AAA", LocalDate.of(2024, 1, 1), 100), candle("AAA", LocalDate.of(2024, 1, 2), 101),
+                candle("AAA", LocalDate.of(2024, 1, 3), 102), candle("AAA", LocalDate.of(2024, 1, 4), 103),
+                candle("AAA", LocalDate.of(2024, 1, 5), 104));
+        List<OhlcvCandle> matchingPrices = prices.stream()
+                .map(candle -> candle("BBB", candle.date(), candle.close().doubleValue())).toList();
+        BacktestConfig config = new BacktestConfig(0, 0, .01, 100, 5, 2, 2, 20, false, 21,
+                com.swingtrade.domain.RiskManagementPolicy.none(), PortfolioExposurePolicy.limits(
+                        new SectorExposureLimit(5, 1.0), new CorrelationExposureLimit(.7, 4)));
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", first), result("BBB", second)), config,
+                LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 5),
+                Map.of("AAA", prices, "BBB", matchingPrices), Map.of("AAA", "IT", "BBB", "FINANCE"));
+
+        assertThat(result.rejectionReasons()).containsExactly("CORRELATION_LIMIT");
     }
 
     private static BacktestConfig config(double capital) {

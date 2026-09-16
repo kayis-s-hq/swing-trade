@@ -21,6 +21,12 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 ## Data-integrity remediation
 
+- [x] Strategy/risk follow-up verified 2026-09-16: bounded synthesis evaluation, two additional
+  opt-in strategy families, portfolio sector/correlation rejection policies, and walk-forward
+  parameter stability evaluation are implemented with focused coverage. Full affected backend tests
+  and `./bin/verify-changes` passed; production persistence, exact indicator semantics, and live data
+  wiring remain documented follow-ups.
+
 - [x] Strategy/LLM remediation batch verified 2026-09-16: fundamentals are separated behind a
   fail-closed data source, sentiment prompts request deterministic temperature and enforce article
   citations, live strategy configs honor CHAMPION/SHADOW/OFF/BACKTEST_ONLY modes, and portfolio

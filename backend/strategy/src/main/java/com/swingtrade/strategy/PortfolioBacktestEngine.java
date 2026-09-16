@@ -2,6 +2,8 @@ package com.swingtrade.strategy;
 
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.RiskManagementPolicy;
+import com.swingtrade.domain.PortfolioExposureContext;
+import com.swingtrade.domain.PortfolioExposureDecision;
 
 import java.time.LocalDate;
 import java.time.DayOfWeek;
@@ -26,6 +28,13 @@ final class PortfolioBacktestEngine {
     PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
                                      LocalDate evaluationStart, LocalDate evaluationEnd,
                                      Map<String, List<OhlcvCandle>> marketData) {
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, marketData, Map.of());
+    }
+
+    PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
+                                     LocalDate evaluationStart, LocalDate evaluationEnd,
+                                     Map<String, List<OhlcvCandle>> marketData,
+                                     Map<String, String> sectors) {
         if (symbolResults == null || config == null || evaluationStart == null || evaluationEnd == null
                 || evaluationStart.isAfter(evaluationEnd)) {
             throw new IllegalArgumentException("Portfolio inputs must be non-null and the window must be ordered");
@@ -63,6 +72,7 @@ final class PortfolioBacktestEngine {
         double cash = config.initialCapital();
 
         int rejected = 0;
+        List<String> rejectionReasons = new ArrayList<>();
         for (LocalDate date : observationDates) {
             Double settled = unsettledByDate.remove(date);
             if (settled != null) {
@@ -106,10 +116,21 @@ final class PortfolioBacktestEngine {
 
             for (BacktestTrade candidate : entriesByDate.getOrDefault(date, List.of())) {
                 double notional = entryNotional(candidate);
-                if (open.containsKey(candidate.symbol())
-                        || open.size() >= config.maxConcurrentPositions()
-                        || notional <= 0 || notional > cash) {
+                String baseRejection = open.containsKey(candidate.symbol()) ? "OPEN_POSITION"
+                        : open.size() >= config.maxConcurrentPositions() ? "MAX_CONCURRENT_POSITIONS"
+                        : notional <= 0 ? "INVALID_NOTIONAL"
+                        : notional > cash ? "INSUFFICIENT_CAPITAL" : null;
+                PortfolioExposureDecision exposure = baseRejection == null
+                        ? config.portfolioExposurePolicy().evaluate(new PortfolioExposureContext(
+                                candidate.symbol(), sectors.get(candidate.symbol()), notional,
+                                config.initialCapital(), open.values().stream()
+                                .map(held -> new PortfolioExposureContext.Holding(held.symbol(),
+                                        sectors.get(held.symbol()), entryNotional(held))).toList(),
+                                closingPrices(effectiveMarketData)))
+                        : PortfolioExposureDecision.accept();
+                if (baseRejection != null || !exposure.accepted()) {
                     rejected++;
+                    rejectionReasons.add(baseRejection != null ? baseRejection : exposure.reason());
                     continue;
                 }
                 open.put(candidate.symbol(), candidate);
@@ -137,11 +158,19 @@ final class PortfolioBacktestEngine {
                         .map(PortfolioEquityPoint::equity).toList()), cagr, BacktestMetrics.sortinoRatio(equityCurve.stream()
                         .map(PortfolioEquityPoint::equity).toList()),
                 BacktestMetrics.calmarRatio(cagr, maxDrawdown), accepted.size(), winners, rejected,
-                accepted, equityCurve);
+                accepted, equityCurve, rejectionReasons);
     }
 
     private static double entryNotional(BacktestTrade trade) {
         return trade.entryPrice().doubleValue() * trade.quantity();
+    }
+
+    private static Map<String, List<Double>> closingPrices(Map<String, List<OhlcvCandle>> marketData) {
+        Map<String, List<Double>> prices = new HashMap<>();
+        marketData.forEach((symbol, candles) -> prices.put(symbol, candles.stream()
+                .sorted(Comparator.comparing(OhlcvCandle::date))
+                .map(candle -> candle.close().doubleValue()).toList()));
+        return prices;
     }
 
     private static OhlcvCandle candleOn(Map<String, List<OhlcvCandle>> marketData,
