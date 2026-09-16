@@ -6,7 +6,11 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -113,6 +117,138 @@ class PiLlamaServerManagerIdleTest {
             long idleSeconds = manager.getIdleSeconds();
             assertThat(idleSeconds).isGreaterThanOrEqualTo(2);
             assertThat(idleSeconds).isLessThan(3);
+        }
+    }
+
+    @Nested
+    @DisplayName("In-flight tracking — a busy server must not be auto-stopped")
+    class InFlightTracking {
+
+        @Test
+        @DisplayName("beginRequest resets the idle clock so a starting request isn't seen as idle")
+        void beginRequestResetsIdleClock() {
+            manager.setIdleCheckTime(System.currentTimeMillis() - 60_000);
+            assertThat(manager.getIdleSeconds()).isGreaterThanOrEqualTo(manager.getIdleTimeoutSec());
+
+            manager.beginRequest();
+
+            assertThat(manager.getIdleSeconds()).isLessThan(manager.getIdleTimeoutSec());
+        }
+
+        @Test
+        @DisplayName("server counts as busy while a request is in flight, even once idle time is exceeded")
+        void staysBusyWhileRequestInFlight() {
+            manager.beginRequest();
+
+            // Simulate a long generation: the idle clock runs past the timeout while
+            // the request is still going. This is the regression — the idle monitor
+            // used to stop llama-server here, killing the in-flight request.
+            manager.setIdleCheckTime(System.currentTimeMillis() - 60_000);
+
+            assertThat(manager.getIdleSeconds()).isGreaterThanOrEqualTo(manager.getIdleTimeoutSec());
+            assertThat(manager.hasInFlightRequests()).isTrue();
+        }
+
+        @Test
+        @DisplayName("endRequest clears the in-flight marker and refreshes the idle clock")
+        void endRequestReleasesServer() {
+            manager.beginRequest();
+            manager.setIdleCheckTime(System.currentTimeMillis() - 60_000);
+
+            manager.endRequest();
+
+            assertThat(manager.hasInFlightRequests()).isFalse();
+            // The idle clock restarts on completion, so the server gets a fresh
+            // idle window rather than being stopped immediately after a long call.
+            assertThat(manager.getIdleSeconds()).isLessThan(manager.getIdleTimeoutSec());
+        }
+
+        @Test
+        @DisplayName("concurrent requests only release the server once all have finished")
+        void nestedRequestsTrackedIndependently() {
+            manager.beginRequest();
+            manager.beginRequest();
+
+            manager.endRequest();
+            assertThat(manager.hasInFlightRequests()).isTrue();
+
+            manager.endRequest();
+            assertThat(manager.hasInFlightRequests()).isFalse();
+        }
+
+        @Test
+        @DisplayName("unbalanced endRequest calls never drive the counter negative")
+        void endRequestDoesNotUnderflow() {
+            manager.endRequest();
+            manager.endRequest();
+
+            assertThat(manager.hasInFlightRequests()).isFalse();
+
+            // A subsequent real request must still register as busy.
+            manager.beginRequest();
+            assertThat(manager.hasInFlightRequests()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Inference readiness")
+    class InferenceReadiness {
+
+        @Test
+        @DisplayName("does not report stopped while the health endpoint still answers")
+        void waitsForHealthEndpointToCloseBeforeReportingStopped() throws Exception {
+            HttpServer mockServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            mockServer.createContext("/health", exchange -> {
+                exchange.sendResponseHeaders(200, -1);
+                exchange.close();
+            });
+            mockServer.start();
+
+            PiLlamaServerManager lifecycleManager = new PiLlamaServerManager(
+                    settingsStore, "testuser", "127.0.0.1", mockServer.getAddress().getPort(), 3, 2, 4096);
+            assertThat(lifecycleManager.awaitServerStopped(0)).isFalse();
+
+            mockServer.stop(0);
+            assertThat(lifecycleManager.awaitServerStopped(0)).isTrue();
+        }
+
+        @Test
+        @DisplayName("waits through a not-ready completion response before adopting the server")
+        void retriesUntilChatCompletionsAreReady() throws Exception {
+            HttpServer mockServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            AtomicInteger completionCalls = new AtomicInteger();
+            mockServer.createContext("/health", exchange -> {
+                exchange.sendResponseHeaders(200, -1);
+                exchange.close();
+            });
+            mockServer.createContext("/v1/chat/completions", exchange -> {
+                exchange.getRequestBody().readAllBytes();
+                int call = completionCalls.incrementAndGet();
+                int status = call == 1 ? 503 : 200;
+                byte[] body = (call == 1 ? "" : "{\"choices\":[{\"message\":{\"content\":\"OK\"}}]}")
+                        .getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(status, body.length);
+                exchange.getResponseBody().write(body);
+                exchange.close();
+            });
+            mockServer.start();
+
+            try {
+                PiLlamaServerManager readinessManager = new PiLlamaServerManager(
+                        settingsStore,
+                        "testuser",
+                        "127.0.0.1",
+                        mockServer.getAddress().getPort(),
+                        3,
+                        2,
+                        4096
+                );
+
+                assertThat(readinessManager.awaitServerReady(5)).isTrue();
+                assertThat(completionCalls.get()).isGreaterThanOrEqualTo(2);
+            } finally {
+                mockServer.stop(0);
+            }
         }
     }
 }

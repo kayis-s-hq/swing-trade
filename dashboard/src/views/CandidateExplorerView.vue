@@ -9,8 +9,8 @@
           Candidate Explorer
         </h1>
         <p class="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
-          Scan the NSE universe for technical BUY signals with a profitable backtest before adding a
-          symbol to the pilot watchlist.
+          Scan the NSE universe for technical BUY signals with a profitable backtest. Review
+          qualified results, then add symbols to the pilot watchlist explicitly.
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -285,9 +285,9 @@
               </td>
               <td class="px-3 py-3.5">
                 <span
-                  v-if="item.activated"
+                  v-if="item.qualified"
                   class="rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success"
-                  >Activated</span
+                  >Qualified</span
                 >
                 <span v-else class="text-xs text-text-muted">{{
                   item.reason ?? item.dataStatus
@@ -327,8 +327,8 @@
     </section>
 
     <p class="mt-4 text-xs leading-5 text-text-muted">
-      Candidate scans never invoke paper trading. Symbols are activated only after the current BUY
-      signal and backtest gate both pass.
+      Candidate scans never modify the watchlist or invoke paper trading. Qualified symbols can be
+      added explicitly from the Watchlist page after review.
     </p>
   </div>
 </template>

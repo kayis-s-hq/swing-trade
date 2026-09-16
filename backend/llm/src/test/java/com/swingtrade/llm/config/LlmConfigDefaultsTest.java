@@ -37,6 +37,7 @@ class LlmConfigDefaultsTest {
         LlmProperties result = new LlmProperties();
         configureProvider(result.getProviders().getLocal(), "http://local.test/v1", "local-model");
         configureProvider(result.getProviders().getPiSsh(), "http://pi.test/v1", "pi-model");
+        result.getLlamaCpp().setModel("/models/pi-model.gguf");
         configureProvider(result.getProviders().getOpenai(), "https://openai.test/v1", "openai-model");
         configureProvider(result.getProviders().getOllama(), "http://ollama.test/v1", "ollama-model");
         return result;
@@ -61,7 +62,7 @@ class LlmConfigDefaultsTest {
             assertThat(local.getBaseUrl()).isEqualTo("http://local.test/v1");
             assertThat(local.getModel()).isEqualTo("local-model");
             assertThat(pi.getBaseUrl()).isEqualTo("http://pi.test/v1");
-            assertThat(pi.getModel()).isEqualTo("pi-model");
+            assertThat(pi.getModel()).isEqualTo("/models/pi-model.gguf");
             assertThat(openai.getBaseUrl()).isEqualTo("https://openai.test/v1");
             assertThat(openai.getModel()).isEqualTo("openai-model");
             assertThat(ollama.getBaseUrl()).isEqualTo("http://ollama.test/v1");
@@ -85,6 +86,17 @@ class LlmConfigDefaultsTest {
 
             assertThat(options.getBaseUrl()).isEqualTo("https://database.test/v1");
             assertThat(options.getModel()).isEqualTo("database-model");
+        }
+
+        @Test
+        void shouldUseTheLoadedLlamaCppModelForPiRequests() {
+            when(appSettingsStore.get("llamacpp.model"))
+                .thenReturn(Optional.of("/models/stage-qwen.gguf"));
+
+            OpenAiChatOptions options = config.piSshChatModel(
+                appSettingsStore, properties, "test-key").getOptions();
+
+            assertThat(options.getModel()).isEqualTo("/models/stage-qwen.gguf");
         }
     }
 }

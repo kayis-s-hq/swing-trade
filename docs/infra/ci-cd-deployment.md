@@ -65,7 +65,7 @@ Flow:
 Key env vars (all configurable via `-e`):
 - `DB_HOST`, `DB_PORT`, `DB_NAME` — PostgreSQL connection (resolves to container name on Docker network)
 - `REDIS_HOST`, `REDIS_PORT` — Redis connection
-- `LLM_BASE_URL`, `LLM_MODEL_NAME`, `LLM_TIMEOUT` — vLLM integration
+- `LLM_BACKEND`, `LLM_PI_SSH_BASE_URL`, `LLAMACPP_MODEL`, `LLM_TIMEOUT` — LLM backend (defaults in `backend/api/src/main/resources/application.properties`)
 - `TRADING_ENABLED`, `PAPER_TRADING_ENABLED`, `REAL_TRADING_ENABLED` — trading mode
 - `STRATEGY_ENABLED` — signal generation
 - `SIGNAL_ENABLED`, `DISCORD_WEBHOOK_ENABLED` — notification toggles

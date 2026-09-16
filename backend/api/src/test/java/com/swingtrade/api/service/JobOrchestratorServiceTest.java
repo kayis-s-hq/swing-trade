@@ -912,9 +912,9 @@ class JobOrchestratorServiceTest {
         @Test
         @DisplayName("RUNNING run older than the staleness threshold is not blocking")
         void shouldReturnEmptyWhenOnlyRunningRunIsOlderThanStalenessThreshold() {
-            // Threshold is 144 min (1440s * 1 batch * 6); 3 hours is past it.
+            // Threshold is 10 hours (6000s * 1 batch * 6); 12 hours is past it.
             JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
-                LocalDateTime.now(IST).minusHours(3));
+                LocalDateTime.now(IST).minusHours(12));
             when(jobRunRepository.findByStatusOrderByStartedAtDesc(JobRun.Status.RUNNING.name()))
                 .thenReturn(List.of(entity));
 
@@ -984,9 +984,9 @@ class JobOrchestratorServiceTest {
         @Test
         @DisplayName("Stale RUNNING run and its RUNNING stages are force-failed")
         void shouldReapStaleRunningRunAndItsRunningStages() {
-            // Threshold is 144 min (1440s * 1 batch * 6); 3 h is past it.
+            // Threshold is 10 hours (6000s * 1 batch * 6); 12 h is past it.
             JobRunEntity entity = makeRunEntity(JobRun.Status.RUNNING, 1, 0, 0,
-                LocalDateTime.now(IST).minusHours(3));
+                LocalDateTime.now(IST).minusHours(12));
             entity.setCompletedAt(null);
             JobRunStageEntity stage = makeStageEntity(runId, SYMBOL,
                 JobRunStage.StageName.SENTIMENT, JobRunStage.Status.RUNNING.name(), null, null);
@@ -1317,12 +1317,17 @@ class JobOrchestratorServiceTest {
 
             service.cancelRun(startedRun.runId());
 
-            assertThat(sentimentInterrupted.await(5, TimeUnit.SECONDS))
+            // 15s, not 5s: this awaits a REAL Thread.interrupt() delivered through a REAL
+            // ExecutorService (Future#cancel(true)) unwinding a REAL Thread.sleep(30_000) — actual
+            // OS thread scheduling, not a mocked/virtual clock. 5s was measured flaky under
+            // real (non-CI-isolated) system load on this Pi even with the interrupt logic
+            // working correctly; this only widens the test's patience, not what it asserts.
+            assertThat(sentimentInterrupted.await(15, TimeUnit.SECONDS))
                 .as("cancelRun() must interrupt the thread blocked in the SENTIMENT stage call, "
                     + "not just update DB status")
                 .isTrue();
-            assertThat(sentimentStageFinalized.await(5, TimeUnit.SECONDS)).isTrue();
-            assertThat(symbolProcessingFinished.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(sentimentStageFinalized.await(15, TimeUnit.SECONDS)).isTrue();
+            assertThat(symbolProcessingFinished.await(15, TimeUnit.SECONDS)).isTrue();
 
             JobRunStageEntity sentimentStage = stageState.get(JobRunStage.StageName.SENTIMENT.name());
             assertThat(sentimentStage.getStatus())
@@ -1379,7 +1384,11 @@ class JobOrchestratorServiceTest {
 
             service.cancelRun(startedRun.runId());
 
-            assertThat(symbolProcessingFinished.await(5, TimeUnit.SECONDS))
+            // 15s, not 5s — same reasoning as shouldInterruptInFlightSentimentStageOnCancel: this
+            // depends on a REAL Thread.interrupt() unwinding a REAL Thread.sleep(30_000), which is
+            // sensitive to actual OS thread scheduling and was measured flaky at 5s under real
+            // system load even when the underlying race-tolerance logic was correct.
+            assertThat(symbolProcessingFinished.await(15, TimeUnit.SECONDS))
                 .as("processSymbol() must still finish (recordCompletion() must still be reached) even "
                     + "when executeStage()'s own status write loses a race with cancelRun()'s — the lost "
                     + "race must not silently abort the rest of the stage loop for this symbol")

@@ -28,4 +28,25 @@ public interface LlmServerManager {
      * Restarts the server with updated configuration.
      */
     void restart();
+
+    /**
+     * Marks the start of an in-flight LLM request so the idle monitor won't stop
+     * the server underneath it.
+     *
+     * <p>This can't be inferred from the server's own health endpoint: llama.cpp
+     * serves multiple slots, so it answers {@code /health} perfectly happily while
+     * one slot is mid-generation. Without explicit tracking, any request running
+     * longer than {@code llamacpp.idle-timeout} had the server stopped out from
+     * under it and failed with "Request failed".
+     *
+     * <p>Must be paired with {@link #endRequest()} in a finally block.
+     */
+    default void beginRequest() {
+    }
+
+    /**
+     * Marks the end of an in-flight LLM request and refreshes the idle clock.
+     */
+    default void endRequest() {
+    }
 }

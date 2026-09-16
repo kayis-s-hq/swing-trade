@@ -231,11 +231,9 @@ public class SettingsController {
                 return ResponseEntity.ok(ApiResponse.ok(result));
             }
 
-            // Test actual LLM inference with a temporary client — does NOT affect the active backend.
-            LlmProperties.Provider piDefaults = llmProperties.getProviders().getPiSsh();
-            URI piBaseUrl = piInferenceBaseUrl();
-            String piModel = appSettingsService.get("openai.model", piDefaults.getModel());
-            boolean inferenceOk = testInference(piBaseUrl, piModel);
+            // Use the same OkHttp transport as the active Spring AI LLM client.
+            // JDK HttpClient requests to llama.cpp can be rejected with an empty 400.
+            boolean inferenceOk = piServerManager.testInferenceConnection();
             result.put("success", inferenceOk);
             result.put("message", inferenceOk
                 ? "Pi SSH connection successful, llama-server started and responded to inference"
@@ -268,7 +266,11 @@ public class SettingsController {
             String payload = """
                 {"model":"%s","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":%d,"temperature":0.2}"""
                 .formatted(model, TEST_INFERENCE_MAX_TOKENS);
-            HttpClient client = HttpClient.newHttpClient();
+            // llama.cpp's OpenAI-compatible listener is HTTP/1.1-only; pin the
+            // JDK client to avoid protocol negotiation that it rejects with 400.
+            HttpClient client = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(chatCompletionsUri(baseUrl))
                 .header("Content-Type", "application/json")
@@ -281,6 +283,8 @@ public class SettingsController {
                 .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
+                logger.warn("Inference test at {} using model {} returned HTTP {}: {}",
+                    baseUrl, model, response.statusCode(), response.body());
                 return false;
             }
             ObjectMapper mapper = new ObjectMapper();
@@ -288,13 +292,9 @@ public class SettingsController {
             var content = node.path("choices").path(0).path("message").path("content").asText(null);
             return content != null && !content.isBlank() && OK_PATTERN.matcher(content).find();
         } catch (Exception e) {
-            logger.debug("Inference test failed: {}", e.getMessage());
+            logger.warn("Inference test failed for {} using model {}: {}", baseUrl, model, e.getMessage());
             return false;
         }
-    }
-
-    URI piInferenceBaseUrl() {
-        return llmProperties.getProviders().getPiSsh().getBaseUrl();
     }
 
     URI ollamaInferenceBaseUrl() {

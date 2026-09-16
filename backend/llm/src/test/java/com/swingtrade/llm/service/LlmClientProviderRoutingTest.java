@@ -8,6 +8,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.openai.OpenAiChatModel;
+import com.swingtrade.llm.client.LlamaCppClient;
+import com.swingtrade.llm.client.LlmClient;
+import static org.mockito.Mockito.mock;
 
 import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,7 +45,7 @@ class LlmClientProviderRoutingTest {
 
     @BeforeEach
     void setUp() {
-        provider = new LlmClientProvider(selector, localModel, piSshModel, openAiModel, ollamaModel);
+        provider = new LlmClientProvider(selector, mock(LlamaCppClient.class), localModel, piSshModel, openAiModel, ollamaModel);
     }
 
     @Nested
@@ -56,7 +59,7 @@ class LlmClientProviderRoutingTest {
             when(selector.resolve()).thenReturn(LlmBackendSelector.Backend.LOCAL);
 
             // Act
-            com.swingtrade.llm.client.LlmClient client = provider.getClient();
+            LlmClient client = provider.getClient();
 
             // Assert
             assertThat(client).isNotNull();
@@ -74,10 +77,10 @@ class LlmClientProviderRoutingTest {
             when(selector.resolve()).thenReturn(LlmBackendSelector.Backend.PI_SSH);
 
             // Act
-            com.swingtrade.llm.client.LlmClient client = provider.getClient();
+            LlmClient client = provider.getClient();
 
             // Assert
-            assertThat(client).isNotNull();
+            assertThat(client).isInstanceOf(LlamaCppClient.class);
         }
     }
 
@@ -92,7 +95,7 @@ class LlmClientProviderRoutingTest {
             when(selector.resolve()).thenReturn(LlmBackendSelector.Backend.OPENAI);
 
             // Act
-            com.swingtrade.llm.client.LlmClient client = provider.getClient();
+            LlmClient client = provider.getClient();
 
             // Assert
             assertThat(client).isNotNull();
@@ -110,7 +113,7 @@ class LlmClientProviderRoutingTest {
             when(selector.resolve()).thenReturn(LlmBackendSelector.Backend.OLLAMA);
 
             // Act
-            com.swingtrade.llm.client.LlmClient client = provider.getClient();
+            LlmClient client = provider.getClient();
 
             // Assert
             assertThat(client).isNotNull();

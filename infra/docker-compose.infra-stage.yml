@@ -40,13 +40,12 @@ services:
       - DB_USER=swingtrade_user
       - DB_PASSWORD=swingtrade_password
       - LANGCHAIN4J_OPEN_AI_API_KEY=${LANGCHAIN4J_OPEN_AI_API_KEY:-}
-      - LLM_BASE_URL=${LLM_BASE_URL:-http://localhost:8000}
-      - LLM_MODEL_NAME=${LLM_MODEL_NAME:-claude-sonnet-4-6}
-      - LLM_TIMEOUT=${LLM_TIMEOUT:-30000}
       - LOG_FILE=/var/log/swing-trade/stage.log
       - TZ=Asia/Kolkata
     volumes:
       - stage_logs:/var/log/swing-trade
+      # Read-only key for PiLlamaServerManager's SSH calls to the Pi host.
+      - /home/dietpi/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,6 +62,8 @@ services:
     container_name: swing-trade-stage-dashboard
     restart: always
     build:
+      # Deployment copies the dashboard artifact and Dockerfile into this
+      # stage directory, so the build context must stay inside it.
       context: ./dashboard
       dockerfile: Dockerfile
     ports:

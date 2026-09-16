@@ -7,7 +7,6 @@ import com.swingtrade.data.repository.CandidateScanRunRepository;
 import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.AppSettingsService;
 import com.swingtrade.data.service.DataIngestionService;
-import com.swingtrade.data.service.WatchlistService;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.PriceActionSignalEngine;
@@ -50,7 +49,6 @@ class CandidateScanServiceTest {
             runRepository,
             resultRepository,
             mock(DataIngestionService.class),
-            mock(WatchlistService.class),
             settingsService,
             mock(CandleStore.class),
             mock(PriceActionSignalEngine.class),

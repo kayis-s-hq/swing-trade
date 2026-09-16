@@ -143,6 +143,18 @@ public class SentimentAnalyzer {
         try {
             BeanOutputConverter<SentimentOutput> converter = new BeanOutputConverter<>(SentimentOutput.class);
             SentimentOutput result = converter.convert(jsonResponse);
+            // SentimentOutput has a no-arg constructor + setters (required for
+            // BeanOutputConverter to construct it at all — see its javadoc), which
+            // has a side effect here: Jackson doesn't fail on an unrecognized JSON
+            // property by default, so a response using the wrong field name (e.g.
+            // "sentiment" instead of the expected "score") "succeeds" with a bean
+            // whose sentiment is simply null, instead of throwing. Treat that the
+            // same as a real parse failure so it falls through to the
+            // Jackson/plain-text fallback chain below, rather than propagating a
+            // null SentimentType into buildSentimentResult's switch.
+            if (result == null || result.getSentiment() == null) {
+                throw new IllegalStateException("BeanOutputConverter produced no sentiment field");
+            }
             logger.debug("BeanOutputConverter parsed: {} (confidence: {})",
                     result.getSentiment(), result.getConfidence());
             return result;

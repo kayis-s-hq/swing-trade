@@ -1,6 +1,11 @@
 package com.swingtrade.llm.service;
 
 import com.swingtrade.domain.store.AppSettingsStore;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,6 +39,7 @@ public class PiLlamaServerManager implements LlmServerManager {
 
     private static final Logger logger = LoggerFactory.getLogger(PiLlamaServerManager.class);
     private static final int STARTUP_TIMEOUT_SECONDS = 45;
+    private static final int STOP_TIMEOUT_SECONDS = 60;
     private static final int IDLE_CHECK_INTERVAL_SEC = 10;
 
     private final AppSettingsStore appSettingsStore;
@@ -54,6 +60,11 @@ public class PiLlamaServerManager implements LlmServerManager {
     });
     private final AtomicLong idleCheckTime = new AtomicLong(0);
 
+    // Requests currently being served. The idle monitor refuses to stop the
+    // server while this is non-zero (see beginRequest/endRequest).
+    private final java.util.concurrent.atomic.AtomicInteger inFlightRequests =
+            new java.util.concurrent.atomic.AtomicInteger(0);
+
     public PiLlamaServerManager(AppSettingsStore appSettingsStore,
                                 @Value("${llamacpp.ssh.user:dietpi}") String sshUser,
                                 @Value("${llamacpp.ssh.host:192.168.0.100}") String sshHost,
@@ -72,8 +83,33 @@ public class PiLlamaServerManager implements LlmServerManager {
 
     @Override
     public void ensureRunning() {
+        // Every LLM request calls this first, so it doubles as the "last used"
+        // marker — without it the idle clock only ever measured time since
+        // startup, and a busy server got stopped mid-request.
+        idleCheckTime.set(System.currentTimeMillis());
+
         if (isRunning()) {
             logger.debug("llama-server already running on {} port {}", sshHost, port);
+            return;
+        }
+
+        // `running` only reflects what THIS JVM instance itself started — it
+        // resets to false on every app restart, even though llama-server is a
+        // detached ("nohup ... & disown") process on the Pi that keeps running
+        // across app restarts. Without checking the real Pi state here, every
+        // restart re-attempted a fresh SSH launch that failed to bind the
+        // already-used port, silently masked because the health poll right
+        // after found the pre-existing server healthy anyway — wasted, noisy
+        // "Starting llama-server..." + bind-failure log churn on every restart.
+        if (healthCheck()) {
+            if (!awaitServerReady(STARTUP_TIMEOUT_SECONDS)) {
+                throw new IllegalStateException("llama-server is listening on " + sshHost + ":" + port
+                        + " but did not become inference-ready within " + STARTUP_TIMEOUT_SECONDS + "s");
+            }
+            logger.info("llama-server on Pi already inference-ready on {}:{} (adopting existing process)",
+                    sshHost, port);
+            running = true;
+            startIdleMonitor();
             return;
         }
 
@@ -108,6 +144,10 @@ public class PiLlamaServerManager implements LlmServerManager {
                     "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 %s@%s \"pkill -f 'llama-server.*--port.*%d'\"",
                     sshUser, sshHost, port);
             runSshCommand(cmd, 10);
+            if (!awaitServerStopped(STOP_TIMEOUT_SECONDS)) {
+                throw new IllegalStateException("llama-server remained reachable on " + sshHost + ":" + port
+                        + " after " + STOP_TIMEOUT_SECONDS + "s");
+            }
         } catch (Exception e) {
             logger.warn("Failed to stop llama-server on Pi: {}", e.getMessage());
         }
@@ -119,6 +159,11 @@ public class PiLlamaServerManager implements LlmServerManager {
     @Override
     public boolean isRunning() {
         return running;
+    }
+
+    /** Runs a minimal completion through the same OkHttp transport used by Spring AI. */
+    public boolean testInferenceConnection() {
+        return inferenceReadyCheck();
     }
 
     @Override
@@ -144,12 +189,12 @@ public class PiLlamaServerManager implements LlmServerManager {
         String logDir = "/tmp";
         String cmd = String.format(
                 "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 %s@%s \"nohup '%s' " +
-                "-m '%s' --host 0.0.0.0 --port %d -t %d -c %d -b 128 -ub 64 --mlock --timeout 0" +
+                "-m '%s' --host 0.0.0.0 --port %d -t %d -c %d -b 128 -ub 64 --timeout 0" +
                 " > '%s/llama-server.log' 2>&1 & disown\"",
                 sshUser, sshHost, binPath, modelPath, port, threads, contextSize, logDir);
 
         // Run the SSH command to launch llama-server on Pi, then exit.
-        ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd);
+        ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
         pb.redirectErrorStream(true);
         Process launchProc = pb.start();
         if (!launchProc.waitFor(15, TimeUnit.SECONDS)) {
@@ -157,21 +202,14 @@ public class PiLlamaServerManager implements LlmServerManager {
             throw new RuntimeException("SSH launch command timed out");
         }
 
-        // Poll health endpoint — this is the real success indicator.
-        // No SSH process to track; llama-server runs independently on Pi.
-        long waited = 0;
-        while (waited < STARTUP_TIMEOUT_SECONDS) {
-            sleepQuietly(2000);
-            if (healthCheck()) {
-                logger.info("llama-server on Pi is healthy after {}s", waited);
-                break;
-            }
-            waited += 2;
-        }
-
-        if (!healthCheck()) {
+        // /health can return 200 just before the chat-completion endpoint is
+        // usable. Require a real small completion too, retrying while the model
+        // finishes loading/warming. No SSH process to track; llama-server runs
+        // independently on Pi.
+        if (!awaitServerReady(STARTUP_TIMEOUT_SECONDS)) {
             String log = readPiLog();
-            throw new RuntimeException("llama-server on Pi failed to become healthy within " + STARTUP_TIMEOUT_SECONDS + "s. Log: " + log);
+            throw new RuntimeException("llama-server on Pi failed to become inference-ready within "
+                    + STARTUP_TIMEOUT_SECONDS + "s. Log: " + log);
         }
 
         running = true;
@@ -184,12 +222,24 @@ public class PiLlamaServerManager implements LlmServerManager {
         ScheduledFuture<?> future = scheduler.scheduleWithFixedDelay(() -> {
             if (!isRunning()) return;
             try {
-                // Refresh idle time by checking health — only stop if truly idle
-                long idleSeconds = getIdleSeconds();
-                if (idleSeconds >= idleTimeoutSec) {
-                    logger.info("llama-server on Pi idle for {}s >= {}s and unhealthy, auto-stopping", idleSeconds, idleTimeoutSec);
-                    stop();
+                // Never stop a server that is mid-request. This cannot be inferred
+                // from /health — llama.cpp serves several slots and answers health
+                // checks happily while one slot is generating, so "responsive" does
+                // not mean "idle".
+                int active = inFlightRequests.get();
+                if (active > 0) {
+                    logger.debug("llama-server on Pi has {} in-flight request(s), deferring auto-stop", active);
+                    return;
                 }
+
+                long idleSeconds = getIdleSeconds();
+                if (idleSeconds < idleTimeoutSec) {
+                    return;
+                }
+
+                logger.info("llama-server on Pi idle for {}s >= {}s, auto-stopping",
+                        idleSeconds, idleTimeoutSec);
+                stop();
             } catch (Exception e) {
                 logger.debug("Idle monitor check failed: {}", e.getMessage());
             }
@@ -200,6 +250,23 @@ public class PiLlamaServerManager implements LlmServerManager {
     private void cancelIdleMonitor() {
         ScheduledFuture<?> f = idleMonitor.getAndSet(null);
         if (f != null) f.cancel(false);
+    }
+
+    @Override
+    public void beginRequest() {
+        inFlightRequests.incrementAndGet();
+        idleCheckTime.set(System.currentTimeMillis());
+    }
+
+    @Override
+    public void endRequest() {
+        inFlightRequests.updateAndGet(n -> n > 0 ? n - 1 : 0);
+        idleCheckTime.set(System.currentTimeMillis());
+    }
+
+    /** True while at least one request is being served. */
+    boolean hasInFlightRequests() {
+        return inFlightRequests.get() > 0;
     }
 
     long getIdleSeconds() {
@@ -232,9 +299,61 @@ public class PiLlamaServerManager implements LlmServerManager {
         }
     }
 
+    boolean awaitServerReady(int timeoutSeconds) {
+        long waited = 0;
+        while (waited < timeoutSeconds) {
+            sleepQuietly(2000);
+            if (healthCheck() && inferenceReadyCheck()) {
+                logger.info("llama-server on Pi is inference-ready after {}s", waited + 2);
+                return true;
+            }
+            waited += 2;
+        }
+        return healthCheck() && inferenceReadyCheck();
+    }
+
+    /**
+     * llama.cpp acknowledges SIGTERM before it has released its HTTP listener when
+     * a generation is still unwinding. Starting a replacement during that window
+     * produces a server that can answer /health but cannot accept completions.
+     */
+    boolean awaitServerStopped(int timeoutSeconds) {
+        long waited = 0;
+        while (waited < timeoutSeconds) {
+            if (!healthCheck()) {
+                return true;
+            }
+            sleepQuietly(1000);
+            waited++;
+        }
+        return !healthCheck();
+    }
+
+    private boolean inferenceReadyCheck() {
+        try {
+            String payload = "{\"model\":\"" + getModelPath()
+                    + "\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: OK\"}]"
+                    + ",\"max_tokens\":8,\"temperature\":0.2}";
+            OkHttpClient client = new OkHttpClient.Builder()
+                    .callTimeout(10, TimeUnit.SECONDS)
+                    .build();
+            Request request = new Request.Builder()
+                    .url(String.format("http://%s:%d/v1/chat/completions", sshHost, port))
+                    .post(RequestBody.create(payload, MediaType.get("application/json")))
+                    .build();
+            try (Response response = client.newCall(request).execute()) {
+                String body = response.body() == null ? "" : response.body().string();
+                return response.isSuccessful() && body.contains("\"choices\"");
+            }
+        } catch (Exception e) {
+            logger.debug("Pi llama-server inference readiness check failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
     private String getModelPath() {
         return appSettingsStore.get("llamacpp.model")
-                .orElse("/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf");
+                .orElse("/home/dietpi/.synapse/models/Qwen3.5-2B_Q4_k_m.gguf");
     }
 
     private String readPiLog() {
@@ -242,7 +361,7 @@ public class PiLlamaServerManager implements LlmServerManager {
             String cmd = String.format(
                     "ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o ServerAliveInterval=2 -o ServerAliveCountMax=3 %s@%s \"tail -20 /tmp/llama-server.log\"",
                     sshUser, sshHost);
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
             pb.redirectErrorStream(true);
             Process p = pb.start();
             if (p.waitFor(10, TimeUnit.SECONDS)) {
@@ -257,7 +376,7 @@ public class PiLlamaServerManager implements LlmServerManager {
     }
 
     private void runSshCommand(String cmd, int timeoutSec) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd);
+        ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
         pb.redirectErrorStream(true);
         Process p = pb.start();
         boolean finished = p.waitFor(timeoutSec, TimeUnit.SECONDS);

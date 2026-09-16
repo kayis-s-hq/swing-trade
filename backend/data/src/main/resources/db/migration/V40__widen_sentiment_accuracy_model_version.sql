@@ -1,5 +1,13 @@
--- Widen model_version from VARCHAR(50) to VARCHAR(255), matching the same
--- widening applied to sentiment_results in V39, for the same reason: longer
--- model identifiers must not be truncated. Safe widening ALTER — no data
--- rewrite or cast required.
+-- Widen sentiment_accuracy.model_version to VARCHAR(255), matching the same
+-- column on sentiment_results (V39) and llm_analysis_audit. Local llama.cpp
+-- backends report the full model file path as the model identifier (e.g.
+-- "/home/dietpi/.synapse/models/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"),
+-- which is 62 characters and overflows the old VARCHAR(50).
+--
+-- Both entities (SentimentResultEntity, SentimentAccuracyEntity) are updated
+-- to length = 255 alongside this: the local profile runs
+-- spring.jpa.hibernate.ddl-auto=update, so leaving the mapping at 50 lets
+-- Hibernate fight the migration, and stage's ddl-auto=validate would flag the
+-- mismatch outright.
+-- Safe widening ALTER — no data rewrite or cast required in Postgres.
 ALTER TABLE sentiment_accuracy ALTER COLUMN model_version TYPE VARCHAR(255);

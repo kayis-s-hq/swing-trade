@@ -11,8 +11,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.net.CookieManager;
-import java.net.CookiePolicy;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -23,24 +21,21 @@ import java.util.stream.Collectors;
 
 /**
  * Fetches corporate announcements from NSE India.
- * Uses a shared CookieManager for session persistence across requests.
+ * The public API requires {@code index=equities}; it returns a JSON array for a
+ * symbol query and does not require a browser cookie session.
  */
 @Service
 public class NseAnnouncementsSource implements NewsSource {
 
     private static final Logger log = LoggerFactory.getLogger(NseAnnouncementsSource.class);
-    private static final String API_URL = "https://www.nseindia.com/api/corporate-announcements?symbol=";
+    private static final String API_URL = "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=";
     private static final String HTML_URL = "https://www.nseindia.com/corporates/announcements";
     private static final String HOME_URL = "https://www.nseindia.com/";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private final int maxArticles;
-    private final CookieManager cookieManager;
-
     public NseAnnouncementsSource(@Value("${news.source.nse.max-articles:10}") int maxArticles) {
         this.maxArticles = maxArticles;
-        this.cookieManager = new CookieManager();
-        this.cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
     }
 
     @Override
@@ -64,10 +59,6 @@ public class NseAnnouncementsSource implements NewsSource {
 
     @Override
     public List<StructuredFiling> fetchFilings(String symbol) {
-        // Save and set shared cookie manager
-        CookieManager previous = HttpClientHolder.getPreviousCookieManager();
-        HttpClientHolder.setCookieManager(cookieManager);
-
         List<StructuredFiling> filings = new ArrayList<>();
         try {
             // Try API first
@@ -84,9 +75,6 @@ public class NseAnnouncementsSource implements NewsSource {
                 log.warn("NSE HTML fetch failed for '{}': {}", symbol, e.getMessage());
             }
         }
-
-        // Restore previous cookie manager
-        HttpClientHolder.setCookieManager(previous);
 
         return filings;
     }
@@ -149,24 +137,30 @@ public class NseAnnouncementsSource implements NewsSource {
         try {
             tools.jackson.databind.JsonNode root =
                     new tools.jackson.databind.ObjectMapper().readTree(body);
-            tools.jackson.databind.JsonNode data = root.path("data");
+            // Symbol-filtered NSE responses are an array. Keep accepting the
+            // historic { data: [...] } shape to remain tolerant of API changes.
+            tools.jackson.databind.JsonNode data = root.isArray() ? root : root.path("data");
             if (!data.isArray()) return filings;
 
             for (tools.jackson.databind.JsonNode item : data) {
-                String title = item.path("scrip_name").asText(
-                        item.path("company").asText(
-                                item.path("title").asText("")));
+                String company = item.path("sm_name").asText();
+                String announcement = item.path("desc").asText();
+                String title = company.isBlank() ? announcement
+                        : announcement.isBlank() ? company : company + " - " + announcement;
                 if (title.isBlank()) continue;
 
-                String dateField = item.path("event_date").asText(
-                        item.path("announcement_date").asText(""));
+                String dateField = item.path("an_dt").asText(
+                        item.path("sort_date").asText(
+                                item.path("event_date").asText(
+                                        item.path("announcement_date").asText(""))));
                 LocalDate ld = parseLocalDate(dateField);
                 if (ld == null) continue;
 
-                String link = item.path("target_url").asText(
-                        item.path("link").asText("#"));
+                String link = item.path("attchmntFile").asText(
+                        item.path("target_url").asText(item.path("link").asText("#")));
+                String description = item.path("attchmntText").asText(announcement);
 
-                filings.add(new StructuredFiling(classify(title), ld, title, "", link));
+                filings.add(new StructuredFiling(classify(title), ld, title, description, link));
             }
         } catch (Exception e) {
             log.debug("NSE JSON parse failed: {}", e.getMessage());
@@ -202,7 +196,12 @@ public class NseAnnouncementsSource implements NewsSource {
     private LocalDate parseLocalDate(String s) {
         if (s == null || s.isBlank()) return null;
         try {
-            return LocalDate.parse(s.trim(), java.time.format.DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH));
+            String normalized = s.trim();
+            if (normalized.length() >= 11) {
+                normalized = normalized.substring(0, 11);
+            }
+            return LocalDate.parse(normalized,
+                    java.time.format.DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH));
         } catch (Exception e) {
             return null;
         }
@@ -218,31 +217,4 @@ public class NseAnnouncementsSource implements NewsSource {
         return FilingType.OTHER;
     }
 
-    /**
-     * Thread-local holder for the global CookieManager.
-     * Jsoup uses the default CookieManager for cookie persistence.
-     */
-    private static class HttpClientHolder {
-        private static final ThreadLocal<CookieManager> CURRENT = ThreadLocal.withInitial(() -> {
-            try {
-                java.net.CookieHandler ch = java.net.CookieHandler.getDefault();
-                return ch instanceof CookieManager ? (CookieManager) ch : null;
-            } catch (Exception e) {
-                return null;
-            }
-        });
-
-        static CookieManager getPreviousCookieManager() {
-            return CURRENT.get();
-        }
-
-        static void setCookieManager(CookieManager cm) {
-            if (cm != null) {
-                java.net.CookieHandler.setDefault(cm);
-            } else {
-                java.net.CookieHandler.setDefault(null);
-            }
-            CURRENT.set(cm);
-        }
-    }
 }

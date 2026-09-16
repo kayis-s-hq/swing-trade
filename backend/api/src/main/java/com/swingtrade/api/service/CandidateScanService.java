@@ -7,7 +7,6 @@ import com.swingtrade.data.repository.CandidateScanRunRepository;
 import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.data.service.AppSettingsService;
-import com.swingtrade.data.service.WatchlistService;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
@@ -59,7 +58,6 @@ public class CandidateScanService {
     private final CandidateScanRunRepository runRepository;
     private final CandidateScanResultRepository resultRepository;
     private final DataIngestionService ingestionService;
-    private final WatchlistService watchlistService;
     private final CandleStore candleStore;
     private final PriceActionSignalEngine signalEngine;
     private final BacktestEngine backtestEngine;
@@ -81,7 +79,6 @@ public class CandidateScanService {
                                 CandidateScanRunRepository runRepository,
                                 CandidateScanResultRepository resultRepository,
                                 DataIngestionService ingestionService,
-                                WatchlistService watchlistService,
                                 AppSettingsService appSettingsService,
                                 CandleStore candleStore,
                                 PriceActionSignalEngine signalEngine,
@@ -93,7 +90,6 @@ public class CandidateScanService {
         this.runRepository = runRepository;
         this.resultRepository = resultRepository;
         this.ingestionService = ingestionService;
-        this.watchlistService = watchlistService;
         this.appSettingsService = appSettingsService;
         this.candleStore = candleStore;
         this.signalEngine = signalEngine;
@@ -410,10 +406,9 @@ public class CandidateScanService {
             && backtest.totalReturn() > minTotalReturn;
         result.setQualified(qualified);
         result.setReason(qualified ? "BUY and backtest gate passed" : qualificationReason(signal, backtest, minWinRate, minTotalReturn));
-        if (qualified) {
-            watchlistService.addToWatchlist(symbol, symbol, "NSE");
-            result.setActivated(true);
-        }
+        // Candidate discovery is intentionally read-only. Watchlist membership is
+        // managed by the Watchlist API/UI, not as a side effect of a scan.
+        result.setActivated(false);
         resultRepository.save(result);
         return qualified;
     }
