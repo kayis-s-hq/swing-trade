@@ -25,9 +25,11 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -508,6 +510,23 @@ public class NewsIngestionService {
 
         logger.info("Fetched {} unique headlines for {}", deduped.size(), stockSymbol);
         return deduped;
+    }
+
+    /**
+     * Returns news admissible for a decision date. Historical dates are read only from the
+     * persisted, bounded window; they never fall back to current live feeds.
+     */
+    public List<NewsArticle> fetchStockNewsForDecisionDate(String stockSymbol, LocalDate decisionDate) {
+        if (decisionDate == null) {
+            return List.of();
+        }
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        if (!decisionDate.isBefore(today)) {
+            return fetchStockNews(stockSymbol);
+        }
+        OffsetDateTime from = decisionDate.minusDays(7).atStartOfDay(ZoneId.of("Asia/Kolkata")).toOffsetDateTime();
+        OffsetDateTime through = decisionDate.atTime(15, 30).atZone(ZoneId.of("Asia/Kolkata")).toOffsetDateTime();
+        return newsArticleStore.findBySymbolAndPublishedAtBetween(stockSymbol, from, through);
     }
 
     /**

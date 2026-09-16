@@ -39,6 +39,10 @@ Completed and verified in this pass:
 - Sentiment response parsing recognizes the legacy `sentiment` JSON alias instead of accepting a
   converter-created neutral default. Plain-text responses remain neutral when sentiment is
   ambiguous; UNKNOWN is preserved and sentiment provenance is now persisted.
+- Historical sentiment analysis now reads the persisted, inclusive symbol/date news window and
+  does not fall back to live feeds; current-day analysis continues to use live ingestion
+  (`NewsArticleStore`, `NewsIngestionService`, `SentimentService`). Article identity/first-seen
+  provenance and sentiment-to-article evidence links remain open.
 
 Additional verified slice — 2026-09-16:
 
@@ -254,8 +258,10 @@ Every BUY is stored and the SUPPRESS verdict is recorded, but nobody measures fo
 `SentimentService.analyzeStockSentiment(symbol, date)` calls `fetchStockNews(symbol)` and ignores `date`. Backfills and accuracy
 evaluation can use news published after the decision date (look-ahead).
 `SentimentService` now filters fetched articles to `publishedAt ≤ date 15:30 IST` and ≥ date − 7d
-before cleaning, truncation, and prompting. Articles without timestamps are rejected because their
-point-in-time position cannot be proven. Persisted article IDs and historical reconstruction remain open.
+before cleaning, truncation, and prompting. For past dates, `NewsIngestionService` reads the
+persisted inclusive symbol/date window and does not call live feeds. Articles without timestamps
+are rejected because their point-in-time position cannot be proven. Persisted article IDs and
+first-seen provenance for exact evidence reconstruction remain open.
 
 ### 15. PARTIALLY FIXED — Plain-text fallback misclassifies
 `SentimentAnalyzer.parsePlainText`: contains "positive" and not "negative" → POSITIVE (0.4). "Not positive", "positive for peers" and similar also become POSITIVE.

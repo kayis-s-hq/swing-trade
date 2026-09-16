@@ -41,6 +41,15 @@ public class NewsArticleStoreImpl implements NewsArticleStore {
 
     @Override
     @Transactional(readOnly = true)
+    public List<NewsArticle> findBySymbolAndPublishedAtBetween(String symbol, OffsetDateTime from,
+                                                               OffsetDateTime through) {
+        return repository.findBySymbolAndPublishedAtBetween(symbol, from, through).stream()
+                .map(this::toArticle)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public long countBySymbol(String symbol) {
         return repository.countBySymbol(symbol);
     }

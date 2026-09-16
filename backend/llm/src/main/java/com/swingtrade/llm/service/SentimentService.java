@@ -184,7 +184,7 @@ public class SentimentService {
         try {
             // Fetch news articles
             List<NewsArticle> fetchedArticles =
-                    newsIngestionService.fetchStockNews(stockSymbol);
+                    newsIngestionService.fetchStockNewsForDecisionDate(stockSymbol, date);
             List<NewsArticle> articles = filterPointInTimeArticles(fetchedArticles, date);
 
             if (articles.isEmpty()) {

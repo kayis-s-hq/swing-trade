@@ -29,6 +29,13 @@ public interface NewsArticleStore {
     List<NewsArticle> findRecentBySymbol(String symbol, OffsetDateTime since);
 
     /**
+     * Finds persisted articles inside an inclusive decision-time window.
+     * Historical consumers must use this bounded query rather than a live feed.
+     */
+    List<NewsArticle> findBySymbolAndPublishedAtBetween(String symbol, OffsetDateTime from,
+                                                        OffsetDateTime through);
+
+    /**
      * Returns the count of articles for a symbol.
      */
     long countBySymbol(String symbol);

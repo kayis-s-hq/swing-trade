@@ -74,12 +74,13 @@ class SentimentServicePromptTest {
         when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
             .thenReturn(Mono.just(llmResponse));
 
-        when(newsIngestionService.fetchStockNews("RELIANCE")).thenReturn(List.of(
-                new NewsArticle("RELIANCE", "Test headline", "Test URL", null, todayNoon(), "Test source", null)));
+        List<NewsArticle> articles = List.of(
+                new NewsArticle("RELIANCE", "Test headline", "Test URL", null, todayNoon(), "Test source", null));
+        when(newsIngestionService.fetchStockNewsForDecisionDate(eq("RELIANCE"), org.mockito.ArgumentMatchers.nullable(LocalDate.class))).thenReturn(articles);
         when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("Test news content");
 
         // When
-        service.analyzeStockSentiment("RELIANCE", LocalDate.now());
+        service.analyzeStockSentiment("RELIANCE", LocalDate.now(ZoneId.of("Asia/Kolkata")));
 
         // Then — verify messages passed to LLM contain the loaded prompts
         verify(llmClient).generateChatCompletion(
@@ -107,12 +108,13 @@ class SentimentServicePromptTest {
         when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
             .thenReturn(Mono.just(llmResponse));
 
-        when(newsIngestionService.fetchStockNews("TCS")).thenReturn(List.of(
-                new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null)));
+        List<NewsArticle> articles = List.of(
+                new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null));
+        when(newsIngestionService.fetchStockNewsForDecisionDate(eq("TCS"), org.mockito.ArgumentMatchers.nullable(LocalDate.class))).thenReturn(articles);
         when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("news content");
 
         // When
-        service.analyzeStockSentiment("TCS", LocalDate.now());
+        service.analyzeStockSentiment("TCS", LocalDate.now(ZoneId.of("Asia/Kolkata")));
 
         // Then — verify the formatted message contains the symbol
         verify(llmClient).generateChatCompletion(
@@ -134,11 +136,12 @@ class SentimentServicePromptTest {
         when(promptLoader.getUserPrompt()).thenReturn("Analyse {symbol}. News: {newsContent}.");
         when(llmClient.generateChatCompletion(anyList(), eq(128), eq(0.3)))
                 .thenReturn(Mono.just("{\"score\":\"NEUTRAL\",\"confidence\":0.5,\"summary\":\"Mixed\",\"red_flags\":[],\"catalysts\":[]}"));
-        when(newsIngestionService.fetchStockNews("TCS")).thenReturn(List.of(
-                new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null)));
+        List<NewsArticle> articles = List.of(
+                new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null));
+        when(newsIngestionService.fetchStockNewsForDecisionDate(eq("TCS"), org.mockito.ArgumentMatchers.nullable(LocalDate.class))).thenReturn(articles);
         when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("news content");
 
-        service.analyzeStockSentiment("TCS", LocalDate.now());
+        service.analyzeStockSentiment("TCS", LocalDate.now(ZoneId.of("Asia/Kolkata")));
 
         verify(llmClient).generateChatCompletion(anyList(), eq(128), eq(0.3));
     }
@@ -156,7 +159,8 @@ class SentimentServicePromptTest {
             ZonedDateTime.of(2026, 9, 15, 15, 30, 0, 0, ZoneId.of("Asia/Kolkata")), "source", null);
         NewsArticle afterCutoff = new NewsArticle("TCS", "Future", "u2", null,
             ZonedDateTime.of(2026, 9, 15, 15, 31, 0, 0, ZoneId.of("Asia/Kolkata")), "source", null);
-        when(newsIngestionService.fetchStockNews("TCS")).thenReturn(List.of(beforeCutoff, afterCutoff));
+        when(newsIngestionService.fetchStockNewsForDecisionDate(eq("TCS"), eq(decisionDate)))
+            .thenReturn(List.of(beforeCutoff, afterCutoff));
         when(newsIngestionService.cleanNewsText(beforeCutoff)).thenReturn("old news");
 
         service.analyzeStockSentiment("TCS", decisionDate);
@@ -169,6 +173,8 @@ class SentimentServicePromptTest {
             argThat(msgs -> msgs.get(1).get("content").contains("old news")
                 && !msgs.get(1).get("content").contains("future news")),
             eq(512), eq(0.3));
+        org.mockito.Mockito.verify(newsIngestionService, org.mockito.Mockito.never())
+            .fetchStockNews("TCS");
     }
 
     private static ZonedDateTime todayNoon() {
