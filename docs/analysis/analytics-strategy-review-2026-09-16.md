@@ -32,6 +32,10 @@ Completed and verified in this pass:
   `TradingService`, `PaperTradingEngine`).
 - Candidate qualification now requires a configurable minimum of 15 completed trades before the
   win-rate/return gates can pass (`CandidateScanService`).
+- Backtest results now expose CAGR, Sortino, and Calmar computed from the evaluated period and
+  marked-to-market daily equity curve (`BacktestEngine`, `BacktestResult`). Benchmark and excess
+  return metrics remain open because the current multi-symbol runner does not yet share capital or
+  define a benchmark data contract.
 - Sentiment response parsing recognizes the legacy `sentiment` JSON alias instead of accepting a
   converter-created neutral default. Plain-text responses remain neutral when sentiment is
   ambiguous; UNKNOWN is preserved and sentiment provenance is now persisted.
@@ -206,9 +210,13 @@ The universe is the current symbol master or watchlist, so delisted and merged n
 be split/bonus-adjusted, which creates false breakouts and stops (Indian bonuses and splits are frequent).
 **Fix:** Adjust OHLC by the `adjclose/close` ratio, add a candle-gap sanity check (>40% overnight moves with no news), and keep delisted symbols.
 
-### 21. GAP — No benchmark or risk-adjusted metrics
-Reports show win rate, return, Sharpe and DD only. There is no comparison with buy-and-hold Nifty.
-**Fix:** Add CAGR, Sortino, Calmar, exposure %, avg R multiple, and alpha/beta vs NIFTY 50 / NIFTY 500 TRI.
+### 21. PARTIALLY FIXED — No benchmark or risk-adjusted metrics
+Single-symbol backtest results now expose CAGR, Sortino and Calmar. CAGR uses the evaluated
+calendar dates; Sortino uses the daily marked-to-market equity curve and downside deviation; Calmar
+uses CAGR divided by maximum drawdown. Benchmark/buy-and-hold comparison, exposure, average R,
+and alpha/beta remain open until a benchmark data contract and shared-capital portfolio semantics
+are defined.
+**Remaining:** Add aligned NIFTY 50 / NIFTY 500 TRI benchmark returns and portfolio-level risk metrics.
 
 ### 22. GAP — Circuit limits not modelled
 A stock closing at the upper circuit can't be bought at next open; at the lower circuit it can't be exited.

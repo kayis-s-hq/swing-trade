@@ -347,7 +347,9 @@ public class BacktestEngine {
         }
         capitalCurve.add(capital);
 
-        return buildResult(symbol, trades, capitalCurve, capital, config);
+        LocalDate evaluationStart = chronologicalCandles.get(firstEvaluationBar).date();
+        LocalDate evaluationEnd = chronologicalCandles.get(lastEvaluationBar).date();
+        return buildResult(symbol, trades, capitalCurve, capital, config, evaluationStart, evaluationEnd);
     }
 
     private OpenPosition tryEnter(List<OhlcvCandle> chronologicalCandles,
@@ -416,7 +418,8 @@ public class BacktestEngine {
     }
 
     private BacktestResult buildResult(String symbol, List<BacktestTrade> trades, List<Double> capitalCurve,
-                                       double finalCapital, BacktestConfig config) {
+                                       double finalCapital, BacktestConfig config,
+                                       LocalDate evaluationStart, LocalDate evaluationEnd) {
         int totalTrades = trades.size();
         List<BacktestTrade> wins = trades.stream().filter(t -> t.pnl() > 0).toList();
         List<BacktestTrade> losses = trades.stream().filter(t -> t.pnl() <= 0).toList();
@@ -428,11 +431,16 @@ public class BacktestEngine {
         double maxDrawdownPct = computeMaxDrawdownPct(capitalCurve);
         double sharpeRatio = computeSharpeRatio(capitalCurve);
         double totalReturn = ((finalCapital - config.initialCapital()) / config.initialCapital()) * 100.0;
+        double cagrPct = BacktestMetrics.cagrPct(config.initialCapital(), finalCapital,
+                evaluationStart, evaluationEnd);
+        double sortinoRatio = BacktestMetrics.sortinoRatio(capitalCurve);
+        double calmarRatio = BacktestMetrics.calmarRatio(cagrPct, maxDrawdownPct);
         double winRatio = winRate / 100.0;
         double expectancy = (winRatio * avgGainPct) - ((1 - winRatio) * avgLossPct);
 
         return new BacktestResult(symbol, totalTrades, wins.size(), losses.size(), winRate, avgGainPct, avgLossPct,
-                maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades);
+                maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades,
+                cagrPct, sortinoRatio, calmarRatio);
     }
 
     private double computeSharpeRatio(List<Double> capitalCurve) {
