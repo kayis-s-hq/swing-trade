@@ -24,6 +24,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -51,8 +52,12 @@ public class CandidateScanService {
     private static final String KEY_MIN_TOTAL_RETURN = "candidate-scan.min-total-return";
     private static final String KEY_MAX_CONCURRENT = "candidate-scan.max-concurrent";
     private static final String KEY_BACKFILL_YEARS = "candidate-scan.backfill-years";
+    private static final String KEY_MIN_TRADES = "candidate-scan.min-trades";
+    private static final String KEY_OOS_DAYS = "candidate-scan.out-of-sample-days";
     private static final double DEFAULT_MIN_WIN_RATE = 45.0;
     private static final double DEFAULT_MIN_TOTAL_RETURN = 0.0;
+    private static final int DEFAULT_MIN_TRADES = 15;
+    private static final int DEFAULT_OOS_DAYS = 252;
 
     private final FyersSymbolRepository symbolRepository;
     private final CandidateScanRunRepository runRepository;
@@ -191,12 +196,32 @@ public class CandidateScanService {
         }
     }
 
+    private int configuredMinTrades() {
+        try {
+            return Math.max(1, Math.min(1000, Integer.parseInt(
+                appSettingsService.get(KEY_MIN_TRADES, String.valueOf(DEFAULT_MIN_TRADES)))));
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_MIN_TRADES;
+        }
+    }
+
+    private int configuredOosDays() {
+        try {
+            return Math.max(60, Math.min(1000, Integer.parseInt(
+                appSettingsService.get(KEY_OOS_DAYS, String.valueOf(DEFAULT_OOS_DAYS)))));
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_OOS_DAYS;
+        }
+    }
+
     public Map<String, String> getScanSettings() {
         Map<String, String> settings = new LinkedHashMap<>();
         settings.put(KEY_MIN_WIN_RATE, String.valueOf(configuredMinWinRate()));
         settings.put(KEY_MIN_TOTAL_RETURN, String.valueOf(configuredMinTotalReturn()));
         settings.put(KEY_MAX_CONCURRENT, String.valueOf(configuredMaxConcurrent()));
         settings.put(KEY_BACKFILL_YEARS, String.valueOf(configuredBackfillYears()));
+        settings.put(KEY_MIN_TRADES, String.valueOf(configuredMinTrades()));
+        settings.put(KEY_OOS_DAYS, String.valueOf(configuredOosDays()));
         return settings;
     }
 
@@ -218,6 +243,16 @@ public class CandidateScanService {
             int value = Integer.parseInt(updates.get(KEY_BACKFILL_YEARS));
             if (value < 1 || value > 10) throw new IllegalArgumentException("backfill-years must be between 1 and 10");
             appSettingsService.set(KEY_BACKFILL_YEARS, String.valueOf(value));
+        }
+        if (updates.containsKey(KEY_MIN_TRADES)) {
+            int value = Integer.parseInt(updates.get(KEY_MIN_TRADES));
+            if (value < 1 || value > 1000) throw new IllegalArgumentException("min-trades must be between 1 and 1000");
+            appSettingsService.set(KEY_MIN_TRADES, String.valueOf(value));
+        }
+        if (updates.containsKey(KEY_OOS_DAYS)) {
+            int value = Integer.parseInt(updates.get(KEY_OOS_DAYS));
+            if (value < 60 || value > 1000) throw new IllegalArgumentException("out-of-sample-days must be between 60 and 1000");
+            appSettingsService.set(KEY_OOS_DAYS, String.valueOf(value));
         }
         return getScanSettings();
     }
@@ -399,13 +434,43 @@ public class CandidateScanService {
             "Backtest: " + backtest.totalTrades() + " trades, "
                 + String.format(java.util.Locale.ROOT, "%.1f%% win rate, %.2f%% return.",
                     backtest.winRate(), backtest.totalReturn()));
+        int oosDays = configuredOosDays();
+        List<com.swingtrade.domain.OhlcvCandle> candlesForOos = new ArrayList<>(
+            candleStore.findAllBySymbolOrderByDateDesc(symbol));
+        candlesForOos.sort(java.util.Comparator.comparing(com.swingtrade.domain.OhlcvCandle::date));
+        if (candlesForOos.size() < oosDays) {
+            result.setQualified(false);
+            result.setReason("BUY rejected: fewer than " + oosDays + " out-of-sample candles");
+            resultRepository.save(result);
+            return false;
+        }
+        LocalDate oosStart = candlesForOos.get(candlesForOos.size() - oosDays).date();
+        LocalDate oosEnd = candlesForOos.get(candlesForOos.size() - 1).date();
+        BacktestResult oosBacktest = backtestEngine.runBacktestWindow(
+            symbol, "NSE", BacktestConfig.defaults(), oosStart, oosEnd);
+        result.setOosStartDate(oosStart);
+        result.setOosEndDate(oosEnd);
+        result.setOosTotalTrades(oosBacktest.totalTrades());
+        result.setOosWinRate(oosBacktest.winRate());
+        result.setOosTotalReturn(oosBacktest.totalReturn());
+        result.setOosMaxDrawdownPct(oosBacktest.maxDrawdownPct());
+        publish(runId, "STAGE_COMPLETED", symbol, "INFO",
+            "Out-of-sample backtest: " + oosBacktest.totalTrades() + " trades, "
+                + String.format(java.util.Locale.ROOT, "%.1f%% win rate, %.2f%% return.",
+                    oosBacktest.winRate(), oosBacktest.totalReturn()));
         double minWinRate = configuredMinWinRate();
         double minTotalReturn = configuredMinTotalReturn();
+        int minTrades = configuredMinTrades();
         boolean qualified = signal.type() == com.swingtrade.domain.Signal.SignalType.BUY
+            && backtest.totalTrades() >= minTrades
             && backtest.winRate() >= minWinRate
-            && backtest.totalReturn() > minTotalReturn;
+            && backtest.totalReturn() > minTotalReturn
+            && oosBacktest.totalTrades() >= minTrades
+            && oosBacktest.winRate() >= minWinRate
+            && oosBacktest.totalReturn() > minTotalReturn;
         result.setQualified(qualified);
-        result.setReason(qualified ? "BUY and backtest gate passed" : qualificationReason(signal, backtest, minWinRate, minTotalReturn));
+        result.setReason(qualified ? "BUY and in-sample/out-of-sample backtest gates passed"
+            : qualificationReason(signal, backtest, oosBacktest, minTrades, minWinRate, minTotalReturn));
         // Candidate discovery is intentionally read-only. Watchlist membership is
         // managed by the Watchlist API/UI, not as a side effect of a scan.
         result.setActivated(false);
@@ -413,10 +478,15 @@ public class CandidateScanService {
         return qualified;
     }
 
-    private String qualificationReason(SignalResult signal, BacktestResult backtest, double minWinRate, double minTotalReturn) {
+    private String qualificationReason(SignalResult signal, BacktestResult backtest, BacktestResult oosBacktest, int minTrades,
+                                       double minWinRate, double minTotalReturn) {
         if (signal.type() != com.swingtrade.domain.Signal.SignalType.BUY) return "Current signal is " + signal.type();
+        if (backtest.totalTrades() < minTrades) return "BUY rejected: fewer than " + minTrades + " trades";
         if (backtest.winRate() < minWinRate) return "BUY rejected: win rate below " + minWinRate + "%";
-        return "BUY rejected: backtest return not above " + minTotalReturn + "%";
+        if (backtest.totalReturn() <= minTotalReturn) return "BUY rejected: backtest return not above " + minTotalReturn + "%";
+        if (oosBacktest.totalTrades() < minTrades) return "BUY rejected: out-of-sample trades below " + minTrades;
+        if (oosBacktest.winRate() < minWinRate) return "BUY rejected: out-of-sample win rate below " + minWinRate + "%";
+        return "BUY rejected: out-of-sample return not above " + minTotalReturn + "%";
     }
 
     private void saveFailure(UUID runId, String symbol, Exception error) {

@@ -725,7 +725,7 @@ class JobOrchestratorServiceTest {
     // ==================== stagePaperTrade ordering ====================
 
     @Nested
-    @DisplayName("stagePaperTrade — signal-processed-before-execution ordering")
+    @DisplayName("stagePaperTrade — queue-before-mark ordering")
     class StagePaperTrade {
 
         private AtomicReference<JobRunEntity> runState;
@@ -808,18 +808,18 @@ class JobOrchestratorServiceTest {
         }
 
         @Test
-        @DisplayName("Signal is marked processed before the trade executes")
-        void shouldMarkSignalProcessedBeforeExecutingTrade() throws InterruptedException {
-            when(tradingService.executeSignal(eq(buySignal), eq(latestCandle.close())))
-                .thenReturn(null);
+        @DisplayName("Signal is queued before it is marked processed")
+        void shouldQueueSignalBeforeMarkingProcessed() throws InterruptedException {
+            when(tradingService.queueSignal(eq(buySignal), eq(latestCandle.close())))
+                .thenReturn(new com.swingtrade.domain.Order());
 
             service.startRun(JobRun.TriggerType.SCHEDULED);
 
             assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
 
             var inOrder = inOrder(signalStore, tradingService);
+            inOrder.verify(tradingService).queueSignal(eq(buySignal), eq(latestCandle.close()));
             inOrder.verify(signalStore).markProcessed(42L);
-            inOrder.verify(tradingService).executeSignal(eq(buySignal), eq(latestCandle.close()));
 
             JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
             assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.COMPLETED.name());
@@ -827,8 +827,10 @@ class JobOrchestratorServiceTest {
         }
 
         @Test
-        @DisplayName("When marking processed fails, the trade is never executed (no duplicate risk)")
-        void shouldNeverExecuteTradeWhenMarkProcessedFails() throws InterruptedException {
+        @DisplayName("When marking processed fails, the queued trade is retried idempotently")
+        void shouldLeaveQueuedTradeRetryableWhenMarkProcessedFails() throws InterruptedException {
+            when(tradingService.queueSignal(eq(buySignal), eq(latestCandle.close())))
+                .thenReturn(new com.swingtrade.domain.Order());
             doThrow(new org.springframework.orm.ObjectOptimisticLockingFailureException(
                     com.swingtrade.data.entity.SignalEntity.class, 42L))
                 .when(signalStore).markProcessed(42L);
@@ -838,7 +840,7 @@ class JobOrchestratorServiceTest {
             assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
 
             verify(signalStore).markProcessed(42L);
-            verifyNoInteractions(tradingService);
+            verify(tradingService).queueSignal(eq(buySignal), eq(latestCandle.close()));
 
             JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
             assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.COMPLETED.name());
@@ -846,23 +848,23 @@ class JobOrchestratorServiceTest {
         }
 
         @Test
-        @DisplayName("When the trade fails after marking processed, the failure is surfaced and not silently dropped")
-        void shouldSurfaceTradeFailureAfterMarkingProcessed() throws InterruptedException {
-            when(tradingService.executeSignal(eq(buySignal), eq(latestCandle.close())))
+        @DisplayName("When queueing fails, the signal remains retryable")
+        void shouldLeaveSignalRetryableWhenQueueFails() throws InterruptedException {
+            when(tradingService.queueSignal(eq(buySignal), eq(latestCandle.close())))
                 .thenThrow(new IllegalStateException("broker rejected order"));
 
             service.startRun(JobRun.TriggerType.SCHEDULED);
 
             assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
 
-            verify(signalStore).markProcessed(42L);
-            verify(tradingService).executeSignal(eq(buySignal), eq(latestCandle.close()));
+            verify(signalStore, never()).markProcessed(42L);
+            verify(tradingService).queueSignal(eq(buySignal), eq(latestCandle.close()));
 
             JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
             assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.COMPLETED.name());
             assertThat(paperTradeStage.getResultSummary())
                 .contains("0 trade(s) executed")
-                .contains("1 failed after marking processed");
+                .contains("1 failed to queue");
         }
     }
 

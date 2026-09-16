@@ -19,7 +19,7 @@ import static org.mockito.Mockito.*;
 class PendingOrderExecutionSchedulerTest {
 
     @Test
-    void executesEligibleLimitOrderAtLatestClose() {
+    void executesEligibleLimitOrderAtSessionOpen() {
         PaperTradingEngine engine = mock(PaperTradingEngine.class);
         OhlcvCandleRepository candles = mock(OhlcvCandleRepository.class);
         Order order = new Order("ORD-1", "TCS", OrderType.LIMIT, TradeDirection.LONG,
@@ -27,7 +27,7 @@ class PendingOrderExecutionSchedulerTest {
         OhlcvCandleEntity candle = mock(OhlcvCandleEntity.class);
         when(engine.getPendingOrders()).thenReturn(List.of(order));
         when(candles.findLatestBySymbol("TCS")).thenReturn(Optional.of(candle));
-        when(candle.getClosePrice()).thenReturn(BigDecimal.valueOf(95));
+        when(candle.getOpenPrice()).thenReturn(BigDecimal.valueOf(95));
 
         new PendingOrderExecutionScheduler(engine, candles).executePendingOrders();
 
@@ -43,7 +43,7 @@ class PendingOrderExecutionSchedulerTest {
         OhlcvCandleEntity candle = mock(OhlcvCandleEntity.class);
         when(engine.getPendingOrders()).thenReturn(List.of(order));
         when(candles.findLatestBySymbol("TCS")).thenReturn(Optional.of(candle));
-        when(candle.getClosePrice()).thenReturn(BigDecimal.valueOf(105));
+        when(candle.getOpenPrice()).thenReturn(BigDecimal.valueOf(105));
 
         new PendingOrderExecutionScheduler(engine, candles).executePendingOrders();
 
@@ -51,10 +51,10 @@ class PendingOrderExecutionSchedulerTest {
     }
 
     @Test
-    void hasNineFifteenWeekdaySchedule() throws NoSuchMethodException {
+    void hasPostIngestionWeekdaySchedule() throws NoSuchMethodException {
         Scheduled scheduled = PendingOrderExecutionScheduler.class
             .getMethod("executePendingOrders").getAnnotation(Scheduled.class);
-        assertThat(scheduled.cron()).isEqualTo("${paper.trading.pending-order-cron:0 15 9 * * MON-FRI}");
+        assertThat(scheduled.cron()).isEqualTo("${paper.trading.pending-order-cron:0 35 16 * * MON-FRI}");
         assertThat(scheduled.zone()).isEqualTo("Asia/Kolkata");
     }
 }

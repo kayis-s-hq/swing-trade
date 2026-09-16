@@ -9,35 +9,46 @@ import com.swingtrade.domain.TradeDirection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 
-/** Fills eligible paper orders at the first available market-data price. */
+/** Fills eligible paper orders at the session open from the latest EOD candle. */
 @Service
 public class PendingOrderExecutionScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(PendingOrderExecutionScheduler.class);
     private final PaperTradingEngine engine;
     private final OhlcvCandleRepository candleRepository;
+    @Value("${broker.slippage.percentage:0.05}")
+    private double slippagePercentage;
 
     public PendingOrderExecutionScheduler(PaperTradingEngine engine, OhlcvCandleRepository candleRepository) {
         this.engine = engine;
         this.candleRepository = candleRepository;
     }
 
-    @Scheduled(cron = "${paper.trading.pending-order-cron:0 15 9 * * MON-FRI}", zone = "Asia/Kolkata")
+    @Scheduled(cron = "${paper.trading.pending-order-cron:0 35 16 * * MON-FRI}", zone = "Asia/Kolkata")
     public void executePendingOrders() {
         engine.getPendingOrders().forEach(order -> {
             candleRepository.findLatestBySymbol(order.getSymbol()).ifPresent(candle -> {
-                BigDecimal price = candle.getClosePrice();
+                BigDecimal price = candle.getOpenPrice();
                 if (isEligible(order, price)) {
-                    engine.executePendingOrder(order.getOrderId(), price);
+                    engine.executePendingOrder(order.getOrderId(), applySlippage(order, price));
                     logger.info("Executed pending {} order {} for {} at {}",
                         order.getType(), order.getOrderId(), order.getSymbol(), price);
                 }
             });
         });
+    }
+
+    private BigDecimal applySlippage(Order order, BigDecimal openPrice) {
+        if (slippagePercentage == 0.0) return openPrice;
+        BigDecimal fraction = BigDecimal.valueOf(slippagePercentage / 100.0);
+        return order.getDirection() == TradeDirection.LONG
+            ? openPrice.multiply(BigDecimal.ONE.add(fraction))
+            : openPrice.multiply(BigDecimal.ONE.subtract(fraction));
     }
 
     private boolean isEligible(Order order, BigDecimal price) {

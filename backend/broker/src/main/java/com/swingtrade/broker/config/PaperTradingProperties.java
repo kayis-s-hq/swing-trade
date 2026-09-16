@@ -46,7 +46,7 @@ public class PaperTradingProperties {
     private long orderExecutionLatencyMillis = 100;
     private boolean statePersistenceEnabled = true;
     private String snapshotCron = "0 45 15 * * MON-FRI";
-    private String monitorCron = "0 30 15 * * MON-FRI";
+    private String monitorCron = "0 45 16 * * MON-FRI";
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }

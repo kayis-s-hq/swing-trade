@@ -485,6 +485,26 @@ class PositionManagerTest {
         }
 
         @Test
+        void longPosition_stopGapUsesOpeningPrice() {
+            Position position = makePosition(1L, "PAPER", "RELIANCE-EQ",
+                    new BigDecimal("100.00"), LocalDate.now(), 10,
+                    new BigDecimal("90.00"), new BigDecimal("125.00"), PositionStatus.OPEN, "Test",
+                    new BigDecimal("100.00"), "POS_00000001", null, Exchange.NSE, TradeDirection.LONG,
+                    new BigDecimal("100.00"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    java.time.LocalDateTime.now(), null, null, null);
+            positionManager.getPositions().put(position.positionId(), position);
+
+            OhlcvCandle candle = new OhlcvCandle("RELIANCE-EQ", LocalDate.now(),
+                    new BigDecimal("80"), new BigDecimal("85"), new BigDecimal("70"),
+                    new BigDecimal("75"), 100000L, new BigDecimal("75"));
+
+            positionManager.checkPositionTriggers(position, candle);
+
+            assertThat(positionManager.getPosition(position.positionId()).realizedPnL())
+                .isEqualByComparingTo(new BigDecimal("-200.00"));
+        }
+
+        @Test
         void longPosition_tpTriggered() {
             // Given: A long position with entry 100, target 125
             Position position = makePosition(1L, "PAPER", "RELIANCE-EQ",
@@ -509,6 +529,26 @@ class PositionManagerTest {
             // Then
             Position stored = positionManager.getPosition("POS_00000001");
             assertThat(stored.status()).isEqualTo(PositionStatus.TARGET_HIT);
+        }
+
+        @Test
+        void longPosition_targetGapUsesOpeningPrice() {
+            Position position = makePosition(1L, "PAPER", "RELIANCE-EQ",
+                    new BigDecimal("100.00"), LocalDate.now(), 10,
+                    new BigDecimal("90.00"), new BigDecimal("125.00"), PositionStatus.OPEN, "Test",
+                    new BigDecimal("100.00"), "POS_00000001", null, Exchange.NSE, TradeDirection.LONG,
+                    new BigDecimal("100.00"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    java.time.LocalDateTime.now(), null, null, null);
+            positionManager.getPositions().put(position.positionId(), position);
+
+            OhlcvCandle candle = new OhlcvCandle("RELIANCE-EQ", LocalDate.now(),
+                    new BigDecimal("130"), new BigDecimal("135"), new BigDecimal("129"),
+                    new BigDecimal("132"), 100000L, new BigDecimal("132"));
+
+            positionManager.checkPositionTriggers(position, candle);
+
+            assertThat(positionManager.getPosition(position.positionId()).realizedPnL())
+                .isEqualByComparingTo(new BigDecimal("300.00"));
         }
 
         @Test

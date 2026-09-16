@@ -17,5 +17,8 @@ public enum SentimentType {
     /**
      * Negative sentiment indicating bearish market conditions.
      */
-    NEGATIVE
+    NEGATIVE,
+
+    /** The response could not be classified reliably. */
+    UNKNOWN
 }

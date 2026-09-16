@@ -187,6 +187,24 @@ class BacktestEngineTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Insufficient candle history");
         }
+
+        @Test
+        @DisplayName("windowed backtest keeps warm-up history but only evaluates the requested dates")
+        void runBacktestWindow_usesEvaluationBoundary() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            LocalDate evaluationStart = candles.get(240).date();
+            LocalDate evaluationEnd = candles.get(candles.size() - 1).date();
+            List<OhlcvCandle> descending = new ArrayList<>(candles);
+            Collections.reverse(descending);
+            when(candleStore.findBySymbolAndDateRange(SYMBOL, evaluationStart.minusDays(400), evaluationEnd))
+                .thenReturn(descending);
+
+            BacktestResult result = engine.runBacktestWindow(SYMBOL, EXCHANGE, BacktestConfig.defaults(),
+                evaluationStart, evaluationEnd);
+
+            assertThat(result.trades()).isNotEmpty();
+            assertThat(result.trades()).allMatch(trade -> !trade.entryDate().isBefore(evaluationStart));
+        }
     }
 
     @Nested
@@ -227,6 +245,23 @@ class BacktestEngineTest {
         }
 
         @Test
+        @DisplayName("stop gap exits at the opening price with adverse slippage")
+        void stopLossGapUsesOpeningPriceAndSlippage() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            BigDecimal entry = entryPrice(candles);
+            BigDecimal gapOpen = entry.multiply(BigDecimal.valueOf(0.75));
+            appendCandle(candles, gapOpen, entry.multiply(BigDecimal.valueOf(0.80)),
+                entry.multiply(BigDecimal.valueOf(0.70)), gapOpen, 1_000_000L);
+
+            stub(candles);
+            BacktestConfig config = new BacktestConfig(0.01, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false, 2);
+            BacktestTrade trade = engine.runBacktest(SYMBOL, EXCHANGE, config).trades().get(0);
+
+            assertThat(trade.exitReason()).isEqualTo(ExitReason.STOP_LOSS);
+            assertThat(trade.exitPrice()).isEqualByComparingTo(gapOpen.multiply(BigDecimal.valueOf(0.99)));
+        }
+
+        @Test
         @DisplayName("price rallies through the target -> TARGET_HIT exit at the target price")
         void targetHitExit() {
             List<OhlcvCandle> candles = buildEntrySetupCandles();
@@ -242,6 +277,23 @@ class BacktestEngineTest {
             assertThat(trade.exitReason()).isEqualTo(ExitReason.TARGET_HIT);
             assertThat(trade.exitPrice()).isEqualByComparingTo(trade.target());
             assertThat(trade.pnl()).isPositive();
+        }
+
+        @Test
+        @DisplayName("target gap exits at the opening price with adverse slippage")
+        void targetGapUsesOpeningPriceAndSlippage() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            BigDecimal entry = entryPrice(candles);
+            BigDecimal gapOpen = entry.multiply(BigDecimal.valueOf(1.60));
+            appendCandle(candles, gapOpen, gapOpen.multiply(BigDecimal.valueOf(1.01)),
+                entry, gapOpen, 1_000_000L);
+
+            stub(candles);
+            BacktestConfig config = new BacktestConfig(0.01, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false, 2);
+            BacktestTrade trade = engine.runBacktest(SYMBOL, EXCHANGE, config).trades().get(0);
+
+            assertThat(trade.exitReason()).isEqualTo(ExitReason.TARGET_HIT);
+            assertThat(trade.exitPrice()).isEqualByComparingTo(gapOpen.multiply(BigDecimal.valueOf(0.99)));
         }
 
         @Test
@@ -338,7 +390,7 @@ class BacktestEngineTest {
         }
 
         @Test
-        @DisplayName("brokerageReducesNetPnl — netPnl = grossPnl - brokeragePerTrade")
+        @DisplayName("deliveryCostsReduceNetPnl — netPnl includes brokerage and statutory charges")
         void brokerageReducesNetPnl() {
             List<OhlcvCandle> candles = buildEntrySetupCandles();
             BigDecimal entry = entryPrice(candles);
@@ -353,7 +405,9 @@ class BacktestEngineTest {
             BacktestTrade trade = result.trades().get(0);
             // Gross PnL = (exitPrice - entryPrice) × quantity
             BigDecimal grossPnl = trade.exitPrice().subtract(trade.entryPrice()).multiply(BigDecimal.valueOf(trade.quantity()));
-            double expectedPnl = grossPnl.doubleValue() - 20.0;
+            BigDecimal costs = new ZerodhaDeliveryCostModel().roundTripCost(
+                trade.entryPrice(), trade.exitPrice(), trade.quantity(), BigDecimal.valueOf(20.0));
+            double expectedPnl = grossPnl.doubleValue() - costs.doubleValue();
             assertThat(trade.pnl()).isCloseTo(expectedPnl, within(0.01));
         }
 

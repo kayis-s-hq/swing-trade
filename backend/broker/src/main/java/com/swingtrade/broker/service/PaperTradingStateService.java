@@ -75,6 +75,7 @@ public class PaperTradingStateService {
             loadPortfolio();
             loadOpenPositions();
             loadClosedPositions();
+            loadPendingOrders();
             logger.info("Paper trading state loaded from DB");
         } catch (Exception e) {
             logger.warn("Failed to load paper trading state from DB, starting fresh: {}", e.getMessage());
@@ -173,6 +174,28 @@ public class PaperTradingStateService {
         }
         // currentCapital from DB already includes realized P&L — do NOT add again
         logger.info("Loaded {} closed positions, total realized P&L: {}", closedEntities.size(), totalRealized);
+    }
+
+    private void loadPendingOrders() {
+        orderRepo.findAllByOrderByCreatedAtDesc().stream()
+            .filter(entity -> "PENDING".equals(entity.getStatus()) || "ACCEPTED".equals(entity.getStatus()))
+            .forEach(entity -> {
+                try {
+                    Order order = new Order(entity.getOrderId(), entity.getSymbol(),
+                        com.swingtrade.domain.OrderType.valueOf(entity.getType()),
+                        com.swingtrade.domain.TradeDirection.valueOf(entity.getDirection()),
+                        BigDecimal.valueOf(entity.getQuantity()), entity.getPrice(),
+                        entity.getLimitPrice(), entity.getStopPrice());
+                    order.setStatus(OrderStatus.valueOf(entity.getStatus()));
+                    if (entity.getSignalId() != null && !entity.getSignalId().isBlank()) {
+                        order.setAdditionalProperties(java.util.Map.of("signalId", entity.getSignalId()));
+                    }
+                    orderManager.getOrders().put(order.getOrderId(), order);
+                    logger.info("Loaded pending order: {} for {}", order.getOrderId(), order.getSymbol());
+                } catch (Exception ex) {
+                    logger.warn("Failed to load pending order {}: {}", entity.getOrderId(), ex.getMessage());
+                }
+            });
     }
 
     // REQUIRES_NEW so this commits (and releases the row) immediately when the method

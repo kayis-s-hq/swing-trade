@@ -176,15 +176,19 @@ public class PositionManager {
 
         if (direction == TradeDirection.LONG) {
             if (low.compareTo(stopLoss) <= 0) {
-                closePosition(position.positionId(), PositionStatus.STOPPED, "Stop Loss Hit - Price dropped to " + low, stopLoss);
+                BigDecimal fill = candleData.open().compareTo(stopLoss) <= 0 ? candleData.open() : stopLoss;
+                closePosition(position.positionId(), PositionStatus.STOPPED, "Stop Loss Hit - Price dropped to " + low, fill);
             } else if (high.compareTo(target) >= 0) {
-                closePosition(position.positionId(), PositionStatus.TARGET_HIT, "Target Hit - Price rose to " + high, target);
+                BigDecimal fill = candleData.open().compareTo(target) >= 0 ? candleData.open() : target;
+                closePosition(position.positionId(), PositionStatus.TARGET_HIT, "Target Hit - Price rose to " + high, fill);
             }
         } else {
             if (high.compareTo(stopLoss) >= 0) {
-                closePosition(position.positionId(), PositionStatus.STOPPED, "Stop Loss Hit - Price rose to " + high, stopLoss);
+                BigDecimal fill = candleData.open().compareTo(stopLoss) >= 0 ? candleData.open() : stopLoss;
+                closePosition(position.positionId(), PositionStatus.STOPPED, "Stop Loss Hit - Price rose to " + high, fill);
             } else if (low.compareTo(target) <= 0) {
-                closePosition(position.positionId(), PositionStatus.TARGET_HIT, "Target Hit - Price dropped to " + low, target);
+                BigDecimal fill = candleData.open().compareTo(target) <= 0 ? candleData.open() : target;
+                closePosition(position.positionId(), PositionStatus.TARGET_HIT, "Target Hit - Price dropped to " + low, fill);
             }
         }
     }

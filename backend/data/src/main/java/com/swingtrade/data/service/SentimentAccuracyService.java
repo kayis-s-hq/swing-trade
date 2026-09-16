@@ -138,32 +138,39 @@ public class SentimentAccuracyService {
         return List.of(new RollingICResult(end.toString(), ic));
     }
 
-    private double computeSpearmanIC(List<Double> scores, List<Double> returns) {
+    static double computeSpearmanIC(List<Double> scores, List<Double> returns) {
         int n = scores.size();
         double[] rankScores = rank(scores);
         double[] rankReturns = rank(returns);
-
-        double sumD2 = 0;
+        double meanScores = java.util.Arrays.stream(rankScores).average().orElse(0.0);
+        double meanReturns = java.util.Arrays.stream(rankReturns).average().orElse(0.0);
+        double covariance = 0.0;
+        double scoreVariance = 0.0;
+        double returnVariance = 0.0;
         for (int i = 0; i < n; i++) {
-            double d = rankScores[i] - rankReturns[i];
-            sumD2 += d * d;
+            double scoreDelta = rankScores[i] - meanScores;
+            double returnDelta = rankReturns[i] - meanReturns;
+            covariance += scoreDelta * returnDelta;
+            scoreVariance += scoreDelta * scoreDelta;
+            returnVariance += returnDelta * returnDelta;
         }
-
-        return 1.0 - (6.0 * sumD2) / (n * (n * n - 1));
+        double denominator = Math.sqrt(scoreVariance * returnVariance);
+        return denominator == 0.0 ? 0.0 : covariance / denominator;
     }
 
-    private double[] rank(List<Double> values) {
+    private static double[] rank(List<Double> values) {
         int n = values.size();
         double[] result = new double[n];
         for (int i = 0; i < n; i++) {
             double v = values.get(i);
-            int r = 1;
+            int less = 0;
+            int equal = 0;
             for (int j = 0; j < n; j++) {
                 if (i == j) continue;
-                if (values.get(j) < v) r++;
-                else if (values.get(j).equals(v) && j < i) r++;
+                if (values.get(j) < v) less++;
+                else if (values.get(j).equals(v)) equal++;
             }
-            result[i] = r;
+            result[i] = less + 1.0 + equal / 2.0;
         }
         return result;
     }

@@ -18,6 +18,7 @@ public class SentimentOutput {
     private List<String> redFlags = new ArrayList<>();
     @JsonProperty("catalysts")
     private List<String> catalysts = new ArrayList<>();
+    private String source;
 
     /**
      * No-arg constructor required by Jackson/Spring AI's BeanOutputConverter.
@@ -29,16 +30,22 @@ public class SentimentOutput {
     }
 
     public SentimentOutput(SentimentType sentiment, String reasoning, Double confidence) {
-        this(sentiment, reasoning, confidence, List.of(), List.of());
+        this(sentiment, reasoning, confidence, List.of(), List.of(), "LLM");
     }
 
     public SentimentOutput(SentimentType sentiment, String reasoning, Double confidence,
                                    List<String> redFlags, List<String> catalysts) {
+        this(sentiment, reasoning, confidence, redFlags, catalysts, "LLM");
+    }
+
+    public SentimentOutput(SentimentType sentiment, String reasoning, Double confidence,
+                           List<String> redFlags, List<String> catalysts, String source) {
         this.sentiment = sentiment;
         this.reasoning = reasoning;
         this.confidence = confidence;
         this.redFlags = redFlags != null ? redFlags : List.of();
         this.catalysts = catalysts != null ? catalysts : List.of();
+        this.source = source != null && !source.isBlank() ? source : "DEFAULT";
     }
 
     public SentimentType getSentiment() {
@@ -84,6 +91,8 @@ public class SentimentOutput {
     public void setCatalysts(List<String> catalysts) {
         this.catalysts = catalysts != null ? catalysts : List.of();
     }
+
+    public String getSource() { return source; }
 
     @Override
     public String toString() {

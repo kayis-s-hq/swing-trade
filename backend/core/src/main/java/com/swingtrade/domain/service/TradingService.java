@@ -41,6 +41,9 @@ public interface TradingService {
 
     Order executeSignal(Signal signal, BigDecimal currentPrice);
 
+    /** Queues a BUY signal for execution by the next-session order scheduler. */
+    Order queueSignal(Signal signal, BigDecimal referencePrice);
+
     BigDecimal getTotalPnL();
 
     BigDecimal getTotalValue();

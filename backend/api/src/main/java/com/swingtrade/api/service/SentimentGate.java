@@ -86,7 +86,7 @@ public class SentimentGate {
             logger.info("Blocking BUY trade due to NEGATIVE sentiment (reasoning: {})", sentiment.summary());
             return SentimentVerdict.suppress(sentiment.summary());
         }
-        if (sentiment.isNeutral()) {
+        if (sentiment.isNeutral() || sentiment.isUnknown()) {
             logger.info("Flagging NEUTRAL sentiment (reasoning: {})", sentiment.summary());
             return SentimentVerdict.flagNeutral(sentiment.summary());
         }

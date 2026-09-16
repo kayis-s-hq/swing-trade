@@ -6,7 +6,7 @@ import java.time.LocalDate;
 /**
  * A single closed round-trip trade produced by {@link BacktestEngine}.
  *
- * @param pnl    net profit/loss in currency units, after brokerage
+ * @param pnl    net profit/loss in currency units, after delivery costs
  * @param pnlPct net profit/loss as a percentage of entry cost (quantity * entryPrice)
  */
 public record BacktestTrade(

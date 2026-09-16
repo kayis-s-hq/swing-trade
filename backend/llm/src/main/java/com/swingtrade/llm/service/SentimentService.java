@@ -89,6 +89,8 @@ public class SentimentService {
     // shallower. Raising this further needs a larger llamacpp.context, not a
     // smaller margin.
     private static final int MAX_ARTICLE_CHARS = 1200;
+    private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
+    private static final int NEWS_LOOKBACK_DAYS = 7;
 
     // Thread pool for async operations
     private final ExecutorService analysisExecutor;
@@ -181,8 +183,9 @@ public class SentimentService {
 
         try {
             // Fetch news articles
-            List<NewsArticle> articles =
+            List<NewsArticle> fetchedArticles =
                     newsIngestionService.fetchStockNews(stockSymbol);
+            List<NewsArticle> articles = filterPointInTimeArticles(fetchedArticles, date);
 
             if (articles.isEmpty()) {
                 logger.warn("No news articles found for stock: {}", stockSymbol);
@@ -201,10 +204,19 @@ public class SentimentService {
             // "request (8556 tokens) exceeds the available context size (4096)".
             // The lead of an article carries the sentiment signal, so trimming the
             // tail costs little and cuts prompt-eval time (and heat) substantially.
-            List<String> newsContent = articles.stream()
-                    .map(a -> newsIngestionService.cleanNewsText(a))
-                    .filter(s -> s != null && !s.trim().isEmpty())
-                    .map(text -> capArticleLength(text, maxArticleChars))
+            List<String> newsContent = java.util.stream.IntStream.range(0, articles.size())
+                    .mapToObj(index -> {
+                        NewsArticle article = articles.get(index);
+                        String cleaned = newsIngestionService.cleanNewsText(article);
+                        if (cleaned == null || cleaned.trim().isEmpty()) return null;
+                        String published = article.publishedDate().withZoneSameInstant(MARKET_ZONE)
+                            .toLocalDate().toString();
+                        String source = article.source() == null || article.source().isBlank()
+                                ? "source unknown" : article.source();
+                        return "[" + (index + 1) + "] " + published + " | " + source + " | "
+                            + capArticleLength(cleaned, maxArticleChars);
+                    })
+                    .filter(Objects::nonNull)
                     .toList();
 
             if (newsContent.isEmpty()) {
@@ -236,7 +248,7 @@ public class SentimentService {
                             default -> SentimentType.NEUTRAL;
                         },
                         fallback.summary(), fallback.confidence(),
-                        fallback.redFlags(), fallback.catalysts()
+                        fallback.redFlags(), fallback.catalysts(), "KEYWORD"
                 );
             }
 
@@ -309,7 +321,7 @@ public class SentimentService {
                 .replace("{symbol}", stockSymbol)
                 .replace("{newsContent}", combinedContent);
         List<Map<String, String>> messages = List.of(
-                Map.of("role", "system", "content", promptLoader.getSystemPrompt()),
+                Map.of("role", "system", "content", promptLoader.getSystemPrompt().replace("{symbol}", stockSymbol)),
                 Map.of("role", "user", "content", formattedUser)
         );
 
@@ -346,8 +358,8 @@ public class SentimentService {
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), true);
             llmMetrics.recordSentimentAnalyzed();
             if (llmResponse == null || llmResponse.isBlank()) {
-                SentimentOutput empty = new SentimentOutput(SentimentType.NEUTRAL,
-                        "No valid response from LLM", 0.1);
+                SentimentOutput empty = new SentimentOutput(SentimentType.UNKNOWN,
+                        "No valid response from LLM", 0.0, List.of(), List.of(), "DEFAULT");
                 persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
                         promptHash, messages, llmResponse, empty, "SUCCESS", null, maxResponseTokens,
                         startedAt, latencyMs);
@@ -368,9 +380,9 @@ public class SentimentService {
                 logger.error("Timeout analyzing sentiment for {}: analysis took more than {} seconds",
                         stockSymbol, ANALYSIS_TIMEOUT_SECONDS);
                 return new SentimentOutput(
-                        SentimentType.NEUTRAL,
+                        SentimentType.UNKNOWN,
                         "Analysis timed out - unable to process news content",
-                        0.2
+                        0.0, List.of(), List.of(), "DEFAULT"
                 );
             }
             logger.error("Error during LLM sentiment analysis: {}", errorDetail, e);
@@ -429,6 +441,9 @@ public class SentimentService {
             case NEGATIVE:
                 score = SentimentResult.SentimentScore.NEGATIVE;
                 break;
+            case UNKNOWN:
+                score = SentimentResult.SentimentScore.UNKNOWN;
+                break;
             default:
                 score = SentimentResult.SentimentScore.NEUTRAL;
         }
@@ -446,8 +461,25 @@ public class SentimentService {
                 analysisResult.getCatalysts() != null ? analysisResult.getCatalysts() : List.of(),
                 promptHash,
                 modelVersion,
-                articleCount
+                articleCount,
+                analysisResult.getSource()
         );
+    }
+
+    /**
+     * Enforces the information boundary for historical sentiment analyses. Articles without a
+     * publication timestamp are retained for compatibility with legacy feeds, but any timestamp
+     * after the decision-day market close is never allowed into the prompt.
+     */
+    private List<NewsArticle> filterPointInTimeArticles(List<NewsArticle> articles, LocalDate date) {
+        if (articles == null || articles.isEmpty() || date == null) return List.of();
+        var from = date.minusDays(NEWS_LOOKBACK_DAYS).atStartOfDay(MARKET_ZONE);
+        var cutoff = date.atTime(15, 30).atZone(MARKET_ZONE);
+        return articles.stream()
+            .filter(Objects::nonNull)
+            .filter(article -> article.publishedDate() == null
+                || (!article.publishedDate().isBefore(from) && !article.publishedDate().isAfter(cutoff)))
+            .toList();
     }
 
     /**

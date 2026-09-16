@@ -144,8 +144,8 @@ class SentimentAnalyzerBeanOutputConverterTest {
             SentimentOutput result = analyzer.parseResponse("");
 
             // Assert
-            assertThat(result.getSentiment()).isEqualTo(SentimentType.NEUTRAL);
-            assertThat(result.getConfidence()).isEqualTo(0.1);
+            assertThat(result.getSentiment()).isEqualTo(SentimentType.UNKNOWN);
+            assertThat(result.getConfidence()).isEqualTo(0.0);
         }
 
         @Test
@@ -154,8 +154,8 @@ class SentimentAnalyzerBeanOutputConverterTest {
             SentimentOutput result = analyzer.parseResponse(null);
 
             // Assert
-            assertThat(result.getSentiment()).isEqualTo(SentimentType.NEUTRAL);
-            assertThat(result.getConfidence()).isEqualTo(0.1);
+            assertThat(result.getSentiment()).isEqualTo(SentimentType.UNKNOWN);
+            assertThat(result.getConfidence()).isEqualTo(0.0);
         }
 
         @Test

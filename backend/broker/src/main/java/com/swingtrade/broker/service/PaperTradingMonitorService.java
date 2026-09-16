@@ -15,7 +15,7 @@ import java.util.List;
 
 /**
  * EOD position monitor.
- * Runs at 15:30 IST to fetch latest candle,
+ * Runs after EOD ingestion to fetch the latest candle,
  * update position prices, and check SL/TP triggers.
  */
 @Service
@@ -38,7 +38,7 @@ public class PaperTradingMonitorService {
         this.properties = properties;
     }
 
-    @Scheduled(cron = "${paper.trading.monitor-cron:0 30 15 * * MON-FRI}", zone = "Asia/Kolkata")
+    @Scheduled(cron = "${paper.trading.monitor-cron:0 45 16 * * MON-FRI}", zone = "Asia/Kolkata")
     public void monitorPositions() {
         List<Position> openPositions = engine.getOpenPositions();
         if (openPositions.isEmpty()) {
@@ -52,10 +52,6 @@ public class PaperTradingMonitorService {
             try {
                 OhlcvCandle candle = fetchLatestCandle(pos.symbol());
                 if (candle == null) continue;
-
-                // Persist candle to DB for signal engine use
-                OhlcvCandleEntity entity = OhlcvCandleEntity.fromDomain(candle);
-                ohlcvCandleRepository.save(entity);
 
                 // Update position price and check SL/TP; this already persists the
                 // resulting state (open or closed) via stateService internally.
@@ -81,7 +77,7 @@ public class PaperTradingMonitorService {
     }
 
     private OhlcvCandle fetchLatestCandle(String symbol) {
-        // Get latest candle from DB (EodIngestionScheduler fetches at 16:30)
+        // Get latest candle from DB after EodIngestionScheduler fetches at 16:30.
         return ohlcvCandleRepository.findLatestBySymbol(symbol)
             .map(OhlcvCandleEntity::toDomain)
             .orElse(null);

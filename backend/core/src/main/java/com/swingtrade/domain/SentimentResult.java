@@ -16,6 +16,7 @@ import java.util.List;
  * @param rawContent  the raw content analyzed (news articles, announcements)
  * @param confidence  the confidence level of the sentiment score (0.0 to 1.0)
  * @param analyzedAt  the timestamp when the sentiment was analyzed
+ * @param source      provenance: LLM, KEYWORD, or DEFAULT
  */
 public record SentimentResult(
     Long id,
@@ -30,15 +31,25 @@ public record SentimentResult(
     List<String> catalysts,
     String promptHash,
     String modelVersion,
-    int articleCount
+    int articleCount,
+    String source
 ) {
+    /** Compatibility constructor for callers predating provenance tracking. */
+    public SentimentResult(Long id, String symbol, LocalDate date, SentimentScore score,
+                           String summary, String rawContent, Double confidence,
+                           LocalDate analyzedAt, List<String> redFlags, List<String> catalysts,
+                           String promptHash, String modelVersion, int articleCount) {
+        this(id, symbol, date, score, summary, rawContent, confidence, analyzedAt,
+            redFlags, catalysts, promptHash, modelVersion, articleCount, "DEFAULT");
+    }
     /**
      * Enum representing the different sentiment scores.
      */
     public enum SentimentScore {
         POSITIVE("Positive"),
         NEUTRAL("Neutral"),
-        NEGATIVE("Negative");
+        NEGATIVE("Negative"),
+        UNKNOWN("Unknown");
 
         private final String displayName;
 
@@ -99,7 +110,8 @@ public record SentimentResult(
             catalysts != null ? catalysts : List.of(),
             null,
             null,
-            0
+            0,
+            "DEFAULT"
         );
     }
 
@@ -128,6 +140,10 @@ public record SentimentResult(
      */
     public boolean isNegative() {
         return SentimentScore.NEGATIVE == score;
+    }
+
+    public boolean isUnknown() {
+        return SentimentScore.UNKNOWN == score;
     }
 
     /**

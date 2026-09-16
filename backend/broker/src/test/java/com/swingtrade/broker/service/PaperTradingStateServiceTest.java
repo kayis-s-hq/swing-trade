@@ -57,6 +57,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 
 /**
  * Unit tests for PaperTradingStateService covering state loading,
@@ -180,6 +181,34 @@ class PaperTradingStateServiceTest {
             verify(portfolioRepo).findById(1L);
             verify(unifiedPositionRepo).findAllOpenPositions();
             verify(unifiedPositionRepo).findByStatus("CLOSED");
+        }
+
+        @Test
+        void success_reloadsPendingOrdersForNextSession() {
+            when(portfolioRepo.findById(1L)).thenReturn(Optional.empty());
+            when(unifiedPositionRepo.findAllOpenPositions()).thenReturn(List.of());
+            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.ZERO));
+
+            PaperTradingOrderEntity entity = new PaperTradingOrderEntity();
+            entity.setOrderId("ORD_RESTART");
+            entity.setSymbol("TCS");
+            entity.setType(OrderType.MARKET.name());
+            entity.setDirection(TradeDirection.LONG.name());
+            entity.setQuantity(10);
+            entity.setPrice(new BigDecimal("100.00"));
+            entity.setStatus(OrderStatus.PENDING.name());
+            entity.setSignalId("42");
+            when(orderRepo.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(entity));
+            var restoredOrders = new java.util.concurrent.ConcurrentHashMap<String, Order>();
+            when(orderManager.getOrders()).thenReturn(restoredOrders);
+
+            stateService.loadState();
+
+            verify(orderManager).getOrders();
+            assertThat(restoredOrders).containsKey("ORD_RESTART");
+            Order restored = restoredOrders.get("ORD_RESTART");
+            assertThat(restored.getStatus()).isEqualTo(OrderStatus.PENDING);
+            assertThat(restored.getAdditionalProperties()).containsEntry("signalId", "42");
         }
 
         @Test

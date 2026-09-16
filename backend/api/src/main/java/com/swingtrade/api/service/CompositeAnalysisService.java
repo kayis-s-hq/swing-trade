@@ -21,6 +21,9 @@ public class CompositeAnalysisService {
 
     private static final Logger logger = LoggerFactory.getLogger(CompositeAnalysisService.class);
     private static final int MIN_CANDLES_FOR_BACKTEST = 100;
+    private static final double NEWS_WEIGHT = 0.30;
+    private static final double TECHNICAL_WEIGHT = 0.40;
+    private static final double FUNDAMENTAL_WEIGHT = 0.30;
 
     private final SentimentService sentimentService;
     private final NewsIngestionService newsService;
@@ -86,10 +89,10 @@ public class CompositeAnalysisService {
         // Source scores for display
         List<CompositeAnalysis.SourceScore> sources = new ArrayList<>();
         if (news != null) {
-            sources.add(new CompositeAnalysis.SourceScore("News Sentiment", news.score(), 0.40, "LLM analysis of news articles"));
+            sources.add(new CompositeAnalysis.SourceScore("News Sentiment", news.score(), NEWS_WEIGHT, "LLM analysis of news articles"));
         }
-        sources.add(new CompositeAnalysis.SourceScore("Technical Signal", technical.score(), 0.40, "TA4j indicators"));
-        sources.add(new CompositeAnalysis.SourceScore("Fundamentals", fundamentals.score(), 0.20, "Price-based fundamentals"));
+        sources.add(new CompositeAnalysis.SourceScore("Technical Signal", technical.score(), TECHNICAL_WEIGHT, "TA4j indicators"));
+        sources.add(new CompositeAnalysis.SourceScore("Fundamentals", fundamentals.score(), FUNDAMENTAL_WEIGHT, "Price-based fundamentals"));
 
         String reasoning = buildReasoning(news, technical, fundamentals, backtest, composite);
 
@@ -119,15 +122,19 @@ public class CompositeAnalysisService {
                                  CompositeAnalysis.TechnicalScore technical,
                                  CompositeAnalysis.FundamentalScore fundamentals) {
         double weightedSum = 0;
+        double usedWeight = 0;
 
         if (news != null && news.articleCount() > 0) {
-            weightedSum += news.score() * 0.30;
+            weightedSum += news.score() * NEWS_WEIGHT;
+            usedWeight += NEWS_WEIGHT;
         }
 
-        weightedSum += technical.score() * 0.40;
-        weightedSum += fundamentals.score() * 0.30;
+        weightedSum += technical.score() * TECHNICAL_WEIGHT;
+        usedWeight += TECHNICAL_WEIGHT;
+        weightedSum += fundamentals.score() * FUNDAMENTAL_WEIGHT;
+        usedWeight += FUNDAMENTAL_WEIGHT;
 
-        return Math.round((int) weightedSum);
+        return usedWeight == 0 ? 0 : (int) Math.round(weightedSum / usedWeight);
     }
 
     private CompositeAnalysis.NewsScore buildNewsScore(String symbol, SentimentResult sentiment) {
@@ -136,9 +143,10 @@ public class CompositeAnalysisService {
                 return new CompositeAnalysis.NewsScore(0, "No sentiment data", List.of(), List.of(), 0);
             }
 
+            double confidence = sentiment.confidence() == null ? 0.0 : Math.max(0.0, Math.min(1.0, sentiment.confidence()));
             int score = switch (sentiment.score()) {
-                case POSITIVE -> 75;
-                case NEGATIVE -> -75;
+                case POSITIVE -> (int) Math.round(100 * confidence);
+                case NEGATIVE -> (int) Math.round(-100 * confidence);
                 default -> 0;
             };
 

@@ -108,7 +108,7 @@ class PaperTradingMonitorServiceTest {
 
             // Then
             verify(ohlcvCandleRepository).findLatestBySymbol("RELIANCE-EQ");
-            verify(ohlcvCandleRepository).save(any(OhlcvCandleEntity.class));
+            verify(ohlcvCandleRepository, never()).save(any(OhlcvCandleEntity.class));
             verify(engine).updatePositionsFromDomain(candle);
             verify(stateService).saveSnapshot();
             verify(stateService).savePortfolio();
@@ -137,7 +137,7 @@ class PaperTradingMonitorServiceTest {
 
             // Then
             verify(ohlcvCandleRepository, times(2)).findLatestBySymbol(anyString());
-            verify(ohlcvCandleRepository, times(2)).save(any(OhlcvCandleEntity.class));
+            verify(ohlcvCandleRepository, never()).save(any(OhlcvCandleEntity.class));
             verify(engine, times(2)).updatePositionsFromDomain(any(OhlcvCandle.class));
             verify(stateService).saveSnapshot();
             verify(stateService).savePortfolio();
@@ -183,7 +183,7 @@ class PaperTradingMonitorServiceTest {
             monitorService.monitorPositions();
 
             // Then
-            verify(ohlcvCandleRepository).save(any(OhlcvCandleEntity.class));
+            verify(ohlcvCandleRepository, never()).save(any(OhlcvCandleEntity.class));
         }
 
         @Test
@@ -271,7 +271,7 @@ class PaperTradingMonitorServiceTest {
 
             // Then: First position skipped (candle null), second processed
             verify(ohlcvCandleRepository, times(2)).findLatestBySymbol(anyString());
-            verify(ohlcvCandleRepository, times(1)).save(any(OhlcvCandleEntity.class));
+            verify(ohlcvCandleRepository, never()).save(any(OhlcvCandleEntity.class));
             verify(engine, times(1)).updatePositionsFromDomain(any(OhlcvCandle.class));
             verify(stateService).saveSnapshot();
             verify(stateService).savePortfolio();
@@ -376,7 +376,7 @@ class PaperTradingMonitorServiceTest {
             String cron = properties.getMonitorCron();
 
             // Then
-            assertThat(cron).isEqualTo("0 30 15 * * MON-FRI");
+            assertThat(cron).isEqualTo("0 45 16 * * MON-FRI");
         }
 
         @Test

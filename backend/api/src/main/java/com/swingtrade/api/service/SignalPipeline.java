@@ -118,10 +118,11 @@ public class SignalPipeline {
             closeHeldPositionOnSell(symbol, latestDate);
         }
 
+        BigDecimal confidence = deriveConfidence(result);
         Signal signal = Signal.create(result.symbol(), result.date(), result.type(),
-                BigDecimal.ONE, result.reasoning());
+                confidence, result.reasoning());
 
-        BigDecimal atr = RiskCalculator.calculateATR(chronologicalCandles);
+        BigDecimal atr = BigDecimal.valueOf(result.atr());
         String indicators = buildPriceActionIndicators(result);
 
         // Sentiment score/reasoning are filled in later by the SENTIMENT stage's own
@@ -130,7 +131,7 @@ public class SignalPipeline {
             ? SignalEntity.WarningFlag.PENDING_SENTIMENT
             : SignalEntity.WarningFlag.NONE).code();
         Signal saved = persistenceService.buildAndSaveWithWarning(
-                symbol, latestDate, result.type(), BigDecimal.ONE,
+                symbol, latestDate, result.type(), confidence,
                 result.reasoning(), indicators, atr, warningFlag, null, null);
 
         logger.info("Generated {} signal for {} on {} (reasoning: {})",
@@ -177,9 +178,7 @@ public class SignalPipeline {
             };
         }
 
-        BigDecimal confidence = result.type() == Signal.SignalType.BUY
-                ? BigDecimal.ONE
-                : BigDecimal.valueOf(0.5);
+        BigDecimal confidence = deriveConfidence(result);
         Signal baseSignal = Signal.create(result.symbol(), result.date(), result.type(), confidence, result.reasoning());
 
         BigDecimal atr = BigDecimal.valueOf(result.atr());
@@ -232,6 +231,33 @@ public class SignalPipeline {
         return String.format(
                 "RSI=%.2f,EMA20=%.2f,EMA50=%.2f,ATR=%.2f",
                 result.rsi(), result.ema20(), result.ema50(), result.atr());
+    }
+
+    /**
+     * Converts rule margins into a bounded confidence instead of assigning every signal a fixed
+     * conviction. RSI location and EMA separation are stable, explainable inputs available on the
+     * signal result itself; the strategy still decides BUY/SELL/HOLD independently.
+     */
+    private BigDecimal deriveConfidence(SignalResult result) {
+        double rsiCenter = 57.5;
+        double rsiMargin = result.type() == Signal.SignalType.BUY
+            ? clamp(1.0 - Math.abs(result.rsi() - rsiCenter) / 7.5)
+            : clamp((50.0 - result.rsi()) / 20.0);
+        double emaSpread = result.ema50() == 0.0 ? 0.0
+            : (result.type() == Signal.SignalType.BUY
+                ? (result.ema20() - result.ema50()) / Math.abs(result.ema50())
+                : (result.ema50() - result.ema20()) / Math.abs(result.ema50()));
+        double trendMargin = clamp(emaSpread * 20.0);
+        double confidence = switch (result.type()) {
+            case BUY -> 0.55 + 0.25 * rsiMargin + 0.20 * trendMargin;
+            case SELL -> 0.45 + 0.30 * rsiMargin + 0.25 * trendMargin;
+            case HOLD -> 0.20 + 0.10 * trendMargin;
+        };
+        return BigDecimal.valueOf(clamp(confidence)).setScale(4, java.math.RoundingMode.HALF_UP);
+    }
+
+    private double clamp(double value) {
+        return Math.max(0.0, Math.min(1.0, value));
     }
 
 }

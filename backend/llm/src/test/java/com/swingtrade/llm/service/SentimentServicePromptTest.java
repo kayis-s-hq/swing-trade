@@ -14,6 +14,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -72,7 +75,7 @@ class SentimentServicePromptTest {
             .thenReturn(Mono.just(llmResponse));
 
         when(newsIngestionService.fetchStockNews("RELIANCE")).thenReturn(List.of(
-                new NewsArticle("RELIANCE", "Test headline", "Test URL", null, null, "Test source", null)));
+                new NewsArticle("RELIANCE", "Test headline", "Test URL", null, todayNoon(), "Test source", null)));
         when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("Test news content");
 
         // When
@@ -105,7 +108,7 @@ class SentimentServicePromptTest {
             .thenReturn(Mono.just(llmResponse));
 
         when(newsIngestionService.fetchStockNews("TCS")).thenReturn(List.of(
-                new NewsArticle("TCS", "Test headline", "Test URL", null, null, "Test source", null)));
+                new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null)));
         when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("news content");
 
         // When
@@ -132,11 +135,44 @@ class SentimentServicePromptTest {
         when(llmClient.generateChatCompletion(anyList(), eq(128), eq(0.3)))
                 .thenReturn(Mono.just("{\"score\":\"NEUTRAL\",\"confidence\":0.5,\"summary\":\"Mixed\",\"red_flags\":[],\"catalysts\":[]}"));
         when(newsIngestionService.fetchStockNews("TCS")).thenReturn(List.of(
-                new NewsArticle("TCS", "Test headline", "Test URL", null, null, "Test source", null)));
+                new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null)));
         when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("news content");
 
         service.analyzeStockSentiment("TCS", LocalDate.now());
 
         verify(llmClient).generateChatCompletion(anyList(), eq(128), eq(0.3));
+    }
+
+    @Test
+    @DisplayName("SentimentService excludes articles published after the decision cutoff")
+    void filtersFutureArticlesBeforePrompting() {
+        when(promptLoader.getSystemPrompt()).thenReturn("System prompt");
+        when(promptLoader.getUserPrompt()).thenReturn("News: {newsContent}");
+        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
+            .thenReturn(Mono.just("{\"score\":\"NEUTRAL\",\"confidence\":0.5,\"summary\":\"Mixed\"}"));
+
+        LocalDate decisionDate = LocalDate.of(2026, 9, 15);
+        NewsArticle beforeCutoff = new NewsArticle("TCS", "Old", "u1", null,
+            ZonedDateTime.of(2026, 9, 15, 15, 30, 0, 0, ZoneId.of("Asia/Kolkata")), "source", null);
+        NewsArticle afterCutoff = new NewsArticle("TCS", "Future", "u2", null,
+            ZonedDateTime.of(2026, 9, 15, 15, 31, 0, 0, ZoneId.of("Asia/Kolkata")), "source", null);
+        when(newsIngestionService.fetchStockNews("TCS")).thenReturn(List.of(beforeCutoff, afterCutoff));
+        when(newsIngestionService.cleanNewsText(beforeCutoff)).thenReturn("old news");
+
+        service.analyzeStockSentiment("TCS", decisionDate);
+
+        verify(sentimentStore).saveOrUpdate(argThat(result -> result.articleCount() == 1));
+        verify(newsIngestionService).cleanNewsText(beforeCutoff);
+        org.mockito.Mockito.verify(newsIngestionService, org.mockito.Mockito.never())
+            .cleanNewsText(afterCutoff);
+        verify(llmClient).generateChatCompletion(
+            argThat(msgs -> msgs.get(1).get("content").contains("old news")
+                && !msgs.get(1).get("content").contains("future news")),
+            eq(512), eq(0.3));
+    }
+
+    private static ZonedDateTime todayNoon() {
+        ZoneId zone = ZoneId.of("Asia/Kolkata");
+        return LocalDate.now(zone).atTime(LocalTime.NOON).atZone(zone);
     }
 }
