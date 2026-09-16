@@ -259,5 +259,5 @@ completed stage deployment.
 - [x] Position is decomposed without API, persistence, or trading-behavior drift.
 - [x] Unused API Position DTO is removed.
 - [x] SELL integration test has a green report from a local-Docker environment.
-- [ ] Full relevant backend/dashboard verification is recorded before any stage
+- [x] Full relevant backend/dashboard verification is recorded before any stage
       promotion.
