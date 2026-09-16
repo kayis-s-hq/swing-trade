@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,7 +21,7 @@ public class KillSwitchService {
 
     private static final Logger logger = LoggerFactory.getLogger(KillSwitchService.class);
 
-    private boolean active;
+    private volatile boolean active;
     private LocalDateTime enabledAt;
     private String reason;
 
@@ -64,8 +65,19 @@ public class KillSwitchService {
 
         try {
             String sql = "SELECT active, enabled_at, reason FROM kill_switch ORDER BY id DESC LIMIT 1";
-            Map<String, Object> result = jdbcTemplate.queryForMap(sql);
+            List<Map<String, Object>> results = jdbcTemplate.queryForList(sql);
 
+            if (results.isEmpty()) {
+                // Table exists but has no row yet (e.g. a database created before the
+                // seed row was added, or the row was manually removed). Seed it from
+                // the current in-memory/config state so future restarts have
+                // something durable to load instead of silently staying in-memory.
+                logger.warn("kill_switch table has no row; seeding it with current state (active={})", active);
+                persistToDatabase();
+                return;
+            }
+
+            Map<String, Object> result = results.get(0);
             this.active = (Boolean) result.get("active");
             this.enabledAt = result.get("enabled_at") != null
                     ? LocalDateTime.parse(result.get("enabled_at").toString())

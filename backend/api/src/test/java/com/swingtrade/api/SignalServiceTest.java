@@ -70,6 +70,7 @@ class SignalServiceTest {
     @BeforeEach
     void setUp() {
         lenient().when(signalStore.findAll()).thenReturn(new ArrayList<>(testSignals));
+        lenient().when(signalStore.findLatestSignalPerSymbol()).thenReturn(new ArrayList<>(testSignals));
     }
 
     @Test

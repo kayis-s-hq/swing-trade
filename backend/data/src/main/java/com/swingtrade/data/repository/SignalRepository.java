@@ -206,4 +206,21 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
     @Modifying
     @Query("DELETE FROM SignalEntity")
     int deleteAllSignals();
+
+    /**
+     * Finds the single latest signal per symbol across the whole table, using a DB-level
+     * window function so no more than one row per symbol is ever loaded into memory.
+     * Ties (same date) are broken by created_at then id, matching the ordering used by
+     * {@link #findLatestBySymbol(String, Pageable)}.
+     *
+     * @return one signal per distinct symbol, the most recent for that symbol
+     */
+    @Query(value = "SELECT ranked.* FROM (" +
+        "  SELECT s.*, ROW_NUMBER() OVER (" +
+        "    PARTITION BY s.symbol ORDER BY s.date DESC, s.created_at DESC, s.id DESC" +
+        "  ) AS rn " +
+        "  FROM signals s" +
+        ") ranked WHERE ranked.rn = 1",
+        nativeQuery = true)
+    List<SignalEntity> findLatestSignalPerSymbol();
 }

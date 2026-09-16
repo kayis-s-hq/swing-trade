@@ -105,6 +105,13 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
+    public List<Signal> findLatestSignalPerSymbol() {
+        return repository.findLatestSignalPerSymbol().stream()
+            .map(SignalEntity::toDomain)
+            .toList();
+    }
+
+    @Override
     public List<String> findAllDistinctSymbols() {
         return repository.findAllDistinctSymbols();
     }

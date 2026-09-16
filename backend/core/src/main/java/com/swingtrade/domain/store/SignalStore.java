@@ -34,6 +34,14 @@ public interface SignalStore {
     Optional<Signal> findLatestBySymbol(String symbol);
     Optional<Signal> findLatestBySymbolAndStrategy(String symbol, String strategy);
 
+    /**
+     * Finds the single latest signal per symbol, computed at the DB level (no full-table
+     * in-memory dedupe).
+     *
+     * @return one signal per distinct symbol, the most recent for that symbol
+     */
+    List<Signal> findLatestSignalPerSymbol();
+
     List<String> findAllDistinctSymbols();
 
     long countBySymbolAndDate(String symbol, LocalDate date);

@@ -43,14 +43,8 @@ public class SignalService {
      * @return List of latest trading signals
      */
     public List<SignalResponse> getLatestSignals() {
-        // Fetch all signals and take the latest per symbol
-        List<Signal> all = signalStore.findAll();
-        java.util.Map<String, Signal> latestBySymbol = all.stream()
-                .collect(java.util.stream.Collectors.toMap(
-                        Signal::symbol,
-                        s -> s,
-                        (a, b) -> b.date() != null && a.date() != null && b.date().isAfter(a.date()) ? b : a));
-        return latestBySymbol.values().stream()
+        // Latest signal per symbol, computed at the DB level (no full-table load).
+        return signalStore.findLatestSignalPerSymbol().stream()
                 .map(SignalResponse::new)
                 .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
     }
