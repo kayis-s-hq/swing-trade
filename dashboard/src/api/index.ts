@@ -108,6 +108,9 @@ export {
 // Backtest
 export { runBacktest, runBacktestAll, listBacktestReports, getBacktestReport } from './backtest'
 
+// Strategies
+export { getStrategies } from './strategies'
+
 // Analysis
 export { getCompositeAnalysis, runFullAnalysis } from './analysis'
 export type { AnalysisStreamOptions } from './analysis'
