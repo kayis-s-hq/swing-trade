@@ -19,6 +19,7 @@ package com.swingtrade.api.service;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.llm.service.SentimentService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -38,6 +39,9 @@ public class SentimentGate {
 
     private final SentimentService sentimentService;
     private final SentimentStore sentimentStore;
+
+    @Autowired(required = false)
+    private GateEffectivenessAuditService effectivenessAuditService;
 
     public SentimentGate(SentimentService sentimentService, SentimentStore sentimentStore) {
         this.sentimentService = sentimentService;
@@ -76,9 +80,13 @@ public class SentimentGate {
      *     default is to not trade an unvetted signal), otherwise the classified verdict
      */
     public SentimentVerdict evaluatePersisted(String symbol, LocalDate date) {
-        return sentimentStore.findBySymbolAndDate(symbol, date)
+        SentimentVerdict verdict = sentimentStore.findBySymbolAndDate(symbol, date)
             .map(this::classify)
             .orElseGet(SentimentVerdict::pending);
+        if (effectivenessAuditService != null) {
+            effectivenessAuditService.recordSentimentVerdict(symbol, date, verdict);
+        }
+        return verdict;
     }
 
     private SentimentVerdict classify(SentimentResult sentiment) {

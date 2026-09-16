@@ -1,7 +1,9 @@
 package com.swingtrade.strategy;
 
 import tools.jackson.databind.ObjectMapper;
+import com.swingtrade.domain.BenchmarkComparison;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.OhlcvDataQuality;
 import com.swingtrade.domain.PriceBand;
 import com.swingtrade.domain.PriceBandPolicy;
 import com.swingtrade.domain.Stock;
@@ -59,6 +61,7 @@ public class BacktestEngine {
      */
     private static final int MIN_CANDLES_FOR_BACKTEST = 60;
     private static final BacktestCostModel DEFAULT_COST_MODEL = new ZerodhaDeliveryCostModel();
+    private final PortfolioBacktestEngine portfolioBacktestEngine = new PortfolioBacktestEngine();
 
     private final CandleStore candleStore;
     private final WatchlistStore watchlistStore;
@@ -138,7 +141,7 @@ public class BacktestEngine {
 
         List<OhlcvCandle> chronologicalCandles = getDescendingCandles(symbol, candleStore, MIN_CANDLES_FOR_BACKTEST);
 
-        return simulate(symbol, chronologicalCandles, config, strategy);
+        return simulate(symbol, qualityChecked(symbol, chronologicalCandles), config, strategy);
     }
 
     /**
@@ -165,6 +168,7 @@ public class BacktestEngine {
             symbol, evaluationStart.minusDays(400), evaluationEnd);
         List<OhlcvCandle> chronological = new ArrayList<>(descending);
         chronological.sort(Comparator.comparing(OhlcvCandle::date));
+        chronological = qualityChecked(symbol, chronological);
         if (chronological.size() < MIN_CANDLES_FOR_BACKTEST) {
             throw new IllegalStateException("Insufficient candle history for evaluation window");
         }
@@ -178,6 +182,47 @@ public class BacktestEngine {
         return simulate(symbol, chronological, config, strategy, start, end);
     }
 
+    /**
+     * Evaluates bounded, non-overlapping trailing OOS folds. Folds are returned in
+     * chronological order; each fold retains the normal indicator warm-up behavior.
+     */
+    public WalkForwardEvaluation runWalkForward(String symbol, String exchange, BacktestConfig config,
+                                                 int oosDays, int requestedFolds) {
+        return runWalkForward(symbol, exchange, config, strategyRegistry.defaultStrategy(), oosDays,
+            requestedFolds);
+    }
+
+    public WalkForwardEvaluation runWalkForward(String symbol, String exchange, BacktestConfig config,
+                                                 TradingStrategy strategy, int oosDays, int requestedFolds) {
+        if (oosDays < 60 || oosDays > 1000) {
+            throw new IllegalArgumentException("oosDays must be between 60 and 1000");
+        }
+        if (requestedFolds < 1 || requestedFolds > 8) {
+            throw new IllegalArgumentException("requestedFolds must be between 1 and 8");
+        }
+        List<OhlcvCandle> candles = new ArrayList<>(candleStore.findAllBySymbolOrderByDateDesc(symbol));
+        candles.sort(Comparator.comparing(OhlcvCandle::date));
+        int required = oosDays * requestedFolds;
+        if (candles.size() < required) {
+            throw new IllegalStateException("Insufficient candle history for " + requestedFolds
+                + " OOS folds: need at least " + required + " candles, found " + candles.size());
+        }
+
+        List<WalkForwardEvaluation.Fold> folds = new ArrayList<>(requestedFolds);
+        for (int fold = requestedFolds - 1; fold >= 0; fold--) {
+            int startIndex = candles.size() - ((fold + 1) * oosDays);
+            int endIndex = startIndex + oosDays - 1;
+            LocalDate startDate = candles.get(startIndex).date();
+            LocalDate endDate = candles.get(endIndex).date();
+            BacktestResult result = runBacktestWindow(symbol, exchange, config, strategy, startDate, endDate);
+            folds.add(new WalkForwardEvaluation.Fold(startDate, endDate, result));
+        }
+        double averageWinRate = folds.stream().mapToDouble(f -> f.result().winRate()).average().orElse(0.0);
+        double averageTotalReturn = folds.stream().mapToDouble(f -> f.result().totalReturn()).average().orElse(0.0);
+        int totalTrades = folds.stream().mapToInt(f -> f.result().totalTrades()).sum();
+        return new WalkForwardEvaluation(folds, averageWinRate, averageTotalReturn, totalTrades);
+    }
+
     static List<OhlcvCandle> getDescendingCandles(String symbol, CandleStore candleStore, int minCandles) {
         List<OhlcvCandle> descendingCandles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 1000);
         if (descendingCandles.size() < minCandles) {
@@ -189,6 +234,19 @@ public class BacktestEngine {
         List<OhlcvCandle> chronologicalCandles = new ArrayList<>(descendingCandles);
         Collections.reverse(chronologicalCandles);
         return chronologicalCandles;
+    }
+
+    private List<OhlcvCandle> qualityChecked(String symbol, List<OhlcvCandle> candles) {
+        OhlcvDataQuality.Assessment quality = OhlcvDataQuality.quarantineUnexplainedGaps(
+            candles, PriceActionSignalEngine.MAX_ANALYTICAL_GAP_RATIO);
+        if (!quality.quarantined().isEmpty()) {
+            logger.warn("Quarantined {} candle(s) from backtest input for {}: {}",
+                quality.quarantined().size(), symbol, quality.quarantined().get(0).reason());
+        }
+        if (quality.accepted().size() < MIN_CANDLES_FOR_BACKTEST) {
+            throw new IllegalStateException("Insufficient quality candle history for " + symbol);
+        }
+        return quality.accepted();
     }
 
     /**
@@ -242,6 +300,38 @@ public class BacktestEngine {
                 .map(Stock::symbol)
                 .toList();
         return runBacktestAll(symbols, exchange, config, strategy);
+    }
+
+    /**
+     * Runs each symbol through the existing windowed backtest, then applies the resulting dated
+     * trades to one shared cash account. This is intentionally bounded to the supplied symbols
+     * and window; the existing independent-symbol APIs remain unchanged.
+     */
+    public PortfolioBacktestResult runPortfolioBacktest(List<String> symbols, String exchange,
+                                                        BacktestConfig config,
+                                                        LocalDate evaluationStart, LocalDate evaluationEnd) {
+        return runPortfolioBacktest(symbols, exchange, config, strategyRegistry.defaultStrategy(),
+                evaluationStart, evaluationEnd);
+    }
+
+    public PortfolioBacktestResult runPortfolioBacktest(List<String> symbols, String exchange,
+                                                        BacktestConfig config, TradingStrategy strategy,
+                                                        LocalDate evaluationStart, LocalDate evaluationEnd) {
+        if (symbols == null || symbols.isEmpty()) {
+            throw new IllegalArgumentException("Symbols cannot be null or empty");
+        }
+        if (config == null || strategy == null) {
+            throw new IllegalArgumentException("Config and strategy cannot be null");
+        }
+        List<BacktestResult> results = new ArrayList<>();
+        for (String symbol : symbols.stream().distinct().sorted().toList()) {
+            try {
+                results.add(runBacktestWindow(symbol, exchange, config, strategy, evaluationStart, evaluationEnd));
+            } catch (RuntimeException e) {
+                logger.warn("Skipping {} in portfolio backtest: {}", symbol, e.getMessage());
+            }
+        }
+        return portfolioBacktestEngine.simulate(results, config, evaluationStart, evaluationEnd);
     }
 
     /**
@@ -386,7 +476,12 @@ public class BacktestEngine {
 
         LocalDate evaluationStart = chronologicalCandles.get(firstEvaluationBar).date();
         LocalDate evaluationEnd = chronologicalCandles.get(lastEvaluationBar).date();
-        return buildResult(symbol, trades, capitalCurve, capital, config, evaluationStart, evaluationEnd);
+        BigDecimal benchmarkStartClose = chronologicalCandles.get(firstEvaluationBar)
+                .adjustedForAnalysis().close();
+        BigDecimal benchmarkEndClose = chronologicalCandles.get(lastEvaluationBar)
+                .adjustedForAnalysis().close();
+        return buildResult(symbol, trades, capitalCurve, capital, config, evaluationStart, evaluationEnd,
+                benchmarkStartClose, benchmarkEndClose);
     }
 
     private OpenPosition tryEnter(List<OhlcvCandle> chronologicalCandles,
@@ -460,7 +555,8 @@ public class BacktestEngine {
 
     private BacktestResult buildResult(String symbol, List<BacktestTrade> trades, List<Double> capitalCurve,
                                        double finalCapital, BacktestConfig config,
-                                       LocalDate evaluationStart, LocalDate evaluationEnd) {
+                                       LocalDate evaluationStart, LocalDate evaluationEnd,
+                                       BigDecimal benchmarkStartClose, BigDecimal benchmarkEndClose) {
         int totalTrades = trades.size();
         List<BacktestTrade> wins = trades.stream().filter(t -> t.pnl() > 0).toList();
         List<BacktestTrade> losses = trades.stream().filter(t -> t.pnl() <= 0).toList();
@@ -476,12 +572,14 @@ public class BacktestEngine {
                 evaluationStart, evaluationEnd);
         double sortinoRatio = BacktestMetrics.sortinoRatio(capitalCurve);
         double calmarRatio = BacktestMetrics.calmarRatio(cagrPct, maxDrawdownPct);
+        BenchmarkComparison benchmarkComparison = BacktestMetrics.buyAndHoldComparison(
+                totalReturn, benchmarkStartClose, benchmarkEndClose);
         double winRatio = winRate / 100.0;
         double expectancy = (winRatio * avgGainPct) - ((1 - winRatio) * avgLossPct);
 
         return new BacktestResult(symbol, totalTrades, wins.size(), losses.size(), winRate, avgGainPct, avgLossPct,
                 maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades,
-                cagrPct, sortinoRatio, calmarRatio);
+                cagrPct, sortinoRatio, calmarRatio, benchmarkComparison);
     }
 
     private double computeSharpeRatio(List<Double> capitalCurve) {

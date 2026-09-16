@@ -562,18 +562,23 @@ public class NewsIngestionService {
      */
     public NewsAndFilings fetchArticlesAndFilings(String symbol) {
         List<NewsArticle> articles = fetchStockNews(symbol);
-        List<StructuredFiling> filings = List.of();
+        return new NewsAndFilings(articles, fetchStructuredFilings(symbol));
+    }
 
+    /** Fetches exchange announcements independently from the article feeds. */
+    public List<StructuredFiling> fetchStructuredFilings(String symbol) {
+        List<StructuredFiling> filings = new ArrayList<>();
         try {
-            List<StructuredFiling> nseFilings = nseSource.fetchFilings(symbol);
-            List<StructuredFiling> bseFilings = bseSource.fetchFilings(symbol);
-            filings = new ArrayList<>(nseFilings);
-            filings.addAll(bseFilings);
+            filings.addAll(nseSource.fetchFilings(symbol));
         } catch (Exception e) {
-            logger.warn("Failed to fetch filings for {}: {}", symbol, e.getMessage());
+            logger.warn("Failed to fetch NSE filings for {}: {}", symbol, e.getMessage());
         }
-
-        return new NewsAndFilings(articles, filings);
+        try {
+            filings.addAll(bseSource.fetchFilings(symbol));
+        } catch (Exception e) {
+            logger.warn("Failed to fetch BSE filings for {}: {}", symbol, e.getMessage());
+        }
+        return filings;
     }
 
     /**

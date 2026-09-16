@@ -3,6 +3,8 @@ Analyse the following for a swing trade entry decision on {symbol}.
 Recent news headlines (last 7 days):
 {newsContent}
 
+{marketContext}
+
 Task: Determine if news sentiment supports a 1-4 week swing trade entry.
 
 CRITICAL: Respond with ONLY a JSON object. No explanation, no reasoning, no other text.

@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.within;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.ArgumentMatchers.any;
 
 @DisplayName("BacktestEngine")
 @ExtendWith(MockitoExtension.class)
@@ -211,6 +212,40 @@ class BacktestEngineTest {
 
             assertThat(result.trades()).isNotEmpty();
             assertThat(result.trades()).allMatch(trade -> !trade.entryDate().isBefore(evaluationStart));
+        }
+
+        @Test
+        @DisplayName("walk-forward evaluation creates bounded chronological non-overlapping folds")
+        void runWalkForward_createsChronologicalFolds() {
+            List<OhlcvCandle> candles = buildTrendingCandles(760, 100.0, 0.05, 1_000_000L);
+            List<OhlcvCandle> descending = new ArrayList<>(candles);
+            Collections.reverse(descending);
+            when(candleStore.findAllBySymbolOrderByDateDesc(SYMBOL)).thenReturn(descending);
+            when(candleStore.findBySymbolAndDateRange(eq(SYMBOL), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(descending);
+
+            WalkForwardEvaluation evaluation = engine.runWalkForward(
+                SYMBOL, EXCHANGE, BacktestConfig.defaults(), 60, 3);
+
+            assertThat(evaluation.folds()).hasSize(3);
+            assertThat(evaluation.folds().get(0).startDate())
+                .isBefore(evaluation.folds().get(1).startDate());
+            assertThat(evaluation.folds().get(1).endDate())
+                .isBefore(evaluation.folds().get(2).startDate());
+            assertThat(evaluation.folds()).allSatisfy(fold ->
+                assertThat(fold.endDate()).isAfterOrEqualTo(fold.startDate()));
+            assertThat(evaluation.totalTrades()).isEqualTo(
+                evaluation.folds().stream().mapToInt(fold -> fold.result().totalTrades()).sum());
+        }
+
+        @Test
+        void runWalkForward_rejectsUnboundedParameters() {
+            assertThatThrownBy(() -> engine.runWalkForward(SYMBOL, EXCHANGE,
+                BacktestConfig.defaults(), 59, 3))
+                .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> engine.runWalkForward(SYMBOL, EXCHANGE,
+                BacktestConfig.defaults(), 60, 9))
+                .isInstanceOf(IllegalArgumentException.class);
         }
     }
 

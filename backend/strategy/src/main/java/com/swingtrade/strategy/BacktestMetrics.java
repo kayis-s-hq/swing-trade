@@ -1,5 +1,8 @@
 package com.swingtrade.strategy;
 
+import com.swingtrade.domain.BenchmarkComparison;
+
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -54,7 +57,35 @@ final class BacktestMetrics {
                 : (sumReturns / observations) / downsideDeviation * Math.sqrt(TRADING_DAYS_PER_YEAR);
     }
 
+    static double sharpeRatio(List<Double> capitalCurve) {
+        if (capitalCurve == null || capitalCurve.size() < 3) {
+            return 0.0;
+        }
+        double[] returns = new double[capitalCurve.size() - 1];
+        for (int i = 1; i < capitalCurve.size(); i++) {
+            double previous = capitalCurve.get(i - 1);
+            returns[i - 1] = previous == 0.0 ? 0.0 : (capitalCurve.get(i) - previous) / previous;
+        }
+        double mean = java.util.Arrays.stream(returns).average().orElse(0.0);
+        double variance = java.util.Arrays.stream(returns).map(value -> Math.pow(value - mean, 2)).average().orElse(0.0);
+        double deviation = Math.sqrt(variance);
+        return deviation == 0.0 ? 0.0 : mean / deviation * Math.sqrt(252.0);
+    }
+
     static double calmarRatio(double cagrPct, double maxDrawdownPct) {
         return maxDrawdownPct == 0.0 ? 0.0 : cagrPct / maxDrawdownPct;
+    }
+
+    static BenchmarkComparison buyAndHoldComparison(double strategyReturnPct,
+                                                    BigDecimal startingClose,
+                                                    BigDecimal endingClose) {
+        if (startingClose == null || endingClose == null || startingClose.signum() <= 0
+                || endingClose.signum() < 0) {
+            return BenchmarkComparison.unavailable(strategyReturnPct);
+        }
+        double benchmarkReturnPct = endingClose.subtract(startingClose)
+                .divide(startingClose, java.math.MathContext.DECIMAL128)
+                .doubleValue() * 100.0;
+        return BenchmarkComparison.buyAndHold(strategyReturnPct, benchmarkReturnPct);
     }
 }

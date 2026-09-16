@@ -18,6 +18,7 @@ package com.swingtrade.strategy;
 
 import com.swingtrade.core.metrics.SignalMetrics;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.OhlcvDataQuality;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.domain.StrategyParams;
@@ -74,6 +75,7 @@ public class PriceActionSignalEngine {
     static final BigDecimal HIGH_PROXIMITY_THRESHOLD = StrategyParams.HIGH_PROXIMITY;
 
     static final int MIN_REQUIRED_CANDLES = StrategyParams.MIN_CANDLES;
+    static final BigDecimal MAX_ANALYTICAL_GAP_RATIO = new BigDecimal("0.75");
 
     private final CandleStore candleStore;
     private final SignalMetrics signalMetrics;
@@ -214,7 +216,13 @@ public class PriceActionSignalEngine {
 
     BarSeries buildBarSeries(String symbol, List<OhlcvCandle> chronologicalCandles) {
         BarSeries series = new BaseBarSeries(symbol, DecimalNum.valueOf(0));
-        for (OhlcvCandle candle : chronologicalCandles) {
+        OhlcvDataQuality.Assessment quality = OhlcvDataQuality.quarantineUnexplainedGaps(
+            chronologicalCandles, MAX_ANALYTICAL_GAP_RATIO);
+        if (!quality.quarantined().isEmpty()) {
+            logger.warn("Quarantined {} candle(s) from analytical series for {}: {}",
+                quality.quarantined().size(), symbol, quality.quarantined().get(0).reason());
+        }
+        for (OhlcvCandle candle : quality.accepted()) {
             OhlcvCandle analyticalCandle = candle.adjustedForAnalysis();
             ZonedDateTime endTime = analyticalCandle.date().atStartOfDay(MARKET_ZONE);
             Long volume = analyticalCandle.volume();

@@ -69,9 +69,15 @@ Additional verified slice — 2026-09-16:
 - Candidate scans now run a configurable 60–1000-day OOS window (252 days by default), persist its
   dates and metrics separately, and require both full-history and OOS gates before a result qualifies.
   Candidate discovery remains read-only; watchlist activation is handled separately by the API/UI.
+  The scan can now require every fold in a bounded 1–8-fold chronological walk-forward evaluation
+  to pass the configured gates.
 - Sentiment point-in-time filtering now rejects articles without publication timestamps, since their
   position relative to the decision cutoff cannot be proven. This favors a safe UNKNOWN/neutral result
   over admitting potentially future information.
+- Backtests now expose same-window buy-and-hold/excess-return comparisons, a bounded shared-capital
+  portfolio result, and adjusted-price gap quarantine without modifying raw candles. Sentiment gate
+  verdicts can be audited through `/api/signals/gate-effectiveness`, and bounded earnings/exchange
+  filing context is included in prompts when available.
 
 Verification: `./bin/verify-changes` passed on 2026-09-16. It ran the backend test task selected
 from changed paths; the explicit affected-module suite also passed:
@@ -198,18 +204,20 @@ otherwise they use the trigger price. Regression tests cover both long stop and 
 `capitalCurve` now includes unrealized P&L at each bar close, so daily returns include open-position risk.
 The marked-to-market value is recorded before each daily observation, so Sharpe and drawdown include open-position risk.
 
-### 17. GAP — No portfolio-level backtest
-Each symbol is simulated in isolation with full capital. `maxConcurrentPositions` is unused, and there is no capital competition,
-sector overlap or combined equity curve.
-**Fix:** Add `PortfolioBacktestEngine`: one date-driven loop across symbols, shared cash, position cap, ranking for competing entries.
+### 17. PARTIALLY FIXED — No portfolio-level backtest
+`BacktestEngine.runPortfolioBacktest` now aggregates dated symbol trades through shared capital,
+available-cash limits, maximum concurrent positions, deterministic symbol ordering, and
+portfolio-level return/drawdown/risk metrics. The existing independent `/run-all` path is unchanged.
+Full candle-level daily mark-to-market, settlement timing, sector limits, and API/report integration remain open.
 
 ### 18. PARTIALLY FIXED — Candidate scan qualifies on in-sample backtest
 `CandidateScanService` now runs a configurable 60–1000-day out-of-sample window (252 days by default), persists its date range and metrics separately,
 and requires both the full-history and OOS trade-count, win-rate and return gates before a result qualifies. Candidate discovery remains read-only;
 watchlist activation is handled separately by the API/UI. The windowed backtest retains prior warm-up candles and prevents entries outside the
-evaluation boundary. Full multi-fold walk-forward validation and portfolio-level OOS evaluation remain open, and the current OOS window overlaps
+evaluation boundary. Multi-fold walk-forward validation now runs bounded chronological folds, while
+portfolio-level OOS evaluation remains open; the current OOS window overlaps
 the descriptive full-history backtest rather than representing a fitted-model holdout.
-**Remaining:** qualify across multiple rolling folds (years 1–2 train, year 3 validate) and report stability across folds.
+**Remaining:** add fitted-parameter train/validate separation and portfolio-level OOS stability reporting.
 
 ### 19. FIXED — No minimum trade count
 Candidate scans now require at least 15 trades by default, configurable through
@@ -222,16 +230,18 @@ Technical-analysis and backtest TA4J inputs now use an analytical candle view th
 This removes a major split/bonus discontinuity from indicators, ATR, breakouts and analytical exits.
 The universe is still the current symbol master/watchlist, delisted and merged names have no
 date-effective eligibility snapshot, and Yahoo adjusted close is total-return adjusted rather than
-an event-specific corporate-action feed.
-**Remaining:** Add historical universe snapshots/action provenance and a warning/quarantine policy for unexplained large gaps.
+an event-specific corporate-action feed. An adjusted-price quality check now quarantines invalid or
+unexplained >75% analytical jumps from backtest/live inputs without rewriting raw candles.
+**Remaining:** Add historical universe snapshots and action provenance.
 
 ### 21. PARTIALLY FIXED — No benchmark or risk-adjusted metrics
-Single-symbol backtest results now expose CAGR, Sortino and Calmar. CAGR uses the evaluated
+Single-symbol backtest results now expose CAGR, Sortino and Calmar plus same-window buy-and-hold and
+excess-return metrics. CAGR uses the evaluated
 calendar dates; Sortino uses the daily marked-to-market equity curve and downside deviation; Calmar
 uses CAGR divided by maximum drawdown. Benchmark/buy-and-hold comparison, exposure, average R,
 and alpha/beta remain open until a benchmark data contract and shared-capital portfolio semantics
 are defined.
-**Remaining:** Add aligned NIFTY 50 / NIFTY 500 TRI benchmark returns and portfolio-level risk metrics.
+**Remaining:** Add aligned NIFTY 50 / NIFTY 500 TRI benchmark returns and portfolio-level benchmark metrics.
 
 ### 22. PARTIALLY FIXED — Circuit limits not modelled
 A persisted `PriceBand` now provides explicit exchange limits. Paper and backtest BUY entries at the
@@ -259,8 +269,10 @@ market order at the next session open with adverse slippage, matching the backte
 `PaperTradingEngine.executeSignal` now calculates size first and validates capacity with the actual
 quantity, eliminating the fixed-100 pre-check. Quantity clamping remains a separate risk-policy decision.
 
-### 24. GAP — No gate-effectiveness or strategy attribution
-Every BUY is stored and the SUPPRESS verdict is recorded, but nobody measures forward returns of blocked vs allowed BUYs, or P&L by strategy/regime.
+### 24. PARTIALLY FIXED — No gate-effectiveness or strategy attribution
+Sentiment-gate verdicts are persisted once per symbol/date and summarized through
+`GET /api/signals/gate-effectiveness`, including 1/5/20-session forward-return means by verdict.
+General gate attribution, strategy/regime dimensions, and realized paper-trade P&L attribution remain open.
 **Fix:** Nightly job: 5/10/20-day forward returns for each BUY tagged by verdict, strategy and regime. Show it on the dashboard.
 
 ---
@@ -288,10 +300,10 @@ Sentiment prompts now format each item with an index, publication date and sourc
 in the system prompt, and filter against the actual seven-day decision window. Historical article IDs and
 persisted-news reconstruction remain part of item 14.
 
-### 28. GAP — No structured Indian-market data in prompt
-The prompt names FII/DII activity and promoter actions but provides no data for them.
-**Fix:** Add a structured block: last-quarter results YoY, promoter holding and pledge change, FII/DII holding change, bulk/block deals,
-delivery %, ASM/GSM flag and next results date. `EarningsData` and `StructuredFiling` already exist.
+### 28. PARTIALLY FIXED — No structured Indian-market data in prompt
+Prompts now include bounded, decision-date-filtered earnings fields and NSE/BSE filing context when
+available, while retaining news-only behavior when structured sources are unavailable. FII/DII holdings,
+promoter pledge, bulk/block deals, delivery, surveillance flags, and next-results data remain open.
 
 ### 29. IMP — Truncation before ranking and dedupe
 `MAX_ARTICLES_FOR_LLM = 10` keeps the first 10 in fetch order. The same story from 5 outlets can use up the budget.

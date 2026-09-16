@@ -75,6 +75,24 @@ public class SignalController {
     @Autowired
     private SentimentService sentimentService;
 
+    @Autowired
+    private com.swingtrade.api.service.GateEffectivenessAuditService gateEffectivenessAuditService;
+
+    /**
+     * Summarizes sentiment-gate decisions and available forward returns by verdict.
+     * Returns separate ALLOW/SUPPRESS/FLAG_NEUTRAL buckets so blocked BUYs can be
+     * compared with the decisions that would have been traded.
+     */
+    @GetMapping("/gate-effectiveness")
+    public ResponseEntity<?> getGateEffectiveness(
+            @RequestParam LocalDate from,
+            @RequestParam LocalDate to,
+            @RequestParam(required = false) String symbol) {
+        if (from.isAfter(to)) return ResponseEntity.badRequest().body(Map.of("error", "from must not be after to"));
+        return ResponseEntity.ok(gateEffectivenessAuditService.report(from, to,
+            symbol == null || symbol.isBlank() ? null : symbol.trim().toUpperCase()));
+    }
+
     /**
      * Get the latest trading signals for today.
      *

@@ -1,5 +1,7 @@
 package com.swingtrade.strategy;
 
+import com.swingtrade.domain.BenchmarkComparison;
+
 import java.util.List;
 
 /**
@@ -13,6 +15,7 @@ import java.util.List;
  * @param cagrPct       annualized return over the evaluated calendar period
  * @param sortinoRatio  annualized return-to-downside-volatility ratio from the daily equity curve
  * @param calmarRatio   CAGR divided by maximum drawdown percentage
+ * @param benchmarkComparison comparison with the buy-and-hold return over the evaluation window
  * @param expectancy    winRate/100 * avgGainPct - (1 - winRate/100) * avgLossPct, in percent-per-trade terms
  */
 public record BacktestResult(
@@ -30,7 +33,8 @@ public record BacktestResult(
     List<BacktestTrade> trades,
     double cagrPct,
     double sortinoRatio,
-    double calmarRatio
+    double calmarRatio,
+    BenchmarkComparison benchmarkComparison
 ) {
     /** Source-compatible constructor for callers that do not yet provide risk-adjusted metrics. */
     public BacktestResult(String symbol, int totalTrades, int winningTrades, int losingTrades,
@@ -38,6 +42,18 @@ public record BacktestResult(
                           double sharpeRatio, double totalReturn, double expectancy,
                           List<BacktestTrade> trades) {
         this(symbol, totalTrades, winningTrades, losingTrades, winRate, avgGainPct, avgLossPct,
-                maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades, 0.0, 0.0, 0.0);
+                maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades, 0.0, 0.0, 0.0,
+                BenchmarkComparison.unavailable(totalReturn));
+    }
+
+    /** Source-compatible constructor for callers that provide risk-adjusted metrics only. */
+    public BacktestResult(String symbol, int totalTrades, int winningTrades, int losingTrades,
+                          double winRate, double avgGainPct, double avgLossPct, double maxDrawdownPct,
+                          double sharpeRatio, double totalReturn, double expectancy,
+                          List<BacktestTrade> trades, double cagrPct, double sortinoRatio,
+                          double calmarRatio) {
+        this(symbol, totalTrades, winningTrades, losingTrades, winRate, avgGainPct, avgLossPct,
+                maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades, cagrPct, sortinoRatio,
+                calmarRatio, BenchmarkComparison.unavailable(totalReturn));
     }
 }

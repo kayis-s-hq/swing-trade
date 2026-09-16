@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import reactor.core.publisher.Mono;
+import com.swingtrade.llm.domain.EarningsData;
+import java.math.BigDecimal;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -43,6 +45,7 @@ class SentimentServicePromptTest {
     @Mock private StockStore stockStore;
     @Mock private AppSettingsStore appSettingsStore;
     @Mock private NewsIngestionService newsIngestionService;
+    @Mock private PdfExtractionService pdfExtractionService;
 
     private SentimentService service;
 
@@ -52,7 +55,8 @@ class SentimentServicePromptTest {
                 clientProvider, serverManagerProvider, promptLoader, null,
                 newsIngestionService, sentimentStore, stockStore, appSettingsStore,
                 org.mockito.Mockito.mock(com.swingtrade.core.metrics.LlmMetrics.class),
-                org.mockito.Mockito.mock(com.swingtrade.core.metrics.SentimentMetrics.class), 0.75);
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.SentimentMetrics.class),
+                pdfExtractionService, 0.75);
         when(serverManagerProvider.getManager()).thenReturn(serverManager);
         doNothing().when(serverManager).ensureRunning();
         when(clientProvider.getClient()).thenReturn(llmClient);
@@ -179,6 +183,37 @@ class SentimentServicePromptTest {
             eq(512), eq(0.3));
         org.mockito.Mockito.verify(newsIngestionService, org.mockito.Mockito.never())
             .fetchStockNews("TCS");
+    }
+
+    @Test
+    @DisplayName("SentimentService adds bounded structured Indian-market context when available")
+    void addsStructuredMarketContext() {
+        when(promptLoader.getSystemPrompt()).thenReturn("System prompt");
+        when(promptLoader.getUserPrompt()).thenReturn("News: {newsContent}\nContext: {marketContext}");
+        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
+                .thenReturn(Mono.just("{\"score\":\"NEUTRAL\",\"confidence\":0.5,\"summary\":\"Mixed\"}"));
+        LocalDate decisionDate = LocalDate.of(2026, 9, 15);
+        NewsArticle article = new NewsArticle("TCS", "Headline", "url", null,
+                decisionDate.atTime(12, 0).atZone(ZoneId.of("Asia/Kolkata")), "source", null);
+        when(newsIngestionService.fetchPersistedStockNewsForDecisionDate("TCS", decisionDate))
+                .thenReturn(List.of(new PersistedNewsArticle(1L, article, null)));
+        when(newsIngestionService.cleanNewsText(article)).thenReturn("news content");
+        when(pdfExtractionService.extractLatestEarnings("TCS")).thenReturn(new EarningsData(
+                "TCS", "Q1 FY27", new BigDecimal("100"), new BigDecimal("20"),
+                new BigDecimal("5"), new BigDecimal("30"), "stable guidance", decisionDate));
+        when(newsIngestionService.fetchStructuredFilings("TCS")).thenReturn(List.of(
+                new StructuredFiling(StructuredFiling.FilingType.DIVIDEND, decisionDate,
+                        "Dividend declared", "Board approved dividend", "link")));
+
+        service.analyzeStockSentiment("TCS", decisionDate);
+
+        verify(llmClient).generateChatCompletion(argThat(messages -> {
+            String prompt = messages.get(1).get("content");
+            return prompt.contains("Structured Indian-market context")
+                    && prompt.contains("Q1 FY27")
+                    && prompt.contains("Dividend declared")
+                    && prompt.length() < 3000;
+        }), eq(512), eq(0.3));
     }
 
     private static ZonedDateTime todayNoon() {

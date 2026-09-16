@@ -16,6 +16,7 @@ import com.swingtrade.llm.SentimentType;
 import com.swingtrade.llm.client.LlmClient;
 import com.swingtrade.llm.config.SentimentPromptLoader;
 import com.swingtrade.llm.config.LlmProperties;
+import com.swingtrade.llm.domain.EarningsData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,6 +67,9 @@ public class SentimentService {
     private static final int PI_MAX_ARTICLE_CHARS = 450;
     private static final int DEFAULT_MAX_RESPONSE_TOKENS = 512;
     private static final int PI_MAX_RESPONSE_TOKENS = 128;
+    private static final int MAX_CONTEXT_FILINGS = 5;
+    private static final int MAX_CONTEXT_CHARS = 2400;
+    private static final int MAX_CONTEXT_FIELD_CHARS = 360;
 
     // Per-article character cap. This exists ONLY to keep the worst case (10
     // articles, all at the cap) under llamacpp.context (8192) — it is not a
@@ -108,6 +112,7 @@ public class SentimentService {
     private final SentimentMetrics sentimentMetrics;
     private final LlmAnalysisAuditRepository auditRepository;
     private final LlmProperties llmProperties;
+    private final PdfExtractionService pdfExtractionService;
 
     private final double defaultConfidence;
 
@@ -128,6 +133,7 @@ public class SentimentService {
             SentimentMetrics sentimentMetrics,
             LlmProperties llmProperties,
             LlmAnalysisAuditRepository auditRepository,
+            PdfExtractionService pdfExtractionService,
             @Value("${llm.sentiment.default-confidence:0.75}") double defaultConfidence) {
 
         this.clientProvider = clientProvider;
@@ -142,6 +148,7 @@ public class SentimentService {
         this.sentimentMetrics = sentimentMetrics;
         this.auditRepository = auditRepository;
         this.llmProperties = llmProperties;
+        this.pdfExtractionService = pdfExtractionService;
         this.defaultConfidence = defaultConfidence;
 
         // Initialize thread pool with bounded capacity
@@ -306,10 +313,23 @@ public class SentimentService {
             SentimentPromptLoader promptLoader, SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService, SentimentStore sentimentStore,
             StockStore stockStore, AppSettingsStore appSettingsStore, LlmMetrics llmMetrics,
+            SentimentMetrics sentimentMetrics, PdfExtractionService pdfExtractionService,
+            double defaultConfidence) {
+        this(clientProvider, serverManagerProvider, promptLoader, sentimentAnalyzer,
+                newsIngestionService, sentimentStore, stockStore, appSettingsStore,
+                llmMetrics, sentimentMetrics, null, null, pdfExtractionService, defaultConfidence);
+    }
+
+    /** Compatibility constructor for lightweight unit tests. */
+    public SentimentService(
+            LlmClientProvider clientProvider, LlmServerManagerProvider serverManagerProvider,
+            SentimentPromptLoader promptLoader, SentimentAnalyzer sentimentAnalyzer,
+            NewsIngestionService newsIngestionService, SentimentStore sentimentStore,
+            StockStore stockStore, AppSettingsStore appSettingsStore, LlmMetrics llmMetrics,
             SentimentMetrics sentimentMetrics, double defaultConfidence) {
         this(clientProvider, serverManagerProvider, promptLoader, sentimentAnalyzer,
                 newsIngestionService, sentimentStore, stockStore, appSettingsStore,
-                llmMetrics, sentimentMetrics, null, null, defaultConfidence);
+                llmMetrics, sentimentMetrics, null, null, null, defaultConfidence);
     }
 
     /**
@@ -337,7 +357,8 @@ public class SentimentService {
         // Create prompt using loaded templates
         String formattedUser = promptLoader.getUserPrompt()
                 .replace("{symbol}", stockSymbol)
-                .replace("{newsContent}", combinedContent);
+                .replace("{newsContent}", combinedContent)
+                .replace("{marketContext}", buildMarketContext(stockSymbol, analysisDate));
         List<Map<String, String>> messages = List.of(
                 Map.of("role", "system", "content", promptLoader.getSystemPrompt().replace("{symbol}", stockSymbol)),
                 Map.of("role", "user", "content", formattedUser)
@@ -407,6 +428,66 @@ public class SentimentService {
             throw e;
         }
 
+    }
+
+    /**
+     * Builds a bounded, factual context block from structured Indian-market
+     * sources. Missing context is represented by an empty string so existing
+     * news-only behavior is preserved.
+     */
+    private String buildMarketContext(String symbol, LocalDate decisionDate) {
+        if (decisionDate == null) return "";
+        StringBuilder context = new StringBuilder();
+        try {
+            if (pdfExtractionService != null) {
+                EarningsData earnings = pdfExtractionService.extractLatestEarnings(symbol);
+                if (earnings != null && earnings.extractionDate() != null
+                        && !earnings.extractionDate().isAfter(decisionDate)) {
+                    context.append("Earnings: quarter=").append(safe(earnings.quarter()))
+                            .append(", revenue=").append(safe(earnings.revenue()))
+                            .append(", netProfit=").append(safe(earnings.netProfit()))
+                            .append(", EPS=").append(safe(earnings.eps()))
+                            .append(", EBITDA=").append(safe(earnings.ebitda()))
+                            .append(", guidance=").append(cap(safe(earnings.guidance()), MAX_CONTEXT_FIELD_CHARS))
+                            .append("\n");
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Structured earnings context unavailable for {}: {}", symbol, e.getMessage());
+        }
+        try {
+            LocalDate from = decisionDate.minusDays(NEWS_LOOKBACK_DAYS);
+            newsIngestionService.fetchStructuredFilings(symbol).stream()
+                    .filter(Objects::nonNull)
+                    .filter(f -> f.date() != null && !f.date().isBefore(from) && !f.date().isAfter(decisionDate))
+                    .sorted((a, b) -> b.date().compareTo(a.date()))
+                    .limit(MAX_CONTEXT_FILINGS)
+                    .forEach(f -> {
+                        context.append("Filing: ").append(f.date()).append(" | ")
+                                .append(f.typeLabel()).append(" | ")
+                                .append(cap(safe(f.title()), MAX_CONTEXT_FIELD_CHARS));
+                        String description = cap(safe(f.description()), MAX_CONTEXT_FIELD_CHARS);
+                        if (!description.isBlank()) context.append(" — ").append(description);
+                        context.append("\n");
+                    });
+        } catch (Exception e) {
+            logger.debug("Structured filing context unavailable for {}: {}", symbol, e.getMessage());
+        }
+        if (context.isEmpty()) return "";
+        if (context.length() > MAX_CONTEXT_CHARS) {
+            context.setLength(MAX_CONTEXT_CHARS);
+            context.append("\n[context truncated]");
+        }
+        return "\n=== Structured Indian-market context (reference only) ===\n"
+                + context + "Use only the supplied values; do not infer missing figures.\n";
+    }
+
+    private static String safe(Object value) {
+        return value == null ? "not available" : value.toString().replaceAll("[\\r\\n]+", " ").trim();
+    }
+
+    private static String cap(String value, int limit) {
+        return value.length() <= limit ? value : value.substring(0, limit) + "...";
     }
 
     private void persistAudit(String requestId, String symbol, LocalDate analysisDate,

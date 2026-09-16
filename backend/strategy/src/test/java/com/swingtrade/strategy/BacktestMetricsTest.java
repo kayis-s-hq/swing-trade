@@ -2,6 +2,8 @@ package com.swingtrade.strategy;
 
 import org.junit.jupiter.api.Test;
 
+import com.swingtrade.domain.BenchmarkComparison;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -34,5 +36,24 @@ class BacktestMetricsTest {
     void calmarDividesCagrByDrawdown() {
         assertEquals(0.5, BacktestMetrics.calmarRatio(10.0, 20.0));
         assertEquals(0.0, BacktestMetrics.calmarRatio(10.0, 0.0));
+    }
+
+    @Test
+    void buyAndHoldUsesPriceReturnAndReportsExcessReturn() {
+        BenchmarkComparison comparison = BacktestMetrics.buyAndHoldComparison(
+                18.0, BigDecimal.valueOf(100), BigDecimal.valueOf(125));
+
+        assertEquals(25.0, comparison.benchmarkReturnPct(), 1e-9);
+        assertEquals(-7.0, comparison.excessReturnPct(), 1e-9);
+    }
+
+    @Test
+    void buyAndHoldIsUnavailableForInvalidPrices() {
+        BenchmarkComparison comparison = BacktestMetrics.buyAndHoldComparison(
+                18.0, BigDecimal.ZERO, BigDecimal.valueOf(125));
+
+        assertEquals(BenchmarkComparison.BUY_AND_HOLD, comparison.benchmarkName());
+        assertEquals(0.0, comparison.benchmarkReturnPct());
+        assertEquals(0.0, comparison.excessReturnPct());
     }
 }
