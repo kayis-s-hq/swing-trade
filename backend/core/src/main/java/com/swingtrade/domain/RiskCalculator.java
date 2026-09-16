@@ -17,15 +17,15 @@
 package com.swingtrade.domain;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 /**
  * Pure functions for risk parameter calculation: ATR, stop-loss, target price,
  * and risk-reward ratio.
  *
- * <p>Uses a simple average of (high - low) over the last 14 candles — not the
- * TA4j ATR. This keeps the calculation lightweight and consistent with the
- * original {@code SignalEngine} implementation.</p>
+ * <p>Uses Wilder's true-range smoothing over 14 periods, including overnight
+ * gaps through the prior close, matching the ATR semantics used by TA4J.</p>
  *
  * <p>This class is stateless and thread-safe. All methods are static.</p>
  */
@@ -38,11 +38,10 @@ public final class RiskCalculator {
     private static final BigDecimal RISK_MULTIPLIER = BigDecimal.valueOf(2.5);
 
     /**
-     * Calculates Average True Range from the last {@value #DEFAULT_ATR_CANDLES} candles.
-     * Uses a simple average of (high - low) over the period.
+     * Calculates Average True Range using Wilder's true range and smoothing.
      *
      * @param candles chronologically-ordered candles (oldest first)
-     * @return ATR as average high-low range, or 2% of latest close as fallback
+     * @return Wilder ATR, or 2% of latest close as fallback
      */
     public static BigDecimal calculateATR(List<OhlcvCandle> candles) {
         if (candles == null || candles.size() < DEFAULT_ATR_CANDLES + 1) {
@@ -53,21 +52,30 @@ public final class RiskCalculator {
             return BigDecimal.ZERO;
         }
 
-        BigDecimal totalRange = BigDecimal.ZERO;
-        int count = 0;
-        int fromIndex = candles.size() - DEFAULT_ATR_CANDLES;
-        for (int i = fromIndex; i < candles.size(); i++) {
-            OhlcvCandle c = candles.get(i);
-            BigDecimal high = c.high();
-            BigDecimal low = c.low();
-            if (high != null && low != null) {
-                totalRange = totalRange.add(high.subtract(low));
-                count++;
+        BigDecimal atr = null;
+        List<BigDecimal> trueRanges = new java.util.ArrayList<>();
+        for (int i = 1; i < candles.size(); i++) {
+            OhlcvCandle current = candles.get(i);
+            OhlcvCandle previous = candles.get(i - 1);
+            if (current.high() == null || current.low() == null || previous.close() == null) continue;
+
+            BigDecimal range = current.high().subtract(current.low());
+            BigDecimal highGap = current.high().subtract(previous.close()).abs();
+            BigDecimal lowGap = current.low().subtract(previous.close()).abs();
+            BigDecimal trueRange = range.max(highGap).max(lowGap);
+            trueRanges.add(trueRange);
+            if (atr == null) {
+                if (trueRanges.size() < DEFAULT_ATR_CANDLES) continue;
+                // The first Wilder value is the average of the first 14 valid TR observations.
+                BigDecimal sum = trueRanges.stream().limit(DEFAULT_ATR_CANDLES)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                atr = sum.divide(BigDecimal.valueOf(DEFAULT_ATR_CANDLES), 8, RoundingMode.HALF_UP);
+            } else {
+                atr = atr.multiply(BigDecimal.valueOf(DEFAULT_ATR_CANDLES - 1)).add(trueRange)
+                    .divide(BigDecimal.valueOf(DEFAULT_ATR_CANDLES), 8, RoundingMode.HALF_UP);
             }
         }
-        return count > 0
-                ? totalRange.divide(BigDecimal.valueOf(count), 4, BigDecimal.ROUND_HALF_UP)
-                : BigDecimal.ZERO;
+        return atr != null ? atr : BigDecimal.ZERO;
     }
 
     /**

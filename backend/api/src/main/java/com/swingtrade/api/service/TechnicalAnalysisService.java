@@ -68,7 +68,8 @@ public class TechnicalAnalysisService {
         Double atr = technicalIndicators.calculateATR(candleObjs, StrategyParams.ATR_PERIOD);
 
         // 52-week high
-        double maxHigh = chrono.stream()
+        int highWindowStart = Math.max(0, chrono.size() - StrategyParams.FIFTY_TWO_WEEK_TRADING_DAYS);
+        double maxHigh = chrono.subList(highWindowStart, chrono.size()).stream()
             .mapToDouble(c -> c.high().doubleValue())
             .max()
             .orElse(price.doubleValue());

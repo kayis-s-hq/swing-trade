@@ -569,7 +569,7 @@ public class JobOrchestratorService {
             .toList();
 
         int executed = 0;
-        int failedAfterMark = 0;
+        int failedToQueue = 0;
         int blockedBySentiment = 0;
         int blockedByLlm = 0;
         for (Signal signal : unprocessed) {
@@ -611,37 +611,25 @@ public class JobOrchestratorService {
                 }
             }
 
-            // Mark the signal processed BEFORE executing the trade, not after. If we executed
-            // first and markProcessed() then threw (e.g. an optimistic-lock failure on a row
-            // with a stale/null @Version), the trade would already be live but the signal
-            // would still show up in findUnprocessed() on the next run/retry — risking a
-            // second real position being opened for the same signal. Marking processed first
-            // makes "already handled" durable before any capital is committed: a failure here
-            // simply skips the trade this run (retried next run), which is the safe failure
-            // mode versus a silent duplicate execution.
+            // Queue before marking processed. A capacity rejection returns null and must leave
+            // the signal retryable. If persistence fails after a queue succeeds, queueSignal's
+            // signal-id dedupe returns the existing pending order on the next run.
             try {
+                var queuedOrder = tradingService.queueSignal(signal, latest.close());
+                if (queuedOrder == null) {
+                    failedToQueue++;
+                    logger.warn("Could not queue BUY signal {} for {}; leaving it unprocessed for retry",
+                        signal.id(), symbol);
+                    continue;
+                }
                 signalStore.markProcessed(signal.id());
-            } catch (Exception e) {
-                logger.warn("""
-                    Failed to mark signal {} processed for {} — skipping trade execution \
-                    this run to avoid a possible duplicate; will retry next run: {}""",
-                    signal.id(), symbol, e.getMessage());
-                continue;
-            }
-
-            try {
-                tradingService.executeSignal(signal, latest.close());
                 executed++;
             } catch (Exception e) {
-                // The signal is already marked processed at this point, so it will NOT be
-                // retried automatically. Log at WARN (not debug) and surface it in the stage
-                // summary so a failed trade attempt is visible for manual follow-up instead of
-                // silently vanishing.
-                failedAfterMark++;
+                failedToQueue++;
                 logger.warn("""
-                    Paper trade execution failed for {} signal {} AFTER marking it processed \
-                    — this signal will not be retried automatically: {}""",
-                    symbol, signal.id(), e.getMessage());
+                    Failed to queue or mark signal {} for {} — leaving the signal retryable: {}""",
+                    signal.id(), symbol, e.getMessage());
+                continue;
             }
         }
         StringBuilder summary = new StringBuilder(executed + " trade(s) executed");
@@ -649,8 +637,8 @@ public class JobOrchestratorService {
             summary.append(", ").append(blockedBySentiment).append(" blocked by sentiment");
         }
         if (blockedByLlm > 0) summary.append(", ").append(blockedByLlm).append(" blocked by LLM analysis");
-        if (failedAfterMark > 0) {
-            summary.append(", ").append(failedAfterMark).append(" failed after marking processed (see logs)");
+        if (failedToQueue > 0) {
+            summary.append(", ").append(failedToQueue).append(" failed to queue (see logs)");
         }
         return summary.toString();
     }

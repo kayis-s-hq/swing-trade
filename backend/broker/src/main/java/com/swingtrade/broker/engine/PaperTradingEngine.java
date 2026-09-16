@@ -114,25 +114,45 @@ public class PaperTradingEngine implements TradingService {
      * @throws IllegalStateException if position limits are reached
      */
     public Order executeSignal(Signal signal, BigDecimal currentPrice) {
+        Order order = queueSignal(signal, currentPrice);
+        if (order == null) return null;
+
+        // This method remains the explicit immediate-execution API used by direct callers.
+        return executePendingOrder(order.getOrderId(), currentPrice);
+    }
+
+    /**
+     * Queues a signal without filling it. The pending-order scheduler settles the
+     * market order at the next session open.
+     */
+    @Override
+    public Order queueSignal(Signal signal, BigDecimal referencePrice) {
         if (signal == null || !signal.isBuySignal()) {
             logger.debug("Ignoring non-BUY signal: {}", signal);
             return null;
         }
 
-        // Validate position capacity (default 100 shares if no specific quantity in signal)
-        int defaultQuantity = 100;
-        if (!validatePositionCapacity(currentPrice, defaultQuantity)) {
-            logger.warn("Cannot execute signal for {}: position capacity exceeded", signal.symbol());
-            return null;
+        if (signal.id() != null) {
+            String signalId = signal.id().toString();
+            Order existing = orderManager.getPendingOrders().stream()
+                .filter(candidate -> candidate.getAdditionalProperties() != null
+                    && signalId.equals(candidate.getAdditionalProperties().get("signalId")))
+                .findFirst().orElse(null);
+            if (existing != null) return existing;
         }
 
         // Calculate position size based on risk
-        BigDecimal quantity = calculatePositionSize(signal.symbol(), currentPrice, signal.stopLoss());
+        BigDecimal quantity = calculatePositionSize(signal.symbol(), referencePrice, signal.stopLoss());
+        if (quantity == null || quantity.intValue() <= 0
+                || !validatePositionCapacity(referencePrice, quantity.intValue())) {
+            logger.warn("Cannot execute signal for {}: calculated position capacity exceeded", signal.symbol());
+            return null;
+        }
         tradeMetrics.recordTradeOpen();
         tradeMetrics.recordSymbolTrade(signal.symbol());
 
         // Create order
-        Order order = orderManager.createBuyOrder(signal.symbol(), quantity.intValue(), currentPrice);
+        Order order = orderManager.createBuyOrder(signal.symbol(), quantity.intValue(), referencePrice);
 
         // Attach signal metadata
         java.util.Map<String, Object> signalProps = new java.util.HashMap<>();
@@ -145,12 +165,14 @@ public class PaperTradingEngine implements TradingService {
         signalProps.put("entryDate", LocalDate.now().toString());
         order.setAdditionalProperties(signalProps);
 
-        logger.info("Executing BUY order for {} at {}: signal confidence={}, SL={}, Target={}",
-            signal.symbol(), currentPrice, signal.confidence(), signal.stopLoss(), signal.target());
+        // Persist before the orchestrator marks the source signal processed so a restart cannot
+        // lose a queued trade between those two operations.
+        if (stateService != null) {
+            stateService.saveOrder(order);
+        }
 
-        // Execute the order immediately (fills it and creates a position)
-        order = executePendingOrder(order.getOrderId(), currentPrice);
-
+        logger.info("Queued BUY order for {} using reference price {}: signal confidence={}, SL={}, Target={}",
+            signal.symbol(), referencePrice, signal.confidence(), signal.stopLoss(), signal.target());
         return order;
     }
 

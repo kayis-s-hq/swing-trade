@@ -55,6 +55,7 @@ public class BacktestEngine {
      * Warm-up (50, from PriceActionSignalEngine.EMA_SLOW_PERIOD) plus a handful of tradable days.
      */
     private static final int MIN_CANDLES_FOR_BACKTEST = 60;
+    private static final BacktestCostModel DEFAULT_COST_MODEL = new ZerodhaDeliveryCostModel();
 
     private final CandleStore candleStore;
     private final WatchlistStore watchlistStore;
@@ -112,6 +113,43 @@ public class BacktestEngine {
         List<OhlcvCandle> chronologicalCandles = getDescendingCandles(symbol, candleStore, MIN_CANDLES_FOR_BACKTEST);
 
         return simulate(symbol, chronologicalCandles, config, strategy);
+    }
+
+    /**
+     * Runs a backtest whose metrics include only trades and equity observations inside the given
+     * evaluation window. Indicator warm-up candles before {@code evaluationStart} are retained,
+     * but no position may be opened before the boundary.
+     */
+    public BacktestResult runBacktestWindow(String symbol, String exchange, BacktestConfig config,
+                                            LocalDate evaluationStart, LocalDate evaluationEnd) {
+        return runBacktestWindow(symbol, exchange, config, strategyRegistry.defaultStrategy(),
+            evaluationStart, evaluationEnd);
+    }
+
+    public BacktestResult runBacktestWindow(String symbol, String exchange, BacktestConfig config,
+                                            TradingStrategy strategy, LocalDate evaluationStart,
+                                            LocalDate evaluationEnd) {
+        if (evaluationStart == null || evaluationEnd == null || evaluationStart.isAfter(evaluationEnd)) {
+            throw new IllegalArgumentException("Evaluation window must be non-empty and ordered");
+        }
+        if (config == null || strategy == null) {
+            throw new IllegalArgumentException("Config and strategy cannot be null");
+        }
+        List<OhlcvCandle> descending = candleStore.findBySymbolAndDateRange(
+            symbol, evaluationStart.minusDays(400), evaluationEnd);
+        List<OhlcvCandle> chronological = new ArrayList<>(descending);
+        chronological.sort(Comparator.comparing(OhlcvCandle::date));
+        if (chronological.size() < MIN_CANDLES_FOR_BACKTEST) {
+            throw new IllegalStateException("Insufficient candle history for evaluation window");
+        }
+        int start = 0;
+        while (start < chronological.size() && chronological.get(start).date().isBefore(evaluationStart)) start++;
+        int end = chronological.size() - 1;
+        while (end >= 0 && chronological.get(end).date().isAfter(evaluationEnd)) end--;
+        if (start > end || end - start < 2) {
+            throw new IllegalStateException("Evaluation window contains insufficient candles");
+        }
+        return simulate(symbol, chronological, config, strategy, start, end);
     }
 
     static List<OhlcvCandle> getDescendingCandles(String symbol, CandleStore candleStore, int minCandles) {
@@ -212,6 +250,12 @@ public class BacktestEngine {
 
     private BacktestResult simulate(String symbol, List<OhlcvCandle> chronologicalCandles, BacktestConfig config,
                                     TradingStrategy strategy) {
+        return simulate(symbol, chronologicalCandles, config, strategy,
+            PriceActionSignalEngine.MIN_REQUIRED_CANDLES, chronologicalCandles.size() - 1);
+    }
+
+    private BacktestResult simulate(String symbol, List<OhlcvCandle> chronologicalCandles, BacktestConfig config,
+                                    TradingStrategy strategy, int evaluationStartIndex, int evaluationEndIndex) {
         BarSeries series = priceActionSignalEngine.buildBarSeries(symbol, chronologicalCandles);
         int barCount = series.getBarCount();
 
@@ -233,9 +277,9 @@ public class BacktestEngine {
         List<Double> capitalCurve = new ArrayList<>();
         OpenPosition open = null;
 
-        for (int i = PriceActionSignalEngine.MIN_REQUIRED_CANDLES; i < barCount; i++) {
-            capitalCurve.add(capital);
-
+        int firstEvaluationBar = Math.max(PriceActionSignalEngine.MIN_REQUIRED_CANDLES, evaluationStartIndex);
+        int lastEvaluationBar = Math.min(evaluationEndIndex, barCount - 1);
+        for (int i = firstEvaluationBar; i <= lastEvaluationBar; i++) {
             if (open != null) {
                 BigDecimal low = numToBigDecimal(lowPrice.getValue(i));
                 BigDecimal high = numToBigDecimal(highPrice.getValue(i));
@@ -255,10 +299,13 @@ public class BacktestEngine {
 
                 if (low.compareTo(open.stopLoss()) <= 0) {
                     reason = ExitReason.STOP_LOSS;
-                    exitPrice = open.stopLoss();
+                    BigDecimal barOpen = openPriceForBar(openPrice, i);
+                    exitPrice = barOpen.compareTo(open.stopLoss()) <= 0
+                            ? barOpen : open.stopLoss();
                 } else if (high.compareTo(open.target()) >= 0) {
                     reason = ExitReason.TARGET_HIT;
-                    exitPrice = open.target();
+                    BigDecimal barOpen = openPriceForBar(openPrice, i);
+                    exitPrice = barOpen.compareTo(open.target()) >= 0 ? barOpen : open.target();
                 } else if (config.signalExitEnabled() && signalExitTriggered) {
                     reason = ExitReason.SIGNAL_EXIT;
                     exitPrice = close;
@@ -282,14 +329,16 @@ public class BacktestEngine {
                 }
             }
 
-            if (open == null && i + 1 < barCount) {
+            capitalCurve.add(markToMarket(capital, open, closePrice, i));
+
+            if (open == null && i + 1 <= lastEvaluationBar) {
                 open = tryEnter(chronologicalCandles, series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
                         weeklyHigh, i, capital, config, strategy);
             }
         }
 
         if (open != null) {
-            int lastIndex = barCount - 1;
+            int lastIndex = lastEvaluationBar;
             BigDecimal exitPrice = numToBigDecimal(closePrice.getValue(lastIndex));
             LocalDate exitDate = chronologicalCandles.get(lastIndex).date();
             BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, lastIndex, ExitReason.TIME_STOP, config);
@@ -340,14 +389,30 @@ public class BacktestEngine {
 
     private BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
                                      int exitIndex, ExitReason reason, BacktestConfig config) {
+        exitPrice = exitPrice.multiply(BigDecimal.valueOf(1 - config.slippagePct()));
         double grossPnl = exitPrice.subtract(open.entryPrice).doubleValue() * open.quantity;
-        double netPnl = grossPnl - config.brokeragePerTrade();
+        BigDecimal costs = DEFAULT_COST_MODEL.roundTripCost(open.entryPrice, exitPrice, open.quantity,
+            BigDecimal.valueOf(config.brokeragePerTrade()));
+        double netPnl = grossPnl - costs.doubleValue();
         double entryCost = open.entryPrice.doubleValue() * open.quantity;
         double pnlPct = entryCost != 0 ? (netPnl / entryCost) * 100.0 : 0.0;
         int holdingDays = exitIndex - open.entryIndex;
 
         return new BacktestTrade(symbol, open.entryDate, exitDate, open.entryPrice, exitPrice,
                 open.stopLoss, open.target, open.quantity, reason, netPnl, pnlPct, holdingDays);
+    }
+
+    private static BigDecimal openPriceForBar(OpenPriceIndicator openPrice, int index) {
+        return numToBigDecimal(openPrice.getValue(index));
+    }
+
+    private static double markToMarket(double realizedCapital, OpenPosition open,
+                                       ClosePriceIndicator closePrice, int index) {
+        if (open == null) {
+            return realizedCapital;
+        }
+        double unrealized = closePrice.getValue(index).doubleValue() - open.entryPrice.doubleValue();
+        return realizedCapital + unrealized * open.quantity;
     }
 
     private BacktestResult buildResult(String symbol, List<BacktestTrade> trades, List<Double> capitalCurve,

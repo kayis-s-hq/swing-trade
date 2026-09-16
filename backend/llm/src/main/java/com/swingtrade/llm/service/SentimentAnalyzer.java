@@ -141,6 +141,11 @@ public class SentimentAnalyzer {
      */
     public SentimentOutput parseResponse(String jsonResponse) {
         try {
+            // The prompt contract uses `score`; avoid accepting a converter's
+            // default NEUTRAL when a provider returns the legacy `sentiment` alias.
+            if (jsonResponse == null || !jsonResponse.contains("\"score\"")) {
+                return parseWithJackson(jsonResponse);
+            }
             BeanOutputConverter<SentimentOutput> converter = new BeanOutputConverter<>(SentimentOutput.class);
             SentimentOutput result = converter.convert(jsonResponse);
             // SentimentOutput has a no-arg constructor + setters (required for
@@ -175,11 +180,11 @@ public class SentimentAnalyzer {
                     content != null ? content.substring(0, Math.min(100, content.length())) : "null");
             JsonNode root = objectMapper.readTree(content);
 
-            if (!root.has("score")) {
+            if (!root.has("score") && !root.has("sentiment")) {
                 throw new IllegalArgumentException("Missing score field");
             }
 
-            String score = root.get("score").asText();
+            String score = root.has("score") ? root.get("score").asText() : root.get("sentiment").asText();
             double confidence = root.has("confidence") ? root.get("confidence").asDouble() : 0.5;
             String summary = root.has("summary") ? root.get("summary").asText() : "Analysis incomplete";
 
@@ -212,7 +217,7 @@ public class SentimentAnalyzer {
      */
     private SentimentOutput parsePlainText(String text) {
         if (text == null || text.isBlank()) {
-            return new SentimentOutput(SentimentType.NEUTRAL, "Empty response", 0.1, List.of(), List.of());
+            return new SentimentOutput(SentimentType.UNKNOWN, "Empty response", 0.0, List.of(), List.of(), "DEFAULT");
         }
 
         String lower = text.toLowerCase();
@@ -220,22 +225,21 @@ public class SentimentAnalyzer {
         double confidence;
         String summary;
 
-        if (lower.contains("positive") && !lower.contains("negative")) {
-            sentiment = SentimentType.POSITIVE;
-            confidence = 0.4;
-        } else if (lower.contains("negative") && !lower.contains("positive")) {
-            sentiment = SentimentType.NEGATIVE;
+        boolean positive = lower.matches(".*\\bpositive\\b.*") && !lower.matches(".*\\b(?:not|no|never)\\s+positive\\b.*");
+        boolean negative = lower.matches(".*\\bnegative\\b.*") && !lower.matches(".*\\b(?:not|no|never)\\s+negative\\b.*");
+        if (positive ^ negative) {
+            sentiment = positive ? SentimentType.POSITIVE : SentimentType.NEGATIVE;
             confidence = 0.4;
         } else {
-            sentiment = SentimentType.NEUTRAL;
-            confidence = 0.2;
+            sentiment = SentimentType.UNKNOWN;
+            confidence = 0.0;
         }
 
         // Truncate to first meaningful sentence as summary
         summary = text.length() > 150 ? text.substring(0, 150).replaceAll("\\.$", "") : text.trim();
 
         logger.warn("Parsed plain text response: {} (confidence: {})", sentiment, confidence);
-        return new SentimentOutput(sentiment, summary, confidence, List.of(), List.of());
+        return new SentimentOutput(sentiment, summary, confidence, List.of(), List.of(), "KEYWORD");
     }
 
     /**

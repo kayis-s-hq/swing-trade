@@ -71,6 +71,9 @@ public class SentimentResultEntity {
     @Column(name = "article_count")
     private int articleCount;
 
+    @Column(name = "source", nullable = false, length = 16)
+    private String source = "DEFAULT";
+
     /**
      * Default constructor for JPA.
      */
@@ -98,6 +101,7 @@ public class SentimentResultEntity {
         entity.setPromptHash(result.promptHash());
         entity.setModelVersion(result.modelVersion());
         entity.setArticleCount(result.articleCount());
+        entity.setSource(result.source());
         return entity;
     }
 
@@ -120,7 +124,8 @@ public class SentimentResultEntity {
             catalysts != null ? List.of(catalysts) : List.of(),
             promptHash,
             modelVersion,
-            articleCount
+            articleCount,
+            source
         );
     }
 
@@ -245,4 +250,8 @@ public class SentimentResultEntity {
     public void setArticleCount(int articleCount) {
         this.articleCount = articleCount;
     }
+
+    public String getSource() { return source; }
+
+    public void setSource(String source) { this.source = source; }
 }

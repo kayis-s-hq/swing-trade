@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -37,6 +38,18 @@ public class CandidateScanResultEntity {
     private Double totalReturn;
     @Column(name = "max_drawdown_pct")
     private Double maxDrawdownPct;
+    @Column(name = "oos_start_date")
+    private LocalDate oosStartDate;
+    @Column(name = "oos_end_date")
+    private LocalDate oosEndDate;
+    @Column(name = "oos_total_trades")
+    private Integer oosTotalTrades;
+    @Column(name = "oos_win_rate")
+    private Double oosWinRate;
+    @Column(name = "oos_total_return")
+    private Double oosTotalReturn;
+    @Column(name = "oos_max_drawdown_pct")
+    private Double oosMaxDrawdownPct;
     @Column(nullable = false)
     private boolean qualified;
     @Column(nullable = false)
@@ -67,6 +80,18 @@ public class CandidateScanResultEntity {
     public void setTotalReturn(Double value) { this.totalReturn = value; }
     public Double getMaxDrawdownPct() { return maxDrawdownPct; }
     public void setMaxDrawdownPct(Double value) { this.maxDrawdownPct = value; }
+    public LocalDate getOosStartDate() { return oosStartDate; }
+    public void setOosStartDate(LocalDate value) { this.oosStartDate = value; }
+    public LocalDate getOosEndDate() { return oosEndDate; }
+    public void setOosEndDate(LocalDate value) { this.oosEndDate = value; }
+    public Integer getOosTotalTrades() { return oosTotalTrades; }
+    public void setOosTotalTrades(Integer value) { this.oosTotalTrades = value; }
+    public Double getOosWinRate() { return oosWinRate; }
+    public void setOosWinRate(Double value) { this.oosWinRate = value; }
+    public Double getOosTotalReturn() { return oosTotalReturn; }
+    public void setOosTotalReturn(Double value) { this.oosTotalReturn = value; }
+    public Double getOosMaxDrawdownPct() { return oosMaxDrawdownPct; }
+    public void setOosMaxDrawdownPct(Double value) { this.oosMaxDrawdownPct = value; }
     public boolean isQualified() { return qualified; }
     public void setQualified(boolean value) { this.qualified = value; }
     public boolean isActivated() { return activated; }

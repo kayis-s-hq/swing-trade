@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO_ROOT}"
+
+dry_run=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) dry_run=true; shift ;;
+    -h|--help)
+      printf 'Usage: %s [--dry-run]\n' "$0"
+      exit 0
+      ;;
+    *)
+      printf 'Unknown option: %s\nUsage: %s [--dry-run]\n' "$1" "$0" >&2
+      exit 2
+      ;;
+  esac
+done
+
+changed_paths="$(
+  {
+    git diff --name-only HEAD
+    git ls-files --others --exclude-standard
+  } | sort -u
+)"
+
+if [[ -z "${changed_paths}" ]]; then
+  printf 'No changed files detected.\n'
+  exit 0
+fi
+
+run_backend=false
+run_dashboard=false
+if grep -q '^backend/' <<<"${changed_paths}"; then run_backend=true; fi
+if grep -q '^dashboard/' <<<"${changed_paths}"; then run_dashboard=true; fi
+
+failures=0
+
+if [[ "${run_backend}" == "true" ]]; then
+  if [[ "${dry_run}" == "true" ]]; then
+    printf '[dry-run] (cd backend && ./gradlew test --no-daemon)\n'
+  else
+    printf '\nRunning backend tests for changed backend files...\n'
+    if ! (cd backend && ./gradlew test --no-daemon); then
+      failures=$((failures + 1))
+    fi
+  fi
+fi
+
+if [[ "${run_dashboard}" == "true" ]]; then
+  if [[ "${dry_run}" == "true" ]]; then
+    printf '[dry-run] (cd dashboard && yarn format:check && yarn typecheck && yarn test:run && yarn eslint . && yarn vite build)\n'
+  else
+    printf '\nRunning dashboard formatting, typecheck, tests, lint, and production build for changed dashboard files...\n'
+    if ! (cd dashboard && yarn format:check && yarn typecheck && yarn test:run && yarn eslint . && yarn vite build); then
+      failures=$((failures + 1))
+    fi
+  fi
+fi
+
+if [[ "${run_backend}" == "false" && "${run_dashboard}" == "false" ]]; then
+  printf 'No backend or dashboard files changed; no application checks selected.\n'
+fi
+
+if [[ "${dry_run}" == "true" ]]; then
+  printf '\nDry run complete; no checks were executed.\n'
+  exit 0
+fi
+
+if [[ ${failures} -gt 0 ]]; then
+  printf '\n%d check group(s) failed.\n' "${failures}" >&2
+  exit 1
+fi
+
+printf '\nSelected checks passed.\n'

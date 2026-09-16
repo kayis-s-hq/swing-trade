@@ -104,7 +104,7 @@ class JobOrchestratorLlmAnalysisTest {
         var sentiment = mock(SentimentGate.class);
         when(sentiment.evaluatePersisted(any(), any())).thenReturn(SentimentGate.SentimentVerdict.allow());
         invokePaperTrade(newService(gate, sentiment, signals, candles, trading, true, true));
-        verify(trading).executeSignal(any(), eq(BigDecimal.TEN));
+        verify(trading).queueSignal(any(), eq(BigDecimal.TEN));
     }
 
     @Test void pendingVerdictDefersTradeWithoutBlocking() throws Exception {

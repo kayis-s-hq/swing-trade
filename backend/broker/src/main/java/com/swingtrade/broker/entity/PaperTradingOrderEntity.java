@@ -61,6 +61,9 @@ public class PaperTradingOrderEntity {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "signal_id", length = 64)
+    private String signalId;
+
     public PaperTradingOrderEntity() {}
 
     public PaperTradingOrderEntity(com.swingtrade.domain.Order order) {
@@ -77,6 +80,8 @@ public class PaperTradingOrderEntity {
         this.executedAt = order.getExecutionTime();
         this.createdAt = order.getTimestamp();
         this.updatedAt = LocalDateTime.now();
+        this.signalId = order.getAdditionalProperties() != null
+            ? String.valueOf(order.getAdditionalProperties().getOrDefault("signalId", "")) : null;
     }
 
     public Long getId() { return id; }
@@ -107,4 +112,6 @@ public class PaperTradingOrderEntity {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public String getSignalId() { return signalId; }
+    public void setSignalId(String signalId) { this.signalId = signalId; }
 }

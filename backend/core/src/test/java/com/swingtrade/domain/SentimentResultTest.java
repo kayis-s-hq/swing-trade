@@ -146,12 +146,13 @@ class SentimentResultTest {
 
         @Test
         void shouldHaveAllEnumValues() {
-            assertThat(SentimentResult.SentimentScore.values()).hasSize(3);
+            assertThat(SentimentResult.SentimentScore.values()).hasSize(4);
             assertThat(SentimentResult.SentimentScore.values())
                 .containsExactlyInAnyOrder(
                     SentimentResult.SentimentScore.POSITIVE,
                     SentimentResult.SentimentScore.NEUTRAL,
-                    SentimentResult.SentimentScore.NEGATIVE
+                    SentimentResult.SentimentScore.NEGATIVE,
+                    SentimentResult.SentimentScore.UNKNOWN
                 );
         }
 

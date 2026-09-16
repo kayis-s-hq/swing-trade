@@ -122,13 +122,16 @@ class SignalPipelineTest {
 
             ArgumentCaptor<String> reasoningCaptor = ArgumentCaptor.forClass(String.class);
             ArgumentCaptor<String> indicatorsCaptor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<BigDecimal> confidenceCaptor = ArgumentCaptor.forClass(BigDecimal.class);
             verify(persistenceService).buildAndSaveWithWarning(
-                    eq(SYMBOL), eq(latestDate), eq(Signal.SignalType.HOLD), eq(BigDecimal.ONE),
+                    eq(SYMBOL), eq(latestDate), eq(Signal.SignalType.HOLD), confidenceCaptor.capture(),
                     reasoningCaptor.capture(), indicatorsCaptor.capture(), any(),
                     eq(com.swingtrade.data.entity.SignalEntity.WARNING_NONE), any(), any());
 
             String persistedReasoning = reasoningCaptor.getValue();
             String persistedIndicators = indicatorsCaptor.getValue();
+            assertThat(confidenceCaptor.getValue()).isBetween(BigDecimal.ZERO, BigDecimal.ONE)
+                .isNotEqualTo(BigDecimal.ONE);
 
             assertThat(persistedReasoning).isEqualTo(detailedReasoning);
             assertThat(persistedReasoning).isNotEqualTo(persistedIndicators);
