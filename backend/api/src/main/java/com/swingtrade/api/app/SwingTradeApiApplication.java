@@ -29,7 +29,7 @@ import java.util.Locale;
  * in any full-context test - even ones that never reference the test config class.
  */
 @ComponentScan(
-    basePackages = {"com.swingtrade.api", "com.swingtrade.broker", "com.swingtrade.data", "com.swingtrade.strategy", "com.swingtrade.llm", "com.swingtrade.core", "com.swingtrade.gpuhub"},
+    basePackages = {"com.swingtrade.api", "com.swingtrade.broker", "com.swingtrade.data", "com.swingtrade.strategy", "com.swingtrade.llm", "com.swingtrade.core"},
     excludeFilters = @ComponentScan.Filter(type = FilterType.ANNOTATION, classes = TestConfiguration.class)
 )
 @EnableJpaRepositories(basePackages = {

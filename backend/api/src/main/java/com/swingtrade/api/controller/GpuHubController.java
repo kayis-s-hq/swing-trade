@@ -1,5 +1,14 @@
 package com.swingtrade.api.controller;
 
+// TODO: Uncomment once these routes have an auth guard. The API has no
+// authentication anywhere (no Spring Security, binds 0.0.0.0), which is an
+// accepted, tracked risk for the trading endpoints (roadmap Phase 5, not
+// required for paper trading) — but createDeployment takes a caller-
+// controlled `cmd` that runs on a remote GPU container (unauthenticated
+// RCE), and stop/delete act on real, billed GPU infrastructure
+// (unauthenticated destructive ops). Add at minimum a shared-secret header
+// check in front of this controller before re-enabling.
+/*
 import com.swingtrade.api.dto.ApiResponse;
 import com.swingtrade.gpuhub.dto.ContainerInfo;
 import com.swingtrade.gpuhub.dto.DeploymentInfo;
@@ -107,3 +116,4 @@ public class GpuHubController {
         return ResponseEntity.ok(ApiResponse.ok(images));
     }
 }
+*/
