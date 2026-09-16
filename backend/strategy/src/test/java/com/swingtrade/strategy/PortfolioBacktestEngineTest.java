@@ -28,11 +28,12 @@ class PortfolioBacktestEngineTest {
         assertThat(result.finalCapital()).isEqualTo(110.0);
         assertThat(result.equityCurve()).extracting(PortfolioEquityPoint::date)
                 .containsExactly(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 2),
-                        LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 5), LocalDate.of(2024, 1, 6));
+                        LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 4),
+                        LocalDate.of(2024, 1, 5), LocalDate.of(2024, 1, 6));
     }
 
     @Test
-    void sameDayExitIsProcessedBeforeEntryAndFreesCapital() {
+    void sameDayExitDoesNotMakeProceedsAvailableBeforeT1Settlement() {
         BacktestTrade first = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), 100, 1, 10);
         BacktestTrade second = trade("BBB", LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 5), 100, 1, 10);
 
@@ -40,9 +41,16 @@ class PortfolioBacktestEngineTest {
                 List.of(result("AAA", first), result("BBB", second)),
                 config(100), LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 5));
 
-        assertThat(result.totalTrades()).isEqualTo(2);
-        assertThat(result.rejectedTrades()).isZero();
-        assertThat(result.finalCapital()).isEqualTo(120.0);
+        assertThat(result.totalTrades()).isEqualTo(1);
+        assertThat(result.rejectedTrades()).isEqualTo(1);
+        assertThat(result.finalCapital()).isEqualTo(110.0);
+        assertThat(result.equityCurve()).extracting(PortfolioEquityPoint::date)
+                .containsExactly(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 2),
+                        LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 4),
+                        LocalDate.of(2024, 1, 5));
+        PortfolioEquityPoint exitDay = result.equityCurve().get(3);
+        assertThat(exitDay.settledCash()).isEqualTo(0.0);
+        assertThat(exitDay.unsettledProceeds()).isEqualTo(110.0);
     }
 
     @Test
@@ -50,6 +58,21 @@ class PortfolioBacktestEngineTest {
         assertThatThrownBy(() -> engine.simulate(List.of(), config(100),
                 LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 1)))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void FridayExitSettlesOnMondayAndDailyCurveExposesCashTransition() {
+        BacktestTrade trade = trade("AAA", LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 5),
+                100, 1, 10);
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", trade)), config(100),
+                LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 8));
+
+        assertThat(result.equityCurve()).hasSize(5);
+        assertThat(result.equityCurve().get(1).unsettledProceeds()).isEqualTo(110.0);
+        assertThat(result.equityCurve().get(2).settledCash()).isEqualTo(0.0);
+        assertThat(result.equityCurve().get(4).settledCash()).isEqualTo(110.0);
     }
 
     private static BacktestConfig config(double capital) {

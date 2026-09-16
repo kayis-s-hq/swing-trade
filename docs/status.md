@@ -30,6 +30,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   chronological walk-forward folds, adjusted-price gap quarantine, same-window benchmark/excess
   returns, sentiment gate-effectiveness summaries, and bounded earnings/NSE/BSE filing prompt context.
   `./bin/verify-changes` passed across the affected backend modules.
+- [x] Local DevStack verification verified 2026-09-16: PostgreSQL migrations applied cleanly through
+  V50, the API health endpoint returned `UP`, and `/api/signals/gate-effectiveness` returned HTTP 200.
+  The local API was run in the foreground for this check because the background launcher terminated
+  during startup under concurrent worker resource pressure; no database data was reset.
 
 - Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
 - Candle uniqueness, market-session validation, reconciliation, and audit logging are implemented.

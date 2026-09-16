@@ -87,10 +87,14 @@ public class SignalController {
     public ResponseEntity<?> getGateEffectiveness(
             @RequestParam LocalDate from,
             @RequestParam LocalDate to,
-            @RequestParam(required = false) String symbol) {
+            @RequestParam(required = false) String symbol,
+            @RequestParam(required = false) String strategy,
+            @RequestParam(required = false) String regime) {
         if (from.isAfter(to)) return ResponseEntity.badRequest().body(Map.of("error", "from must not be after to"));
         return ResponseEntity.ok(gateEffectivenessAuditService.report(from, to,
-            symbol == null || symbol.isBlank() ? null : symbol.trim().toUpperCase()));
+            symbol == null || symbol.isBlank() ? null : symbol.trim().toUpperCase(),
+            strategy == null || strategy.isBlank() ? null : strategy.trim().toUpperCase(),
+            regime == null || regime.isBlank() ? null : regime.trim().toUpperCase()));
     }
 
     /**

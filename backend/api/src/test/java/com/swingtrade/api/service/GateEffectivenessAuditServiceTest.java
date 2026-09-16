@@ -52,6 +52,46 @@ class GateEffectivenessAuditServiceTest {
         assertThat(report.verdicts().get("SUPPRESS").meanForwardReturnPct().get(1))
             .isEqualByComparingTo("-5.0000");
         assertThat(report.verdicts().get("ALLOW").meanForwardReturnPct()).doesNotContainKey(5);
+        assertThat(report.verdicts().get("ALLOW").returnObservationCounts()).containsEntry(1, 1);
+        assertThat(report.byStrategy()).containsKey("DEFAULT");
+        assertThat(report.byRegime()).containsKey("UNKNOWN");
+    }
+
+    @Test
+    void reportCanFilterByDerivedRegimeWithoutTreatingMissingOutcomesAsLosses() {
+        var audit = new GateEffectivenessAuditEntity("TCS", date, "SENTIMENT", "ALLOW", null, null);
+        when(repository.findByGateNameAndSymbolAndSignalDateBetweenOrderBySignalDateAsc(
+            any(), eq("TCS"), any(), any())).thenReturn(List.of(audit));
+        when(candles.findLastNBySymbolBeforeDateAsc("TCS", date, 20))
+            .thenReturn(List.of(candle(date.minusDays(2), "100"), candle(date.minusDays(1), "103")));
+        when(candles.findBySymbolAndDate("TCS", date)).thenReturn(Optional.of(candle(date, "100")));
+        when(candles.findNthBySymbolAndDateAfterOrderByDateAsc("TCS", date, 1))
+            .thenReturn(Optional.of(candle(date.plusDays(1), "102")));
+        when(candles.findNthBySymbolAndDateAfterOrderByDateAsc(any(), any(), eq(5)))
+            .thenReturn(Optional.empty());
+        when(candles.findNthBySymbolAndDateAfterOrderByDateAsc(any(), any(), eq(20)))
+            .thenReturn(Optional.empty());
+
+        var report = service.report(date, date, "TCS", "DEFAULT", "BULL");
+
+        assertThat(report.auditCount()).isEqualTo(1);
+        assertThat(report.strategy()).isEqualTo("DEFAULT");
+        assertThat(report.regime()).isEqualTo("BULL");
+        assertThat(report.byRegime()).containsKey("BULL");
+        assertThat(report.verdicts().get("ALLOW").meanForwardReturnPct()).containsEntry(1, new BigDecimal("2.0000"));
+        assertThat(report.verdicts().get("ALLOW").returnObservationCounts())
+            .containsEntry(1, 1).doesNotContainKey(5);
+    }
+
+    @Test
+    void unsupportedStrategyFilterReturnsNoAuditRows() {
+        when(repository.findByGateNameAndSignalDateBetweenOrderBySignalDateAsc(any(), any(), any()))
+            .thenReturn(List.of(new GateEffectivenessAuditEntity("TCS", date, "SENTIMENT", "ALLOW", null, null)));
+
+        var report = service.report(date, date, null, "OTHER", null);
+
+        assertThat(report.auditCount()).isZero();
+        assertThat(report.verdicts()).isEmpty();
     }
 
     private static OhlcvCandle candle(LocalDate date, String close) {

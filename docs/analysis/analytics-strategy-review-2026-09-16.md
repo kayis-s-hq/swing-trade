@@ -78,6 +78,9 @@ Additional verified slice — 2026-09-16:
   portfolio result, and adjusted-price gap quarantine without modifying raw candles. Sentiment gate
   verdicts can be audited through `/api/signals/gate-effectiveness`, and bounded earnings/exchange
   filing context is included in prompts when available.
+- Historical universe snapshots, corporate actions, NIFTY benchmark data contracts, and immutable
+  strategy-configuration persistence are now available as explicit data-layer contracts/migrations;
+  live strategy fan-out and provider population remain separate follow-ups.
 
 Verification: `./bin/verify-changes` passed on 2026-09-16. It ran the backend test task selected
 from changed paths; the explicit affected-module suite also passed:
@@ -110,20 +113,20 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 
 ### P2 — Trustworthy evaluation
 - [x] 16 No mark-to-market equity curve (Sharpe/DD wrong)
-- [ ] 17 No portfolio-level backtest
+- [~] 17 No portfolio-level backtest
 - [~] 18 Candidate scan qualifies on in-sample backtest
 - [x] 19 No minimum trade count
 - [~] 20 Survivorship bias and corporate-action checks
 - [~] 21 No benchmark / risk-adjusted metrics
 - [ ] 22 Circuit limits not modelled
 - [~] 23 Accuracy metrics not fed back; IC ignores ties; raw vs excess return
-- [ ] 24 No gate-effectiveness or strategy attribution
+- [~] 24 No gate-effectiveness or strategy attribution
 
 ### P3 — Better LLM inputs and calibration
 - [x] 25 Sentiment mapped to fixed ±75, confidence ignored
 - [ ] 26 "Fundamentals" is price-only and duplicates Tech
 - [x] 27 Headlines lack date/source; `{symbol}` placeholder unfilled
-- [ ] 28 No structured Indian-market data in prompt
+- [~] 28 No structured Indian-market data in prompt
 - [ ] 29 Article truncation before ranking/dedupe
 - [ ] 30 No determinism or grounding checks
 - [ ] 31 Synthesis LLM adds little decision value
@@ -131,7 +134,7 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 - [~] 33 LLM failure silently becomes NEUTRAL / keyword result
 
 ### P4 — Multi-strategy, regime, risk
-- [ ] 34 Live fixed to one strategy
+- [~] 34 Live fixed to one strategy
 - [ ] 35 Add standard NSE swing setups
 - [ ] 36 Market-regime filter
 - [ ] 37 Relative strength vs Nifty/sector
@@ -232,7 +235,9 @@ The universe is still the current symbol master/watchlist, delisted and merged n
 date-effective eligibility snapshot, and Yahoo adjusted close is total-return adjusted rather than
 an event-specific corporate-action feed. An adjusted-price quality check now quarantines invalid or
 unexplained >75% analytical jumps from backtest/live inputs without rewriting raw candles.
-**Remaining:** Add historical universe snapshots and action provenance.
+Historical universe snapshots and explicit corporate actions now have persistence contracts and V50
+schema support; population from authoritative historical sources remains open.
+**Remaining:** Populate and enforce dated universe/action data in backtest selection and adjustment.
 
 ### 21. PARTIALLY FIXED — No benchmark or risk-adjusted metrics
 Single-symbol backtest results now expose CAGR, Sortino and Calmar plus same-window buy-and-hold and
@@ -241,7 +246,8 @@ calendar dates; Sortino uses the daily marked-to-market equity curve and downsid
 uses CAGR divided by maximum drawdown. Benchmark/buy-and-hold comparison, exposure, average R,
 and alpha/beta remain open until a benchmark data contract and shared-capital portfolio semantics
 are defined.
-**Remaining:** Add aligned NIFTY 50 / NIFTY 500 TRI benchmark returns and portfolio-level benchmark metrics.
+An explicit benchmark candle-series contract and fail-closed data adapter now exist; aligned NIFTY 50 /
+NIFTY 500 TRI ingestion and portfolio-level benchmark metrics remain open.
 
 ### 22. PARTIALLY FIXED — Circuit limits not modelled
 A persisted `PriceBand` now provides explicit exchange limits. Paper and backtest BUY entries at the
@@ -334,7 +340,10 @@ gate/composite weight consumes trailing IC.
 
 ## E. Strategy, regime and risk
 
-### 34. GAP — Live fixed to one strategy
+### 34. PARTIALLY FIXED — Live fixed to one strategy
+Immutable, versioned `StrategyConfig` persistence now supports OFF, BACKTEST_ONLY, SHADOW, and CHAMPION
+modes with one current row per variant and one champion constraint. Live signal fan-out, champion
+gating, per-variant portfolios, and dashboard/API management remain open.
 `StrategyRegistry` supports many strategies but live signals and the orchestrator use only `defaultStrategy()`. The signal
 strategy label is the string `"DEFAULT"`.
 **Fix:** Add `strategy_config` (enabled, capital %, params). Loop enabled strategies in SIGNAL stage and persist `strategy` on signals and positions.

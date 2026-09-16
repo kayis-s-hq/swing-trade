@@ -1,6 +1,7 @@
 package com.swingtrade.strategy;
 
 import java.time.LocalDate;
+import java.time.DayOfWeek;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -43,20 +44,20 @@ final class PortfolioBacktestEngine {
         List<BacktestTrade> accepted = new ArrayList<>();
         List<PortfolioEquityPoint> equityCurve = new ArrayList<>();
         Map<String, BacktestTrade> open = new HashMap<>();
+        Map<LocalDate, Double> unsettledByDate = new HashMap<>();
         double cash = config.initialCapital();
-        equityCurve.add(new PortfolioEquityPoint(evaluationStart, cash));
-
-        List<LocalDate> eventDates = entriesByDate.keySet().stream()
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-        eventDates.addAll(exitsByDate.keySet().stream().filter(date -> !eventDates.contains(date)).toList());
-        eventDates.sort(LocalDate::compareTo);
 
         int rejected = 0;
-        for (LocalDate date : eventDates) {
+        for (LocalDate date = evaluationStart; !date.isAfter(evaluationEnd); date = date.plusDays(1)) {
+            Double settled = unsettledByDate.remove(date);
+            if (settled != null) {
+                cash += settled;
+            }
             for (BacktestTrade trade : exitsByDate.getOrDefault(date, List.of())) {
                 BacktestTrade held = open.remove(trade.symbol());
                 if (held != null) {
-                    cash += entryNotional(held) + held.pnl();
+                    double proceeds = entryNotional(held) + held.pnl();
+                    unsettledByDate.merge(nextSettlementDate(date), proceeds, Double::sum);
                 }
             }
 
@@ -73,11 +74,13 @@ final class PortfolioBacktestEngine {
                 cash -= notional;
             }
 
-            double equity = cash + open.values().stream().mapToDouble(PortfolioBacktestEngine::entryNotional).sum();
-            equityCurve.add(new PortfolioEquityPoint(date, equity));
+            double unsettled = unsettledByDate.values().stream().mapToDouble(Double::doubleValue).sum();
+            double positionValue = open.values().stream().mapToDouble(PortfolioBacktestEngine::entryNotional).sum();
+            equityCurve.add(new PortfolioEquityPoint(date, cash + unsettled + positionValue,
+                    cash, unsettled, positionValue));
         }
 
-        double finalCapital = cash;
+        double finalCapital = equityCurve.getLast().equity();
         int winners = (int) accepted.stream().filter(trade -> trade.pnl() > 0).count();
         double maxDrawdown = maxDrawdownPct(equityCurve);
         double cagr = BacktestMetrics.cagrPct(config.initialCapital(), finalCapital,
@@ -93,6 +96,15 @@ final class PortfolioBacktestEngine {
 
     private static double entryNotional(BacktestTrade trade) {
         return trade.entryPrice().doubleValue() * trade.quantity();
+    }
+
+    private static LocalDate nextSettlementDate(LocalDate exitDate) {
+        LocalDate settlement = exitDate.plusDays(1);
+        while (settlement.getDayOfWeek() == DayOfWeek.SATURDAY
+                || settlement.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            settlement = settlement.plusDays(1);
+        }
+        return settlement;
     }
 
     private static double maxDrawdownPct(List<PortfolioEquityPoint> curve) {

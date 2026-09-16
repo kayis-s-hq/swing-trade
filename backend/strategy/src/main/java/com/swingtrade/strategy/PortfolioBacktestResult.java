@@ -6,10 +6,10 @@ import java.util.List;
 /**
  * Result of a shared-capital portfolio backtest.
  *
- * <p>The equity curve is event-driven: it records the initial value and each date on which an
- * entry or exit is processed. Open positions are valued at their entry notional because the
- * existing {@link BacktestTrade} contract does not carry daily candles; this avoids inventing
- * interim prices while still enforcing capital and concurrency constraints.</p>
+ * <p>The curve is daily over the requested window. Since the existing {@link BacktestTrade}
+ * contract carries no intermediate candles, open positions are marked at their entry notional;
+ * the point still exposes settled cash and unsettled exit proceeds so cash availability is not
+ * confused with economic equity.</p>
  */
 public record PortfolioBacktestResult(
         LocalDate evaluationStart,
