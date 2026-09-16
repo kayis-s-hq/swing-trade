@@ -7,6 +7,7 @@ import com.swingtrade.data.repository.CandidateScanRunRepository;
 import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.data.service.AppSettingsService;
+import com.swingtrade.data.service.WatchlistService;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
@@ -18,6 +19,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -63,6 +65,7 @@ public class CandidateScanService {
     private final CandidateScanRunRepository runRepository;
     private final CandidateScanResultRepository resultRepository;
     private final DataIngestionService ingestionService;
+    private final WatchlistService watchlistService;
     private final CandleStore candleStore;
     private final PriceActionSignalEngine signalEngine;
     private final BacktestEngine backtestEngine;
@@ -80,10 +83,12 @@ public class CandidateScanService {
     private final ConcurrentHashMap<UUID, Deque<ScanLogEvent>> logHistory = new ConcurrentHashMap<>();
     private static final int MAX_LOG_HISTORY = 500;
 
+    @Autowired
     public CandidateScanService(FyersSymbolRepository symbolRepository,
                                 CandidateScanRunRepository runRepository,
                                 CandidateScanResultRepository resultRepository,
                                 DataIngestionService ingestionService,
+                                WatchlistService watchlistService,
                                 AppSettingsService appSettingsService,
                                 CandleStore candleStore,
                                 PriceActionSignalEngine signalEngine,
@@ -95,6 +100,7 @@ public class CandidateScanService {
         this.runRepository = runRepository;
         this.resultRepository = resultRepository;
         this.ingestionService = ingestionService;
+        this.watchlistService = watchlistService;
         this.appSettingsService = appSettingsService;
         this.candleStore = candleStore;
         this.signalEngine = signalEngine;
@@ -105,6 +111,20 @@ public class CandidateScanService {
         this.semaphore = new Semaphore(this.maxConcurrent);
         this.executor = Executors.newThreadPerTaskExecutor(
             Thread.ofVirtual().name("candidate-scan-", 0).factory());
+    }
+
+    public CandidateScanService(FyersSymbolRepository symbolRepository,
+                                CandidateScanRunRepository runRepository,
+                                CandidateScanResultRepository resultRepository,
+                                DataIngestionService ingestionService,
+                                AppSettingsService appSettingsService,
+                                CandleStore candleStore,
+                                PriceActionSignalEngine signalEngine,
+                                BacktestEngine backtestEngine,
+                                int backfillYears, long delayMs, int maxConcurrent) {
+        this(symbolRepository, runRepository, resultRepository, ingestionService, null,
+            appSettingsService, candleStore, signalEngine, backtestEngine,
+            backfillYears, delayMs, maxConcurrent);
     }
 
     @PostConstruct
@@ -471,9 +491,12 @@ public class CandidateScanService {
         result.setQualified(qualified);
         result.setReason(qualified ? "BUY and in-sample/out-of-sample backtest gates passed"
             : qualificationReason(signal, backtest, oosBacktest, minTrades, minWinRate, minTotalReturn));
-        // Candidate discovery is intentionally read-only. Watchlist membership is
-        // managed by the Watchlist API/UI, not as a side effect of a scan.
-        result.setActivated(false);
+        if (qualified && watchlistService != null) {
+            watchlistService.addToWatchlist(symbol, symbol, "NSE");
+            result.setActivated(true);
+        } else {
+            result.setActivated(false);
+        }
         resultRepository.save(result);
         return qualified;
     }
