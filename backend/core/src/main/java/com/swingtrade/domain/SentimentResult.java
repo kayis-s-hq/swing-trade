@@ -17,6 +17,7 @@ import java.util.List;
  * @param confidence  the confidence level of the sentiment score (0.0 to 1.0)
  * @param analyzedAt  the timestamp when the sentiment was analyzed
  * @param source      provenance: LLM, KEYWORD, or DEFAULT
+ * @param articleIds  persisted news evidence used for this result
  */
 public record SentimentResult(
     Long id,
@@ -32,15 +33,25 @@ public record SentimentResult(
     String promptHash,
     String modelVersion,
     int articleCount,
-    String source
+    String source,
+    List<Long> articleIds
 ) {
+    /** Compatibility constructor for callers that already provide provenance. */
+    public SentimentResult(Long id, String symbol, LocalDate date, SentimentScore score,
+                           String summary, String rawContent, Double confidence,
+                           LocalDate analyzedAt, List<String> redFlags, List<String> catalysts,
+                           String promptHash, String modelVersion, int articleCount,
+                           String source) {
+        this(id, symbol, date, score, summary, rawContent, confidence, analyzedAt,
+            redFlags, catalysts, promptHash, modelVersion, articleCount, source, List.of());
+    }
     /** Compatibility constructor for callers predating provenance tracking. */
     public SentimentResult(Long id, String symbol, LocalDate date, SentimentScore score,
                            String summary, String rawContent, Double confidence,
                            LocalDate analyzedAt, List<String> redFlags, List<String> catalysts,
                            String promptHash, String modelVersion, int articleCount) {
         this(id, symbol, date, score, summary, rawContent, confidence, analyzedAt,
-            redFlags, catalysts, promptHash, modelVersion, articleCount, "DEFAULT");
+            redFlags, catalysts, promptHash, modelVersion, articleCount, "DEFAULT", List.of());
     }
     /**
      * Enum representing the different sentiment scores.
@@ -111,7 +122,8 @@ public record SentimentResult(
             null,
             null,
             0,
-            "DEFAULT"
+            "DEFAULT",
+            List.of()
         );
     }
 

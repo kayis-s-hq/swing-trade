@@ -2,7 +2,9 @@ package com.swingtrade.strategy;
 
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
 import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.PriceBandStore;
 import com.swingtrade.domain.store.WatchlistStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.lenient;
 
 @DisplayName("BacktestEngine")
 @ExtendWith(MockitoExtension.class)
@@ -36,6 +40,9 @@ class BacktestEngineTest {
     @Mock
     private WatchlistStore watchlistStore;
 
+    @Mock
+    private PriceBandStore priceBandStore;
+
     private BacktestEngine engine;
 
     @BeforeEach
@@ -44,7 +51,7 @@ class BacktestEngineTest {
             PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class), priceActionStrategy);
             StrategyRegistry strategyRegistry = new StrategyRegistry(java.util.List.of(priceActionStrategy), priceActionStrategy);
         engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry,
-            new ObjectMapper(), "target/test-reports");
+            new ObjectMapper(), "target/test-reports", priceBandStore);
     }
 
     // -----------------------------------------------------------------------
@@ -211,6 +218,22 @@ class BacktestEngineTest {
     class EntryAndExit {
 
         @Test
+        @DisplayName("upper circuit on next open prevents long entry")
+        void upperCircuitOnEntryDay_skipsTrade() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            stub(candles);
+            OhlcvCandle entryCandle = candles.get(300);
+            lenient().when(priceBandStore.findBySymbolAndDate(eq(SYMBOL), eq(entryCandle.date())))
+                .thenReturn(java.util.Optional.of(new PriceBand(SYMBOL, entryCandle.date(),
+                    entryCandle.open().multiply(BigDecimal.valueOf(0.9)), entryCandle.open())));
+
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE,
+                new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 5, false, 2));
+
+            assertThat(result.trades()).isEmpty();
+        }
+
+        @Test
         @DisplayName("all entry rules satisfied -> a trade opens on the next day's open")
         void entrySignal_opensTradeAtNextOpen() {
             List<OhlcvCandle> candles = buildEntrySetupCandles();
@@ -242,6 +265,25 @@ class BacktestEngineTest {
             assertThat(trade.exitReason()).isEqualTo(ExitReason.STOP_LOSS);
             assertThat(trade.exitPrice()).isEqualByComparingTo(trade.stopLoss());
             assertThat(trade.pnl()).isNegative();
+        }
+
+        @Test
+        @DisplayName("lower circuit on exit day defers stop and does not force a fill")
+        void lowerCircuitOnFinalBar_defersExit() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            BigDecimal entry = entryPrice(candles);
+            appendCandle(candles, entry, entry, entry.multiply(BigDecimal.valueOf(0.75)),
+                entry.multiply(BigDecimal.valueOf(0.80)), 1_000_000L);
+            stub(candles);
+            OhlcvCandle finalCandle = candles.get(candles.size() - 1);
+            lenient().when(priceBandStore.findBySymbolAndDate(eq(SYMBOL), eq(finalCandle.date())))
+                .thenReturn(java.util.Optional.of(new PriceBand(SYMBOL, finalCandle.date(),
+                    finalCandle.close(), finalCandle.close().multiply(BigDecimal.valueOf(1.2)))));
+
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE,
+                new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false, 2));
+
+            assertThat(result.trades()).isEmpty();
         }
 
         @Test

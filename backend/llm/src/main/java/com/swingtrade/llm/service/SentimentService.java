@@ -3,6 +3,7 @@ package com.swingtrade.llm.service;
 import com.swingtrade.core.metrics.LlmMetrics;
 import com.swingtrade.core.metrics.SentimentMetrics;
 import com.swingtrade.domain.NewsArticle;
+import com.swingtrade.domain.PersistedNewsArticle;
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.StockStore;
@@ -183,9 +184,15 @@ public class SentimentService {
 
         try {
             // Fetch news articles
-            List<NewsArticle> fetchedArticles =
-                    newsIngestionService.fetchStockNewsForDecisionDate(stockSymbol, date);
-            List<NewsArticle> articles = filterPointInTimeArticles(fetchedArticles, date);
+            List<PersistedNewsArticle> persistedArticles =
+                    newsIngestionService.fetchPersistedStockNewsForDecisionDate(stockSymbol, date);
+            List<PersistedNewsArticle> articles = persistedArticles.stream()
+                    .filter(article -> article.article().publishedDate() != null
+                        && !article.article().publishedDate().isBefore(
+                            date.minusDays(NEWS_LOOKBACK_DAYS).atStartOfDay(MARKET_ZONE))
+                        && !article.article().publishedDate().isAfter(
+                            date.atTime(15, 30).atZone(MARKET_ZONE)))
+                    .toList();
 
             if (articles.isEmpty()) {
                 logger.warn("No news articles found for stock: {}", stockSymbol);
@@ -204,10 +211,19 @@ public class SentimentService {
             // "request (8556 tokens) exceeds the available context size (4096)".
             // The lead of an article carries the sentiment signal, so trimming the
             // tail costs little and cuts prompt-eval time (and heat) substantially.
-            List<String> newsContent = java.util.stream.IntStream.range(0, articles.size())
+            Map<PersistedNewsArticle, String> cleanedArticles = new java.util.LinkedHashMap<>();
+            List<PersistedNewsArticle> usableArticles = articles.stream()
+                    .filter(article -> {
+                        String cleaned = newsIngestionService.cleanNewsText(article.article());
+                        if (cleaned == null || cleaned.trim().isEmpty()) return false;
+                        cleanedArticles.put(article, cleaned);
+                        return true;
+                    }).toList();
+            List<PersistedNewsArticle> preparedArticles = usableArticles;
+            List<String> newsContent = java.util.stream.IntStream.range(0, preparedArticles.size())
                     .mapToObj(index -> {
-                        NewsArticle article = articles.get(index);
-                        String cleaned = newsIngestionService.cleanNewsText(article);
+                        NewsArticle article = preparedArticles.get(index).article();
+                        String cleaned = cleanedArticles.get(preparedArticles.get(index));
                         if (cleaned == null || cleaned.trim().isEmpty()) return null;
                         String published = article.publishedDate().withZoneSameInstant(MARKET_ZONE)
                             .toLocalDate().toString();
@@ -225,12 +241,13 @@ public class SentimentService {
             }
 
             // Limit articles to fit within LLM context window
-            int articleCountForLlm = newsContent.size();
             if (newsContent.size() > maxArticles) {
                 logger.info("Truncating {} articles to {} for {} LLM analysis",
                         newsContent.size(), maxArticles, piBackend ? "Pi" : "configured");
                 newsContent = newsContent.subList(0, maxArticles);
+                usableArticles = usableArticles.subList(0, maxArticles);
             }
+            List<Long> articleIds = usableArticles.stream().map(PersistedNewsArticle::id).toList();
 
             // Perform sentiment analysis
             SentimentOutput analysisResult;
@@ -253,7 +270,8 @@ public class SentimentService {
             }
 
             // Build and cache result
-            SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult, articleCountForLlm);
+            SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult,
+                    articleIds.size(), articleIds);
 
             // Persist to database
             try {
@@ -427,7 +445,7 @@ public class SentimentService {
             String stockSymbol,
             LocalDate date,
             SentimentOutput analysisResult,
-            int articleCount) {
+            int articleCount, List<Long> articleIds) {
 
         String modelVersion = appSettingsStore.get("llamacpp.model")
                 .orElse("Qwen3-4B-Instruct");
@@ -462,7 +480,8 @@ public class SentimentService {
                 promptHash,
                 modelVersion,
                 articleCount,
-                analysisResult.getSource()
+                analysisResult.getSource(),
+                articleIds
         );
     }
 

@@ -1,6 +1,6 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-02 (development verification)
+Last checked: 2026-09-16 (analytics remediation verification)
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
@@ -20,6 +20,12 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 - [x] Verified 2026-09-01: `:api:test`, `:data:test`, all 277 dashboard tests, dashboard typecheck, lint, formatting, and production build passed. Dev-stack health, `/api/candidate-scans/settings`, `/api/candidate-scans`, and the dashboard returned HTTP 200. The latest persisted full-universe run completed 2,635 symbols with 5 qualifiers; current development settings are 50% minimum win rate, >0% total return, 8 workers, and 3 backfill years.
 
 ## Data-integrity remediation
+
+- [x] Analytics remediation slice verified 2026-09-16: historical sentiment uses persisted
+  first-seen-bounded evidence, analytical OHLC normalization is in place, and explicit price-band
+  persistence/policies cover paper and backtest circuit-limit behavior. `./bin/verify-changes` and
+  affected backend module tests passed; portfolio-level backtesting, historical universe snapshots,
+  and exchange-band ingestion/API population remain follow-ups.
 
 - Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
 - Candle uniqueness, market-session validation, reconciliation, and audit logging are implemented.

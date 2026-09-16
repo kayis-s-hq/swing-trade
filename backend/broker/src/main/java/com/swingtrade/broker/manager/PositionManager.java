@@ -5,6 +5,8 @@ import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.PriceBandPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -141,6 +143,12 @@ public class PositionManager {
      * Updates positions based on new candle data.
      */
     public List<Position> updatePositionsWithCandleData(String symbol, OhlcvCandle candleData) {
+        return updatePositionsWithCandleData(symbol, candleData, null);
+    }
+
+    /** Updates positions, deferring long exits when an explicit lower band locks the market. */
+    public List<Position> updatePositionsWithCandleData(String symbol, OhlcvCandle candleData,
+                                                        PriceBand priceBand) {
         List<Position> updatedPositions = new ArrayList<>();
 
         for (Map.Entry<String, Position> entry : positions.entrySet()) {
@@ -148,7 +156,7 @@ public class PositionManager {
 
             if (position.symbol().equals(symbol) && position.status() == PositionStatus.OPEN) {
                 Position updated = updatePositionPrice(entry.getKey(), candleData.close());
-                checkPositionTriggers(updated, candleData);
+                checkPositionTriggers(updated, candleData, priceBand);
 
                 // Re-read from the map: checkPositionTriggers may have replaced this
                 // entry with a closed instance (stop-loss/target hit). Callers branch
@@ -164,7 +172,18 @@ public class PositionManager {
      * Checks if position has hit stop loss or target levels based on candle data.
      */
     public void checkPositionTriggers(Position position, OhlcvCandle candleData) {
+        checkPositionTriggers(position, candleData, null);
+    }
+
+    /** Checks triggers while respecting an explicitly supplied daily price band. */
+    public void checkPositionTriggers(Position position, OhlcvCandle candleData, PriceBand priceBand) {
         if (position.status() != PositionStatus.OPEN) {
+            return;
+        }
+
+        if (PriceBandPolicy.blocksLongExit(priceBand, candleData)) {
+            logger.info("Deferring exit for {}: lower circuit limit {} is locked on {}",
+                position.positionId(), priceBand.lowerLimit(), candleData.date());
             return;
         }
 

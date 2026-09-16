@@ -1,6 +1,7 @@
 package com.swingtrade.llm.service;
 
 import com.swingtrade.domain.NewsArticle;
+import com.swingtrade.domain.PersistedNewsArticle;
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.StockStore;
@@ -74,9 +75,9 @@ class SentimentServicePromptTest {
         when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
             .thenReturn(Mono.just(llmResponse));
 
-        List<NewsArticle> articles = List.of(
-                new NewsArticle("RELIANCE", "Test headline", "Test URL", null, todayNoon(), "Test source", null));
-        when(newsIngestionService.fetchStockNewsForDecisionDate(eq("RELIANCE"), org.mockito.ArgumentMatchers.nullable(LocalDate.class))).thenReturn(articles);
+        List<PersistedNewsArticle> articles = List.of(
+                new PersistedNewsArticle(1L, new NewsArticle("RELIANCE", "Test headline", "Test URL", null, todayNoon(), "Test source", null), null));
+        when(newsIngestionService.fetchPersistedStockNewsForDecisionDate(eq("RELIANCE"), org.mockito.ArgumentMatchers.nullable(LocalDate.class))).thenReturn(articles);
         when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("Test news content");
 
         // When
@@ -108,9 +109,9 @@ class SentimentServicePromptTest {
         when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.3)))
             .thenReturn(Mono.just(llmResponse));
 
-        List<NewsArticle> articles = List.of(
-                new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null));
-        when(newsIngestionService.fetchStockNewsForDecisionDate(eq("TCS"), org.mockito.ArgumentMatchers.nullable(LocalDate.class))).thenReturn(articles);
+        List<PersistedNewsArticle> articles = List.of(
+                new PersistedNewsArticle(1L, new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null), null));
+        when(newsIngestionService.fetchPersistedStockNewsForDecisionDate(eq("TCS"), org.mockito.ArgumentMatchers.nullable(LocalDate.class))).thenReturn(articles);
         when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("news content");
 
         // When
@@ -136,9 +137,9 @@ class SentimentServicePromptTest {
         when(promptLoader.getUserPrompt()).thenReturn("Analyse {symbol}. News: {newsContent}.");
         when(llmClient.generateChatCompletion(anyList(), eq(128), eq(0.3)))
                 .thenReturn(Mono.just("{\"score\":\"NEUTRAL\",\"confidence\":0.5,\"summary\":\"Mixed\",\"red_flags\":[],\"catalysts\":[]}"));
-        List<NewsArticle> articles = List.of(
-                new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null));
-        when(newsIngestionService.fetchStockNewsForDecisionDate(eq("TCS"), org.mockito.ArgumentMatchers.nullable(LocalDate.class))).thenReturn(articles);
+        List<PersistedNewsArticle> articles = List.of(
+                new PersistedNewsArticle(1L, new NewsArticle("TCS", "Test headline", "Test URL", null, todayNoon(), "Test source", null), null));
+        when(newsIngestionService.fetchPersistedStockNewsForDecisionDate(eq("TCS"), org.mockito.ArgumentMatchers.nullable(LocalDate.class))).thenReturn(articles);
         when(newsIngestionService.cleanNewsText(any(NewsArticle.class))).thenReturn("news content");
 
         service.analyzeStockSentiment("TCS", LocalDate.now(ZoneId.of("Asia/Kolkata")));
@@ -159,13 +160,16 @@ class SentimentServicePromptTest {
             ZonedDateTime.of(2026, 9, 15, 15, 30, 0, 0, ZoneId.of("Asia/Kolkata")), "source", null);
         NewsArticle afterCutoff = new NewsArticle("TCS", "Future", "u2", null,
             ZonedDateTime.of(2026, 9, 15, 15, 31, 0, 0, ZoneId.of("Asia/Kolkata")), "source", null);
-        when(newsIngestionService.fetchStockNewsForDecisionDate(eq("TCS"), eq(decisionDate)))
-            .thenReturn(List.of(beforeCutoff, afterCutoff));
+        when(newsIngestionService.fetchPersistedStockNewsForDecisionDate(eq("TCS"), eq(decisionDate)))
+            .thenReturn(List.of(
+                new PersistedNewsArticle(1L, beforeCutoff, null),
+                new PersistedNewsArticle(2L, afterCutoff, null)));
         when(newsIngestionService.cleanNewsText(beforeCutoff)).thenReturn("old news");
 
         service.analyzeStockSentiment("TCS", decisionDate);
 
         verify(sentimentStore).saveOrUpdate(argThat(result -> result.articleCount() == 1));
+        verify(sentimentStore).saveOrUpdate(argThat(result -> result.articleIds().contains(1L)));
         verify(newsIngestionService).cleanNewsText(beforeCutoff);
         org.mockito.Mockito.verify(newsIngestionService, org.mockito.Mockito.never())
             .cleanNewsText(afterCutoff);

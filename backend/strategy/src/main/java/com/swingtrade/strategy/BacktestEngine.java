@@ -2,8 +2,11 @@ package com.swingtrade.strategy;
 
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.PriceBandPolicy;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.PriceBandStore;
 import com.swingtrade.domain.store.WatchlistStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,6 +66,7 @@ public class BacktestEngine {
     private final StrategyRegistry strategyRegistry;
     private final ObjectMapper objectMapper;
     private final String reportsDir;
+    private final PriceBandStore priceBandStore;
 
     public BacktestEngine(CandleStore candleStore,
                           WatchlistStore watchlistStore,
@@ -70,12 +74,34 @@ public class BacktestEngine {
                           StrategyRegistry strategyRegistry,
                           ObjectMapper objectMapper,
                           @Value("${backtest.reports.dir:reports}") String reportsDir) {
+        this(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry, objectMapper,
+            reportsDir, emptyPriceBandStore());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BacktestEngine(CandleStore candleStore,
+                          WatchlistStore watchlistStore,
+                          PriceActionSignalEngine priceActionSignalEngine,
+                          StrategyRegistry strategyRegistry,
+                          ObjectMapper objectMapper,
+                          @Value("${backtest.reports.dir:reports}") String reportsDir,
+                          PriceBandStore priceBandStore) {
         this.candleStore = candleStore;
         this.watchlistStore = watchlistStore;
         this.priceActionSignalEngine = priceActionSignalEngine;
         this.strategyRegistry = strategyRegistry;
         this.objectMapper = objectMapper;
         this.reportsDir = reportsDir;
+        this.priceBandStore = priceBandStore;
+    }
+
+    private static PriceBandStore emptyPriceBandStore() {
+        return new PriceBandStore() {
+            @Override public java.util.Optional<PriceBand> findBySymbolAndDate(String symbol, LocalDate date) {
+                return java.util.Optional.empty();
+            }
+            @Override public void save(PriceBand priceBand) {}
+        };
     }
 
     /**
@@ -317,7 +343,9 @@ public class BacktestEngine {
                     exitPrice = close;
                 }
 
-                if (reason != null) {
+                PriceBand band = priceBandStore.findBySymbolAndDate(symbol,
+                    chronologicalCandles.get(i).date()).orElse(null);
+                if (reason != null && !PriceBandPolicy.blocksLongExit(band, chronologicalCandles.get(i))) {
                     LocalDate exitDate = chronologicalCandles.get(i).date();
                     BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, i, reason, config);
                     trades.add(trade);
@@ -332,8 +360,10 @@ public class BacktestEngine {
             capitalCurve.add(markToMarket(capital, open, closePrice, i));
 
             if (open == null && i + 1 <= lastEvaluationBar) {
+                PriceBand entryBand = priceBandStore.findBySymbolAndDate(symbol,
+                    chronologicalCandles.get(i + 1).date()).orElse(null);
                 open = tryEnter(chronologicalCandles, series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
-                        weeklyHigh, i, capital, config, strategy);
+                        weeklyHigh, i, capital, config, strategy, entryBand);
             }
         }
 
@@ -341,9 +371,16 @@ public class BacktestEngine {
             int lastIndex = lastEvaluationBar;
             BigDecimal exitPrice = numToBigDecimal(closePrice.getValue(lastIndex));
             LocalDate exitDate = chronologicalCandles.get(lastIndex).date();
-            BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, lastIndex, ExitReason.TIME_STOP, config);
-            trades.add(trade);
-            capital += trade.pnl();
+            PriceBand finalBand = priceBandStore.findBySymbolAndDate(symbol, exitDate).orElse(null);
+            if (!PriceBandPolicy.blocksLongExit(finalBand, chronologicalCandles.get(lastIndex))) {
+                BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, lastIndex, ExitReason.TIME_STOP, config);
+                trades.add(trade);
+                capital += trade.pnl();
+            } else {
+                // No fill is assumed while the final bar is locked at the lower band.
+                // Return marked-to-market capital and leave the trade absent from closed trades.
+                capital = markToMarket(capital, open, closePrice, lastIndex);
+            }
         }
         capitalCurve.add(capital);
 
@@ -357,7 +394,8 @@ public class BacktestEngine {
                                   ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
                                   EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
                                   VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
-                                  int i, double capital, BacktestConfig config, TradingStrategy strategy) {
+                                  int i, double capital, BacktestConfig config, TradingStrategy strategy,
+                                  PriceBand entryBand) {
         Indicators ind = indicatorsAt(series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
                 weeklyHigh, i);
 
@@ -369,6 +407,9 @@ public class BacktestEngine {
 
         int entryIndex = i + 1;
         BigDecimal nextOpen = numToBigDecimal(openPrice.getValue(entryIndex));
+        if (PriceBandPolicy.blocksLongEntry(entryBand, nextOpen)) {
+            return null;
+        }
         BigDecimal entryPrice = nextOpen.multiply(BigDecimal.valueOf(1 + config.slippagePct()));
         BigDecimal atrVal = numToBigDecimal(atr.getValue(i));
         BigDecimal stopLoss = entryPrice.subtract(atrVal.multiply(BigDecimal.valueOf(config.atrMultiplierStop())));

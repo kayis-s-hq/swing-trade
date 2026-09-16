@@ -1,6 +1,7 @@
 package com.swingtrade.domain.store;
 
 import com.swingtrade.domain.NewsArticle;
+import com.swingtrade.domain.PersistedNewsArticle;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -18,6 +19,16 @@ public interface NewsArticleStore {
      * @return number of articles saved
      */
     int saveAll(List<NewsArticle> articles);
+
+    /** Saves articles idempotently and returns their persisted identities. */
+    List<PersistedNewsArticle> saveAllReturningPersisted(List<NewsArticle> articles);
+
+    /** Finds persisted articles with stable identity and first-seen provenance. */
+    List<PersistedNewsArticle> findPersistedBySymbolAndPublishedAtBetween(
+        String symbol, OffsetDateTime from, OffsetDateTime through);
+
+    List<PersistedNewsArticle> findPersistedBySymbolAndPublishedAtBetweenAndFirstSeenAtBeforeOrEqual(
+        String symbol, OffsetDateTime from, OffsetDateTime through, OffsetDateTime firstSeenCutoff);
 
     /**
      * Finds recent articles for a symbol since a given time.

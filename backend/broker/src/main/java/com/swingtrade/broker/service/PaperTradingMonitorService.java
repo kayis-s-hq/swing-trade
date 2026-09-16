@@ -6,6 +6,8 @@ import com.swingtrade.domain.Position;
 import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.store.PriceBandStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,15 +29,26 @@ public class PaperTradingMonitorService {
     private final PaperTradingStateService stateService;
     private final OhlcvCandleRepository ohlcvCandleRepository;
     private final PaperTradingProperties properties;
+    private final PriceBandStore priceBandStore;
 
     public PaperTradingMonitorService(PaperTradingEngine engine,
                                       PaperTradingStateService stateService,
                                       OhlcvCandleRepository ohlcvCandleRepository,
                                       PaperTradingProperties properties) {
+        this(engine, stateService, ohlcvCandleRepository, properties, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PaperTradingMonitorService(PaperTradingEngine engine,
+                                      PaperTradingStateService stateService,
+                                      OhlcvCandleRepository ohlcvCandleRepository,
+                                      PaperTradingProperties properties,
+                                      PriceBandStore priceBandStore) {
         this.engine = engine;
         this.stateService = stateService;
         this.ohlcvCandleRepository = ohlcvCandleRepository;
         this.properties = properties;
+        this.priceBandStore = priceBandStore;
     }
 
     @Scheduled(cron = "${paper.trading.monitor-cron:0 45 16 * * MON-FRI}", zone = "Asia/Kolkata")
@@ -58,7 +71,12 @@ public class PaperTradingMonitorService {
                 // Do not additionally save `pos` here — it is the pre-update
                 // snapshot captured before this loop and would overwrite whatever
                 // updatePositionsFromDomain just wrote with stale values.
-                engine.updatePositionsFromDomain(candle);
+                if (priceBandStore == null) {
+                    engine.updatePositionsFromDomain(candle);
+                } else {
+                    PriceBand band = priceBandStore.findBySymbolAndDate(pos.symbol(), candle.date()).orElse(null);
+                    engine.updatePositionsFromDomain(candle, band);
+                }
 
             } catch (Exception e) {
                 logger.warn("Failed to monitor position {} for {}: {}",

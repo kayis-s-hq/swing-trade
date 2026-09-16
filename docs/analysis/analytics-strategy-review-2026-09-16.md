@@ -41,8 +41,9 @@ Completed and verified in this pass:
   ambiguous; UNKNOWN is preserved and sentiment provenance is now persisted.
 - Historical sentiment analysis now reads the persisted, inclusive symbol/date news window and
   does not fall back to live feeds; current-day analysis continues to use live ingestion
-  (`NewsArticleStore`, `NewsIngestionService`, `SentimentService`). Article identity/first-seen
-  provenance and sentiment-to-article evidence links remain open.
+  (`NewsArticleStore`, `NewsIngestionService`, `SentimentService`). New articles persist a
+  symbol-scoped identity, first-seen timestamp, and sentiment-to-article evidence IDs; legacy
+  rows without first-seen provenance remain excluded from historical reconstruction.
 - Analytical TA paths now scale historical OHLC by `adjClose / close` when valid, preventing
   split/bonus discontinuities from becoming artificial signals while retaining raw persisted
   candles for execution and audit (`OhlcvCandle`, `PriceActionSignalEngine`,
@@ -232,9 +233,11 @@ and alpha/beta remain open until a benchmark data contract and shared-capital po
 are defined.
 **Remaining:** Add aligned NIFTY 50 / NIFTY 500 TRI benchmark returns and portfolio-level risk metrics.
 
-### 22. GAP — Circuit limits not modelled
-A stock closing at the upper circuit can't be bought at next open; at the lower circuit it can't be exited.
-**Fix:** Store the price band per symbol. Skip entry when the next open is at the upper limit and defer exit while locked at the lower limit.
+### 22. PARTIALLY FIXED — Circuit limits not modelled
+A persisted `PriceBand` now provides explicit exchange limits. Paper and backtest BUY entries at the
+upper band are skipped, and long exits are deferred while the candle is locked at the lower band.
+Missing bands are not inferred from OHLC data. Ingestion/API coverage for populating exchange-provided
+bands and short-side policy remain open.
 
 ---
 
@@ -269,9 +272,10 @@ The previous implementation fetched live news without a date-bounded source, so 
 evaluation could use news published after the decision date (look-ahead). `SentimentService` now
 filters fetched articles to `publishedAt ≤ date 15:30 IST` and ≥ date − 7d
 before cleaning, truncation, and prompting. For past dates, `NewsIngestionService` reads the
-persisted inclusive symbol/date window and does not call live feeds. Articles without timestamps
-are rejected because their point-in-time position cannot be proven. Persisted article IDs and
-first-seen provenance for exact evidence reconstruction remain open.
+persisted inclusive symbol/date window, requires `first_seen_at ≤` the decision cutoff, and does not
+call live feeds. Articles without timestamps or first-seen provenance are rejected because their
+point-in-time position cannot be proven. Evidence IDs are persisted for newly analyzed results;
+legacy rows remain unreconstructable.
 
 ### 15. PARTIALLY FIXED — Plain-text fallback misclassifies
 Malformed/empty responses now return `UNKNOWN` with zero confidence, and the gate flags UNKNOWN.

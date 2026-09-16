@@ -6,6 +6,8 @@ import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.store.PriceBandStore;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.BeforeEach;
@@ -93,7 +95,7 @@ class PaperTradingMonitorServiceTest {
         }
 
         @Test
-        void monitorPositions_singlePosition_fullFlow() {
+    void monitorPositions_singlePosition_fullFlow() {
             // Given: One open position
             Position position = makePosition("RELIANCE-EQ", PositionStatus.OPEN, new BigDecimal("100.00"));
             when(engine.getOpenPositions()).thenReturn(List.of(position));
@@ -161,6 +163,25 @@ class PaperTradingMonitorServiceTest {
             verify(stateService).saveSnapshot();
             verify(stateService).savePortfolio();
         }
+    }
+
+    @Test
+    void monitorPositions_passesExplicitPriceBandToEngine() {
+        Position position = makePosition("RELIANCE-EQ", PositionStatus.OPEN, new BigDecimal("100.00"));
+        when(engine.getOpenPositions()).thenReturn(List.of(position));
+        OhlcvCandle candle = makeCandle("RELIANCE-EQ", new BigDecimal("90.00"));
+        OhlcvCandleEntity entity = mock(OhlcvCandleEntity.class);
+        when(entity.toDomain()).thenReturn(candle);
+        when(ohlcvCandleRepository.findLatestBySymbol("RELIANCE-EQ")).thenReturn(Optional.of(entity));
+        PriceBandStore bands = mock(PriceBandStore.class);
+        PriceBand band = new PriceBand("RELIANCE-EQ", candle.date(), new BigDecimal("90.00"), new BigDecimal("110.00"));
+        when(bands.findBySymbolAndDate("RELIANCE-EQ", candle.date())).thenReturn(Optional.of(band));
+        PaperTradingMonitorService service = new PaperTradingMonitorService(engine, stateService,
+            ohlcvCandleRepository, properties, bands);
+
+        service.monitorPositions();
+
+        verify(engine).updatePositionsFromDomain(candle, band);
     }
 
     // ==================== Position Updates ====================

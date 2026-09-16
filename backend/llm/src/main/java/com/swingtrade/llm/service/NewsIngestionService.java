@@ -2,6 +2,7 @@ package com.swingtrade.llm.service;
 
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.NewsArticle;
+import com.swingtrade.domain.PersistedNewsArticle;
 import com.swingtrade.domain.store.NewsArticleStore;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.slf4j.Logger;
@@ -527,6 +528,33 @@ public class NewsIngestionService {
         OffsetDateTime from = decisionDate.minusDays(7).atStartOfDay(ZoneId.of("Asia/Kolkata")).toOffsetDateTime();
         OffsetDateTime through = decisionDate.atTime(15, 30).atZone(ZoneId.of("Asia/Kolkata")).toOffsetDateTime();
         return newsArticleStore.findBySymbolAndPublishedAtBetween(stockSymbol, from, through);
+    }
+
+    /** Same decision-date contract as above, retaining persisted IDs for audit evidence. */
+    public List<PersistedNewsArticle> fetchPersistedStockNewsForDecisionDate(
+            String stockSymbol, LocalDate decisionDate) {
+        if (decisionDate == null) return List.of();
+        ZoneId marketZone = ZoneId.of("Asia/Kolkata");
+        OffsetDateTime from = decisionDate.minusDays(7).atStartOfDay(marketZone).toOffsetDateTime();
+        OffsetDateTime through = decisionDate.atTime(15, 30).atZone(marketZone).toOffsetDateTime();
+        if (decisionDate.isBefore(LocalDate.now(marketZone))) {
+            return newsArticleStore
+                .findPersistedBySymbolAndPublishedAtBetweenAndFirstSeenAtBeforeOrEqual(
+                    stockSymbol, from, through, through);
+        }
+
+        List<NewsArticle> fetched = fetchStockNews(stockSymbol);
+        Set<String> fetchedIdentities = fetched.stream().map(this::articleIdentity).collect(Collectors.toSet());
+        return newsArticleStore.findPersistedBySymbolAndPublishedAtBetween(stockSymbol, from, through).stream()
+            .filter(article -> fetchedIdentities.contains(articleIdentity(article.article())))
+            .toList();
+    }
+
+    private String articleIdentity(NewsArticle article) {
+        if (article.link() != null && !article.link().isBlank()) return article.link().trim();
+        return String.join("|", article.source() == null ? "" : article.source().trim(),
+            article.title() == null ? "" : article.title().trim(),
+            article.publishedDate() == null ? "" : article.publishedDate().toInstant().toString());
     }
 
     /**

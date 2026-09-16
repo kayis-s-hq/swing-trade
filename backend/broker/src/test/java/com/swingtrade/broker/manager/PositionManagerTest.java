@@ -3,6 +3,7 @@ package com.swingtrade.broker.manager;
 import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.domain.Exchange;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
@@ -445,6 +446,25 @@ class PositionManagerTest {
             assertThat(updated).hasSize(1);
             assertThat(updated.get(0).status()).isEqualTo(PositionStatus.STOPPED);
             assertThat(updated.get(0).realizedPnL()).isEqualByComparingTo(new BigDecimal("-100.00"));
+        }
+
+        @Test
+        void updatePositionsWithCandleData_lowerCircuitDefersExit() {
+            String positionId = "POS_00000001";
+            positionManager.createPosition(positionId, "RELIANCE-EQ", TradeDirection.LONG, 10,
+                new BigDecimal("100.00"), new BigDecimal("5.00"), "Test");
+            OhlcvCandle candle = new OhlcvCandle("RELIANCE-EQ", LocalDate.now(),
+                new BigDecimal("92"), new BigDecimal("95"), new BigDecimal("85"),
+                new BigDecimal("88"), 100000L, new BigDecimal("88"));
+            PriceBand band = new PriceBand("RELIANCE-EQ", candle.date(),
+                new BigDecimal("88"), new BigDecimal("110"));
+
+            List<Position> updated = positionManager.updatePositionsWithCandleData(
+                "RELIANCE-EQ", candle, band);
+
+            assertThat(updated).hasSize(1);
+            assertThat(updated.get(0).status()).isEqualTo(PositionStatus.OPEN);
+            assertThat(updated.get(0).realizedPnL()).isEqualByComparingTo(BigDecimal.ZERO);
         }
     }
 

@@ -9,6 +9,7 @@ import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.broker.service.PaperTradingStateService;
 import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.Signal;
@@ -806,7 +807,18 @@ public class PaperTradingEngine implements TradingService {
      */
     public void updatePositionsFromDomain(OhlcvCandle candle) {
         List<Position> updated = positionManager.updatePositionsWithCandleData(candle.symbol(), candle);
+        handleUpdatedPositions(updated);
+    }
 
+    /** Updates positions using optional explicit exchange price-band data. */
+    public void updatePositionsFromDomain(OhlcvCandle candle, PriceBand priceBand) {
+        List<Position> updated = positionManager.updatePositionsWithCandleData(
+            candle.symbol(), candle, priceBand);
+
+        handleUpdatedPositions(updated);
+    }
+
+    private void handleUpdatedPositions(List<Position> updated) {
         // Check triggers for each updated position
         for (Position position : updated) {
             if (position.status() == PositionStatus.OPEN) {
