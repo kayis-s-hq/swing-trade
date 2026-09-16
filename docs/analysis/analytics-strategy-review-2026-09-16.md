@@ -54,7 +54,8 @@ Additional verified slice — 2026-09-16:
   hand-rolled formula set. Technical and fundamental scoring therefore use the same TA4J semantics
   as the live signal path; only indicator object construction remains duplicated.
 - Candidate scans now run a configurable 60–1000-day OOS window (252 days by default), persist its
-  dates and metrics separately, and require both full-history and OOS gates before activation.
+  dates and metrics separately, and require both full-history and OOS gates before a result qualifies.
+  Candidate discovery remains read-only; watchlist activation is handled separately by the API/UI.
 - Sentiment point-in-time filtering now rejects articles without publication timestamps, since their
   position relative to the decision cutoff cannot be proven. This favors a safe UNKNOWN/neutral result
   over admitting potentially future information.
@@ -189,8 +190,10 @@ sector overlap or combined equity curve.
 
 ### 18. PARTIALLY FIXED — Candidate scan qualifies on in-sample backtest
 `CandidateScanService` now runs a configurable 60–1000-day out-of-sample window (252 days by default), persists its date range and metrics separately,
-and requires both the full-history and OOS trade-count, win-rate and return gates before watchlist activation. The windowed backtest retains prior
-warm-up candles and prevents entries outside the evaluation boundary. Full multi-fold walk-forward validation and portfolio-level OOS evaluation remain open.
+and requires both the full-history and OOS trade-count, win-rate and return gates before a result qualifies. Candidate discovery remains read-only;
+watchlist activation is handled separately by the API/UI. The windowed backtest retains prior warm-up candles and prevents entries outside the
+evaluation boundary. Full multi-fold walk-forward validation and portfolio-level OOS evaluation remain open, and the current OOS window overlaps
+the descriptive full-history backtest rather than representing a fitted-model holdout.
 **Remaining:** qualify across multiple rolling folds (years 1–2 train, year 3 validate) and report stability across folds.
 
 ### 19. FIXED — No minimum trade count
