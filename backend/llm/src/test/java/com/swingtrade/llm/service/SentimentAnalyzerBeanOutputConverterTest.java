@@ -139,6 +139,14 @@ class SentimentAnalyzerBeanOutputConverterTest {
         }
 
         @Test
+        void shouldNotTreatNegatedOrPeerScopedKeywordsAsSubjectSentiment() {
+            assertThat(analyzer.parseResponse("The outlook is not positive for peers").getSentiment())
+                    .isEqualTo(SentimentType.UNKNOWN);
+            assertThat(analyzer.parseResponse("The result is positive for competitors").getSentiment())
+                    .isEqualTo(SentimentType.UNKNOWN);
+        }
+
+        @Test
         void shouldHandleEmptyResponse() {
             // Act
             SentimentOutput result = analyzer.parseResponse("");

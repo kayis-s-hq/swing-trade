@@ -215,15 +215,16 @@ public class PriceActionSignalEngine {
     BarSeries buildBarSeries(String symbol, List<OhlcvCandle> chronologicalCandles) {
         BarSeries series = new BaseBarSeries(symbol, DecimalNum.valueOf(0));
         for (OhlcvCandle candle : chronologicalCandles) {
-            ZonedDateTime endTime = candle.date().atStartOfDay(MARKET_ZONE);
-            Long volume = candle.volume();
+            OhlcvCandle analyticalCandle = candle.adjustedForAnalysis();
+            ZonedDateTime endTime = analyticalCandle.date().atStartOfDay(MARKET_ZONE);
+            Long volume = analyticalCandle.volume();
             Bar bar = new BaseBar(
                 Duration.ofDays(1),
                 endTime,
-                candle.open(),
-                candle.high(),
-                candle.low(),
-                candle.close(),
+                analyticalCandle.open(),
+                analyticalCandle.high(),
+                analyticalCandle.low(),
+                analyticalCandle.close(),
                 BigDecimal.valueOf(volume != null ? volume : 0L)
             );
             series.addBar(bar);

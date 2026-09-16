@@ -43,6 +43,10 @@ Completed and verified in this pass:
   does not fall back to live feeds; current-day analysis continues to use live ingestion
   (`NewsArticleStore`, `NewsIngestionService`, `SentimentService`). Article identity/first-seen
   provenance and sentiment-to-article evidence links remain open.
+- Analytical TA paths now scale historical OHLC by `adjClose / close` when valid, preventing
+  split/bonus discontinuities from becoming artificial signals while retaining raw persisted
+  candles for execution and audit (`OhlcvCandle`, `PriceActionSignalEngine`,
+  `TechnicalAnalysisService`). Historical universe snapshots and action provenance remain open.
 
 Additional verified slice — 2026-09-16:
 
@@ -209,10 +213,14 @@ Candidate scans now require at least 15 trades by default, configurable through
 `candidate-scan.min-trades`, before applying the win-rate and return gates. The no-loss profit-factor
 cap remains separately documented as a reporting limitation.
 
-### 20. GAP — Survivorship bias and corporate actions
-The universe is the current symbol master or watchlist, so delisted and merged names are absent. Only `adjclose` is read, and OHLC may not
-be split/bonus-adjusted, which creates false breakouts and stops (Indian bonuses and splits are frequent).
-**Fix:** Adjust OHLC by the `adjclose/close` ratio, add a candle-gap sanity check (>40% overnight moves with no news), and keep delisted symbols.
+### 20. PARTIALLY FIXED — Survivorship bias and corporate actions
+Technical-analysis and backtest TA4J inputs now use an analytical candle view that scales OHLC by
+`adjClose / close` when valid, while raw OHLC remains persisted and is not rewritten for execution.
+This removes a major split/bonus discontinuity from indicators, ATR, breakouts and analytical exits.
+The universe is still the current symbol master/watchlist, delisted and merged names have no
+date-effective eligibility snapshot, and Yahoo adjusted close is total-return adjusted rather than
+an event-specific corporate-action feed.
+**Remaining:** Add historical universe snapshots/action provenance and a warning/quarantine policy for unexplained large gaps.
 
 ### 21. PARTIALLY FIXED — No benchmark or risk-adjusted metrics
 Single-symbol backtest results now expose CAGR, Sortino and Calmar. CAGR uses the evaluated
@@ -264,10 +272,10 @@ are rejected because their point-in-time position cannot be proven. Persisted ar
 first-seen provenance for exact evidence reconstruction remain open.
 
 ### 15. PARTIALLY FIXED — Plain-text fallback misclassifies
-`SentimentAnalyzer.parsePlainText`: contains "positive" and not "negative" → POSITIVE (0.4). "Not positive", "positive for peers" and similar also become POSITIVE.
 Malformed/empty responses now return `UNKNOWN` with zero confidence, and the gate flags UNKNOWN.
-Keyword fallback remains explicitly marked `KEYWORD`; contextual language disambiguation and an
-optional JSON-repair retry remain open.
+The keyword fallback remains explicitly marked `KEYWORD` and now ignores locally negated terms and
+peer/competitor-scoped phrases such as “not positive” and “positive for peers”. Broader contextual
+language, sarcasm, and domain-specific polarity remain open.
 
 ### 27. FIXED — Headlines lack date/source; `{symbol}` never substituted
 Sentiment prompts now format each item with an index, publication date and source, substitute `{symbol}`

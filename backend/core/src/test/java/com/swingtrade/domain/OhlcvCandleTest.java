@@ -95,6 +95,28 @@ class OhlcvCandleTest {
         }
 
         @Test
+        void adjustedForAnalysisScalesRawOhlcToAdjustedClose() {
+            OhlcvCandle candle = new OhlcvCandle(SYMBOL, DATE,
+                new BigDecimal("50"), new BigDecimal("60"), new BigDecimal("40"),
+                new BigDecimal("50"), VOLUME, new BigDecimal("25"));
+
+            OhlcvCandle adjusted = candle.adjustedForAnalysis();
+
+            assertThat(adjusted.open()).isEqualByComparingTo("25");
+            assertThat(adjusted.high()).isEqualByComparingTo("30");
+            assertThat(adjusted.low()).isEqualByComparingTo("20");
+            assertThat(adjusted.close()).isEqualByComparingTo("25");
+            assertThat(adjusted.adjClose()).isEqualByComparingTo("25");
+        }
+
+        @Test
+        void adjustedForAnalysisFallsBackWhenAdjustmentIsInvalid() {
+            OhlcvCandle candle = new OhlcvCandle(SYMBOL, DATE, OPEN, HIGH, LOW, CLOSE, VOLUME, null);
+
+            assertThat(candle.adjustedForAnalysis()).isSameAs(candle);
+        }
+
+        @Test
         void shouldCreateCandleWithVeryLargeValues() {
             OhlcvCandle candle = OhlcvCandle.of(
                 "HIGHVALUE",
