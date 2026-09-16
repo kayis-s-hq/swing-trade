@@ -6,6 +6,7 @@ import com.swingtrade.domain.JobRun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,7 @@ public class CandidateScanScheduler {
     private final boolean schedulerEnabled;
     private final boolean candidateScanSchedulerEnabled;
 
+    @Autowired
     public CandidateScanScheduler(CandidateScanService candidateScanService,
                                   JobOrchestratorService orchestratorService,
                                   @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled,
