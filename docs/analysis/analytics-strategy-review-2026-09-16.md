@@ -82,6 +82,8 @@ review items are broader than the landed fixes.
 
 ## Status checklist (by priority)
 
+Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow-ups · `[ ]` open.
+
 ### P1 — Fix wrong numbers (days)
 - [x] 1  Composite weights displayed ≠ weights used
 - [x] 2  Missing news weight not renormalized
@@ -96,18 +98,18 @@ review items are broader than the landed fixes.
 - [x] 11 Indian transaction costs missing from backtest
 - [x] 12 Exit slippage missing
 - [x] 13 Gap-through stops fill at the stop price
-- [ ] 14 Sentiment not point-in-time (look-ahead)
-- [ ] 15 Plain-text LLM fallback misclassifies
+- [~] 14 Sentiment not point-in-time (look-ahead)
+- [~] 15 Plain-text LLM fallback misclassifies
 
 ### P2 — Trustworthy evaluation
 - [x] 16 No mark-to-market equity curve (Sharpe/DD wrong)
 - [ ] 17 No portfolio-level backtest
-- [ ] 18 Candidate scan qualifies on in-sample backtest
+- [~] 18 Candidate scan qualifies on in-sample backtest
 - [x] 19 No minimum trade count
-- [ ] 20 Survivorship bias and corporate-action checks
-- [ ] 21 No benchmark / risk-adjusted metrics
+- [~] 20 Survivorship bias and corporate-action checks
+- [~] 21 No benchmark / risk-adjusted metrics
 - [ ] 22 Circuit limits not modelled
-- [ ] 23 Accuracy metrics not fed back; IC ignores ties; raw vs excess return
+- [~] 23 Accuracy metrics not fed back; IC ignores ties; raw vs excess return
 - [ ] 24 No gate-effectiveness or strategy attribution
 
 ### P3 — Better LLM inputs and calibration
@@ -118,8 +120,8 @@ review items are broader than the landed fixes.
 - [ ] 29 Article truncation before ranking/dedupe
 - [ ] 30 No determinism or grounding checks
 - [ ] 31 Synthesis LLM adds little decision value
-- [ ] 32 Hard-coded signal confidence (1.0 / 0.5)
-- [ ] 33 LLM failure silently becomes NEUTRAL / keyword result
+- [~] 32 Hard-coded signal confidence (1.0 / 0.5)
+- [~] 33 LLM failure silently becomes NEUTRAL / keyword result
 
 ### P4 — Multi-strategy, regime, risk
 - [ ] 34 Live fixed to one strategy
@@ -193,7 +195,7 @@ otherwise they use the trigger price. Regression tests cover both long stop and 
 
 ### 16. FIXED — No mark-to-market equity curve
 `capitalCurve` now includes unrealized P&L at each bar close, so daily returns include open-position risk.
-**Fix:** Add `quantity × (close − entry)` for open positions each bar before recording the curve.
+The marked-to-market value is recorded before each daily observation, so Sharpe and drawdown include open-position risk.
 
 ### 17. GAP — No portfolio-level backtest
 Each symbol is simulated in isolation with full capital. `maxConcurrentPositions` is unused, and there is no capital competition,
@@ -263,9 +265,9 @@ Every BUY is stored and the SUPPRESS verdict is recorded, but nobody measures fo
 ## D. LLM and sentiment
 
 ### 14. PARTIALLY FIXED — Sentiment not point-in-time
-`SentimentService.analyzeStockSentiment(symbol, date)` calls `fetchStockNews(symbol)` and ignores `date`. Backfills and accuracy
-evaluation can use news published after the decision date (look-ahead).
-`SentimentService` now filters fetched articles to `publishedAt ≤ date 15:30 IST` and ≥ date − 7d
+The previous implementation fetched live news without a date-bounded source, so backfills and accuracy
+evaluation could use news published after the decision date (look-ahead). `SentimentService` now
+filters fetched articles to `publishedAt ≤ date 15:30 IST` and ≥ date − 7d
 before cleaning, truncation, and prompting. For past dates, `NewsIngestionService` reads the
 persisted inclusive symbol/date window and does not call live feeds. Articles without timestamps
 are rejected because their point-in-time position cannot be proven. Persisted article IDs and
