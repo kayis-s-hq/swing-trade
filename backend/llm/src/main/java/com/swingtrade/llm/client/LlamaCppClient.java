@@ -65,7 +65,10 @@ public class LlamaCppClient implements LlmClient {
                 "top_p", 0.9,
                 "n", 1,
                 "stream", false,
-                "response_format", Map.of("type", "json_object")
+                "response_format", Map.of("type", "json_object"),
+                // Qwen3.5 otherwise spends the small structured-output budget
+                // in its reasoning channel and leaves message.content empty.
+                "chat_template_kwargs", Map.of("enable_thinking", false)
         );
 
         return webClient
@@ -134,9 +137,13 @@ public class LlamaCppClient implements LlmClient {
         private String content;
         @JsonProperty("reasoning")
         private String reasoning;
+        @JsonProperty("reasoning_content")
+        private String reasoningContent;
 
         public String getContent() {
-            return content != null ? content : reasoning;
+            if (content != null && !content.isBlank()) return content;
+            if (reasoning != null && !reasoning.isBlank()) return reasoning;
+            return reasoningContent;
         }
     }
 }
