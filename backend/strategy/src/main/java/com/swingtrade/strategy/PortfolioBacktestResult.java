@@ -6,10 +6,10 @@ import java.util.List;
 /**
  * Result of a shared-capital portfolio backtest.
  *
- * <p>The curve is daily over the requested window. Since the existing {@link BacktestTrade}
- * contract carries no intermediate candles, open positions are marked at their entry notional;
- * the point still exposes settled cash and unsettled exit proceeds so cash availability is not
- * confused with economic equity.</p>
+ * <p>The production portfolio path marks open positions at each supplied trading candle close;
+ * callers using the legacy trade-only engine overload retain the entry-notional fallback. The
+ * point exposes settled cash and unsettled exit proceeds so cash availability is not confused
+ * with economic equity.</p>
  */
 public record PortfolioBacktestResult(
         LocalDate evaluationStart,

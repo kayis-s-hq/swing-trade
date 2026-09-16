@@ -2,6 +2,8 @@ package com.swingtrade.strategy;
 
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.BenchmarkComparison;
+import com.swingtrade.domain.CorporateAction;
+import com.swingtrade.domain.HistoricalCandleAdjuster;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.OhlcvDataQuality;
 import com.swingtrade.domain.PriceBand;
@@ -9,6 +11,8 @@ import com.swingtrade.domain.PriceBandPolicy;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PriceBandStore;
+import com.swingtrade.domain.store.CorporateActionStore;
+import com.swingtrade.domain.store.UniverseSnapshotStore;
 import com.swingtrade.domain.store.WatchlistStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +42,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Simulates the Phase 2 price-action entry rules bar-by-bar against historical candles to
@@ -70,6 +76,8 @@ public class BacktestEngine {
     private final ObjectMapper objectMapper;
     private final String reportsDir;
     private final PriceBandStore priceBandStore;
+    private final UniverseSnapshotStore universeSnapshotStore;
+    private final CorporateActionStore corporateActionStore;
 
     public BacktestEngine(CandleStore candleStore,
                           WatchlistStore watchlistStore,
@@ -81,7 +89,6 @@ public class BacktestEngine {
             reportsDir, emptyPriceBandStore());
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public BacktestEngine(CandleStore candleStore,
                           WatchlistStore watchlistStore,
                           PriceActionSignalEngine priceActionSignalEngine,
@@ -89,6 +96,16 @@ public class BacktestEngine {
                           ObjectMapper objectMapper,
                           @Value("${backtest.reports.dir:reports}") String reportsDir,
                           PriceBandStore priceBandStore) {
+        this(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry, objectMapper, reportsDir,
+            priceBandStore, permissiveUniverseStore(), permissiveCorporateActionStore());
+    }
+
+    /** Production constructor: historical analytics are fail-closed on missing provenance. */
+    @org.springframework.beans.factory.annotation.Autowired
+    public BacktestEngine(CandleStore candleStore, WatchlistStore watchlistStore,
+                          PriceActionSignalEngine priceActionSignalEngine, StrategyRegistry strategyRegistry,
+                          ObjectMapper objectMapper, String reportsDir, PriceBandStore priceBandStore,
+                          UniverseSnapshotStore universeSnapshotStore, CorporateActionStore corporateActionStore) {
         this.candleStore = candleStore;
         this.watchlistStore = watchlistStore;
         this.priceActionSignalEngine = priceActionSignalEngine;
@@ -96,6 +113,24 @@ public class BacktestEngine {
         this.objectMapper = objectMapper;
         this.reportsDir = reportsDir;
         this.priceBandStore = priceBandStore;
+        this.universeSnapshotStore = universeSnapshotStore;
+        this.corporateActionStore = corporateActionStore;
+    }
+
+    private static UniverseSnapshotStore permissiveUniverseStore() {
+        return new UniverseSnapshotStore() {
+            public java.util.Optional<com.swingtrade.domain.UniverseSnapshot> findBySymbolAndDate(String s, LocalDate d) { return java.util.Optional.empty(); }
+            public java.util.Optional<com.swingtrade.domain.UniverseSnapshot> findLatestBySymbolAndDateOnOrBefore(String s, LocalDate d) { return java.util.Optional.of(new com.swingtrade.domain.UniverseSnapshot(s, d, null, null, true, "legacy-test", java.time.Instant.EPOCH)); }
+            public List<com.swingtrade.domain.UniverseSnapshot> findByDate(LocalDate d) { return List.of(); }
+            public void save(com.swingtrade.domain.UniverseSnapshot snapshot) {}
+        };
+    }
+
+    private static CorporateActionStore permissiveCorporateActionStore() {
+        return new CorporateActionStore() {
+            public List<CorporateAction> findBySymbolAndEffectiveDateBetween(String s, LocalDate f, LocalDate t) { return List.of(); }
+            public void save(CorporateAction action) {}
+        };
     }
 
     private static PriceBandStore emptyPriceBandStore() {
@@ -139,7 +174,8 @@ public class BacktestEngine {
         }
         logger.debug("Running backtest for {} on {} using strategy {}", symbol, exchange, strategy.name());
 
-        List<OhlcvCandle> chronologicalCandles = getDescendingCandles(symbol, candleStore, MIN_CANDLES_FOR_BACKTEST);
+        List<OhlcvCandle> chronologicalCandles = historicalCandles(symbol, exchange,
+            getDescendingCandles(symbol, candleStore, MIN_CANDLES_FOR_BACKTEST));
 
         return simulate(symbol, qualityChecked(symbol, chronologicalCandles), config, strategy);
     }
@@ -168,6 +204,7 @@ public class BacktestEngine {
             symbol, evaluationStart.minusDays(400), evaluationEnd);
         List<OhlcvCandle> chronological = new ArrayList<>(descending);
         chronological.sort(Comparator.comparing(OhlcvCandle::date));
+        chronological = historicalCandles(symbol, exchange, chronological);
         chronological = qualityChecked(symbol, chronological);
         if (chronological.size() < MIN_CANDLES_FOR_BACKTEST) {
             throw new IllegalStateException("Insufficient candle history for evaluation window");
@@ -180,6 +217,24 @@ public class BacktestEngine {
             throw new IllegalStateException("Evaluation window contains insufficient candles");
         }
         return simulate(symbol, chronological, config, strategy, start, end);
+    }
+
+    private List<OhlcvCandle> historicalCandles(String symbol, String exchange, List<OhlcvCandle> candles) {
+        if (candles.isEmpty()) return candles;
+        LocalDate from = candles.get(0).date();
+        LocalDate to = candles.get(candles.size() - 1).date();
+        List<CorporateAction> actions = corporateActionStore
+            .findBySymbolAndEffectiveDateBetween(symbol, from, to);
+        return candles.stream().map(candle -> {
+            var snapshot = universeSnapshotStore.findLatestBySymbolAndDateOnOrBefore(symbol, candle.date());
+            if (snapshot.isEmpty() || !snapshot.get().included()
+                    || (exchange != null && !exchange.isBlank() && snapshot.get().exchange() != null
+                        && !exchange.equalsIgnoreCase(snapshot.get().exchange()))) {
+                throw new IllegalStateException("No included historical universe membership for "
+                    + symbol + " on " + candle.date());
+            }
+            return HistoricalCandleAdjuster.adjust(candle, actions);
+        }).toList();
     }
 
     /**
@@ -324,14 +379,22 @@ public class BacktestEngine {
             throw new IllegalArgumentException("Config and strategy cannot be null");
         }
         List<BacktestResult> results = new ArrayList<>();
+        Map<String, List<OhlcvCandle>> marketData = new HashMap<>();
         for (String symbol : symbols.stream().distinct().sorted().toList()) {
             try {
+                List<OhlcvCandle> candles = new ArrayList<>(candleStore.findBySymbolAndDateRange(
+                        symbol, evaluationStart.minusDays(400), evaluationEnd));
+                candles.sort(Comparator.comparing(OhlcvCandle::date));
+                marketData.put(symbol, qualityChecked(symbol, historicalCandles(symbol, exchange, candles)).stream()
+                        .filter(candle -> !candle.date().isBefore(evaluationStart)
+                                && !candle.date().isAfter(evaluationEnd)).toList());
                 results.add(runBacktestWindow(symbol, exchange, config, strategy, evaluationStart, evaluationEnd));
             } catch (RuntimeException e) {
+                marketData.remove(symbol);
                 logger.warn("Skipping {} in portfolio backtest: {}", symbol, e.getMessage());
             }
         }
-        return portfolioBacktestEngine.simulate(results, config, evaluationStart, evaluationEnd);
+        return portfolioBacktestEngine.simulate(results, config, evaluationStart, evaluationEnd, marketData);
     }
 
     /**

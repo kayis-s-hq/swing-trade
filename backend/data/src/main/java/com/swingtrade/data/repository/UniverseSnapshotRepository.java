@@ -9,5 +9,7 @@ import java.util.Optional;
 
 public interface UniverseSnapshotRepository extends JpaRepository<UniverseSnapshotEntity, Long> {
     Optional<UniverseSnapshotEntity> findBySymbolAndSnapshotDate(String symbol, LocalDate snapshotDate);
+    Optional<UniverseSnapshotEntity> findFirstBySymbolAndSnapshotDateLessThanEqualOrderBySnapshotDateDesc(
+        String symbol, LocalDate snapshotDate);
     List<UniverseSnapshotEntity> findBySnapshotDateOrderBySymbol(LocalDate snapshotDate);
 }

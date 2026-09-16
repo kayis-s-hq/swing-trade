@@ -21,6 +21,12 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 ## Data-integrity remediation
 
+- [x] Analytics follow-up batch verified 2026-09-16: portfolio backtests support candle-close
+  mark-to-market and next-session settlement, production backtests enforce as-of universe membership
+  and immutable corporate-action adjustment, benchmark adapters fail closed on malformed persisted data,
+  and LLM article selection ranks and deduplicates before truncation. Full backend verification and
+  `./bin/verify-changes` passed. Remaining limitations are recorded in the analytics review.
+
 - [x] Analytics remediation slice verified 2026-09-16: historical sentiment uses persisted
   first-seen-bounded evidence, analytical OHLC normalization is in place, and explicit price-band
   persistence/policies cover paper and backtest circuit-limit behavior. `./bin/verify-changes` and

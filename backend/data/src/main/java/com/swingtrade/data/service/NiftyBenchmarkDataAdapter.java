@@ -9,8 +9,10 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Historical NIFTY 50 adapter backed exclusively by persisted candles.
@@ -40,17 +42,24 @@ public final class NiftyBenchmarkDataAdapter implements BenchmarkDataAdapter {
 
         List<OhlcvCandle> candles = candleStore.findBySymbolAndDateRange(NIFTY_50_SYMBOL, from, to)
                 .stream()
-                .filter(NiftyBenchmarkDataAdapter::usable)
+                .filter(candle -> usable(candle, from, to))
                 .sorted(Comparator.comparing(OhlcvCandle::date))
                 .toList();
-        if (candles.isEmpty()) {
+        if (candles.size() < 2 || hasDuplicateDates(candles)) {
             return Optional.empty();
         }
         return Optional.of(new BenchmarkCandleSeries(NIFTY_50_SYMBOL, from, to, candles));
     }
 
-    private static boolean usable(OhlcvCandle candle) {
+    private static boolean usable(OhlcvCandle candle, LocalDate from, LocalDate to) {
         return candle != null && candle.date() != null
+                && !candle.date().isBefore(from) && !candle.date().isAfter(to)
+                && NIFTY_50_SYMBOL.equals(candle.symbol())
                 && candle.close() != null && candle.close().signum() > 0;
+    }
+
+    private static boolean hasDuplicateDates(List<OhlcvCandle> candles) {
+        Set<LocalDate> dates = new HashSet<>();
+        return candles.stream().map(OhlcvCandle::date).anyMatch(date -> !dates.add(date));
     }
 }

@@ -3,8 +3,10 @@ package com.swingtrade.strategy;
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.store.CorporateActionStore;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PriceBandStore;
+import com.swingtrade.domain.store.UniverseSnapshotStore;
 import com.swingtrade.domain.store.WatchlistStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,6 +46,12 @@ class BacktestEngineTest {
     @Mock
     private PriceBandStore priceBandStore;
 
+    @Mock
+    private UniverseSnapshotStore universeSnapshotStore;
+
+    @Mock
+    private CorporateActionStore corporateActionStore;
+
     private BacktestEngine engine;
 
     @BeforeEach
@@ -53,6 +61,25 @@ class BacktestEngineTest {
             StrategyRegistry strategyRegistry = new StrategyRegistry(java.util.List.of(priceActionStrategy), priceActionStrategy);
         engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry,
             new ObjectMapper(), "target/test-reports", priceBandStore);
+    }
+
+    @Test
+    void productionBacktestFailsClosedWhenMembershipIsUnavailable() {
+        List<OhlcvCandle> candles = buildTrendingCandles(60, 100.0, 0.0, 1_000_000L);
+        stub(candles);
+        when(corporateActionStore.findBySymbolAndEffectiveDateBetween(eq(SYMBOL), any(LocalDate.class),
+            any(LocalDate.class))).thenReturn(List.of());
+        when(universeSnapshotStore.findLatestBySymbolAndDateOnOrBefore(eq(SYMBOL), any(LocalDate.class)))
+            .thenReturn(java.util.Optional.empty());
+        BacktestEngine enforcedEngine = new BacktestEngine(candleStore, watchlistStore,
+            new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class),
+                new PriceActionStrategy()),
+            new StrategyRegistry(java.util.List.of(new PriceActionStrategy()), new PriceActionStrategy()),
+            new ObjectMapper(), "target/test-reports", priceBandStore, universeSnapshotStore, corporateActionStore);
+
+        assertThatThrownBy(() -> enforcedEngine.runBacktest(SYMBOL, EXCHANGE, BacktestConfig.defaults()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("No included historical universe membership");
     }
 
     // -----------------------------------------------------------------------

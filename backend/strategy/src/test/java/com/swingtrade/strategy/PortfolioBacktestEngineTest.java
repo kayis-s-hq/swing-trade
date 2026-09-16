@@ -1,10 +1,12 @@
 package com.swingtrade.strategy;
 
+import com.swingtrade.domain.OhlcvCandle;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -75,6 +77,28 @@ class PortfolioBacktestEngineTest {
         assertThat(result.equityCurve().get(4).settledCash()).isEqualTo(110.0);
     }
 
+    @Test
+    void marksOpenPositionAtEachTradingCandleCloseAndSettlesOnNextTradingCandle() {
+        BacktestTrade held = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4),
+                100, 1, 10);
+        Map<String, List<OhlcvCandle>> candles = Map.of("AAA", List.of(
+                candle("AAA", LocalDate.of(2024, 1, 2), 100),
+                candle("AAA", LocalDate.of(2024, 1, 3), 120),
+                candle("AAA", LocalDate.of(2024, 1, 4), 110),
+                candle("AAA", LocalDate.of(2024, 1, 5), 90)));
+
+        PortfolioBacktestResult result = engine.simulate(List.of(result("AAA", held)), config(100),
+                LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 5), candles);
+
+        assertThat(result.equityCurve()).extracting(PortfolioEquityPoint::date)
+                .containsExactly(LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 3),
+                        LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 5));
+        assertThat(result.equityCurve().get(1).positionMarketValue()).isEqualTo(120.0);
+        assertThat(result.equityCurve().get(1).equity()).isEqualTo(120.0);
+        assertThat(result.equityCurve().get(2).unsettledProceeds()).isEqualTo(110.0);
+        assertThat(result.equityCurve().get(3).settledCash()).isEqualTo(110.0);
+    }
+
     private static BacktestConfig config(double capital) {
         return new BacktestConfig(0, 0, .01, capital, 2, 2, 2, 20, false, 21);
     }
@@ -90,5 +114,10 @@ class PortfolioBacktestEngineTest {
         return new BacktestTrade(symbol, entryDate, exitDate, entry, entry,
                 entry.subtract(BigDecimal.ONE), entry.add(BigDecimal.ONE), quantity,
                 ExitReason.TIME_STOP, pnl, pnl, 1);
+    }
+
+    private static OhlcvCandle candle(String symbol, LocalDate date, double close) {
+        BigDecimal price = BigDecimal.valueOf(close);
+        return OhlcvCandle.of(symbol, date, price, price, price, price, 1L);
     }
 }

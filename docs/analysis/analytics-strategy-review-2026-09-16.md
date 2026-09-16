@@ -131,7 +131,7 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 - [ ] 26 "Fundamentals" is price-only and duplicates Tech
 - [x] 27 Headlines lack date/source; `{symbol}` placeholder unfilled
 - [~] 28 No structured Indian-market data in prompt
-- [ ] 29 Article truncation before ranking/dedupe
+- [~] 29 Article truncation before ranking/dedupe
 - [ ] 30 No determinism or grounding checks
 - [ ] 31 Synthesis LLM adds little decision value
 - [~] 32 Hard-coded signal confidence (1.0 / 0.5)
@@ -215,7 +215,9 @@ The marked-to-market value is recorded before each daily observation, so Sharpe 
 `BacktestEngine.runPortfolioBacktest` now aggregates dated symbol trades through shared capital,
 available-cash limits, maximum concurrent positions, deterministic symbol ordering, and
 portfolio-level return/drawdown/risk metrics. The existing independent `/run-all` path is unchanged.
-Full candle-level daily mark-to-market, settlement timing, sector limits, and API/report integration remain open.
+The portfolio engine now accepts evaluated candle series, marks open positions at each observed candle close,
+and uses the next available trading session for settlement when market dates are supplied. Sector limits,
+intraday execution ordering, missing-candle interpolation, and richer API/report integration remain open.
 
 ### 18. PARTIALLY FIXED — Candidate scan qualifies on in-sample backtest
 `CandidateScanService` now runs a configurable 60–1000-day out-of-sample window (252 days by default), persists its date range and metrics separately,
@@ -240,8 +242,9 @@ date-effective eligibility snapshot, and Yahoo adjusted close is total-return ad
 an event-specific corporate-action feed. An adjusted-price quality check now quarantines invalid or
 unexplained >75% analytical jumps from backtest/live inputs without rewriting raw candles.
 Historical universe snapshots and explicit corporate actions now have persistence contracts and V50
-schema support; population from authoritative historical sources remains open.
-**Remaining:** Populate and enforce dated universe/action data in backtest selection and adjustment.
+schema support. Backtest selection now fails closed when the production universe store has no eligible
+as-of membership or the exchange does not match; valid corporate actions adjust analytical OHLCV immutably.
+Population from authoritative historical sources and event-specific semantics remain open.
 
 ### 21. PARTIALLY FIXED — No benchmark or risk-adjusted metrics
 Single-symbol backtest results now expose CAGR, Sortino and Calmar plus same-window buy-and-hold and
@@ -250,8 +253,10 @@ calendar dates; Sortino uses the daily marked-to-market equity curve and downsid
 uses CAGR divided by maximum drawdown. Benchmark/buy-and-hold comparison, exposure, average R,
 and alpha/beta remain open until a benchmark data contract and shared-capital portfolio semantics
 are defined.
-An explicit benchmark candle-series contract and fail-closed data adapter now exist; aligned NIFTY 50 /
-NIFTY 500 TRI ingestion and portfolio-level benchmark metrics remain open.
+An explicit benchmark candle-series contract and fail-closed adapter now exist: malformed, duplicate,
+out-of-window, or insufficient persisted observations produce an unavailable benchmark rather than a
+misleading comparison. Authoritative NIFTY 50 / NIFTY 500 TRI ingestion and portfolio-level benchmark
+metrics remain open.
 
 ### 22. PARTIALLY FIXED — Circuit limits not modelled
 A persisted `PriceBand` now provides explicit exchange limits. Paper and backtest BUY entries at the
@@ -315,9 +320,10 @@ Prompts now include bounded, decision-date-filtered earnings fields and NSE/BSE 
 available, while retaining news-only behavior when structured sources are unavailable. FII/DII holdings,
 promoter pledge, bulk/block deals, delivery, surveillance flags, and next-results data remain open.
 
-### 29. IMP — Truncation before ranking and dedupe
-`MAX_ARTICLES_FOR_LLM = 10` keeps the first 10 in fetch order. The same story from 5 outlets can use up the budget.
-**Fix:** Run `NewsFilterService` ranking, dedupe by normalized-title similarity, prioritize NSE/BSE filings, then take the top N.
+### 29. PARTIALLY FIXED — Truncation before ranking and dedupe
+News ingestion now applies deterministic source/date ranking, prioritizes NSE/BSE filings, removes
+near-duplicate normalized headlines, and only then applies the bounded article budget. Cross-source
+semantic deduplication and richer relevance scoring remain open.
 
 ### 30. IMP — No determinism or grounding
 A single sample at non-zero temperature. Red flags and catalysts can be invented.

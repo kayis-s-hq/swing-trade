@@ -46,6 +46,42 @@ class NiftyBenchmarkDataAdapterTest {
     }
 
     @Test
+    void failsClosedWhenOnlyOneObservationIsAvailable() {
+        LocalDate from = LocalDate.of(2025, 1, 1);
+        LocalDate to = LocalDate.of(2025, 1, 3);
+        when(candleStore.findBySymbolAndDateRange("NIFTY50", from, to))
+                .thenReturn(List.of(candle("NIFTY50", from, "100")));
+
+        assertThat(adapter.findNifty50(from, to)).isEmpty();
+    }
+
+    @Test
+    void ignoresOutOfWindowAndWrongSymbolObservations() {
+        LocalDate from = LocalDate.of(2025, 1, 1);
+        LocalDate to = LocalDate.of(2025, 1, 3);
+        when(candleStore.findBySymbolAndDateRange("NIFTY50", from, to)).thenReturn(List.of(
+                candle("OTHER", from, "100"),
+                candle("NIFTY50", from.minusDays(1), "99"),
+                candle("NIFTY50", from, "100"),
+                candle("NIFTY50", to, "101")));
+
+        assertThat(adapter.findNifty50(from, to)).isPresent();
+        assertThat(adapter.findNifty50(from, to).orElseThrow().candles())
+                .extracting(OhlcvCandle::symbol)
+                .containsOnly("NIFTY50");
+    }
+
+    @Test
+    void failsClosedOnDuplicateObservationDates() {
+        LocalDate date = LocalDate.of(2025, 1, 1);
+        when(candleStore.findBySymbolAndDateRange("NIFTY50", date, date.plusDays(1)))
+                .thenReturn(List.of(candle("NIFTY50", date, "100"),
+                        candle("NIFTY50", date, "101")));
+
+        assertThat(adapter.findNifty50(date, date.plusDays(1))).isEmpty();
+    }
+
+    @Test
     void rejectsInvalidOrUnboundedWindowsWithoutReadingStore() {
         LocalDate date = LocalDate.of(2025, 1, 1);
 

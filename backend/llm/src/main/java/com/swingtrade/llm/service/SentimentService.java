@@ -201,6 +201,10 @@ public class SentimentService {
                             date.atTime(15, 30).atZone(MARKET_ZONE)))
                     .toList();
 
+            // Source completion order is nondeterministic. Rank and collapse
+            // syndicated headlines before the LLM article budget is applied.
+            articles = NewsIngestionService.rankAndDeduplicateForLlm(articles);
+
             if (articles.isEmpty()) {
                 logger.warn("No news articles found for stock: {}", stockSymbol);
                 return createDefaultSentimentResult(stockSymbol, date, SentimentType.NEUTRAL);

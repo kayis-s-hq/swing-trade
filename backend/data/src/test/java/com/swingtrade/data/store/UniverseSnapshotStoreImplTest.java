@@ -34,4 +34,16 @@ class UniverseSnapshotStoreImplTest {
         org.assertj.core.api.Assertions.assertThat(existing.isIncluded()).isFalse();
         org.assertj.core.api.Assertions.assertThat(existing.getId()).isEqualTo(4L);
     }
+
+    @Test
+    void findsLatestSnapshotOnOrBeforeDate() {
+        UniverseSnapshot snapshot = new UniverseSnapshot("TCS", LocalDate.of(2024, 1, 2), "NSE", null,
+            true, "archive", Instant.now());
+        when(repository.findFirstBySymbolAndSnapshotDateLessThanEqualOrderBySnapshotDateDesc(
+            "TCS", LocalDate.of(2024, 1, 10))).thenReturn(Optional.of(UniverseSnapshotEntity.fromDomain(snapshot)));
+
+        org.assertj.core.api.Assertions.assertThat(new UniverseSnapshotStoreImpl(repository)
+            .findLatestBySymbolAndDateOnOrBefore("TCS", LocalDate.of(2024, 1, 10)))
+            .contains(snapshot);
+    }
 }

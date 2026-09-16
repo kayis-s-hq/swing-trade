@@ -1,5 +1,7 @@
 package com.swingtrade.strategy;
 
+import com.swingtrade.domain.OhlcvCandle;
+
 import java.time.LocalDate;
 import java.time.DayOfWeek;
 import java.util.ArrayList;
@@ -16,10 +18,17 @@ final class PortfolioBacktestEngine {
 
     PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
                                      LocalDate evaluationStart, LocalDate evaluationEnd) {
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, Map.of());
+    }
+
+    PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
+                                     LocalDate evaluationStart, LocalDate evaluationEnd,
+                                     Map<String, List<OhlcvCandle>> marketData) {
         if (symbolResults == null || config == null || evaluationStart == null || evaluationEnd == null
                 || evaluationStart.isAfter(evaluationEnd)) {
             throw new IllegalArgumentException("Portfolio inputs must be non-null and the window must be ordered");
         }
+        Map<String, List<OhlcvCandle>> effectiveMarketData = marketData == null ? Map.of() : marketData;
         if (config.initialCapital() <= 0 || config.maxConcurrentPositions() <= 0) {
             throw new IllegalArgumentException("Portfolio capital and max positions must be positive");
         }
@@ -45,10 +54,13 @@ final class PortfolioBacktestEngine {
         List<PortfolioEquityPoint> equityCurve = new ArrayList<>();
         Map<String, BacktestTrade> open = new HashMap<>();
         Map<LocalDate, Double> unsettledByDate = new HashMap<>();
+        List<LocalDate> observationDates = observationDates(effectiveMarketData, evaluationStart, evaluationEnd);
+        Map<LocalDate, LocalDate> nextTradingDate = effectiveMarketData.isEmpty()
+                ? Map.of() : nextTradingDates(observationDates);
         double cash = config.initialCapital();
 
         int rejected = 0;
-        for (LocalDate date = evaluationStart; !date.isAfter(evaluationEnd); date = date.plusDays(1)) {
+        for (LocalDate date : observationDates) {
             Double settled = unsettledByDate.remove(date);
             if (settled != null) {
                 cash += settled;
@@ -57,7 +69,7 @@ final class PortfolioBacktestEngine {
                 BacktestTrade held = open.remove(trade.symbol());
                 if (held != null) {
                     double proceeds = entryNotional(held) + held.pnl();
-                    unsettledByDate.merge(nextSettlementDate(date), proceeds, Double::sum);
+                    unsettledByDate.merge(nextSettlementDate(date, nextTradingDate), proceeds, Double::sum);
                 }
             }
 
@@ -75,7 +87,10 @@ final class PortfolioBacktestEngine {
             }
 
             double unsettled = unsettledByDate.values().stream().mapToDouble(Double::doubleValue).sum();
-            double positionValue = open.values().stream().mapToDouble(PortfolioBacktestEngine::entryNotional).sum();
+            LocalDate valuationDate = date;
+            double positionValue = open.values().stream()
+                    .mapToDouble(trade -> marketValue(trade, valuationDate, effectiveMarketData))
+                    .sum();
             equityCurve.add(new PortfolioEquityPoint(date, cash + unsettled + positionValue,
                     cash, unsettled, positionValue));
         }
@@ -98,13 +113,49 @@ final class PortfolioBacktestEngine {
         return trade.entryPrice().doubleValue() * trade.quantity();
     }
 
-    private static LocalDate nextSettlementDate(LocalDate exitDate) {
+    private static double marketValue(BacktestTrade trade, LocalDate date,
+                                      Map<String, List<OhlcvCandle>> marketData) {
+        List<OhlcvCandle> candles = marketData.get(trade.symbol());
+        if (candles == null || candles.isEmpty()) {
+            return entryNotional(trade);
+        }
+        return candles.stream().filter(candle -> candle.date().equals(date)).findFirst()
+                .map(candle -> candle.close().doubleValue() * trade.quantity())
+                .orElseGet(() -> entryNotional(trade));
+    }
+
+    private static LocalDate nextSettlementDate(LocalDate exitDate, Map<LocalDate, LocalDate> nextTradingDate) {
+        if (!nextTradingDate.isEmpty()) {
+            return nextTradingDate.getOrDefault(exitDate, exitDate.plusDays(1));
+        }
         LocalDate settlement = exitDate.plusDays(1);
         while (settlement.getDayOfWeek() == DayOfWeek.SATURDAY
                 || settlement.getDayOfWeek() == DayOfWeek.SUNDAY) {
             settlement = settlement.plusDays(1);
         }
         return settlement;
+    }
+
+    private static List<LocalDate> observationDates(Map<String, List<OhlcvCandle>> marketData,
+                                                    LocalDate start, LocalDate end) {
+        if (marketData.isEmpty()) {
+            List<LocalDate> dates = new ArrayList<>();
+            for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+                dates.add(date);
+            }
+            return dates;
+        }
+        return marketData.values().stream().flatMap(List::stream)
+                .map(OhlcvCandle::date).filter(date -> !date.isBefore(start) && !date.isAfter(end))
+                .distinct().sorted().toList();
+    }
+
+    private static Map<LocalDate, LocalDate> nextTradingDates(List<LocalDate> dates) {
+        Map<LocalDate, LocalDate> next = new HashMap<>();
+        for (int i = 0; i + 1 < dates.size(); i++) {
+            next.put(dates.get(i), dates.get(i + 1));
+        }
+        return next;
     }
 
     private static double maxDrawdownPct(List<PortfolioEquityPoint> curve) {

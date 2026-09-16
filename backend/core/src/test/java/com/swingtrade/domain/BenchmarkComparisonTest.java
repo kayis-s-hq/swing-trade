@@ -15,11 +15,22 @@ class BenchmarkComparisonTest {
         assertEquals(18.5, comparison.strategyReturnPct());
         assertEquals(12.0, comparison.benchmarkReturnPct());
         assertEquals(6.5, comparison.excessReturnPct());
+        assertEquals(BenchmarkComparison.Availability.AVAILABLE, comparison.availability());
     }
 
     @Test
     void blankBenchmarkNameIsRejected() {
         assertThrows(IllegalArgumentException.class,
-                () -> new BenchmarkComparison(" ", 1.0, 2.0, -1.0));
+                () -> new BenchmarkComparison(" ", 1.0, 2.0, -1.0,
+                        BenchmarkComparison.Availability.AVAILABLE));
+    }
+
+    @Test
+    void unavailableBenchmarkHasExplicitStatus() {
+        BenchmarkComparison comparison = BenchmarkComparison.unavailable(18.5);
+
+        assertEquals(BenchmarkComparison.Availability.UNAVAILABLE, comparison.availability());
+        assertEquals(0.0, comparison.benchmarkReturnPct());
+        assertEquals(0.0, comparison.excessReturnPct());
     }
 }

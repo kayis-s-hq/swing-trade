@@ -17,6 +17,10 @@ public class UniverseSnapshotStoreImpl implements UniverseSnapshotStore {
     public Optional<UniverseSnapshot> findBySymbolAndDate(String symbol, LocalDate date) {
         return repository.findBySymbolAndSnapshotDate(symbol, date).map(UniverseSnapshotEntity::toDomain);
     }
+    public Optional<UniverseSnapshot> findLatestBySymbolAndDateOnOrBefore(String symbol, LocalDate date) {
+        return repository.findFirstBySymbolAndSnapshotDateLessThanEqualOrderBySnapshotDateDesc(symbol, date)
+            .map(UniverseSnapshotEntity::toDomain);
+    }
     public List<UniverseSnapshot> findByDate(LocalDate date) {
         return repository.findBySnapshotDateOrderBySymbol(date).stream().map(UniverseSnapshotEntity::toDomain).toList();
     }

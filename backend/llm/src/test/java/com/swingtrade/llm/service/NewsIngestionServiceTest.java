@@ -1,10 +1,14 @@
 package com.swingtrade.llm.service;
 
+import com.swingtrade.domain.NewsArticle;
+import com.swingtrade.domain.PersistedNewsArticle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
@@ -24,6 +28,41 @@ class NewsIngestionServiceTest {
     void setUp() {
         // Note: Full initialization would require WebClient.Builder and NewsFilterService
         // For unit tests, we test the individual methods that don't require full DI
+    }
+
+    @Test
+    void rankAndDeduplicateForLlm_prefersExchangeFilingAndRemovesSyndicatedHeadline() {
+        ZonedDateTime published = ZonedDateTime.parse("2026-09-16T10:00:00+05:30[Asia/Kolkata]");
+        PersistedNewsArticle syndicated = article(1, "Reliance announces new green energy project", "Reuters", published);
+        PersistedNewsArticle filing = article(2, "Reliance announces new green energy project details", "NSE India", published.minusHours(2));
+        PersistedNewsArticle unrelated = article(3, "TCS wins large cloud services contract", "Google News", published.minusHours(1));
+
+        List<PersistedNewsArticle> ranked = NewsIngestionService.rankAndDeduplicateForLlm(
+                List.of(syndicated, unrelated, filing));
+
+        assertThat(ranked).extracting(article -> article.id()).containsExactly(2L, 3L);
+    }
+
+    @Test
+    void rankAndDeduplicateForLlm_isStableRegardlessOfFetchOrder() {
+        PersistedNewsArticle older = article(10, "Infosys quarterly revenue growth", "Google News",
+                ZonedDateTime.parse("2026-09-15T10:00:00+05:30[Asia/Kolkata]"));
+        PersistedNewsArticle newer = article(11, "Infosys quarterly revenue growth improves", "Google News",
+                ZonedDateTime.parse("2026-09-16T10:00:00+05:30[Asia/Kolkata]"));
+
+        List<Long> first = NewsIngestionService.rankAndDeduplicateForLlm(List.of(older, newer))
+                .stream().map(PersistedNewsArticle::id).toList();
+        List<Long> second = NewsIngestionService.rankAndDeduplicateForLlm(List.of(newer, older))
+                .stream().map(PersistedNewsArticle::id).toList();
+
+        assertThat(first).containsExactly(11L);
+        assertThat(second).isEqualTo(first);
+    }
+
+    private PersistedNewsArticle article(long id, String title, String source, ZonedDateTime published) {
+        return new PersistedNewsArticle(id,
+                new NewsArticle("TEST", title, "https://example.test/" + id, "", published, source, ""),
+                OffsetDateTime.parse("2026-09-16T12:00:00Z"));
     }
 
     @Test
