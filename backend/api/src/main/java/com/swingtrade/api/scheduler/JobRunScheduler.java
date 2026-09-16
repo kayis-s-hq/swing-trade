@@ -1,6 +1,7 @@
 package com.swingtrade.api.scheduler;
 
 import com.swingtrade.api.service.JobOrchestratorService;
+import com.swingtrade.api.service.CandidateScanService;
 import com.swingtrade.domain.JobRun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,18 +21,31 @@ public class JobRunScheduler {
     private static final Logger logger = LoggerFactory.getLogger(JobRunScheduler.class);
 
     private final JobOrchestratorService orchestratorService;
+    private final CandidateScanService candidateScanService;
     private final boolean schedulerEnabled;
 
     public JobRunScheduler(JobOrchestratorService orchestratorService,
+                           CandidateScanService candidateScanService,
                            @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled) {
         this.orchestratorService = orchestratorService;
+        this.candidateScanService = candidateScanService;
         this.schedulerEnabled = schedulerEnabled;
+    }
+
+    /** Backwards-compatible constructor for scheduler unit tests. */
+    public JobRunScheduler(JobOrchestratorService orchestratorService, boolean schedulerEnabled) {
+        this(orchestratorService, null, schedulerEnabled);
     }
 
     @Scheduled(cron = "0 0 18 * * MON-FRI", zone = "Asia/Kolkata")
     public void runScheduledPipeline() {
         if (!schedulerEnabled) {
             logger.debug("Scheduler disabled (app.features.scheduler.enabled=false) — skipping scheduled pipeline run");
+            return;
+        }
+
+        if (candidateScanService != null && candidateScanService.hasActiveRun()) {
+            logger.info("Skipping scheduled run: candidate scan is still in progress");
             return;
         }
 

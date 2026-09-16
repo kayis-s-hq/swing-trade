@@ -7,6 +7,7 @@ import com.swingtrade.data.repository.CandidateScanRunRepository;
 import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.data.service.AppSettingsService;
+import com.swingtrade.data.service.WatchlistService;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
@@ -58,6 +59,7 @@ public class CandidateScanService {
     private final CandidateScanRunRepository runRepository;
     private final CandidateScanResultRepository resultRepository;
     private final DataIngestionService ingestionService;
+    private final WatchlistService watchlistService;
     private final CandleStore candleStore;
     private final PriceActionSignalEngine signalEngine;
     private final BacktestEngine backtestEngine;
@@ -79,6 +81,7 @@ public class CandidateScanService {
                                 CandidateScanRunRepository runRepository,
                                 CandidateScanResultRepository resultRepository,
                                 DataIngestionService ingestionService,
+                                WatchlistService watchlistService,
                                 AppSettingsService appSettingsService,
                                 CandleStore candleStore,
                                 PriceActionSignalEngine signalEngine,
@@ -90,6 +93,7 @@ public class CandidateScanService {
         this.runRepository = runRepository;
         this.resultRepository = resultRepository;
         this.ingestionService = ingestionService;
+        this.watchlistService = watchlistService;
         this.appSettingsService = appSettingsService;
         this.candleStore = candleStore;
         this.signalEngine = signalEngine;
@@ -100,6 +104,21 @@ public class CandidateScanService {
         this.semaphore = new Semaphore(this.maxConcurrent);
         this.executor = Executors.newThreadPerTaskExecutor(
             Thread.ofVirtual().name("candidate-scan-", 0).factory());
+    }
+
+    /** Backwards-compatible constructor for lightweight unit tests. */
+    public CandidateScanService(FyersSymbolRepository symbolRepository,
+                                CandidateScanRunRepository runRepository,
+                                CandidateScanResultRepository resultRepository,
+                                DataIngestionService ingestionService,
+                                AppSettingsService appSettingsService,
+                                CandleStore candleStore,
+                                PriceActionSignalEngine signalEngine,
+                                BacktestEngine backtestEngine,
+                                int backfillYears, long delayMs, int maxConcurrent) {
+        this(symbolRepository, runRepository, resultRepository, ingestionService, null,
+            appSettingsService, candleStore, signalEngine, backtestEngine,
+            backfillYears, delayMs, maxConcurrent);
     }
 
     @PostConstruct
@@ -246,6 +265,10 @@ public class CandidateScanService {
 
     public CandidateScanRunEntity getRun(UUID runId) {
         return runRepository.findByRunId(runId).orElse(null);
+    }
+
+    public boolean hasActiveRun() {
+        return activeRun.get() != null || runRepository.existsByStatus("RUNNING");
     }
 
     public List<CandidateScanResultEntity> getResults(UUID runId, int offset, int limit) {
@@ -406,9 +429,12 @@ public class CandidateScanService {
             && backtest.totalReturn() > minTotalReturn;
         result.setQualified(qualified);
         result.setReason(qualified ? "BUY and backtest gate passed" : qualificationReason(signal, backtest, minWinRate, minTotalReturn));
-        // Candidate discovery is intentionally read-only. Watchlist membership is
-        // managed by the Watchlist API/UI, not as a side effect of a scan.
-        result.setActivated(false);
+        if (qualified && watchlistService != null) {
+            watchlistService.addToWatchlist(symbol, symbol, "NSE");
+            result.setActivated(true);
+        } else {
+            result.setActivated(false);
+        }
         resultRepository.save(result);
         return qualified;
     }
