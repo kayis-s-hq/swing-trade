@@ -67,7 +67,7 @@ public class SentimentAccuracyEntity {
     @Column(name = "prompt_hash", length = 64)
     private String promptHash;
 
-    @Column(name = "model_version", length = 50)
+    @Column(name = "model_version", length = 255)
     private String modelVersion;
 
     @Column(name = "composite_score")
