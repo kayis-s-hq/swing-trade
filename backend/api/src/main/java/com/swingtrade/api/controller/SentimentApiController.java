@@ -160,12 +160,13 @@ public class SentimentApiController {
     @RateLimiter(name = "sentimentAnalysis")
     public ResponseEntity<ApiResponse<Map<String, Object>>> triggerEvaluation() {
         evaluationJob.triggerEvaluation();
-        Map<String, Object> data = Map.of(
-            "message", "Evaluation triggered",
-            "lastRun", evaluationJob.getLastRun(),
-            "lastStatus", evaluationJob.getLastStatus(),
-            "lastCount", evaluationJob.getLastCount()
-        );
+        // Map.of() rejects null values, so a still-in-progress job (fields not yet
+        // set) would throw an NPE here just like in getJobStatus() below.
+        Map<String, Object> data = new java.util.HashMap<>();
+        data.put("message", "Evaluation triggered");
+        data.put("lastRun", evaluationJob.getLastRun());
+        data.put("lastStatus", evaluationJob.getLastStatus());
+        data.put("lastCount", evaluationJob.getLastCount());
         return ResponseEntity.ok(ApiResponse.ok(data));
     }
 
@@ -174,11 +175,12 @@ public class SentimentApiController {
         LocalDateTime lastRun = evaluationJob.getLastRun();
         String lastStatus = evaluationJob.getLastStatus();
         Integer lastCount = evaluationJob.getLastCount();
-        Map<String, Object> data = Map.of(
-            "lastRun", lastRun != null ? lastRun.toString() : null,
-            "lastStatus", lastStatus != null ? lastStatus : "never run",
-            "lastCount", lastCount != null ? lastCount : 0
-        );
+        // Map.of() rejects null values outright, so a never-run job (lastRun == null)
+        // always threw an NPE here. Use a mutable map, which permits null values.
+        Map<String, Object> data = new java.util.HashMap<>();
+        data.put("lastRun", lastRun != null ? lastRun.toString() : null);
+        data.put("lastStatus", lastStatus != null ? lastStatus : "never run");
+        data.put("lastCount", lastCount != null ? lastCount : 0);
         return ResponseEntity.ok(ApiResponse.ok(data));
     }
 

@@ -14,7 +14,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  * ArchUnit tests enforcing module boundary rules.
  *
  * Dependency direction (inward, Clean Architecture):
- *   api -> {strategy, llm, broker, data} -> core
+ *   api -> {strategy, llm, broker, gpuhub, data} -> core
  *
  * Each layer may only depend on layers closer to the center (core).
  *
@@ -49,6 +49,7 @@ class ModuleBoundaryTest {
                 "..data..",
                 "..strategy..",
                 "..llm..",
+                "..gpuhub..",
                 "java..",
                 "javax..",
                 "jakarta..",

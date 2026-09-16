@@ -238,14 +238,44 @@ public class PositionService {
     }
 
     /**
-     * Get sector allocation.
-     * @return Sector allocation data (currently empty - sector data not yet available)
+     * Get sector allocation across open positions, using each symbol's
+     * {@code stocks.sector}. Symbols with no sector on record are grouped
+     * under "UNKNOWN" rather than dropped, so total exposure always
+     * reconciles with the sum of per-sector exposure.
+     * @return Sector allocation data
      */
     public SectorAllocation getSectorAllocation() {
+        List<Position> openPositions = positionStore.findAllOpen();
+
+        java.util.Map<String, BigDecimal> exposureBySector = new java.util.LinkedHashMap<>();
+        BigDecimal totalExposure = BigDecimal.ZERO;
+        for (Position position : openPositions) {
+            if (position.currentPrice() == null || position.quantity() == null) {
+                continue;
+            }
+            BigDecimal exposure = position.currentPrice().multiply(BigDecimal.valueOf(position.quantity()));
+            String sector = stockStore.findBySymbol(position.symbol())
+                    .map(com.swingtrade.domain.Stock::sector)
+                    .map(Enum::name)
+                    .orElse("UNKNOWN");
+            exposureBySector.merge(sector, exposure, BigDecimal::add);
+            totalExposure = totalExposure.add(exposure);
+        }
+
+        java.util.Map<String, Double> allocationPct = new java.util.LinkedHashMap<>();
+        for (var entry : exposureBySector.entrySet()) {
+            double pct = totalExposure.compareTo(BigDecimal.ZERO) > 0
+                    ? entry.getValue().multiply(BigDecimal.valueOf(100))
+                            .divide(totalExposure, 2, java.math.RoundingMode.HALF_UP)
+                            .doubleValue()
+                    : 0.0;
+            allocationPct.put(entry.getKey(), pct);
+        }
+
         SectorAllocation allocation = new SectorAllocation();
-        allocation.setNumberOfSectors(0);
-        allocation.setTotalExposure(BigDecimal.ZERO);
-        allocation.setAllocation(Collections.emptyMap());
+        allocation.setAllocation(allocationPct);
+        allocation.setTotalExposure(totalExposure);
+        allocation.setNumberOfSectors(exposureBySector.size());
         return allocation;
     }
 
@@ -488,6 +518,16 @@ public class PositionService {
                         .multiply(BigDecimal.valueOf(p.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         summary.setStopLossExposure(stopLossExposure);
+
+        java.util.Map<String, Integer> sectorExposure = new java.util.LinkedHashMap<>();
+        for (Position position : openPositions) {
+            String sector = stockStore.findBySymbol(position.symbol())
+                    .map(com.swingtrade.domain.Stock::sector)
+                    .map(Enum::name)
+                    .orElse("UNKNOWN");
+            sectorExposure.merge(sector, 1, Integer::sum);
+        }
+        summary.setSectorExposure(sectorExposure);
 
         return summary;
     }

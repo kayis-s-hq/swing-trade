@@ -10,8 +10,7 @@ dependencies {
     implementation(project(":data"))
     implementation(project(":strategy"))
     implementation(project(":llm"))
-    // TODO: restore when GpuHubDeploymentService component scan is fixed
-    // implementation(project(":gpuhub"))
+    implementation(project(":gpuhub"))
     implementation(project(":broker"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")

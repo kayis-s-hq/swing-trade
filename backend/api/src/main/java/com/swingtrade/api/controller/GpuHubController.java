@@ -1,7 +1,5 @@
 package com.swingtrade.api.controller;
 
-// TODO: Uncomment when GpuHubDeploymentService component scan is fixed
-/*
 import com.swingtrade.api.dto.ApiResponse;
 import com.swingtrade.gpuhub.dto.ContainerInfo;
 import com.swingtrade.gpuhub.dto.DeploymentInfo;
@@ -109,4 +107,3 @@ public class GpuHubController {
         return ResponseEntity.ok(ApiResponse.ok(images));
     }
 }
-*/
