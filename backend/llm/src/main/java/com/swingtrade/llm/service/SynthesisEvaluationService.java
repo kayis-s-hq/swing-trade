@@ -4,6 +4,7 @@ import com.swingtrade.llm.SynthesisEvaluation;
 import com.swingtrade.llm.SynthesisOutput;
 import com.swingtrade.llm.SynthesisEvaluationEntity;
 import com.swingtrade.llm.SynthesisEvaluationRepository;
+import com.swingtrade.llm.SynthesisEvaluationSummary;
 import com.swingtrade.domain.CompositeAnalysis;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.store.CandleStore;
@@ -15,6 +16,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.time.Instant;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -107,6 +109,22 @@ public class SynthesisEvaluationService {
             }
         }
         return processed;
+    }
+
+    public SynthesisEvaluationSummary summary() {
+        List<SynthesisEvaluation> records = repository == null
+                ? List.copyOf(evaluations.values())
+                : repository.findAll().stream().map(SynthesisEvaluationEntity::toDomain).toList();
+        long measured = records.stream().filter(value -> value.outcome() != null).count();
+        long correct = records.stream().filter(value -> value.outcome() != null
+                && value.outcome().recommendationCorrect()).count();
+        Map<String, Long> byRecommendation = new HashMap<>();
+        records.stream().filter(value -> value.outcome() != null)
+                .forEach(value -> byRecommendation.merge(
+                        value.recommendation() == null ? "UNKNOWN" : value.recommendation().toUpperCase(),
+                        1L, Long::sum));
+        double accuracy = measured == 0 ? 0.0 : correct * 100.0 / measured;
+        return new SynthesisEvaluationSummary(records.size(), measured, correct, accuracy, byRecommendation);
     }
 
     private void persist(SynthesisEvaluation evaluation) {

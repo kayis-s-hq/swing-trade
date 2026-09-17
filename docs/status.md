@@ -82,6 +82,11 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   gap-through fills. Broker tests and `./bin/verify-changes` passed; the feature
   remains opt-in by default (`paper.trading.risk-management-enabled=false`).
 
+- [x] Synthesis evaluation reporting verified 2026-09-17: durable measured decisions
+  now have a summary API at `GET /api/synthesis/evaluations/summary`, including total,
+  measured, correct, accuracy, and recommendation counts. LLM/API tests and
+  `./bin/verify-changes` passed.
+
 - [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
   as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API
   tests passed; cross-sectional rank and authoritative index ingestion remain open.

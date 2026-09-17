@@ -90,6 +90,21 @@ class SynthesisEvaluationServiceTest {
         verify(repository).save(entity);
     }
 
+    @Test
+    void summarizesMeasuredOutcomesByRecommendation() {
+        SynthesisEvaluationService service = new SynthesisEvaluationService();
+        service.record(composite(), output("BUY"));
+        service.recordOutcome("RELIANCE", composite().date(), 5, new BigDecimal("3.25"));
+
+        var summary = service.summary();
+
+        assertThat(summary.totalEvaluations()).isEqualTo(1);
+        assertThat(summary.measuredEvaluations()).isEqualTo(1);
+        assertThat(summary.correctEvaluations()).isEqualTo(1);
+        assertThat(summary.accuracyPct()).isEqualTo(100.0);
+        assertThat(summary.measuredByRecommendation()).containsEntry("BUY", 1L);
+    }
+
     private SynthesisOutput output(String recommendation) {
         var output = new SynthesisOutput();
         output.setRecommendation(recommendation);
