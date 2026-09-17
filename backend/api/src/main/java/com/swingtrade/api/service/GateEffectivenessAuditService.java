@@ -19,6 +19,8 @@ import java.util.Map;
 @Service
 public class GateEffectivenessAuditService {
     public static final String SENTIMENT_GATE = "SENTIMENT";
+    public static final String LLM_GATE = "LLM_ANALYSIS";
+    public static final String ELIGIBILITY_GATE = "LIVE_ELIGIBILITY";
     public static final String DEFAULT_STRATEGY = "DEFAULT";
     public static final String UNKNOWN_DIMENSION = "UNKNOWN";
 
@@ -50,11 +52,20 @@ public class GateEffectivenessAuditService {
     public void recordSentimentVerdict(String symbol, LocalDate signalDate,
                                        SentimentGate.SentimentVerdict verdict, String strategy) {
         if (verdict.action() == SentimentGate.SentimentVerdict.Action.PENDING) return;
+        recordGateVerdict(symbol, signalDate, SENTIMENT_GATE, verdict.action().name(), verdict.reason(), strategy);
+    }
+
+    @Transactional
+    public void recordGateVerdict(String symbol, LocalDate signalDate, String gateName,
+                                  String verdict, String reason, String strategy) {
+        if (symbol == null || signalDate == null || gateName == null || gateName.isBlank()
+                || verdict == null || verdict.isBlank()) return;
+        String auditStrategy = normalizeStrategy(strategy);
         GateEffectivenessAuditEntity entity = repository
-            .findBySymbolAndSignalDateAndGateNameAndStrategy(symbol, signalDate, SENTIMENT_GATE,
-                normalizeStrategy(strategy))
-            .orElseGet(() -> new GateEffectivenessAuditEntity(symbol, signalDate, SENTIMENT_GATE,
-                verdict.action().name(), verdict.reason(), OffsetDateTime.now(), normalizeStrategy(strategy)));
+            .findBySymbolAndSignalDateAndGateNameAndStrategy(symbol, signalDate, gateName,
+                auditStrategy)
+            .orElseGet(() -> new GateEffectivenessAuditEntity(symbol, signalDate, gateName,
+                verdict, reason, OffsetDateTime.now(), auditStrategy));
         // Keep the first decision: overwriting it on a retry would bias the audit.
         repository.save(entity);
     }
@@ -67,10 +78,22 @@ public class GateEffectivenessAuditService {
     @Transactional(readOnly = true)
     public EffectivenessReport report(LocalDate from, LocalDate to, String symbol,
                                      String strategy, String regime) {
+        return report(from, to, symbol, strategy, regime, SENTIMENT_GATE);
+    }
+
+    @Transactional(readOnly = true)
+    public EffectivenessReport report(LocalDate from, LocalDate to, String symbol,
+                                     String strategy, String regime, String gateName) {
         List<GateEffectivenessAuditEntity> audits = symbol == null
-            ? repository.findByGateNameAndSignalDateBetweenOrderBySignalDateAsc(SENTIMENT_GATE, from, to)
-            : repository.findByGateNameAndSymbolAndSignalDateBetweenOrderBySignalDateAsc(
-                SENTIMENT_GATE, symbol, from, to);
+            ? (SENTIMENT_GATE.equalsIgnoreCase(gateName)
+                ? repository.findByGateNameAndSignalDateBetweenOrderBySignalDateAsc(gateName, from, to)
+                : repository.findBySignalDateBetweenOrderBySignalDateAsc(from, to).stream()
+                    .filter(audit -> gateName.equalsIgnoreCase(audit.getGateName())).toList())
+            : (SENTIMENT_GATE.equalsIgnoreCase(gateName)
+                ? repository.findByGateNameAndSymbolAndSignalDateBetweenOrderBySignalDateAsc(
+                    gateName, symbol, from, to)
+                : repository.findBySymbolAndSignalDateBetweenOrderBySignalDateAsc(symbol, from, to).stream()
+                    .filter(audit -> gateName.equalsIgnoreCase(audit.getGateName())).toList());
 
         Map<String, MutableBucket> buckets = new LinkedHashMap<>();
         Map<String, MutableBucket> strategyBuckets = new LinkedHashMap<>();

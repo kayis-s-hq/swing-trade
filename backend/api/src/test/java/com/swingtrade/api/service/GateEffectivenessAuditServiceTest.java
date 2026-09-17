@@ -98,6 +98,25 @@ class GateEffectivenessAuditServiceTest {
     }
 
     @Test
+    void recordsAndReportsNonSentimentGateOutcomes() {
+        when(repository.findBySymbolAndSignalDateAndGateNameAndStrategy(
+            "TCS", date, GateEffectivenessAuditService.ELIGIBILITY_GATE, "PRICE_ACTION"))
+            .thenReturn(Optional.empty());
+        service.recordGateVerdict("TCS", date, GateEffectivenessAuditService.ELIGIBILITY_GATE,
+            "SUPPRESS", "missing price band", "PRICE_ACTION");
+        var saved = org.mockito.ArgumentCaptor.forClass(GateEffectivenessAuditEntity.class);
+        org.mockito.Mockito.verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getGateName()).isEqualTo(GateEffectivenessAuditService.ELIGIBILITY_GATE);
+
+        when(repository.findBySignalDateBetweenOrderBySignalDateAsc(date, date))
+            .thenReturn(List.of(saved.getValue()));
+        var report = service.report(date, date, null, "PRICE_ACTION", null,
+            GateEffectivenessAuditService.ELIGIBILITY_GATE);
+        assertThat(report.auditCount()).isEqualTo(1);
+        assertThat(report.verdicts()).containsKey("SUPPRESS");
+    }
+
+    @Test
     void reportCanFilterByDerivedRegimeWithoutTreatingMissingOutcomesAsLosses() {
         var audit = new GateEffectivenessAuditEntity("TCS", date, "SENTIMENT", "ALLOW", null, null);
         when(repository.findByGateNameAndSymbolAndSignalDateBetweenOrderBySignalDateAsc(

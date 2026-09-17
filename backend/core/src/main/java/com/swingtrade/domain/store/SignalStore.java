@@ -23,6 +23,8 @@ public interface SignalStore {
      */
     List<String> findStrategiesBySymbolAndDate(String symbol, LocalDate date);
 
+    Optional<String> findStrategyById(Long signalId);
+
     List<Signal> findByType(Signal.SignalType type);
 
     List<Signal> findUnprocessed();

@@ -10,6 +10,10 @@ Last checked: 2026-09-17 (documentation/lint and analytics remediation verificat
   signal ID and gate-effectiveness buckets include realized P&L for closed positions with known
   provenance; v56 migration, broker/API tests, full verifier, and live API checks passed.
 
+- [x] Non-sentiment gate audits extended 2026-09-17: LLM-analysis and live-eligibility outcomes
+  are persisted with strategy attribution and selectable through the gate-effectiveness endpoint;
+  focused API/controller tests passed.
+
 - [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
   producing signal variant, support multiple strategies per symbol/date, and report/filter by the
   stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade

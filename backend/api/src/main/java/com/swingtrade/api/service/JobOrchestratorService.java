@@ -145,6 +145,12 @@ public class JobOrchestratorService {
     private final StrategyConfigRepository strategyConfigRepository;
     private final StrategyRegistry strategyRegistry;
     private final LiveEligibilityService liveEligibilityService;
+    private GateEffectivenessAuditService gateEffectivenessAuditService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setGateEffectivenessAuditService(GateEffectivenessAuditService service) {
+        this.gateEffectivenessAuditService = service;
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     public JobOrchestratorService(
@@ -681,6 +687,16 @@ public class JobOrchestratorService {
                 }
                 var llmVerdict = llmAnalysisEnabled && llmAnalysisGate != null
                     ? llmAnalysisGate.evaluatePersisted(symbol, signal.date()) : null;
+                String signalStrategy = signal.id() == null || signalStore == null
+                    ? GateEffectivenessAuditService.DEFAULT_STRATEGY
+                    : signalStore.findStrategyById(signal.id())
+                        .orElse(GateEffectivenessAuditService.DEFAULT_STRATEGY);
+                if (llmVerdict != null && llmVerdict.action() != LlmAnalysisGate.LlmVerdict.Action.PENDING
+                        && gateEffectivenessAuditService != null) {
+                    gateEffectivenessAuditService.recordGateVerdict(symbol, signal.date(),
+                        GateEffectivenessAuditService.LLM_GATE, llmVerdict.action().name(),
+                        llmVerdict.reason(), signalStrategy);
+                }
                 if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.PENDING) continue;
                 if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.SUPPRESS && !llmAnalysisAdvisoryOnly) {
                     try {
@@ -694,6 +710,13 @@ public class JobOrchestratorService {
                 }
                 if (liveEligibilityService != null) {
                     var eligibility = liveEligibilityService.assess(symbol, signal.date(), latest.close());
+                    if (gateEffectivenessAuditService != null) {
+                        gateEffectivenessAuditService.recordGateVerdict(symbol, signal.date(),
+                            GateEffectivenessAuditService.ELIGIBILITY_GATE,
+                            eligibility.eligible() ? "ALLOW" : "SUPPRESS",
+                            eligibility.eligible() ? "Eligible" : eligibility.rejectionReasons().toString(),
+                            signalStrategy);
+                    }
                     if (!eligibility.eligible()) {
                         blockedByEligibility++;
                         logger.info("Blocked BUY signal {} for {} by live eligibility: unavailable={}, rejected={}",

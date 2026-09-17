@@ -296,8 +296,10 @@ strategy, and regime. Strategy attribution now comes from the producing signal v
 audit uniqueness key permits multiple variants for one symbol/date. Paper positions now retain the
 originating `signal_id`, and closed-position realized P&L is included in the corresponding strategy
 bucket when provenance exists. Historical/manual positions without provenance are intentionally not
-guessed, and dashboard presentation plus broader gate-outcome joins remain open.
-**Remaining:** Add dashboard presentation and attribution for non-sentiment gates.
+guessed. LLM-analysis and live-eligibility outcomes are now recorded as strategy-aware gate audits;
+the endpoint accepts `gate=LLM_ANALYSIS` or `gate=LIVE_ELIGIBILITY` as well as its sentiment default.
+Dashboard presentation and attribution for future gate types remain open.
+**Remaining:** Add dashboard presentation and any newly introduced gate types.
 
 ---
 
