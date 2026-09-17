@@ -36,6 +36,17 @@ class MarketCalendarTest {
     }
 
     @Test
+    void allowsAnExchangeDeclaredPartialSessionOnAWeekend() {
+        NseHolidayService holidays = mock(NseHolidayService.class);
+        NseCalendarCoverageRepository coverage = mock(NseCalendarCoverageRepository.class);
+        LocalDate muhurat = LocalDate.of(2026, 11, 8);
+        when(holidays.getHoliday(muhurat)).thenReturn(Optional.of(
+            new NseHolidayEntity(muhurat, "Diwali Laxmi Pujan / Muhurat", "PARTIAL")));
+
+        assertThat(new MarketCalendar(holidays, coverage).isNseTradingSession(muhurat)).isTrue();
+    }
+
+    @Test
     void coverageVerificationRequiresEveryYearToBeVerified() {
         NseHolidayService holidays = mock(NseHolidayService.class);
         NseCalendarCoverageRepository coverage = mock(NseCalendarCoverageRepository.class);

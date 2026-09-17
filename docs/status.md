@@ -1,6 +1,6 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-17 (data coverage verification)
+Last checked: 2026-09-17 (holiday-calendar verification)
 
 - [x] GPUHub client/service coverage completed 2026-09-17: deployment, image, container,
   status, stop, delete, DTO, and API-error paths now have behavior-focused tests. Successful
@@ -13,55 +13,55 @@ Last checked: 2026-09-17 (data coverage verification)
   aggregate coverage is 80% (3,086/3,856 lines) and now clears the 80% gate; focused
   WatchlistService, DataIngestionService, TradeLabelService, SignalEntity, PositionEntity,
   TradeEntity, CandidateScanResultEntity, and the remaining simple entity/domain persistence
-  contracts coverage was added, but this remains the next full-build blocker. The data PMD test
+  contracts coverage was added. The data PMD test
   violation was also removed and the scoped verifier passed.
 
 - [x] Provider limiter delegation coverage extended 2026-09-17: all market-data operations,
   including price bands, bulk quotes, metadata, symbol search, and connectivity, are now
   covered through the shared rate-limited decorator. Full data tests and the aggregate report
-  passed; the 80% data threshold remains the next blocker.
+  passed; the 80% data coverage gate is clear.
 
 - [x] Signal-store contract coverage extended 2026-09-17: read/filter paths, strategy metadata
   deduplication, save variants, processed-state updates, and delete operations now have focused
-  tests. Full data tests and the aggregate report passed; the 80% data threshold remains open.
+  tests. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
 
 - [x] Sentiment-store contract coverage extended 2026-09-17: read paths, new-result insertion,
   existing-result updates, provenance fields, and missing-result behavior now have focused tests.
-  Full data tests and the aggregate report passed; the 80% data threshold remains open.
+  Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
 
 - [x] Trade/position store contract coverage extended 2026-09-17: open/closed/status/date
   queries, save mappings, counts, and missing-position behavior now have focused tests. Full
-  data tests and the aggregate report passed; the 80% data threshold remains open.
+  data tests and the aggregate report passed; the 80% data coverage gate is clear.
 
 - [x] Fyers order-service testability and coverage extended 2026-09-17: SDK access is now
   injectable for tests while production keeps the singleton constructor; token guards, order
   payloads, success/failure responses, cancellation, and order-history parsing are covered.
-  Full data tests and the aggregate report passed; the 80% data threshold remains open.
+  Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
 
 - [x] Fyers market-depth parsing hardened 2026-09-17: SDK bid/ask collections are initialized
   defensively, and quote fields, circuit bands, sides, malformed values, empty responses, and
-  provider failures are covered. Focused and full data tests passed; the 80% threshold remains open.
+  provider failures are covered. Focused and full data tests passed; the 80% data coverage gate is clear.
 
 - [x] Fyers position-service testability and coverage extended 2026-09-17: injectable SDK access
   covers net-position parsing, position exits, product conversion, malformed payloads, and
   provider failures while preserving the production singleton constructor. Full data tests and
-  the aggregate report passed; the 80% threshold remains open.
+  the aggregate report passed; the 80% data coverage gate is clear.
 
 - [x] Fyers profile/holdings coverage extended 2026-09-17: injectable SDK access now covers
   profile and funds mapping, holdings mapping, optional response containers, and fail-closed
-  provider errors. Full data tests and the aggregate report passed; the 80% threshold remains open.
+  provider errors. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
 
 - [x] Fyers trade-book, market-status, and GTT coverage extended 2026-09-17: SDK response
   parsing, trigger-leg construction, empty responses, and provider failures are covered through
-  injectable test seams. Full data tests and the aggregate report passed; the 80% threshold remains open.
+  injectable test seams. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
 
 - [x] Yahoo quote/search coverage extended 2026-09-17: bulk quote parsing, invalid quote
   filtering, symbol-search filtering, empty inputs, and HTTP failures are covered by the
-  MockWebServer suite. Full data tests and the aggregate report passed; the 80% threshold remains open.
+  MockWebServer suite. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
 
 - [x] Application-settings coverage extended 2026-09-17: DB reads and cache hits, defaults,
   environment overrides, read-only override writes, upserts, and null-value normalization are
-  covered by focused tests. Full data tests and the aggregate report passed; the 80% threshold remains open.
+  covered by focused tests. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
 
 - [x] Data-ingestion coverage extended 2026-09-17: non-trading-day filtering, invalid and empty
   provider responses, duplicate-safe inserts, price anomalies, trailing gaps, and unavailable
@@ -72,6 +72,11 @@ Last checked: 2026-09-17 (data coverage verification)
   calendar-year verification, holiday CRUD delegation, candle history queries, stock/watchlist
   mappings, strategy-config append-only behavior, sentiment-accuracy persistence, and utility
   value mappings are covered. Full data tests and the scoped verifier passed.
+
+- [x] NSE 2026 equity holiday seed corrected 2026-09-17: V62 aligns the persisted calendar with
+  NSE's published dates, removes stale seeded dates, adds missing full holidays, and records the
+  November 8 Muhurat session as partial. `MarketCalendar` now honors exchange-declared partial
+  sessions even when they fall on a weekend; full data tests and `./bin/verify-changes` passed.
 
 - [x] Sentiment accuracy confidence normalization corrected 2026-09-17: the aggregate
   confidence endpoint now returns a normalized 0–1 value (rounded to four decimals) rather

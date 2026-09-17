@@ -1,11 +1,13 @@
 package com.swingtrade.data.service;
 
+import com.swingtrade.data.entity.NseHolidayEntity;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.IntStream;
 
 /** The single source of truth for whether an NSE daily candle may exist. */
@@ -28,11 +30,12 @@ public class MarketCalendar {
     }
 
     public boolean isNseTradingSession(LocalDate date) {
+        Optional<NseHolidayEntity> holiday = holidayService.getHoliday(date);
+        if (holiday.isPresent()) {
+            return !"FULL".equalsIgnoreCase(holiday.get().getHolidayType());
+        }
         DayOfWeek day = date.getDayOfWeek();
-        return day != DayOfWeek.SATURDAY && day != DayOfWeek.SUNDAY
-            && holidayService.getHoliday(date)
-                .map(h -> !"FULL".equalsIgnoreCase(h.getHolidayType()))
-                .orElse(true);
+        return day != DayOfWeek.SATURDAY && day != DayOfWeek.SUNDAY;
     }
 
     public List<LocalDate> expectedNseSessions(LocalDate from, LocalDate to) {
