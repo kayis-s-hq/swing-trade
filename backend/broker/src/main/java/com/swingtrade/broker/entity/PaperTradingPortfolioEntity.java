@@ -50,6 +50,14 @@ public class PaperTradingPortfolioEntity {
     @Column(name = "open_position_count")
     private int openPositionCount;
 
+    // Kill switch / daily loss breaker (plan §7.2). Applied per portfolio for SHADOW variants
+    // and, since a single process-wide "global" breaker concept doesn't cleanly exist yet given
+    // there's only one live paper engine today, applied identically to the CHAMPION's own
+    // ("default") portfolio row as its interpretation of "global" - see
+    // PaperPortfolioServiceImpl.isDailyLossBreached().
+    @Column(name = "daily_loss_threshold_pct", precision = 5, scale = 4)
+    private BigDecimal dailyLossThresholdPct;
+
     public PaperTradingPortfolioEntity() {}
 
     public Long getId() { return id; }
@@ -66,4 +74,6 @@ public class PaperTradingPortfolioEntity {
     public void setTotalUnrealizedPnL(BigDecimal totalUnrealizedPnL) { this.totalUnrealizedPnL = totalUnrealizedPnL; }
     public int getOpenPositionCount() { return openPositionCount; }
     public void setOpenPositionCount(int openPositionCount) { this.openPositionCount = openPositionCount; }
+    public BigDecimal getDailyLossThresholdPct() { return dailyLossThresholdPct; }
+    public void setDailyLossThresholdPct(BigDecimal dailyLossThresholdPct) { this.dailyLossThresholdPct = dailyLossThresholdPct; }
 }

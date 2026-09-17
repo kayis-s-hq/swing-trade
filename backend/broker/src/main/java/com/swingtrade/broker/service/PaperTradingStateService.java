@@ -304,6 +304,7 @@ public class PaperTradingStateService {
                 entity.setTotalPnL(engine.getTotalPnL());
                 entity.setReturnPct(engine.getReturnPercentage());
                 entity.setOpenPositions(engine.getOpenPositionCount());
+                entity.setPortfolioId("default");
                 snapshotRepo.save(entity);
                 logger.debug("Saved portfolio snapshot: total={}, cash={}, pnl={}",
                     entity.getTotalValue(), entity.getCashBalance(), entity.getTotalPnL());
