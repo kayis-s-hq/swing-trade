@@ -78,6 +78,10 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   November 8 Muhurat session as partial. `MarketCalendar` now honors exchange-declared partial
   sessions even when they fall on a weekend; full data tests and `./bin/verify-changes` passed.
 
+- [x] Local V62 runtime migration verified 2026-09-17: the DevStack PostgreSQL database advanced
+  from schema V61 to V62, read-only queries confirmed the corrected 2026 holiday rows, and the
+  API health endpoint returned 200 with PostgreSQL reported `UP`. No application data was reset.
+
 - [x] Sentiment accuracy confidence normalization corrected 2026-09-17: the aggregate
   confidence endpoint now returns a normalized 0–1 value (rounded to four decimals) rather
   than a percentage-scale value. Service edge cases and aggregate mappings are covered by
