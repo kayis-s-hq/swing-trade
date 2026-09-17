@@ -142,4 +142,19 @@ class DomainValueRecordsTest {
             .containsExactly("TCS", "Title", "https://example.test", "Description", published, "RSS", "raw");
         assertThat(legacy.success()).isFalse();
     }
+
+    @Test
+    void sharedConstantsAndPositionEventsExposeStableContracts() {
+        PositionClosedEvent event = new PositionClosedEvent("TCS", DATE, "TARGET_HIT",
+            BigDecimal.valueOf(4.25));
+
+        assertThat(event.getSymbol()).isEqualTo("TCS");
+        assertThat(event.getSignalDate()).isEqualTo(DATE);
+        assertThat(event.getOutcome()).isEqualTo("TARGET_HIT");
+        assertThat(event.getPnlPct()).isEqualByComparingTo("4.25");
+        assertThat(StrategyParams.EMA_FAST).isEqualTo(20);
+        assertThat(StrategyParams.RSI_LOWER).isEqualByComparingTo("50");
+        assertThat(StrategyParams.RSI_UPPER).isEqualByComparingTo("65");
+        assertThat(StrategyParams.MIN_CANDLES).isEqualTo(50);
+    }
 }
