@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import com.swingtrade.domain.PriceBand;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -379,6 +380,23 @@ class FyersServiceClientTest {
         assertThat(quotes.get(0).symbol()).isEqualTo("RELIANCE");
         assertThat(quotes.get(1).symbol()).isEqualTo("TCS");
         assertThat(quotes.get(2).symbol()).isEqualTo("INFY");
+    }
+
+    @Test
+    void fetchPriceBandUsesAuthoritativeFyersCircuitFields() {
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("""
+                {"s":"success","d":[{"n":"NSE:RELIANCE-EQ","v":{
+                  "symbol":"NSE:RELIANCE-EQ","lp":2500,"lower_ckt":2250,"upper_ckt":2750
+                }}]}
+                """)
+            .addHeader("Content-Type", "application/json"));
+
+        PriceBand band = client.fetchPriceBand("RELIANCE", LocalDate.of(2026, 1, 5));
+
+        assertThat(band).isNotNull();
+        assertThat(band.lowerLimit()).isEqualByComparingTo("2250");
+        assertThat(band.upperLimit()).isEqualByComparingTo("2750");
     }
 
     @Test

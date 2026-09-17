@@ -4,6 +4,7 @@ import com.swingtrade.core.metrics.DataIngestionMetrics;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.data.entity.FyersSymbolEntity;
+import com.swingtrade.domain.PriceBand;
 import com.tts.in.model.FyersClass;
 import com.tts.in.model.OrderModel;
 import com.tts.in.model.PositionModel;
@@ -221,6 +222,18 @@ public class FyersServiceClient implements MarketDataClient {
     // -----------------------------------------------------------------------
 
     @Override
+    public PriceBand fetchPriceBand(String symbol, LocalDate date) {
+        QuoteData quote = fetchQuote(symbol);
+        if (quote == null || quote.lowerPriceBand() == null || quote.upperPriceBand() == null) return null;
+        try {
+            return new PriceBand(symbol, date, quote.lowerPriceBand(), quote.upperPriceBand());
+        } catch (IllegalArgumentException e) {
+            logger.warn("Ignoring invalid price band for {} on {}: {}", symbol, date, e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
     public QuoteData fetchQuote(String symbol) {
         List<QuoteData> results = fetchQuotes(List.of(symbol));
         return results.isEmpty() ? null : results.get(0);
@@ -270,10 +283,13 @@ public class FyersServiceClient implements MarketDataClient {
             BigDecimal high = decimalOrNull(v, "high_price");
             BigDecimal low = decimalOrNull(v, "low_price");
             BigDecimal prevClose = decimalOrNull(v, "prev_close_price");
+            BigDecimal lowerBand = decimalOrNull(v, "lower_ckt");
+            BigDecimal upperBand = decimalOrNull(v, "upper_ckt");
             Long volume = v.has("volume") ? v.get("volume").asLong() : null;
             String shortName = v.has("short_name") ? v.get("short_name").asText() : null;
             return QuoteData.of(symbol, shortName, null, price, change, changePct,
-                high, low, prevClose, null, null, volume, null, null, null, null);
+                high, low, prevClose, null, null, volume, null, null, null, null,
+                lowerBand, upperBand);
         } catch (Exception e) {
             logger.warn("Failed to parse quote for {}: {}", symbol, e.getMessage());
             return null;

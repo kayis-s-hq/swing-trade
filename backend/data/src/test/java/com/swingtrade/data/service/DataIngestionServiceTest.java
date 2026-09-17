@@ -4,6 +4,8 @@ import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.data.repository.WatchlistRepository;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.store.PriceBandStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,7 @@ class DataIngestionServiceTest {
     private WatchlistRepository watchlistRepository;
     private MarketDataClientProvider marketDataClientProvider;
     private MarketDataClient mockClient;
+    private PriceBandStore priceBandStore;
 
     @BeforeEach
     void setUp() {
@@ -40,8 +43,26 @@ class DataIngestionServiceTest {
 
         marketDataClientProvider = Mockito.mock(MarketDataClientProvider.class);
         when(marketDataClientProvider.getClient()).thenReturn(mockClient);
+        priceBandStore = Mockito.mock(PriceBandStore.class);
 
-        dataIngestionService = new DataIngestionService(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider, Mockito.mock(TransactionTemplate.class), Mockito.mock(com.swingtrade.core.metrics.DataIngestionMetrics.class));
+        dataIngestionService = new DataIngestionService(candleRepository, stockRepository, watchlistRepository,
+            marketDataClientProvider, Mockito.mock(TransactionTemplate.class),
+            Mockito.mock(com.swingtrade.core.metrics.DataIngestionMetrics.class), null,
+            null, 30, priceBandStore);
+    }
+
+    @Test
+    @DisplayName("processSingleStock persists provider price bands even when candle exists")
+    void processSingleStockPersistsPriceBandForExistingCandle() {
+        LocalDate date = LocalDate.of(2026, 1, 5);
+        PriceBand band = new PriceBand("RELIANCE", date, bd("90"), bd("110"));
+        when(mockClient.fetchPriceBand("RELIANCE", date)).thenReturn(band);
+        when(candleRepository.existsBySymbolAndDate("RELIANCE", date)).thenReturn(true);
+
+        dataIngestionService.processSingleStock("RELIANCE", date);
+
+        verify(priceBandStore).save(band);
+        verify(mockClient, Mockito.never()).fetchCandle("RELIANCE", date);
     }
 
     @Test
@@ -125,6 +146,10 @@ class DataIngestionServiceTest {
         // Then: Candles are returned
         assert result != null;
         assert result.size() == 1;
+    }
+
+    private static BigDecimal bd(String value) {
+        return new BigDecimal(value);
     }
 
     @Test

@@ -9,6 +9,11 @@ import java.util.List;
  */
 public interface MarketDataClient {
 
+    /** Returns an authoritative exchange price band, or null when the provider has none. */
+    default com.swingtrade.domain.PriceBand fetchPriceBand(String symbol, LocalDate date) {
+        return null;
+    }
+
     /**
      * Fetches a single day's OHLCV data for a stock.
      *

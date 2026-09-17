@@ -7,6 +7,8 @@ import com.swingtrade.data.repository.StockRepository;
 import com.swingtrade.data.repository.WatchlistRepository;
 import com.swingtrade.data.repository.ReconciliationAuditRepository;
 import com.swingtrade.data.entity.ReconciliationAuditEntity;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.store.PriceBandStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,6 +45,7 @@ public class DataIngestionService {
     private final MarketCalendar marketCalendar;
     private final ReconciliationAuditRepository reconciliationAuditRepository;
     private final int backfillChunkDays;
+    private final PriceBandStore priceBandStore;
 
     @Autowired
     public DataIngestionService(
@@ -54,7 +57,8 @@ public class DataIngestionService {
         DataIngestionMetrics ingestionMetrics,
         MarketCalendar marketCalendar,
         ReconciliationAuditRepository reconciliationAuditRepository,
-        @Value("${data.backfill.chunk-days:30}") int backfillChunkDays
+        @Value("${data.backfill.chunk-days:30}") int backfillChunkDays,
+        PriceBandStore priceBandStore
     ) {
         this.candleRepository = candleRepository;
         this.stockRepository = stockRepository;
@@ -65,6 +69,7 @@ public class DataIngestionService {
         this.marketCalendar = marketCalendar;
         this.reconciliationAuditRepository = reconciliationAuditRepository;
         this.backfillChunkDays = Math.max(1, backfillChunkDays);
+        this.priceBandStore = priceBandStore;
     }
 
     /** Compatibility constructor for lightweight unit tests. */
@@ -73,7 +78,7 @@ public class DataIngestionService {
         MarketDataClientProvider marketDataClientProvider, TransactionTemplate txTemplate,
         DataIngestionMetrics ingestionMetrics, MarketCalendar marketCalendar) {
         this(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider,
-            txTemplate, ingestionMetrics, marketCalendar, null, 30);
+            txTemplate, ingestionMetrics, marketCalendar, null, 30, null);
     }
 
     /** Compatibility constructor for lightweight unit tests. */
@@ -82,7 +87,7 @@ public class DataIngestionService {
         MarketDataClientProvider marketDataClientProvider, TransactionTemplate txTemplate,
         DataIngestionMetrics ingestionMetrics) {
         this(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider,
-            txTemplate, ingestionMetrics, null, null, 30);
+            txTemplate, ingestionMetrics, null, null, 30, null);
     }
 
     /**
@@ -232,6 +237,8 @@ public class DataIngestionService {
         if (!isNseTradingSession(date)) {
             return;
         }
+
+        persistPriceBand(symbol, date);
         if (candleRepository.existsBySymbolAndDate(symbol, date)) {
             logger.trace("Candle already exists for {}: {}", symbol, date);
             return;
@@ -248,6 +255,17 @@ public class DataIngestionService {
         } else if (candle != null) {
             logger.debug("Rejected invalid candle for {} on {}: {}", symbol, date, candle);
             ingestionMetrics.recordFetchFailure("unknown");
+        }
+    }
+
+    private void persistPriceBand(String symbol, LocalDate date) {
+        if (priceBandStore == null) return;
+        try {
+            PriceBand band = marketDataClientProvider.getClient().fetchPriceBand(symbol, date);
+            if (band != null) priceBandStore.save(band);
+        } catch (RuntimeException e) {
+            // Circuit data is supplementary; a provider outage must not discard a valid candle.
+            logger.warn("Price-band fetch failed for {} on {}: {}", symbol, date, e.getMessage());
         }
     }
 

@@ -62,6 +62,9 @@ final class RateLimitedMarketDataClient implements MarketDataClient {
     @Override public CandleData fetchLatestCandle(String symbol) {
         acquire(); return delegate.fetchLatestCandle(symbol);
     }
+    @Override public com.swingtrade.domain.PriceBand fetchPriceBand(String symbol, LocalDate date) {
+        acquire(); return delegate.fetchPriceBand(symbol, date);
+    }
     @Override public InstrumentDetails fetchInstrumentDetails(String symbol) {
         acquire(); return delegate.fetchInstrumentDetails(symbol);
     }

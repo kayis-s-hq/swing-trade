@@ -1,6 +1,12 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-17 (strategy provenance verification)
+Last checked: 2026-09-17 (price-band ingestion verification)
+
+- [x] Exchange price-band ingestion wired 2026-09-17: Fyers `lower_ckt`/`upper_ckt`
+  quote fields now flow through the rate-limited market-data client and are persisted by
+  daily ingestion, including for an already-stored candle. Providers without authoritative
+  circuit data remain fail-closed; data tests, Fyers parsing tests, and `./bin/verify-changes`
+  passed.
 
 - [x] Strategy configuration provenance persisted 2026-09-17: configured signals now retain
   their variant ID and immutable configuration version; legacy signals are backfilled to version
