@@ -23,6 +23,8 @@ public interface SignalStore {
      */
     List<String> findStrategiesBySymbolAndDate(String symbol, LocalDate date);
 
+    Optional<String> findStrategyById(Long signalId);
+
     List<Signal> findByType(Signal.SignalType type);
 
     List<Signal> findUnprocessed();
@@ -35,6 +37,9 @@ public interface SignalStore {
     Signal save(Signal signal, String warningFlag);
 
     Signal save(Signal signal, String warningFlag, String strategy);
+
+    /** Saves a signal with its strategy variant and immutable configuration version. */
+    Signal save(Signal signal, String warningFlag, String strategy, Integer strategyVersion);
 
     void markProcessed(Long signalId);
 

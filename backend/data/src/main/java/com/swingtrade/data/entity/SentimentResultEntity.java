@@ -77,6 +77,9 @@ public class SentimentResultEntity {
     @Column(name = "article_ids", columnDefinition = "BIGINT[]")
     private Long[] articleIds;
 
+    @Column(name = "audit_request_id", length = 36)
+    private String auditRequestId;
+
     /**
      * Default constructor for JPA.
      */
@@ -106,6 +109,7 @@ public class SentimentResultEntity {
         entity.setArticleCount(result.articleCount());
         entity.setSource(result.source());
         entity.setArticleIds(result.articleIds() == null ? null : result.articleIds().toArray(new Long[0]));
+        entity.setAuditRequestId(result.auditRequestId());
         return entity;
     }
 
@@ -130,7 +134,8 @@ public class SentimentResultEntity {
             modelVersion,
             articleCount,
             source,
-            articleIds != null ? List.of(articleIds) : List.of()
+            articleIds != null ? List.of(articleIds) : List.of(),
+            auditRequestId
         );
     }
 
@@ -262,4 +267,6 @@ public class SentimentResultEntity {
 
     public Long[] getArticleIds() { return articleIds; }
     public void setArticleIds(Long[] articleIds) { this.articleIds = articleIds; }
+    public String getAuditRequestId() { return auditRequestId; }
+    public void setAuditRequestId(String auditRequestId) { this.auditRequestId = auditRequestId; }
 }

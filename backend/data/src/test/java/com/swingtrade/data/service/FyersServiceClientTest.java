@@ -78,6 +78,20 @@ class FyersServiceClientTest {
     }
 
     @Test
+    void retriesRateLimitedHistoricalRequestWithBackoff() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(429));
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("{\"s\":\"success\",\"candles\":[[1705272600,2500,2550,2490,2530,5000000]]}")
+            .addHeader("Content-Type", "application/json"));
+
+        List<CandleData> candles = client.fetchCandlesList("RELIANCE",
+            LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 15));
+
+        assertThat(candles).hasSize(1);
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
+    }
+
+    @Test
     void fetchCandleReturnsSingleDayCandle() {
         mockWebServer.enqueue(new MockResponse()
             .setBody("""

@@ -292,7 +292,9 @@ public class PaperTradingEngine implements TradingService {
                 // Persist
                 if (stateService != null) {
                     stateService.saveOrder(order);
-                    stateService.savePosition(position);
+                    Long signalId = signalId(order);
+                    if (signalId == null) stateService.savePosition(position);
+                    else stateService.savePosition(position, signalId);
                     stateService.savePortfolio();
                 }
             }
@@ -328,6 +330,18 @@ public class PaperTradingEngine implements TradingService {
                 ? (String) order.getAdditionalProperties().get("signalReason")
                 : null
         );
+    }
+
+    private static Long signalId(Order order) {
+        if (order == null || order.getAdditionalProperties() == null) return null;
+        Object raw = order.getAdditionalProperties().get("signalId");
+        if (raw == null) return null;
+        try {
+            long value = Long.parseLong(raw.toString());
+            return value > 0 ? value : null;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     /**

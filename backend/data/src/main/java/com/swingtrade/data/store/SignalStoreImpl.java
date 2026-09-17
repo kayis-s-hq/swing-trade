@@ -55,6 +55,11 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
+    public Optional<String> findStrategyById(Long signalId) {
+        return signalId == null ? Optional.empty() : repository.findStrategyById(signalId);
+    }
+
+    @Override
     public List<Signal> findByType(Signal.SignalType type) {
         return repository.findByDateRangeAndSignalType(
                 LocalDate.MIN, LocalDate.MAX, type.name(), org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).stream()
@@ -81,9 +86,12 @@ public class SignalStoreImpl implements SignalStore {
 
     @Override
     public Signal save(Signal signal, String warningFlag, String strategy) {
-        SignalEntity entity = SignalEntity.fromDomain(signal, warningFlag);
-        entity.setStrategy(strategy);
-        return repository.save(entity).toDomain();
+        return save(signal, warningFlag, strategy, 1);
+    }
+
+    @Override
+    public Signal save(Signal signal, String warningFlag, String strategy, Integer strategyVersion) {
+        return repository.save(SignalEntity.fromDomain(signal, warningFlag, strategy, strategyVersion)).toDomain();
     }
 
     @Override

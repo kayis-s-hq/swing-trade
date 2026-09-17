@@ -64,6 +64,7 @@ public class SentimentStoreImpl implements SentimentStore {
                 existing.setArticleCount(entity.getArticleCount());
                 existing.setSource(entity.getSource());
                 existing.setArticleIds(entity.getArticleIds());
+                existing.setAuditRequestId(entity.getAuditRequestId());
                 return repository.saveAndFlush(existing).toDomain();
             })
             .orElseGet(() -> repository.save(entity).toDomain());

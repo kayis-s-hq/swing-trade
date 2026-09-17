@@ -236,6 +236,21 @@ public class YahooFinanceClient implements MarketDataClient {
             JsonNode timestamps = result.get(0).path("timestamp");
             if (!quoteObj.isObject() || !timestamps.isArray() || timestamps.size() == 0) return null;
 
+            ZoneId exchangeZone = resolveExchangeZone(result.get(0).path("meta"));
+            int row = -1;
+            for (int i = 0; i < timestamps.size(); i++) {
+                LocalDate resolvedDate = LocalDate.ofInstant(
+                    Instant.ofEpochSecond(timestamps.get(i).asLong()), exchangeZone);
+                if (date.equals(resolvedDate)) {
+                    row = i;
+                    break;
+                }
+            }
+            if (row < 0) {
+                logger.warn("Yahoo returned no candle timestamp for {} on {}", symbol, date);
+                return null;
+            }
+
             JsonNode openArr = quoteObj.path("open");
             JsonNode highArr = quoteObj.path("high");
             JsonNode lowArr = quoteObj.path("low");
@@ -244,22 +259,29 @@ public class YahooFinanceClient implements MarketDataClient {
             JsonNode adjArr = result.get(0).path("indicators").path("adjclose")
                 .isArray() && result.get(0).path("indicators").path("adjclose").size() > 0
                     ? result.get(0).path("indicators").path("adjclose").get(0).path("adjclose") : null;
-            if (!closeArr.isArray() || closeArr.size() == 0 || closeArr.get(0).isNull()) {
+            if (!closeArr.isArray() || row >= closeArr.size() || closeArr.get(row).isNull()) {
                 logger.warn("Yahoo returned no close values for {} on {}", symbol, date);
                 return null;
             }
-            double closeVal = closeArr.get(0).asDouble(0);
+            if (!openArr.isArray() || !highArr.isArray() || !lowArr.isArray()
+                    || !volumeArr.isArray() || row >= openArr.size() || row >= highArr.size()
+                    || row >= lowArr.size() || row >= volumeArr.size()
+                    || openArr.get(row).isNull() || highArr.get(row).isNull() || lowArr.get(row).isNull()) {
+                logger.warn("Yahoo returned incomplete OHLCV values for {} on {}", symbol, date);
+                return null;
+            }
+            double closeVal = closeArr.get(row).asDouble(0);
             if (!Double.isFinite(closeVal) || closeVal == 0) {
                 logger.warn("Yahoo returned an unusable close value for {} on {}: {}", symbol, date, closeVal);
                 return null;
             }
-            long volume = volumeArr.isNull() ? 0 : volumeArr.get(0).asLong(0);
+            long volume = volumeArr.get(row).asLong(0);
             if (volume == 0) return null;
             return CandleData.of(symbol, date,
-                parseBigDecimal(openArr.get(0)), parseBigDecimal(highArr.get(0)),
-                parseBigDecimal(lowArr.get(0)), parseBigDecimal(closeArr.get(0)), volume,
-                (adjArr != null && !adjArr.isNull()) ? parseBigDecimal(adjArr.get(0))
-                    : parseBigDecimal(closeArr.get(0)));
+                parseBigDecimal(openArr.get(row)), parseBigDecimal(highArr.get(row)),
+                parseBigDecimal(lowArr.get(row)), parseBigDecimal(closeArr.get(row)), volume,
+                (adjArr != null && !adjArr.isNull() && row < adjArr.size()) ? parseBigDecimal(adjArr.get(row))
+                    : parseBigDecimal(closeArr.get(row)));
 
         } catch (Exception e) {
             logger.warn("Failed to fetch candle for {} on {}: {}", symbol, date, e.getMessage());

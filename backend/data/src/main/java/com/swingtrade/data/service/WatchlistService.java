@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -19,6 +20,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -32,6 +36,7 @@ public class WatchlistService {
     private final OhlcvCandleRepository candleRepository;
     private final DataIngestionService dataIngestionService;
     private final MarketDataClientProvider marketDataClientProvider;
+    private final int backfillParallelism;
 
     // In-memory pull progress tracking
     private final ConcurrentHashMap<String, PullProgress> pullProgressMap = new ConcurrentHashMap<>();
@@ -42,13 +47,15 @@ public class WatchlistService {
             StockRepository stockRepository,
             OhlcvCandleRepository candleRepository,
             DataIngestionService dataIngestionService,
-            MarketDataClientProvider marketDataClientProvider
+            MarketDataClientProvider marketDataClientProvider,
+            @Value("${data.backfill.parallelism:5}") int backfillParallelism
     ) {
         this.watchlistRepository = watchlistRepository;
         this.stockRepository = stockRepository;
         this.candleRepository = candleRepository;
         this.dataIngestionService = dataIngestionService;
         this.marketDataClientProvider = marketDataClientProvider;
+        this.backfillParallelism = Math.max(1, backfillParallelism);
     }
 
     // -----------------------------------------------------------------------
@@ -213,30 +220,48 @@ public class WatchlistService {
         PullProgress progress = pullProgressMap.get(pullId);
         if (progress == null) return;
 
-        for (WatchlistEntity entry : watchlist) {
-            progress.updateCurrent(entry.getSymbol());
-            try {
-                // Request the complete configured range in one provider call. The database
-                // upsert makes this idempotent while allowing the provider response to repair
-                // internal gaps, not just append after the latest stored candle.
-                dataIngestionService.processStockData(entry.getSymbol(), fromDate, toDate);
-
-                // Update watchlist entry
-                entry.setLastSyncedAt(LocalDateTime.now());
-                entry.setCandleCount((int) candleRepository.countBySymbol(entry.getSymbol()));
-                watchlistRepository.save(entry);
-
-                progress.incrementCompleted();
-                logger.info("Pull progress: {}/{} - {} complete", progress.getCompleted(), progress.getTotal(), entry.getSymbol());
-            } catch (Exception e) {
-                logger.error("Failed to pull data for {}: {}", entry.getSymbol(), e.getMessage());
-                progress.incrementFailed();
+        try (ExecutorService executor = Executors.newFixedThreadPool(backfillParallelism)) {
+            for (WatchlistEntity entry : watchlist) {
+                executor.submit(() -> processPullEntry(entry, fromDate, toDate, progress));
             }
+            executor.shutdown();
+            if (!executor.awaitTermination(1, TimeUnit.DAYS)) {
+                logger.error("Pull {} exceeded its one-day execution limit", pullId);
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            progress.setStatus("cancelled");
+            logger.warn("Pull {} interrupted", pullId);
         }
 
-        progress.setStatus("completed");
+        if (!"cancelled".equals(progress.getStatus())) {
+            progress.setStatus("completed");
+        }
         activePullId.set(null);
         logger.info("Pull {} completed: {} succeeded, {} failed", pullId, progress.getCompleted(), progress.getFailed());
+    }
+
+    private void processPullEntry(WatchlistEntity entry, LocalDate fromDate, LocalDate toDate,
+                                  PullProgress progress) {
+        progress.updateCurrent(entry.getSymbol());
+        try {
+            // Only fetch the missing tail for each symbol; bounded repair handles recent
+            // interior gaps separately and this avoids downloading the full history again.
+            dataIngestionService.processIncrementalStockData(entry.getSymbol(), fromDate, toDate);
+
+            // Each entry is owned by one task, so its state cannot race with another symbol.
+            entry.setLastSyncedAt(LocalDateTime.now());
+            entry.setCandleCount((int) candleRepository.countBySymbol(entry.getSymbol()));
+            watchlistRepository.save(entry);
+
+            progress.incrementCompleted();
+            logger.info("Pull progress: {}/{} - {} complete", progress.getProcessed(),
+                progress.getTotal(), entry.getSymbol());
+        } catch (Exception e) {
+            logger.error("Failed to pull data for {}: {}", entry.getSymbol(), e.getMessage());
+            progress.incrementFailed();
+        }
     }
 
     public Optional<PullProgress> getPullProgress(String pullId) {
@@ -281,6 +306,7 @@ public class WatchlistService {
         public int getTotal() { return total; }
         public int getCompleted() { return completed.get(); }
         public int getFailed() { return failed.get(); }
+        public int getProcessed() { return completed.get() + failed.get(); }
         public String getCurrentSymbol() { return currentSymbol.get(); }
         public String getStatus() { return status.get(); }
 
@@ -299,7 +325,7 @@ public class WatchlistService {
         }
 
         public double getPercentComplete() {
-            return total > 0 ? (double) completed.get() / total * 100 : 0;
+            return total > 0 ? (double) getProcessed() / total * 100 : 0;
         }
     }
 }

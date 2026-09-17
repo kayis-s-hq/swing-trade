@@ -37,6 +37,25 @@ export interface SignalGenerationProgress {
   signal?: Signal
 }
 
+export interface GateEffectivenessSummary {
+  count: number
+  meanForwardReturnPct: Record<string, number>
+  returnObservationCounts: Record<string, number>
+  realizedPnl: number
+}
+
+export interface GateEffectivenessReport {
+  from: string
+  to: string
+  symbol: string | null
+  strategy: string | null
+  regime: string | null
+  auditCount: number
+  verdicts: Record<string, GateEffectivenessSummary>
+  byStrategy: Record<string, GateEffectivenessSummary>
+  byRegime: Record<string, GateEffectivenessSummary>
+}
+
 const mapSignal = (s: BackendSignal): Signal => ({
   id: s.id === null ? `${s.symbol}-${s.date}` : String(s.id),
   symbol: s.symbol,
@@ -61,6 +80,40 @@ export async function getSignals(): Promise<Signal[]> {
     responseContract: 'direct',
   })
   return signals.map(mapSignal)
+}
+
+export async function getGateEffectiveness(options: {
+  from: string
+  to: string
+  gate?: string
+  strategy?: string
+  regime?: string
+}): Promise<GateEffectivenessReport> {
+  const params = new URLSearchParams({ from: options.from, to: options.to })
+  if (options.gate) params.set('gate', options.gate)
+  if (options.strategy) params.set('strategy', options.strategy)
+  if (options.regime) params.set('regime', options.regime)
+  const report = await apiRequest<GateEffectivenessReport>(
+    `/signals/gate-effectiveness?${params.toString()}`,
+    { method: 'GET', responseContract: 'direct' }
+  )
+  const normalize = (summary: GateEffectivenessSummary): GateEffectivenessSummary => ({
+    ...summary,
+    realizedPnl: toNum(summary.realizedPnl),
+    meanForwardReturnPct: Object.fromEntries(
+      Object.entries(summary.meanForwardReturnPct ?? {}).map(([key, value]) => [key, toNum(value)])
+    ),
+  })
+  const normalizeMap = (value: Record<string, GateEffectivenessSummary>) =>
+    Object.fromEntries(
+      Object.entries(value ?? {}).map(([key, summary]) => [key, normalize(summary)])
+    )
+  return {
+    ...report,
+    verdicts: normalizeMap(report.verdicts),
+    byStrategy: normalizeMap(report.byStrategy),
+    byRegime: normalizeMap(report.byRegime),
+  }
 }
 
 export async function generateAllSignals(): Promise<{

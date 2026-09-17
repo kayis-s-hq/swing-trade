@@ -99,6 +99,9 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
      */
     List<PositionEntity> findBySymbol(String symbol);
 
+    @Query("SELECT p FROM PositionEntity p WHERE p.signalId = :signalId AND p.status <> 'OPEN'")
+    List<PositionEntity> findClosedBySignalId(@Param("signalId") Long signalId);
+
     @Query("SELECT p FROM PositionEntity p WHERE p.brokerType = :brokerType ORDER BY p.entryDate DESC")
     List<PositionEntity> findByBrokerType(@Param("brokerType") String brokerType);
 

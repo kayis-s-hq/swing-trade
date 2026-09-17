@@ -34,12 +34,17 @@ public record SentimentAccuracy(
     BigDecimal actualReturn1d,
     BigDecimal actualReturn5d,
     BigDecimal actualReturn21d,
+    BigDecimal excessReturn1d,
+    BigDecimal excessReturn5d,
+    BigDecimal excessReturn21d,
+    String groundTruthBasis,
     String groundTruthLabel,
     Boolean wasCorrect,
     BigDecimal pnlPct,
     String marketRegime,
     String promptHash,
     String modelVersion,
+    String sentimentSource,
     LocalDateTime evaluatedAt
 ) {
 }

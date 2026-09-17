@@ -206,6 +206,12 @@ const navItems = computed(() => [
     icon: iconPaths.signals,
     badge: buySignalCount.value ? String(buySignalCount.value) : undefined,
   },
+  {
+    path: '/gate-effectiveness',
+    label: 'Gate Effectiveness',
+    icon: iconPaths.intelligence,
+    badge: undefined,
+  },
   { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
   { path: '/strategies', label: 'Strategies', icon: iconPaths.settings, badge: undefined },
   { path: '/news', label: 'News', icon: iconPaths.intelligence, badge: undefined },

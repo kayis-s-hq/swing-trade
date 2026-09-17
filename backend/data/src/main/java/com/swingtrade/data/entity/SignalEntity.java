@@ -73,8 +73,11 @@ public class SignalEntity {
     @Column(name = "generated_at")
     private LocalDate generatedAt;
 
-    @Column(name = "strategy", nullable = false, length = 30)
+    @Column(name = "strategy", nullable = false, length = 40)
     private String strategy = STRATEGY_DEFAULT;
+
+    @Column(name = "strategy_version", nullable = false)
+    private Integer strategyVersion = 1;
 
     // Warning flag constants
     public static final String WARNING_NONE = "";
@@ -145,6 +148,11 @@ public class SignalEntity {
     }
 
     public static SignalEntity fromDomain(Signal signal, String warningFlag) {
+        return fromDomain(signal, warningFlag, STRATEGY_DEFAULT, 1);
+    }
+
+    public static SignalEntity fromDomain(Signal signal, String warningFlag,
+                                          String strategy, Integer strategyVersion) {
         SignalEntity entity = new SignalEntity();
         entity.setSymbol(signal.symbol());
         entity.setDate(signal.date());
@@ -160,6 +168,8 @@ public class SignalEntity {
         entity.setWarningFlag(warningFlag);
         entity.setSentimentScore(signal.sentimentScore());
         entity.setSentimentReasoning(signal.sentimentReasoning());
+        entity.setStrategy(strategy == null || strategy.isBlank() ? STRATEGY_DEFAULT : strategy);
+        entity.setStrategyVersion(strategyVersion == null || strategyVersion < 1 ? 1 : strategyVersion);
         return entity;
     }
 
@@ -325,6 +335,14 @@ public class SignalEntity {
 
     public void setStrategy(String strategy) {
         this.strategy = strategy;
+    }
+
+    public Integer getStrategyVersion() {
+        return strategyVersion;
+    }
+
+    public void setStrategyVersion(Integer strategyVersion) {
+        this.strategyVersion = strategyVersion;
     }
 
     public Boolean getProcessed() {

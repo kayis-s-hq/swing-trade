@@ -2,6 +2,8 @@ package com.swingtrade.api.service;
 
 import com.swingtrade.data.entity.GateEffectivenessAuditEntity;
 import com.swingtrade.data.repository.GateEffectivenessAuditRepository;
+import com.swingtrade.data.repository.PositionRepository;
+import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.domain.store.CandleStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,15 +19,27 @@ import java.util.Map;
 @Service
 public class GateEffectivenessAuditService {
     public static final String SENTIMENT_GATE = "SENTIMENT";
+    public static final String LLM_GATE = "LLM_ANALYSIS";
+    public static final String ELIGIBILITY_GATE = "LIVE_ELIGIBILITY";
     public static final String DEFAULT_STRATEGY = "DEFAULT";
     public static final String UNKNOWN_DIMENSION = "UNKNOWN";
 
     private final GateEffectivenessAuditRepository repository;
     private final CandleStore candleStore;
+    private final SignalRepository signalRepository;
+    private final PositionRepository positionRepository;
 
     public GateEffectivenessAuditService(GateEffectivenessAuditRepository repository, CandleStore candleStore) {
+        this(repository, candleStore, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public GateEffectivenessAuditService(GateEffectivenessAuditRepository repository, CandleStore candleStore,
+                                         SignalRepository signalRepository, PositionRepository positionRepository) {
         this.repository = repository;
         this.candleStore = candleStore;
+        this.signalRepository = signalRepository;
+        this.positionRepository = positionRepository;
     }
 
     @Transactional
@@ -38,11 +52,20 @@ public class GateEffectivenessAuditService {
     public void recordSentimentVerdict(String symbol, LocalDate signalDate,
                                        SentimentGate.SentimentVerdict verdict, String strategy) {
         if (verdict.action() == SentimentGate.SentimentVerdict.Action.PENDING) return;
+        recordGateVerdict(symbol, signalDate, SENTIMENT_GATE, verdict.action().name(), verdict.reason(), strategy);
+    }
+
+    @Transactional
+    public void recordGateVerdict(String symbol, LocalDate signalDate, String gateName,
+                                  String verdict, String reason, String strategy) {
+        if (symbol == null || signalDate == null || gateName == null || gateName.isBlank()
+                || verdict == null || verdict.isBlank()) return;
+        String auditStrategy = normalizeStrategy(strategy);
         GateEffectivenessAuditEntity entity = repository
-            .findBySymbolAndSignalDateAndGateNameAndStrategy(symbol, signalDate, SENTIMENT_GATE,
-                normalizeStrategy(strategy))
-            .orElseGet(() -> new GateEffectivenessAuditEntity(symbol, signalDate, SENTIMENT_GATE,
-                verdict.action().name(), verdict.reason(), OffsetDateTime.now(), normalizeStrategy(strategy)));
+            .findBySymbolAndSignalDateAndGateNameAndStrategy(symbol, signalDate, gateName,
+                auditStrategy)
+            .orElseGet(() -> new GateEffectivenessAuditEntity(symbol, signalDate, gateName,
+                verdict, reason, OffsetDateTime.now(), auditStrategy));
         // Keep the first decision: overwriting it on a retry would bias the audit.
         repository.save(entity);
     }
@@ -55,10 +78,22 @@ public class GateEffectivenessAuditService {
     @Transactional(readOnly = true)
     public EffectivenessReport report(LocalDate from, LocalDate to, String symbol,
                                      String strategy, String regime) {
+        return report(from, to, symbol, strategy, regime, SENTIMENT_GATE);
+    }
+
+    @Transactional(readOnly = true)
+    public EffectivenessReport report(LocalDate from, LocalDate to, String symbol,
+                                     String strategy, String regime, String gateName) {
         List<GateEffectivenessAuditEntity> audits = symbol == null
-            ? repository.findByGateNameAndSignalDateBetweenOrderBySignalDateAsc(SENTIMENT_GATE, from, to)
-            : repository.findByGateNameAndSymbolAndSignalDateBetweenOrderBySignalDateAsc(
-                SENTIMENT_GATE, symbol, from, to);
+            ? (SENTIMENT_GATE.equalsIgnoreCase(gateName)
+                ? repository.findByGateNameAndSignalDateBetweenOrderBySignalDateAsc(gateName, from, to)
+                : repository.findBySignalDateBetweenOrderBySignalDateAsc(from, to).stream()
+                    .filter(audit -> gateName.equalsIgnoreCase(audit.getGateName())).toList())
+            : (SENTIMENT_GATE.equalsIgnoreCase(gateName)
+                ? repository.findByGateNameAndSymbolAndSignalDateBetweenOrderBySignalDateAsc(
+                    gateName, symbol, from, to)
+                : repository.findBySymbolAndSignalDateBetweenOrderBySignalDateAsc(symbol, from, to).stream()
+                    .filter(audit -> gateName.equalsIgnoreCase(audit.getGateName())).toList());
 
         Map<String, MutableBucket> buckets = new LinkedHashMap<>();
         Map<String, MutableBucket> strategyBuckets = new LinkedHashMap<>();
@@ -82,6 +117,7 @@ public class GateEffectivenessAuditService {
 
     private void addOutcome(MutableBucket bucket, GateEffectivenessAuditEntity audit) {
         bucket.count++;
+        realizedPnl(audit).ifPresent(value -> bucket.realizedPnl = bucket.realizedPnl.add(value));
         for (int horizon : new int[]{1, 5, 20}) {
             forwardReturn(audit.getSymbol(), audit.getSignalDate(), horizon).ifPresent(value -> {
                 bucket.returnSums.merge(horizon, value, BigDecimal::add);
@@ -112,6 +148,23 @@ public class GateEffectivenessAuditService {
 
     private static String normalizeStrategy(String strategy) {
         return strategy == null || strategy.isBlank() ? DEFAULT_STRATEGY : strategy;
+    }
+
+    private java.util.Optional<BigDecimal> realizedPnl(GateEffectivenessAuditEntity audit) {
+        if (signalRepository == null || positionRepository == null) return java.util.Optional.empty();
+        List<Long> signalIds = signalRepository.findIdsBySymbolAndDateAndStrategy(
+            audit.getSymbol(), audit.getSignalDate(), normalizeStrategy(audit.getStrategy()));
+        BigDecimal total = BigDecimal.ZERO;
+        boolean observed = false;
+        for (Long signalId : signalIds) {
+            for (var position : positionRepository.findClosedBySignalId(signalId)) {
+                if (position.getRealizedPnL() != null) {
+                    total = total.add(position.getRealizedPnL());
+                    observed = true;
+                }
+            }
+        }
+        return observed ? java.util.Optional.of(total) : java.util.Optional.empty();
     }
 
     private static Map<String, VerdictSummary> summarize(Map<String, MutableBucket> buckets) {
@@ -146,9 +199,13 @@ public class GateEffectivenessAuditService {
     }
 
     public record VerdictSummary(int count, Map<Integer, BigDecimal> meanForwardReturnPct,
-                                 Map<Integer, Integer> returnObservationCounts) {
+                                 Map<Integer, Integer> returnObservationCounts, BigDecimal realizedPnl) {
         public VerdictSummary(int count, Map<Integer, BigDecimal> meanForwardReturnPct) {
-            this(count, meanForwardReturnPct, Map.of());
+            this(count, meanForwardReturnPct, Map.of(), BigDecimal.ZERO);
+        }
+        public VerdictSummary(int count, Map<Integer, BigDecimal> meanForwardReturnPct,
+                              Map<Integer, Integer> returnObservationCounts) {
+            this(count, meanForwardReturnPct, returnObservationCounts, BigDecimal.ZERO);
         }
     }
 
@@ -156,11 +213,12 @@ public class GateEffectivenessAuditService {
         int count;
         Map<Integer, BigDecimal> returnSums = new LinkedHashMap<>();
         Map<Integer, Integer> returnCounts = new LinkedHashMap<>();
+        BigDecimal realizedPnl = BigDecimal.ZERO;
         VerdictSummary summary() {
             Map<Integer, BigDecimal> means = new LinkedHashMap<>();
             returnSums.forEach((horizon, sum) -> means.put(horizon,
                 sum.divide(BigDecimal.valueOf(returnCounts.get(horizon)), 4, RoundingMode.HALF_UP)));
-            return new VerdictSummary(count, means, new LinkedHashMap<>(returnCounts));
+            return new VerdictSummary(count, means, new LinkedHashMap<>(returnCounts), realizedPnl);
         }
     }
 }

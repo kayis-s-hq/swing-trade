@@ -1,5 +1,6 @@
 package com.swingtrade.strategy;
 
+import com.swingtrade.domain.StrategyConfig;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -31,12 +32,21 @@ public class StrategyRegistry {
 
     private final Map<String, TradingStrategy> strategiesByName;
     private final TradingStrategy defaultStrategy;
+    private final PriceActionConfluenceStrategy priceActionConfluenceStrategy;
 
-    public StrategyRegistry(List<TradingStrategy> strategies, PriceActionStrategy defaultStrategy) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public StrategyRegistry(List<TradingStrategy> strategies, PriceActionStrategy defaultStrategy,
+                            PriceActionConfluenceStrategy priceActionConfluenceStrategy) {
         this.strategiesByName = strategies.stream()
             .filter(strategy -> EXPLICITLY_ENABLED_NAMES.contains(strategy.name()))
             .collect(Collectors.toMap(TradingStrategy::name, Function.identity()));
         this.defaultStrategy = defaultStrategy;
+        this.priceActionConfluenceStrategy = priceActionConfluenceStrategy;
+    }
+
+    /** Compatibility constructor for unit tests and callers that only register the default bean. */
+    public StrategyRegistry(List<TradingStrategy> strategies, PriceActionStrategy defaultStrategy) {
+        this(strategies, defaultStrategy, new PriceActionConfluenceStrategy());
     }
 
     /** The compatibility strategy used when no live configuration is active. */
@@ -46,6 +56,19 @@ public class StrategyRegistry {
 
     public Optional<TradingStrategy> find(String name) {
         return Optional.ofNullable(strategiesByName.get(name));
+    }
+
+    /**
+     * Resolves a persisted strategy configuration, applying only parameters with an explicit
+     * strategy-owned parser. Unknown strategy types remain fail-closed through an empty result.
+     */
+    public Optional<TradingStrategy> resolve(StrategyConfig config) {
+        if (config == null) return Optional.empty();
+        if (PriceActionConfluenceStrategy.NAME.equals(config.strategyType())) {
+            // Build a request-scoped instance so one variant's RSI range cannot leak into another.
+            return Optional.of(PriceActionConfluenceStrategy.fromParameters(config.params()));
+        }
+        return find(config.strategyType());
     }
 
     public List<String> availableNames() {

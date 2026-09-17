@@ -1,5 +1,6 @@
 package com.swingtrade.data.service;
 
+import com.swingtrade.core.metrics.DataIngestionMetrics;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.data.entity.FyersSymbolEntity;
@@ -18,6 +19,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 import reactor.netty.http.client.HttpClient;
 
 import java.math.BigDecimal;
@@ -61,6 +63,7 @@ public class FyersServiceClient implements MarketDataClient {
     // Resilience4j fields
     private CircuitBreaker fyersCircuitBreaker;
     private Bulkhead fyersBulkhead;
+    private DataIngestionMetrics ingestionMetrics;
 
     // Delegated order management services
     private final FyersOrderService orderService;
@@ -104,6 +107,10 @@ public class FyersServiceClient implements MarketDataClient {
     public void setResilience4j(CircuitBreaker circuitBreaker, Bulkhead bulkhead) {
         this.fyersCircuitBreaker = circuitBreaker;
         this.fyersBulkhead = bulkhead;
+    }
+
+    public void setIngestionMetrics(DataIngestionMetrics ingestionMetrics) {
+        this.ingestionMetrics = ingestionMetrics;
     }
 
     // -----------------------------------------------------------------------
@@ -354,6 +361,16 @@ public class FyersServiceClient implements MarketDataClient {
         if (fyersBulkhead != null) {
             mono = mono.transformDeferred(BulkheadOperator.of(fyersBulkhead));
         }
+        mono = mono.retryWhen(Retry.backoff(4, Duration.ofSeconds(1))
+            .maxBackoff(Duration.ofSeconds(8))
+            .filter(this::isRateLimitError)
+            .doBeforeRetry(signal -> {
+                if (ingestionMetrics != null) {
+                    ingestionMetrics.recordRateLimitHit("fyers");
+                }
+                logger.warn("Fyers rate limit hit for {}; retry {}/{}", uri.getPath(),
+                    signal.totalRetries() + 1, 4);
+            }));
         return mono
             .onErrorResume(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class,
                 e -> {
@@ -366,6 +383,18 @@ public class FyersServiceClient implements MarketDataClient {
                     return Mono.empty();
                 })
             .block();
+    }
+
+    private boolean isRateLimitError(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof WebClientResponseException response
+                    && response.getStatusCode().value() == 429) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     /**

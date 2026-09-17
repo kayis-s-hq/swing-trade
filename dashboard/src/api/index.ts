@@ -27,6 +27,7 @@ export { checkHealth, getHealthStatus } from './health'
 // Signals
 export {
   getSignals,
+  getGateEffectiveness,
   generateAllSignals,
   generateAllSignalsStream,
   clearAllSignals,
@@ -37,7 +38,12 @@ export {
   generatePriceActionSignal,
   triggerScan,
 } from './signals'
-export type { SignalGenerationProgress, SignalStreamOptions } from './signals'
+export type {
+  GateEffectivenessReport,
+  GateEffectivenessSummary,
+  SignalGenerationProgress,
+  SignalStreamOptions,
+} from './signals'
 
 // Positions
 export {

@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -41,6 +42,7 @@ public class DataIngestionService {
     private final DataIngestionMetrics ingestionMetrics;
     private final MarketCalendar marketCalendar;
     private final ReconciliationAuditRepository reconciliationAuditRepository;
+    private final int backfillChunkDays;
 
     @Autowired
     public DataIngestionService(
@@ -51,7 +53,8 @@ public class DataIngestionService {
         TransactionTemplate txTemplate,
         DataIngestionMetrics ingestionMetrics,
         MarketCalendar marketCalendar,
-        ReconciliationAuditRepository reconciliationAuditRepository
+        ReconciliationAuditRepository reconciliationAuditRepository,
+        @Value("${data.backfill.chunk-days:30}") int backfillChunkDays
     ) {
         this.candleRepository = candleRepository;
         this.stockRepository = stockRepository;
@@ -61,6 +64,7 @@ public class DataIngestionService {
         this.ingestionMetrics = ingestionMetrics;
         this.marketCalendar = marketCalendar;
         this.reconciliationAuditRepository = reconciliationAuditRepository;
+        this.backfillChunkDays = Math.max(1, backfillChunkDays);
     }
 
     /** Compatibility constructor for lightweight unit tests. */
@@ -69,7 +73,7 @@ public class DataIngestionService {
         MarketDataClientProvider marketDataClientProvider, TransactionTemplate txTemplate,
         DataIngestionMetrics ingestionMetrics, MarketCalendar marketCalendar) {
         this(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider,
-            txTemplate, ingestionMetrics, marketCalendar, null);
+            txTemplate, ingestionMetrics, marketCalendar, null, 30);
     }
 
     /** Compatibility constructor for lightweight unit tests. */
@@ -78,7 +82,7 @@ public class DataIngestionService {
         MarketDataClientProvider marketDataClientProvider, TransactionTemplate txTemplate,
         DataIngestionMetrics ingestionMetrics) {
         this(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider,
-            txTemplate, ingestionMetrics, null, null);
+            txTemplate, ingestionMetrics, null, null, 30);
     }
 
     /**
@@ -99,10 +103,72 @@ public class DataIngestionService {
         LocalDate toDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
         LocalDate fromDate = toDate.minusYears(yearsBack);
 
-        BackfillOutcome outcome = processStockDataWithOutcome(stockSymbol, fromDate, toDate);
+        BackfillOutcome outcome = processIncrementalStockData(stockSymbol, fromDate, toDate);
 
         logger.info("Backfill completed for {}: {}", stockSymbol, outcome.sourceOutcome());
         return outcome;
+    }
+
+    /**
+     * Fetches only the unpopulated tail of a requested range. Existing interior gaps are
+     * handled by the bounded repair path; this method prevents a routine backfill from
+     * re-downloading years of already stored candles.
+     */
+    public BackfillOutcome processIncrementalStockData(String symbol, LocalDate requestedFrom,
+                                                       LocalDate toDate) {
+        if (symbol == null || symbol.isBlank() || requestedFrom == null || toDate == null
+                || requestedFrom.isAfter(toDate)) {
+            throw new IllegalArgumentException("symbol and an ordered date range are required");
+        }
+        DataWindow existing = getExistingDataWindow(symbol);
+        LocalDate effectiveFrom = requestedFrom;
+        if (existing.latestDate() != null && existing.latestDate().isAfter(requestedFrom.minusDays(1))) {
+            effectiveFrom = existing.latestDate().plusDays(1);
+        }
+        if (effectiveFrom.isAfter(toDate)) {
+            logger.info("Skipping incremental backfill for {}: existing data reaches {}", symbol,
+                existing.latestDate());
+            return new BackfillOutcome("ALREADY_CURRENT", 0, 0, 0, null);
+        }
+        logger.info("Incremental backfill for {}: requested {} to {}, fetching {} to {} in {}-day chunks",
+            symbol, requestedFrom, toDate, effectiveFrom, toDate, backfillChunkDays);
+        return processStockDataInChunks(symbol, effectiveFrom, toDate);
+    }
+
+    private BackfillOutcome processStockDataInChunks(String symbol, LocalDate fromDate, LocalDate toDate) {
+        int fetched = 0;
+        int saved = 0;
+        int invalid = 0;
+        String firstError = null;
+        boolean receivedData = false;
+        LocalDate chunkStart = fromDate;
+        while (!chunkStart.isAfter(toDate)) {
+            LocalDate chunkEnd = chunkStart.plusDays(backfillChunkDays - 1L);
+            if (chunkEnd.isAfter(toDate)) chunkEnd = toDate;
+            BackfillOutcome outcome = processStockDataWithOutcome(symbol, chunkStart, chunkEnd);
+            fetched += outcome.fetchedRows();
+            saved += outcome.savedRows();
+            invalid += outcome.invalidRows();
+            receivedData |= !"NO_USABLE_DATA".equals(outcome.sourceOutcome())
+                && !"TRANSIENT_SOURCE_FAILURE".equals(outcome.sourceOutcome());
+            if (firstError == null) firstError = outcome.errorMessage();
+            chunkStart = chunkEnd.plusDays(1);
+        }
+        String sourceOutcome = firstError != null && fetched == 0 ? "TRANSIENT_SOURCE_FAILURE"
+            : fetched == 0 ? "NO_USABLE_DATA"
+            : invalid > 0 && saved == 0 ? "INVALID_ROWS_REJECTED"
+            : receivedData ? "DATA_RECEIVED" : "NO_USABLE_DATA";
+        return new BackfillOutcome(sourceOutcome, fetched, saved, invalid, firstError);
+    }
+
+    /** Returns the earliest and latest stored candle dates for a symbol. */
+    public DataWindow getExistingDataWindow(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            throw new IllegalArgumentException("symbol is required");
+        }
+        LocalDate earliest = candleRepository.findEarliestBySymbol(symbol).map(OhlcvCandleEntity::getDate).orElse(null);
+        LocalDate latest = candleRepository.findLatestBySymbol(symbol).map(OhlcvCandleEntity::getDate).orElse(null);
+        return new DataWindow(earliest, latest);
     }
 
     /**
@@ -338,14 +404,13 @@ public class DataIngestionService {
             org.springframework.data.domain.Pageable.unpaged()
         );
 
-        report.setActualTradingDays(candles.size());
+        Set<LocalDate> actualDates = candles.stream()
+            .map(OhlcvCandleEntity::getDate)
+            .collect(Collectors.toSet());
+        report.setActualTradingDays(actualDates.size());
 
         // Find gaps
         List<LocalDate> tradingDays = getTradingDays(fromDate, toDate);
-        List<LocalDate> actualDates = candles.stream()
-            .map(OhlcvCandleEntity::getDate)
-            .toList();
-
         List<DataGap> gaps = new ArrayList<>();
         LocalDate currentGapStart = null;
 
@@ -373,6 +438,11 @@ public class DataIngestionService {
         // Check for price anomalies
         List<PriceAnomaly> anomalies = findPriceAnomalies(candles);
         report.setAnomalies(anomalies);
+
+        if (report.isCritical()) {
+            logger.warn("Critical data quality issues for {} from {} to {}: gapRate={}%, gaps={}, anomalies={}",
+                stockSymbol, fromDate, toDate, report.getGapPercentage(), gaps.size(), anomalies.size());
+        }
 
         return report;
     }
@@ -538,25 +608,37 @@ public class DataIngestionService {
         public long getExpectedTradingDays() { return expectedTradingDays; }
         public void setExpectedTradingDays(long expectedTradingDays) {
             this.expectedTradingDays = expectedTradingDays;
-            this.hasIssues = actualTradingDays < expectedTradingDays;
+            refreshIssueState();
         }
         public long getActualTradingDays() { return actualTradingDays; }
         public void setActualTradingDays(long actualTradingDays) {
             this.actualTradingDays = actualTradingDays;
-            this.hasIssues = actualTradingDays < expectedTradingDays;
+            refreshIssueState();
         }
         public List<DataGap> getGaps() { return gaps; }
         public void setGaps(List<DataGap> gaps) {
-            this.gaps = gaps;
-            this.hasIssues = !gaps.isEmpty();
+            this.gaps = gaps == null ? new ArrayList<>() : gaps;
+            refreshIssueState();
         }
         public List<PriceAnomaly> getAnomalies() { return anomalies; }
         public void setAnomalies(List<PriceAnomaly> anomalies) {
-            this.anomalies = anomalies;
-            this.hasIssues = !anomalies.isEmpty();
+            this.anomalies = anomalies == null ? new ArrayList<>() : anomalies;
+            refreshIssueState();
         }
         public boolean hasIssues() { return hasIssues; }
         public void setHasIssues(boolean hasIssues) { this.hasIssues = hasIssues; }
+        public double getGapPercentage() {
+            return expectedTradingDays == 0 ? 0.0
+                : ((expectedTradingDays - Math.min(expectedTradingDays, actualTradingDays)) * 100.0)
+                    / expectedTradingDays;
+        }
+        public boolean isCritical() { return getGapPercentage() > 10.0 || !anomalies.isEmpty(); }
+
+        private void refreshIssueState() {
+            this.hasIssues = actualTradingDays < expectedTradingDays
+                || !gaps.isEmpty()
+                || !anomalies.isEmpty();
+        }
     }
 
     /**
@@ -609,4 +691,6 @@ public class DataIngestionService {
 
     public record BackfillOutcome(String sourceOutcome, int fetchedRows, int savedRows,
                                   int invalidRows, String errorMessage) {}
+
+    public record DataWindow(LocalDate earliestDate, LocalDate latestDate) {}
 }

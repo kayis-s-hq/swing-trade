@@ -188,6 +188,7 @@ public class SentimentService {
     public SentimentResult analyzeStockSentiment(String stockSymbol, LocalDate date) {
         logger.info("Starting sentiment analysis for stock: {} on date: {}", stockSymbol, date);
         long start = System.currentTimeMillis();
+        String auditRequestId = UUID.randomUUID().toString();
 
         try {
             // Fetch news articles
@@ -263,12 +264,12 @@ public class SentimentService {
             // Perform sentiment analysis
             SentimentOutput analysisResult;
             try {
-                analysisResult = performSentimentAnalysis(stockSymbol, date, newsContent);
+                analysisResult = performSentimentAnalysis(stockSymbol, date, newsContent, auditRequestId);
             } catch (Exception llmEx) {
                 logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", stockSymbol, LlmErrorUtils.describeError(llmEx));
                 // Build a simple result from headlines
                 List<String> headlines = newsContent.stream().toList();
-                SentimentResult fallback = keywordBasedSentiment(stockSymbol, headlines);
+                SentimentResult fallback = keywordBasedSentiment(stockSymbol, date, headlines);
                 analysisResult = new SentimentOutput(
                         switch (fallback.score()) {
                             case POSITIVE -> SentimentType.POSITIVE;
@@ -284,7 +285,7 @@ public class SentimentService {
             var selectedBackend = clientProvider.getBackend();
             String provider = selectedBackend == null ? "unknown" : selectedBackend.getKey();
             SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult,
-                    articleIds.size(), articleIds, provider);
+                    articleIds.size(), articleIds, provider, auditRequestId);
 
             // Persist to database
             try {
@@ -346,7 +347,7 @@ public class SentimentService {
      * @return sentiment analysis result
      */
     private SentimentOutput performSentimentAnalysis(String stockSymbol, LocalDate analysisDate,
-                                                     List<String> newsContent) {
+                                                     List<String> newsContent, String requestId) {
         logger.debug("Performing LLM sentiment analysis for {} with {} articles", stockSymbol, newsContent.size());
 
         if (newsContent.isEmpty()) {
@@ -373,7 +374,6 @@ public class SentimentService {
         var backend = clientProvider.getBackend();
         int maxResponseTokens = backend == LlmBackendSelector.Backend.PI_SSH
                 ? PI_MAX_RESPONSE_TOKENS : DEFAULT_MAX_RESPONSE_TOKENS;
-        String requestId = UUID.randomUUID().toString();
         String provider = backend != null ? backend.getKey() : "unknown";
         String modelVersion = configuredModel(provider);
         String promptHash = computePromptHash();
@@ -407,18 +407,18 @@ public class SentimentService {
                         "No valid response from LLM", 0.0, List.of(), List.of(), "DEFAULT");
                 persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
                         promptHash, messages, llmResponse, empty, "SUCCESS", null, maxResponseTokens,
-                        startedAt, latencyMs);
+                        false, startedAt, latencyMs);
                 return empty;
             }
             SentimentOutput parsed = sentimentAnalyzer.parseResponse(llmResponse, newsContent.size());
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
                     promptHash, messages, llmResponse, parsed, "SUCCESS", null, maxResponseTokens,
-                    startedAt, latencyMs);
+                    false, startedAt, latencyMs);
             return parsed;
         } catch (Exception e) {
             String errorDetail = LlmErrorUtils.describeError(e);
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion, promptHash,
-                    messages, null, null, "FAILED", errorDetail, maxResponseTokens, startedAt,
+                    messages, null, null, "FAILED", errorDetail, maxResponseTokens, true, startedAt,
                     System.currentTimeMillis() - llmStart);
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), false);
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
@@ -500,14 +500,15 @@ public class SentimentService {
                               String provider, String model,
                               String promptHash, List<Map<String, String>> messages,
                               String rawResponse, SentimentOutput parsed, String status,
-                              String error, int maxResponseTokens, OffsetDateTime startedAt, long latencyMs) {
+                              String error, int maxResponseTokens, boolean fallbackUsed,
+                              OffsetDateTime startedAt, long latencyMs) {
         if (auditRepository == null) return;
         String score = parsed == null ? null : parsed.getSentiment().name();
         Double confidence = parsed == null ? null : parsed.getConfidence();
         auditRepository.save(new LlmAnalysisAuditEntity(requestId, symbol, analysisDate,
                 provider, model, promptHash, messages.get(0).get("content"),
                 messages.get(1).get("content"), rawResponse, score, confidence, status,
-                    error, false, maxResponseTokens, 0.3, startedAt,
+                    error, fallbackUsed, maxResponseTokens, 0.0, startedAt,
                 OffsetDateTime.now(ZoneOffset.UTC), latencyMs));
     }
 
@@ -539,6 +540,18 @@ public class SentimentService {
             int articleCount,
             List<Long> articleIds,
             String provider) {
+        return buildSentimentResult(stockSymbol, date, analysisResult, articleCount, articleIds,
+            provider, null);
+    }
+
+    private SentimentResult buildSentimentResult(
+            String stockSymbol,
+            LocalDate date,
+            SentimentOutput analysisResult,
+            int articleCount,
+            List<Long> articleIds,
+            String provider,
+            String auditRequestId) {
 
         String modelVersion = configuredModel(provider);
         String promptHash = computePromptHash();
@@ -573,7 +586,8 @@ public class SentimentService {
                 modelVersion,
                 articleCount,
                 analysisResult.getSource(),
-                articleIds
+                articleIds,
+                auditRequestId
         );
     }
 
@@ -715,7 +729,8 @@ public class SentimentService {
      * Classifies each headline by its overall sentiment using phrase matching,
      * then aggregates into a composite result.
      */
-    private SentimentResult keywordBasedSentiment(String symbol, List<String> headlines) {
+    private SentimentResult keywordBasedSentiment(String symbol, LocalDate analysisDate,
+                                                  List<String> headlines) {
         int posCount = 0, negCount = 0, neuCount = 0;
         List<String> posHeadlines = new ArrayList<>();
         List<String> negHeadlines = new ArrayList<>();
@@ -780,7 +795,7 @@ public class SentimentService {
         List<String> uniqueFlags = allFlags.stream().distinct().toList();
         List<String> uniqueCatalysts = allCatalysts.stream().distinct().toList();
 
-        return SentimentResult.create(symbol, LocalDate.now(), score,
+        return SentimentResult.create(symbol, analysisDate, score,
                 reasoning.toString(), "", confidence,
                 uniqueFlags.isEmpty() ? List.of() : uniqueFlags,
                 uniqueCatalysts.isEmpty() ? List.of() : uniqueCatalysts);

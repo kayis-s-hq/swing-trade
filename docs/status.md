@@ -1,10 +1,68 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-17 (documentation/lint and analytics remediation verification)
+Last checked: 2026-09-17 (strategy provenance verification)
+
+- [x] Strategy configuration provenance persisted 2026-09-17: configured signals now retain
+  their variant ID and immutable configuration version; legacy signals are backfilled to version
+  1, and the strategy column accepts the documented 40-character variant limit. Schema v60,
+  focused data/API tests, `./bin/verify-changes`, local Flyway migration, API health, positions,
+  and request/portfolio metrics checks passed.
+
+- [x] Legacy news provenance recovered 2026-09-17: historical sentiment reconstruction now
+  backfills missing `first_seen_at` from the original article `created_at` when available,
+  preserving fail-closed behavior for rows without either timestamp. Schema v61 and the
+  change-aware backend verification passed.
+
+- [x] Historical keyword fallback date corrected 2026-09-17: an LLM outage during analysis of
+  an earlier trading date now persists the keyword result under that requested date instead of
+  silently using the runtime date. LLM tests and `./bin/verify-changes` passed.
+
+- [x] Contextual plain-text sentiment fallback improved 2026-09-17: bullish/bearish, outlook,
+  guidance, earnings, and growth phrases are recognized with negation safeguards; ambiguous
+  mixed language remains neutral/unknown rather than forcing a polarity. LLM tests and
+  `./bin/verify-changes` passed.
 
 - [x] Local runtime revalidation 2026-09-17: the API migrated the PostgreSQL-backed schema to
   v55, reported healthy database/readiness status, and served
   `GET /api/signals/gate-effectiveness` successfully (empty result set in the current data window).
+
+- [x] Gate-outcome provenance extended 2026-09-17: paper positions now retain their originating
+  signal ID and gate-effectiveness buckets include realized P&L for closed positions with known
+  provenance; v56 migration, broker/API tests, full verifier, and live API checks passed.
+
+- [x] Non-sentiment gate audits extended 2026-09-17: LLM-analysis and live-eligibility outcomes
+  are persisted with strategy attribution and selectable through the gate-effectiveness endpoint;
+  focused API/controller tests passed, and the live `gate=LIVE_ELIGIBILITY` request returned 200
+  against the PostgreSQL-backed API.
+
+- [x] Gate-effectiveness dashboard added 2026-09-17: `/gate-effectiveness` now supports selectable
+  sentiment, LLM-analysis, and live-eligibility reports with decision counts, forward-return
+  horizons, and realized P&L; dashboard typecheck, 286 tests, lint, formatting, and production
+  build passed.
+
+- [x] Data-quality and risk accuracy fixes added 2026-09-17: `/api/admin/data/validate` reports
+  distinct stored sessions and a critical gap rate without losing gap flags when anomalies are
+  empty; daily loss protection now scopes realized P&L to the current India-market date; sentiment
+  accuracy windows average their own horizons. Focused data, accuracy, and broker tests passed.
+
+- [x] Excess-return sentiment labels added 2026-09-17: accuracy records now retain optional
+  persisted-NIFTY excess returns and a `RAW_RETURN`/`EXCESS_RETURN` basis; new labels use the
+  benchmark only when exact dates are available and legacy rows remain compatible. Schema v57,
+  affected data/API tests, local PostgreSQL migration, health, and data-quality API checks passed.
+
+- [x] Yahoo single-candle lookup hardened 2026-09-17: the client now selects the response row
+  matching the requested exchange date, rejects incomplete OHLCV rows with warnings, and retains
+  the bounded one-day request. Yahoo remains development/backfill-only; focused client tests and
+  the full change-aware backend verifier passed.
+
+- [x] Sentiment provenance carried into accuracy 2026-09-17: accuracy rows now retain the
+  originating `LLM`/`KEYWORD`/`DEFAULT` source, and predictive aggregates exclude fallback rows
+  while preserving legacy null-source data. Schema v58, affected data/API tests, local migration,
+  health, `/api/sentiment/accuracy/by-window`, and evaluation-status checks passed.
+
+- [x] Sector position filtering completed 2026-09-17: `/api/positions/sector/{sector}` now uses
+  persisted stock metadata, supports common sector aliases, and no longer returns a silent empty
+  result for valid sector data. Focused PositionService and full change-aware API tests passed.
 
 - [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
   producing signal variant, support multiple strategies per symbol/date, and report/filter by the
@@ -114,6 +172,53 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   opt-in 3-of-4 price-action strategy supports configurable RSI bounds. Full affected backend tests
   and `./bin/verify-changes` passed after restoring legacy fixture compatibility. Relative-strength
   live wiring and data-backed entry variant comparison remain open.
+
+- [x] Configured strategy parameters verified 2026-09-17: live orchestration now resolves persisted
+  `PRICE_ACTION_3_OF_4` RSI bounds per variant with request-scoped strategy instances; invalid
+  parameter maps are rejected fail-closed. Strategy/API tests passed; per-variant portfolio
+  isolation and production data population remain open.
+
+- [x] LLM audit correlation verified 2026-09-17: persisted sentiment results now retain the UUID
+  of the corresponding LLM audit attempt across successful responses and keyword fallbacks, while
+  pre-existing rows remain compatible with a nullable value. Core/data/LLM tests, full verifier,
+  local PostgreSQL migration to v59, API health, and the sentiment-window endpoint checks passed.
+
+- [x] LLM audit telemetry corrected 2026-09-17: audit rows now record the actual `temperature=0.0`
+  request setting and mark failed LLM attempts that lead to keyword fallback as `fallback_used`.
+  LLM/data tests and `./bin/verify-changes` passed.
+
+- [x] Synthesis determinism strengthened 2026-09-17: synthesis now runs at `temperature=0.0`,
+  and its prompt requires source-section labels for drivers/factors and prohibits invented data.
+  LLM tests and `./bin/verify-changes` passed; runtime grounding enforcement remains a follow-up.
+
+- [x] Market-data request throttling verified 2026-09-17: production client resolution now applies
+  a shared provider-aware token bucket (Yahoo retains its configured interval; Fyers/Upstox/default
+  use 60/100/30 requests per minute by default), including bulk and metadata methods. Fyers retries
+  HTTP 429 responses with bounded 1/2/4/8-second backoff, aliased beans share one limiter, and
+  limiter waits are exported as `data_rate_limit_hits{source=...}`. Data/API tests and
+  `./bin/verify-changes` passed.
+
+- [x] Yahoo usage boundary documented 2026-09-17: `docs/yahoo-finance-api.md` now states that
+  Yahoo is limited to local development, paper experiments, and backfills, and documents the
+  single-day `period1`/exclusive-`period2` request and unusable-close warning behavior.
+
+- [x] Portfolio metrics wiring verified 2026-09-17: active positions, total P&L, portfolio value,
+  and return gauges now read from the core `TradingService` instead of a hardcoded zero or an
+  API-to-broker concrete dependency. Metric registration coverage and `./bin/verify-changes` passed.
+
+- [x] API latency metrics verified 2026-09-17: the servlet layer now records
+  `api_request_duration_seconds` with bounded method/status tags, including requests whose handler
+  fails. Filter coverage and `./bin/verify-changes` passed.
+
+- [x] Incremental backfill verified 2026-09-17: `POST /api/data/pull/incremental` now exposes
+  bounded single-symbol pulls, `getExistingDataWindow` reports stored bounds, routine backfills skip
+  an already populated tail, long ranges are split into configurable 30-day provider requests, and
+  watchlist bulk pulls use the incremental path. Data/API tests and `./bin/verify-changes` passed;
+  bounded interior-gap repair remains handled separately.
+
+- [x] Watchlist backfill parallelism verified 2026-09-17: bulk pulls now use a bounded worker pool
+  (configurable with `DATA_BACKFILL_PARALLELISM`, default 5), isolate failures per symbol, and report
+  failed work in completion percentage. Backend tests and `./bin/verify-changes` passed.
 
 - [x] Strategy/risk follow-up verified 2026-09-16: bounded synthesis evaluation, two additional
   opt-in strategy families, portfolio sector/correlation rejection policies, and walk-forward

@@ -89,12 +89,19 @@ public class SignalController {
             @RequestParam LocalDate to,
             @RequestParam(required = false) String symbol,
             @RequestParam(required = false) String strategy,
-            @RequestParam(required = false) String regime) {
+            @RequestParam(required = false) String regime,
+            @RequestParam(defaultValue = "SENTIMENT") String gate) {
         if (from.isAfter(to)) return ResponseEntity.badRequest().body(Map.of("error", "from must not be after to"));
-        return ResponseEntity.ok(gateEffectivenessAuditService.report(from, to,
-            symbol == null || symbol.isBlank() ? null : symbol.trim().toUpperCase(),
-            strategy == null || strategy.isBlank() ? null : strategy.trim().toUpperCase(),
-            regime == null || regime.isBlank() ? null : regime.trim().toUpperCase()));
+        String normalizedGate = gate == null || gate.isBlank() ? "SENTIMENT" : gate.trim().toUpperCase();
+        String normalizedSymbol = symbol == null || symbol.isBlank() ? null : symbol.trim().toUpperCase();
+        String normalizedStrategy = strategy == null || strategy.isBlank() ? null : strategy.trim().toUpperCase();
+        String normalizedRegime = regime == null || regime.isBlank() ? null : regime.trim().toUpperCase();
+        if ("SENTIMENT".equals(normalizedGate)) {
+            return ResponseEntity.ok(gateEffectivenessAuditService.report(from, to, normalizedSymbol,
+                normalizedStrategy, normalizedRegime));
+        }
+        return ResponseEntity.ok(gateEffectivenessAuditService.report(from, to, normalizedSymbol,
+            normalizedStrategy, normalizedRegime, normalizedGate));
     }
 
     /**

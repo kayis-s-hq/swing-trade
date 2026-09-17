@@ -133,6 +133,31 @@ public class IngestionController {
         }
     }
 
+    /** Performs an incremental pull for one symbol, skipping its already stored tail. */
+    @PostMapping("/data/pull/incremental")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> incrementalPull(
+            @RequestParam String symbol, @RequestParam LocalDate from, @RequestParam LocalDate to) {
+        String normalized = symbol.trim().toUpperCase(java.util.Locale.ROOT);
+        try {
+            DataIngestionService.BackfillOutcome outcome =
+                dataIngestionService.processIncrementalStockData(normalized, from, to);
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("symbol", normalized);
+            payload.put("from", from);
+            payload.put("to", to);
+            payload.put("sourceOutcome", outcome.sourceOutcome());
+            payload.put("fetchedRows", outcome.fetchedRows());
+            payload.put("savedRows", outcome.savedRows());
+            payload.put("invalidRows", outcome.invalidRows());
+            return ResponseEntity.ok(ApiResponse.ok(payload));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Incremental pull failed for {}: {}", normalized, e.getMessage(), e);
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Incremental pull failed: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/ingestion/date")
     public ResponseEntity<ApiResponse<Map<String, Object>>> ingestDate(
             @RequestParam String symbol, @RequestParam LocalDate date) {

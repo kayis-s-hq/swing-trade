@@ -171,7 +171,7 @@ public class SignalPipeline {
         Signal saved = persistenceService.buildAndSaveWithWarning(
             symbol, result.date(), result.type(), confidence, result.reasoning(),
             buildPriceActionIndicators(result), BigDecimal.valueOf(result.atr()), warningFlag,
-            null, null, config.variantId());
+            null, null, config.variantId(), config.version());
         return java.util.Optional.of(saved);
     }
 

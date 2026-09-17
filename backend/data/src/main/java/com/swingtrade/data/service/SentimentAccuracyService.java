@@ -26,14 +26,17 @@ public class SentimentAccuracyService {
     }
 
     public AccuracyStats getAccuracyStats() {
-        long total = accuracyRepo.countAll();
-        long correct = accuracyRepo.countCorrect();
+        List<SentimentAccuracyEntity> scorable = accuracyRepo.findAll().stream()
+            .filter(SentimentAccuracyService::isScorable)
+            .toList();
+        long total = scorable.size();
+        long correct = scorable.stream().filter(e -> Boolean.TRUE.equals(e.getWasCorrect())).count();
         double accuracy = total > 0 ? (double) correct / total : 0.0;
 
         Map<String, Integer> bySentiment = new HashMap<>();
         Map<String, Integer> bySymbol = new HashMap<>();
 
-        for (SentimentAccuracyEntity e : accuracyRepo.findAll()) {
+        for (SentimentAccuracyEntity e : scorable) {
             bySentiment.merge(e.getLlmScore(), 1, Integer::sum);
             bySymbol.merge(e.getSymbol(), 1, Integer::sum);
         }
@@ -48,7 +51,8 @@ public class SentimentAccuracyService {
     }
 
     public List<AccuracyByWindow> getAccuracyByWindow() {
-        List<SentimentAccuracyEntity> all = accuracyRepo.findAll();
+        List<SentimentAccuracyEntity> all = accuracyRepo.findAll().stream()
+            .filter(SentimentAccuracyService::isScorable).toList();
         Map<String, List<SentimentAccuracyEntity>> windows = new LinkedHashMap<>();
 
         for (SentimentAccuracyEntity e : all) {
@@ -62,11 +66,12 @@ public class SentimentAccuracyService {
             var list = entry.getValue();
             int total = list.size();
             long correct = list.stream().filter(e -> isCorrect(e.getLlmScore(),
-                classifyReturn(returnForWindow(e, entry.getKey())))).count();
+                classifyReturn(labelReturnForWindow(e, entry.getKey())))).count();
             double accuracy = total > 0 ? (double) correct / total : 0.0;
             double avgReturn = list.stream()
-                .filter(e -> e.getActualReturn5d() != null)
-                .mapToDouble(e -> e.getActualReturn5d().doubleValue())
+                .map(e -> returnForWindow(e, entry.getKey()))
+                .filter(java.util.Objects::nonNull)
+                .mapToDouble(BigDecimal::doubleValue)
                 .average().orElse(0.0);
 
             result.add(new AccuracyByWindow(
@@ -222,9 +227,10 @@ public class SentimentAccuracyService {
     }
 
     public double getAvgConfidence() {
-        long total = accuracyRepo.countAll();
+        long total = accuracyRepo.findAll().stream().filter(SentimentAccuracyService::isScorable).count();
         if (total == 0) return 0.0;
-        List<SentimentAccuracyEntity> all = accuracyRepo.findAll();
+        List<SentimentAccuracyEntity> all = accuracyRepo.findAll().stream()
+            .filter(SentimentAccuracyService::isScorable).toList();
         double sum = all.stream()
             .filter(e -> e.getLlmConfidence() != null)
             .mapToDouble(e -> e.getLlmConfidence())
@@ -238,6 +244,20 @@ public class SentimentAccuracyService {
             case "5-day" -> e.getActualReturn5d();
             default -> e.getActualReturn21d();
         };
+    }
+
+    private static boolean isScorable(SentimentAccuracyEntity entity) {
+        String source = entity.getSentimentSource();
+        return source == null || source.isBlank() || "LLM".equalsIgnoreCase(source);
+    }
+
+    private BigDecimal labelReturnForWindow(SentimentAccuracyEntity e, String window) {
+        BigDecimal excess = switch (window) {
+            case "1-day" -> e.getExcessReturn1d();
+            case "5-day" -> e.getExcessReturn5d();
+            default -> e.getExcessReturn21d();
+        };
+        return excess != null ? excess : returnForWindow(e, window);
     }
 
     private String classifyReturn(BigDecimal value) {

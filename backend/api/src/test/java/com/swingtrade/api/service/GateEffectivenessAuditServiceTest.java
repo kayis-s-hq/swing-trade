@@ -2,6 +2,9 @@ package com.swingtrade.api.service;
 
 import com.swingtrade.data.entity.GateEffectivenessAuditEntity;
 import com.swingtrade.data.repository.GateEffectivenessAuditRepository;
+import com.swingtrade.data.repository.PositionRepository;
+import com.swingtrade.data.repository.SignalRepository;
+import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.store.CandleStore;
 import org.junit.jupiter.api.Test;
@@ -20,7 +23,9 @@ import static org.mockito.Mockito.when;
 class GateEffectivenessAuditServiceTest {
     private final GateEffectivenessAuditRepository repository = mock(GateEffectivenessAuditRepository.class);
     private final CandleStore candles = mock(CandleStore.class);
-    private final GateEffectivenessAuditService service = new GateEffectivenessAuditService(repository, candles);
+    private final SignalRepository signals = mock(SignalRepository.class);
+    private final PositionRepository positions = mock(PositionRepository.class);
+    private final GateEffectivenessAuditService service = new GateEffectivenessAuditService(repository, candles, signals, positions);
     private final LocalDate date = LocalDate.of(2026, 8, 3);
 
     @Test
@@ -70,6 +75,45 @@ class GateEffectivenessAuditServiceTest {
         var captor = org.mockito.ArgumentCaptor.forClass(GateEffectivenessAuditEntity.class);
         org.mockito.Mockito.verify(repository).save(captor.capture());
         assertThat(captor.getValue().getStrategy()).isEqualTo("PRICE_ACTION");
+    }
+
+    @Test
+    void includesRealizedPnlForClosedPositionWithSignalProvenance() {
+        var audit = new GateEffectivenessAuditEntity("TCS", date, "SENTIMENT", "ALLOW", null, null,
+            "PRICE_ACTION");
+        when(repository.findByGateNameAndSignalDateBetweenOrderBySignalDateAsc(any(), any(), any()))
+            .thenReturn(List.of(audit));
+        when(signals.findIdsBySymbolAndDateAndStrategy("TCS", date, "PRICE_ACTION"))
+            .thenReturn(List.of(42L));
+        var position = new PositionEntity();
+        position.setSignalId(42L);
+        position.setStatus("CLOSED");
+        position.setRealizedPnL(new BigDecimal("125.50"));
+        when(positions.findClosedBySignalId(42L)).thenReturn(List.of(position));
+
+        var report = service.report(date, date, null);
+
+        assertThat(report.byStrategy().get("PRICE_ACTION").realizedPnl())
+            .isEqualByComparingTo("125.50");
+    }
+
+    @Test
+    void recordsAndReportsNonSentimentGateOutcomes() {
+        when(repository.findBySymbolAndSignalDateAndGateNameAndStrategy(
+            "TCS", date, GateEffectivenessAuditService.ELIGIBILITY_GATE, "PRICE_ACTION"))
+            .thenReturn(Optional.empty());
+        service.recordGateVerdict("TCS", date, GateEffectivenessAuditService.ELIGIBILITY_GATE,
+            "SUPPRESS", "missing price band", "PRICE_ACTION");
+        var saved = org.mockito.ArgumentCaptor.forClass(GateEffectivenessAuditEntity.class);
+        org.mockito.Mockito.verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getGateName()).isEqualTo(GateEffectivenessAuditService.ELIGIBILITY_GATE);
+
+        when(repository.findBySignalDateBetweenOrderBySignalDateAsc(date, date))
+            .thenReturn(List.of(saved.getValue()));
+        var report = service.report(date, date, null, "PRICE_ACTION", null,
+            GateEffectivenessAuditService.ELIGIBILITY_GATE);
+        assertThat(report.auditCount()).isEqualTo(1);
+        assertThat(report.verdicts()).containsKey("SUPPRESS");
     }
 
     @Test

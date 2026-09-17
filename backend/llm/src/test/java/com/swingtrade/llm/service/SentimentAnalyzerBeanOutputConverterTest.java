@@ -230,7 +230,7 @@ class SentimentAnalyzerBeanOutputConverterTest {
         }
 
         @Test
-        void shouldExtractJsonFromMarkdownCodeBlock() {
+    void shouldExtractJsonFromMarkdownCodeBlock() {
             // Arrange
             String text = """
                     ```json
@@ -244,6 +244,23 @@ class SentimentAnalyzerBeanOutputConverterTest {
             // Assert
             assertThat(result).isNotNull();
             assertThat(result.getSentiment()).isEqualTo(SentimentType.NEGATIVE);
+        }
+
+        @Test
+        void shouldClassifyContextualPlainTextWithoutExplicitPositiveNegativeWord() {
+            SentimentOutput result = analyzer.parseResponse(
+                    "The outlook is bullish after an earnings beat, with guidance raised.");
+
+            assertThat(result.getSentiment()).isEqualTo(SentimentType.POSITIVE);
+            assertThat(result.getConfidence()).isEqualTo(0.4);
+        }
+
+        @Test
+        void shouldKeepNegatedContextualPhraseUnknown() {
+            SentimentOutput result = analyzer.parseResponse("The company did not deliver an earnings beat.");
+
+            assertThat(result.getSentiment()).isEqualTo(SentimentType.UNKNOWN);
+            assertThat(result.getConfidence()).isZero();
         }
     }
 

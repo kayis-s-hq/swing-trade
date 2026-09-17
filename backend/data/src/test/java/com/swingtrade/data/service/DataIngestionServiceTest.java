@@ -69,6 +69,26 @@ class DataIngestionServiceTest {
     }
 
     @Test
+    @DisplayName("data quality keeps gap issues and reports distinct actual sessions")
+    void dataQualityKeepsGapIssuesAndUsesDistinctDates() {
+        LocalDate monday = LocalDate.of(2026, 1, 5);
+        OhlcvCandleEntity first = candle("RELIANCE", monday);
+        OhlcvCandleEntity duplicate = candle("RELIANCE", monday);
+        when(candleRepository.findBySymbolAndDateRange(eq("RELIANCE"), eq(monday),
+            eq(monday.plusDays(2)), any())).thenReturn(List.of(first, duplicate));
+
+        DataIngestionService.DataQualityReport report =
+            dataIngestionService.validateDataQuality("RELIANCE", monday, monday.plusDays(2));
+
+        assert report.getExpectedTradingDays() == 3;
+        assert report.getActualTradingDays() == 1;
+        assert report.hasIssues();
+        assert report.getGapPercentage() > 10.0;
+        assert report.isCritical();
+        assert report.getGaps().size() == 1;
+    }
+
+    @Test
     @DisplayName("testGetLatestCandle_ReturnsLatestData")
     void testGetLatestCandle() {
         // Given: Mock repository returns a candle
@@ -130,10 +150,64 @@ class DataIngestionServiceTest {
         assert summary.contains("requested gap repair for 2 sessions");
     }
 
+    @Test
+    void incrementalBackfillFetchesOnlyAfterLatestStoredCandle() {
+        LocalDate from = LocalDate.of(2026, 1, 1);
+        LocalDate latest = LocalDate.of(2026, 6, 1);
+        OhlcvCandleEntity earliest = candle("RELIANCE", from);
+        OhlcvCandleEntity latestCandle = candle("RELIANCE", latest);
+        when(candleRepository.findEarliestBySymbol("RELIANCE")).thenReturn(Optional.of(earliest));
+        when(candleRepository.findLatestBySymbol("RELIANCE")).thenReturn(Optional.of(latestCandle));
+        when(mockClient.fetchCandles("RELIANCE", latest.plusDays(1), LocalDate.of(2026, 6, 10)))
+            .thenReturn(List.of());
+
+        DataIngestionService.BackfillOutcome outcome = dataIngestionService.processIncrementalStockData(
+            "RELIANCE", from, LocalDate.of(2026, 6, 10));
+
+        verify(mockClient).fetchCandles("RELIANCE", latest.plusDays(1), LocalDate.of(2026, 6, 10));
+        assert outcome.sourceOutcome().equals("NO_USABLE_DATA");
+    }
+
+    @Test
+    void incrementalBackfillDoesNotCallProviderWhenRangeAlreadyCurrent() {
+        LocalDate date = LocalDate.of(2026, 6, 10);
+        OhlcvCandleEntity stored = candle("RELIANCE", date);
+        when(candleRepository.findEarliestBySymbol("RELIANCE")).thenReturn(Optional.of(stored));
+        when(candleRepository.findLatestBySymbol("RELIANCE")).thenReturn(Optional.of(stored));
+
+        DataIngestionService.BackfillOutcome outcome = dataIngestionService.processIncrementalStockData(
+            "RELIANCE", LocalDate.of(2026, 1, 1), date);
+
+        verify(mockClient, Mockito.never()).fetchCandles(anyString(), any(LocalDate.class), any(LocalDate.class));
+        assert outcome.sourceOutcome().equals("ALREADY_CURRENT");
+    }
+
+    @Test
+    void incrementalBackfillSplitsLongRangeIntoConfiguredChunks() {
+        LocalDate from = LocalDate.of(2026, 1, 1);
+        LocalDate to = from.plusDays(64);
+        when(candleRepository.findEarliestBySymbol("RELIANCE")).thenReturn(Optional.empty());
+        when(candleRepository.findLatestBySymbol("RELIANCE")).thenReturn(Optional.empty());
+        when(mockClient.fetchCandles(anyString(), any(LocalDate.class), any(LocalDate.class)))
+            .thenReturn(List.of());
+
+        DataIngestionService.BackfillOutcome outcome = dataIngestionService.processIncrementalStockData(
+            "RELIANCE", from, to);
+
+        verify(mockClient).fetchCandles("RELIANCE", from, from.plusDays(29));
+        verify(mockClient).fetchCandles("RELIANCE", from.plusDays(30), from.plusDays(59));
+        verify(mockClient).fetchCandles("RELIANCE", from.plusDays(60), to);
+        assert outcome.sourceOutcome().equals("NO_USABLE_DATA");
+    }
+
     private OhlcvCandleEntity candle(String symbol, LocalDate date) {
         OhlcvCandleEntity candle = new OhlcvCandleEntity();
         candle.setSymbol(symbol);
         candle.setDate(date);
+        candle.setOpenPrice(BigDecimal.valueOf(100));
+        candle.setHighPrice(BigDecimal.valueOf(105));
+        candle.setLowPrice(BigDecimal.valueOf(95));
+        candle.setClosePrice(BigDecimal.valueOf(102));
         return candle;
     }
 }

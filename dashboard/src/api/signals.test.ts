@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppError, isAppError } from '../errors/appError'
-import { generateAllSignalsStream } from './signals'
+import { generateAllSignalsStream, getGateEffectiveness } from './signals'
 import type { SignalGenerationProgress } from './signals'
 
 const fetchMock = vi.fn<typeof fetch>()
@@ -272,5 +272,48 @@ describe('generateAllSignalsStream', () => {
     }
 
     expect(cancel).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('getGateEffectiveness', () => {
+  it('requests the selected gate and normalizes numeric wire values', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          from: '2026-01-01',
+          to: '2026-01-31',
+          symbol: null,
+          strategy: null,
+          regime: null,
+          auditCount: 1,
+          verdicts: {
+            SUPPRESS: {
+              count: 1,
+              meanForwardReturnPct: { '1': '2.50' },
+              returnObservationCounts: { '1': 1 },
+              realizedPnl: '125.50',
+            },
+          },
+          byStrategy: {},
+          byRegime: {},
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    )
+
+    const report = await getGateEffectiveness({
+      from: '2026-01-01',
+      to: '2026-01-31',
+      gate: 'LIVE_ELIGIBILITY',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '/signals/gate-effectiveness?from=2026-01-01&to=2026-01-31&gate=LIVE_ELIGIBILITY'
+      ),
+      expect.objectContaining({ method: 'GET' })
+    )
+    expect(report.verdicts.SUPPRESS?.realizedPnl).toBe(125.5)
+    expect(report.verdicts.SUPPRESS?.meanForwardReturnPct['1']).toBe(2.5)
   })
 })

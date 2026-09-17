@@ -123,6 +123,26 @@ class YahooFinanceClientTest {
     }
 
     @Test
+    void fetchCandleSelectsRequestedDateWhenResponseContainsMultipleRows() {
+        LocalDate requested = LocalDate.of(2024, 1, 15);
+        List<Object[]> rows = List.of(
+            new Object[]{LocalDate.of(2024, 1, 12).atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC),
+                90.0, 95.0, 89.0, 94.0, 1000L, 94.0},
+            new Object[]{requested.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC),
+                100.0, 105.0, 99.0, 104.0, 5000000L, 104.0}
+        );
+        mockWebServer.enqueue(new MockResponse()
+            .setBody(multiCandleResponse(rows))
+            .addHeader("Content-Type", "application/json"));
+
+        CandleData candle = client.fetchCandle("RELIANCE", requested);
+
+        assertThat(candle).isNotNull();
+        assertThat(candle.close()).isEqualByComparingTo("104.0");
+        assertThat(candle.volume()).isEqualTo(5000000L);
+    }
+
+    @Test
     void fetchCandleReturnsNullWhenApiReturnsEmptyResult() {
         mockWebServer.enqueue(new MockResponse()
                 .setBody("{\"chart\":{\"result\":[],\"error\":null}}")

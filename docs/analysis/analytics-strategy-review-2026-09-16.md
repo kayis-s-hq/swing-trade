@@ -55,7 +55,8 @@ Additional verified slice — 2026-09-16:
   formats prompt articles with publication date/source/index metadata, substitutes `{symbol}` in
   the system prompt, and persists `LLM`/`KEYWORD`/`DEFAULT` provenance. Unparseable responses are
   represented as `UNKNOWN` and the gate flags them rather than allowing them. Historical article
-  IDs and a complete persisted-news reconstruction path remain follow-ups.
+  IDs and a complete persisted-news reconstruction path remain follow-ups; legacy article
+  eligibility is now recoverable from `created_at` through migration V61.
 - Pending paper orders are persisted before their source signal is marked processed and pending
   orders are reloaded on startup. Paper stop/target triggers now use the candle open when a bar
   gaps through a trigger, matching the backtest policy.
@@ -81,6 +82,9 @@ Additional verified slice — 2026-09-16:
 - Historical universe snapshots, corporate actions, NIFTY benchmark data contracts, and immutable
   strategy-configuration persistence are now available as explicit data-layer contracts/migrations;
   live strategy fan-out and provider population remain separate follow-ups.
+- Legacy news rows with a persistence timestamp now recover `first_seen_at` during migration V61,
+  allowing historical reconstruction to include only rows demonstrably persisted before the
+  decision cutoff; rows lacking both timestamps remain excluded.
 - The current platform now exposes opt-in pullback and volatility-squeeze strategy beans, bounded
   regime/relative-strength and liquidity/event eligibility policies, strategy-config CRUD/version/mode
   endpoints, a Strategies dashboard view, and a portfolio-backtest endpoint. The existing default live
@@ -293,9 +297,14 @@ quantity, eliminating the fixed-100 pre-check. Quantity clamping remains a separ
 Sentiment-gate verdicts are persisted and summarized through
 `GET /api/signals/gate-effectiveness`, including 1/5/20-session forward-return means by verdict,
 strategy, and regime. Strategy attribution now comes from the producing signal variant, and the
-audit uniqueness key permits multiple variants for one symbol/date. Realized paper-trade P&L
-attribution across gates remains open.
-**Remaining:** Add realized trade-outcome joins and dashboard presentation for gate-attributed P&L.
+audit uniqueness key permits multiple variants for one symbol/date. Paper positions now retain the
+originating `signal_id`, and closed-position realized P&L is included in the corresponding strategy
+bucket when provenance exists. Historical/manual positions without provenance are intentionally not
+guessed. LLM-analysis and live-eligibility outcomes are now recorded as strategy-aware gate audits;
+the endpoint accepts `gate=LLM_ANALYSIS` or `gate=LIVE_ELIGIBILITY` as well as its sentiment default.
+The dashboard now exposes the report at `/gate-effectiveness`, with selectable gates, verdict
+tables, forward-return horizons, and realized P&L. Attribution for future gate types remains open.
+**Remaining:** Add support for any newly introduced gate types and complete historical provenance.
 
 ---
 
@@ -308,8 +317,9 @@ filters fetched articles to `publishedAt ≤ date 15:30 IST` and ≥ date − 7d
 before cleaning, truncation, and prompting. For past dates, `NewsIngestionService` reads the
 persisted inclusive symbol/date window, requires `first_seen_at ≤` the decision cutoff, and does not
 call live feeds. Articles without timestamps or first-seen provenance are rejected because their
-point-in-time position cannot be proven. Evidence IDs are persisted for newly analyzed results;
-legacy rows remain unreconstructable.
+  point-in-time position cannot be proven. Evidence IDs are persisted for newly analyzed results;
+legacy sentiment-result evidence arrays remain unreconstructable, while legacy news articles with
+an original `created_at` can now be admitted through the V61 provenance backfill.
 
 ### 15. PARTIALLY FIXED — Plain-text fallback misclassifies
 Malformed/empty responses now return `UNKNOWN` with zero confidence, and the gate flags UNKNOWN.
@@ -333,7 +343,9 @@ near-duplicate normalized headlines, and only then applies the bounded article b
 semantic deduplication and richer relevance scoring remain open.
 
 ### 30. PARTIALLY FIXED — No determinism or grounding
-LLM defaults and sentiment calls now request temperature 0, prompts require article-index citations,
+LLM defaults and sentiment calls now request temperature 0, and audit rows now record the actual
+zero temperature plus whether a failed attempt triggered fallback. Synthesis prompts now require
+source-section labels on drivers/factors and explicitly prohibit invented data. Prompts require article-index citations,
 and uncited or out-of-range flags/catalysts are removed before persistence. Provider-level
 nondeterminism, multi-sample disagreement scoring, and grounding for every synthesized statement remain open.
 
@@ -344,17 +356,21 @@ the bounded persisted-candle evaluator runs on schedule, and `/api/synthesis/eva
 aggregate accuracy. Model-value attribution against a non-LLM baseline remains open.
 
 ### 33. PARTIALLY FIXED — LLM failures hidden
-Top-level exceptions return a default NEUTRAL; LLM outages fall back to keyword sentiment stored as if it were an LLM result.
-Sentiment rows now persist `source = LLM | KEYWORD | DEFAULT`, and UNKNOWN is preserved. Excluding
-non-LLM rows from accuracy statistics and correlating rows to audit request IDs remain open.
+Top-level exceptions return a default NEUTRAL; LLM outages fall back to keyword sentiment, but
+sentiment rows persist `source = LLM | KEYWORD | DEFAULT`, and UNKNOWN is preserved. Accuracy
+records now retain that source, and predictive aggregates/IC exclude KEYWORD and DEFAULT rows while
+retaining legacy null-source rows. New sentiment results now retain the UUID of their corresponding
+LLM audit attempt, including failed-attempt fallback results; legacy rows remain nullable.
 
 ### 23. PARTIALLY FIXED — Accuracy metrics not fed back; IC formula
 `SentimentAccuracyService` computes IC, ECE and regime accuracy, but nothing uses them. Scores are
 nearly all tied (3 categories), so the prior no-ties shortcut distorted IC. "UP/DOWN/FLAT" still
 uses raw returns, so a bull market can make POSITIVE look accurate.
 The IC calculation now uses Pearson correlation over average ranks, correcting the tied-score
-distortion. Accuracy is still based on raw returns, no Nifty excess-return input exists, and no
-gate/composite weight consumes trailing IC.
+distortion, and the monitoring windows now average the selected 1/5/21-day horizon correctly.
+Accuracy records now retain optional NIFTY excess returns and an explicit raw/excess label basis;
+new labels use excess returns only when exact persisted benchmark dates are available, with legacy
+rows falling back to raw returns. No gate/composite weight consumes trailing IC yet.
 
 ---
 
@@ -367,8 +383,10 @@ gating, and per-variant portfolios remain open.
 
 The configuration API and dashboard management surface are now available, and two additional strategy
 families can run through the existing strategy registry. Live orchestration now treats CHAMPION configs
-as trade-authoritative, fans out SHADOW signals without trading, and excludes OFF/BACKTEST_ONLY configs;
-per-variant portfolio isolation and production data population remain open.
+as trade-authoritative, fans out SHADOW signals without trading, and excludes OFF/BACKTEST_ONLY configs.
+Persisted `PRICE_ACTION_3_OF_4` RSI bounds are now resolved per configured variant through a
+request-scoped strategy instance, so invalid parameter maps fail closed and one variant cannot leak
+its bounds into another. Per-variant portfolio isolation and production data population remain open.
 
 ### 35. GAP — Add standard NSE swing setups
 **Fix:** Add `TradingStrategy` beans, backtest each, and enable only those passing out-of-sample:
