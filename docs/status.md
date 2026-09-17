@@ -83,6 +83,10 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   the baseline relevance score. Backend tests and `./bin/verify-changes` passed; the LLM module's
   aggregate coverage is 45% (1,408/3,121 lines), with external source/server adapters still open.
 
+- [x] Strategy coverage gate restored 2026-09-17: focused tests now cover the previously
+  uncovered advanced indicator validation and calculations. Strategy tests, JaCoCo verification,
+  and `./bin/verify-changes` passed; aggregate line coverage is now 83.8% (1,452/1,732 lines).
+
 - [x] Local V62 runtime migration verified 2026-09-17: the DevStack PostgreSQL database advanced
   from schema V61 to V62, read-only queries confirmed the corrected 2026 holiday rows, and the
   API health endpoint returned 200 with PostgreSQL reported `UP`. No application data was reset.
