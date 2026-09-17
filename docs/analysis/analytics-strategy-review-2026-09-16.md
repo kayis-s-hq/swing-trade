@@ -293,9 +293,11 @@ quantity, eliminating the fixed-100 pre-check. Quantity clamping remains a separ
 Sentiment-gate verdicts are persisted and summarized through
 `GET /api/signals/gate-effectiveness`, including 1/5/20-session forward-return means by verdict,
 strategy, and regime. Strategy attribution now comes from the producing signal variant, and the
-audit uniqueness key permits multiple variants for one symbol/date. Realized paper-trade P&L
-attribution across gates remains open.
-**Remaining:** Add realized trade-outcome joins and dashboard presentation for gate-attributed P&L.
+audit uniqueness key permits multiple variants for one symbol/date. Paper positions now retain the
+originating `signal_id`, and closed-position realized P&L is included in the corresponding strategy
+bucket when provenance exists. Historical/manual positions without provenance are intentionally not
+guessed, and dashboard presentation plus broader gate-outcome joins remain open.
+**Remaining:** Add dashboard presentation and attribution for non-sentiment gates.
 
 ---
 

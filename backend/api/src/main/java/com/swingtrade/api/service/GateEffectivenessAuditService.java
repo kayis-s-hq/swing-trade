@@ -2,6 +2,8 @@ package com.swingtrade.api.service;
 
 import com.swingtrade.data.entity.GateEffectivenessAuditEntity;
 import com.swingtrade.data.repository.GateEffectivenessAuditRepository;
+import com.swingtrade.data.repository.PositionRepository;
+import com.swingtrade.data.repository.SignalRepository;
 import com.swingtrade.domain.store.CandleStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,10 +24,20 @@ public class GateEffectivenessAuditService {
 
     private final GateEffectivenessAuditRepository repository;
     private final CandleStore candleStore;
+    private final SignalRepository signalRepository;
+    private final PositionRepository positionRepository;
 
     public GateEffectivenessAuditService(GateEffectivenessAuditRepository repository, CandleStore candleStore) {
+        this(repository, candleStore, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public GateEffectivenessAuditService(GateEffectivenessAuditRepository repository, CandleStore candleStore,
+                                         SignalRepository signalRepository, PositionRepository positionRepository) {
         this.repository = repository;
         this.candleStore = candleStore;
+        this.signalRepository = signalRepository;
+        this.positionRepository = positionRepository;
     }
 
     @Transactional
@@ -82,6 +94,7 @@ public class GateEffectivenessAuditService {
 
     private void addOutcome(MutableBucket bucket, GateEffectivenessAuditEntity audit) {
         bucket.count++;
+        realizedPnl(audit).ifPresent(value -> bucket.realizedPnl = bucket.realizedPnl.add(value));
         for (int horizon : new int[]{1, 5, 20}) {
             forwardReturn(audit.getSymbol(), audit.getSignalDate(), horizon).ifPresent(value -> {
                 bucket.returnSums.merge(horizon, value, BigDecimal::add);
@@ -112,6 +125,23 @@ public class GateEffectivenessAuditService {
 
     private static String normalizeStrategy(String strategy) {
         return strategy == null || strategy.isBlank() ? DEFAULT_STRATEGY : strategy;
+    }
+
+    private java.util.Optional<BigDecimal> realizedPnl(GateEffectivenessAuditEntity audit) {
+        if (signalRepository == null || positionRepository == null) return java.util.Optional.empty();
+        List<Long> signalIds = signalRepository.findIdsBySymbolAndDateAndStrategy(
+            audit.getSymbol(), audit.getSignalDate(), normalizeStrategy(audit.getStrategy()));
+        BigDecimal total = BigDecimal.ZERO;
+        boolean observed = false;
+        for (Long signalId : signalIds) {
+            for (var position : positionRepository.findClosedBySignalId(signalId)) {
+                if (position.getRealizedPnL() != null) {
+                    total = total.add(position.getRealizedPnL());
+                    observed = true;
+                }
+            }
+        }
+        return observed ? java.util.Optional.of(total) : java.util.Optional.empty();
     }
 
     private static Map<String, VerdictSummary> summarize(Map<String, MutableBucket> buckets) {
@@ -146,9 +176,13 @@ public class GateEffectivenessAuditService {
     }
 
     public record VerdictSummary(int count, Map<Integer, BigDecimal> meanForwardReturnPct,
-                                 Map<Integer, Integer> returnObservationCounts) {
+                                 Map<Integer, Integer> returnObservationCounts, BigDecimal realizedPnl) {
         public VerdictSummary(int count, Map<Integer, BigDecimal> meanForwardReturnPct) {
-            this(count, meanForwardReturnPct, Map.of());
+            this(count, meanForwardReturnPct, Map.of(), BigDecimal.ZERO);
+        }
+        public VerdictSummary(int count, Map<Integer, BigDecimal> meanForwardReturnPct,
+                              Map<Integer, Integer> returnObservationCounts) {
+            this(count, meanForwardReturnPct, returnObservationCounts, BigDecimal.ZERO);
         }
     }
 
@@ -156,11 +190,12 @@ public class GateEffectivenessAuditService {
         int count;
         Map<Integer, BigDecimal> returnSums = new LinkedHashMap<>();
         Map<Integer, Integer> returnCounts = new LinkedHashMap<>();
+        BigDecimal realizedPnl = BigDecimal.ZERO;
         VerdictSummary summary() {
             Map<Integer, BigDecimal> means = new LinkedHashMap<>();
             returnSums.forEach((horizon, sum) -> means.put(horizon,
                 sum.divide(BigDecimal.valueOf(returnCounts.get(horizon)), 4, RoundingMode.HALF_UP)));
-            return new VerdictSummary(count, means, new LinkedHashMap<>(returnCounts));
+            return new VerdictSummary(count, means, new LinkedHashMap<>(returnCounts), realizedPnl);
         }
     }
 }

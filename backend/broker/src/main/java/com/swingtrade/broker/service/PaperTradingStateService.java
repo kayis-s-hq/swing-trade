@@ -227,6 +227,10 @@ public class PaperTradingStateService {
     }
 
     public void savePosition(Position position) {
+        savePosition(position, null);
+    }
+
+    public void savePosition(Position position, Long signalId) {
         try {
             OptimisticLockRetryHelper.execute(() -> {
                 PositionEntity entity = unifiedPositionRepo.findByPositionId(position.positionId()).orElse(null);
@@ -244,6 +248,7 @@ public class PaperTradingStateService {
                             ? position.exitReason() : ExitReason.MANUAL.name());
                     }
                 }
+                if (signalId != null) entity.setSignalId(signalId);
                 unifiedPositionRepo.save(entity);
             }, "PositionEntity");
         } catch (Exception e) {

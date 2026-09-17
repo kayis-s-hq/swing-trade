@@ -6,6 +6,10 @@ Last checked: 2026-09-17 (documentation/lint and analytics remediation verificat
   v55, reported healthy database/readiness status, and served
   `GET /api/signals/gate-effectiveness` successfully (empty result set in the current data window).
 
+- [x] Gate-outcome provenance extended 2026-09-17: paper positions now retain their originating
+  signal ID and gate-effectiveness buckets include realized P&L for closed positions with known
+  provenance; v56 migration, broker/API tests, full verifier, and live API checks passed.
+
 - [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
   producing signal variant, support multiple strategies per symbol/date, and report/filter by the
   stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade

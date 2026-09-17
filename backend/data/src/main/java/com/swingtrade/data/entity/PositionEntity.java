@@ -83,6 +83,10 @@ public class PositionEntity {
     @Column(name = "position_id", length = 32)
     private String positionId;
 
+    /** Signal that caused this paper position, when the entry came through the signal pipeline. */
+    @Column(name = "signal_id")
+    private Long signalId;
+
     @Column(name = "broker_position_id", length = 64)
     private String brokerPositionId;
 
@@ -226,6 +230,8 @@ public class PositionEntity {
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
     public String getPositionId() { return positionId; }
     public void setPositionId(String positionId) { this.positionId = positionId; }
+    public Long getSignalId() { return signalId; }
+    public void setSignalId(Long signalId) { this.signalId = signalId; }
     public String getBrokerPositionId() { return brokerPositionId; }
     public void setBrokerPositionId(String brokerPositionId) { this.brokerPositionId = brokerPositionId; }
     public String getExchange() { return exchange; }
