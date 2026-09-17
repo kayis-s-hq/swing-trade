@@ -40,6 +40,10 @@ Last checked: 2026-09-17 (documentation/lint and analytics remediation verificat
   while preserving legacy null-source data. Schema v58, affected data/API tests, local migration,
   health, `/api/sentiment/accuracy/by-window`, and evaluation-status checks passed.
 
+- [x] Sector position filtering completed 2026-09-17: `/api/positions/sector/{sector}` now uses
+  persisted stock metadata, supports common sector aliases, and no longer returns a silent empty
+  result for valid sector data. Focused PositionService and full change-aware API tests passed.
+
 - [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
   producing signal variant, support multiple strategies per symbol/date, and report/filter by the
   stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade

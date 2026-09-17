@@ -32,7 +32,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -161,12 +160,30 @@ public class PositionService {
     /**
      * Get positions by sector.
      * @param sector the sector name
-     * @return List of positions in the sector (currently returns empty - sector data not yet available)
+     * @return List of positions in the sector
      */
     public List<PositionResponse> getPositionsBySector(String sector) {
-        // Sector data is not available on PositionEntity yet
-        // Return empty list until sector mapping is implemented
-        return Collections.emptyList();
+        if (sector == null || sector.isBlank()) return List.of();
+        String requested = normalizeSector(sector);
+        return positionStore.findAll().stream()
+            .filter(position -> stockStore.findBySymbol(position.symbol())
+                .map(com.swingtrade.domain.Stock::sector)
+                .map(Enum::name)
+                .map(value -> value.equals(requested))
+                .orElse(false))
+            .map(this::convertToResponse)
+            .toList();
+    }
+
+    private String normalizeSector(String value) {
+        String normalized = value.trim().toUpperCase().replace('-', '_').replace(' ', '_');
+        return switch (normalized) {
+            case "TECHNOLOGY", "INFORMATION_TECHNOLOGY", "SOFTWARE" -> "IT";
+            case "BANKING", "BANKS" -> "BANK";
+            case "PHARMACEUTICALS", "PHARMA" -> "PHARMA";
+            case "OIL_AND_GAS", "OIL_GAS" -> "OIL_GAS";
+            default -> com.swingtrade.domain.Stock.Sector.fromDbName(value).name();
+        };
     }
 
     /**
