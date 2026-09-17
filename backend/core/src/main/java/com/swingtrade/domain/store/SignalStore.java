@@ -45,6 +45,19 @@ public interface SignalStore {
      */
     int markProcessedExcludingStrategy(String symbol, String strategy);
 
+    /**
+     * Generalizes {@link #markProcessedExcludingStrategy} to several variants at once: marks
+     * every unprocessed BUY signal for {@code symbol} whose {@code strategy} is not in
+     * {@code strategies} as processed, without executing them. Used by the PAPER_TRADE stage to
+     * quarantine only signals belonging to no currently-active variant, once every active
+     * variant (CHAMPION and SHADOW alike) executes against its own portfolio.
+     *
+     * @param symbol     the stock symbol
+     * @param strategies the variant ids whose signals must NOT be touched
+     * @return number of signals marked processed
+     */
+    int markProcessedExcludingStrategies(String symbol, List<String> strategies);
+
     Signal save(Signal signal);
 
     /**

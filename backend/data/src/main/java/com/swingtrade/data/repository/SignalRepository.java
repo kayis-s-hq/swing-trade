@@ -223,6 +223,19 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
     int markProcessedExcludingStrategy(@Param("symbol") String symbol, @Param("strategy") String strategy);
 
     /**
+     * Marks every unprocessed BUY signal for {@code symbol} whose {@code strategy} is not in
+     * {@code strategies} as processed, without executing them. Generalizes
+     * {@link #markProcessedExcludingStrategy} to the multi-variant paper-trade stage (plan §7.4):
+     * every currently-active variant's own BUYs are executed against its own portfolio, and only
+     * signals belonging to no active variant are quarantined this way.
+     */
+    @Modifying
+    @Query("UPDATE SignalEntity s SET s.processed = true WHERE s.symbol = :symbol "
+        + "AND s.signalType = 'BUY' AND s.processed = false "
+        + "AND (s.strategy IS NULL OR s.strategy NOT IN :strategies)")
+    int markProcessedExcludingStrategies(@Param("symbol") String symbol, @Param("strategies") List<String> strategies);
+
+    /**
      * Deletes all signals for a specific symbol and date.
      */
     @Modifying

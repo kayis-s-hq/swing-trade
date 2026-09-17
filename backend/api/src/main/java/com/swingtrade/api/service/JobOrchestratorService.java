@@ -614,59 +614,96 @@ public class JobOrchestratorService {
     }
 
     /**
-     * PAPER_TRADE stage (plan §7.2). Fixes the cross-contamination gap flagged in the §7.1
-     * follow-up: {@code SignalStore.findUnprocessed()} used to be filtered only by symbol, with
-     * no awareness of which strategy variant produced a signal - so a SHADOW variant's BUY
-     * (persisted per-variant since §7.1's fan-out) could be picked up here and executed through
-     * the single shared paper engine/"default" portfolio just like the CHAMPION's own signal.
-     *
-     * <p><b>Interpretation applied here</b> (see {@link com.swingtrade.domain.service.PaperPortfolioService}'s
-     * javadoc): {@code PaperTradingEngine} is still a single, process-wide in-memory engine with
-     * one live portfolio ({@code "default"}) - it is not portfolio-parametrized. Making every
-     * SHADOW variant's BUY execute against its own independently-simulated portfolio would
-     * require that engine to become portfolio-aware, which is a larger rearchitecture out of
-     * this fix's scope. Given that, this stage now:
+     * PAPER_TRADE stage (plan §7.2/§7 Phase 5). Every currently-active variant (CHAMPION or
+     * SHADOW) now executes its own unprocessed BUY signals against its own paper portfolio,
+     * independently:
      * <ul>
-     *   <li>only ever queues BUY signals whose {@code strategy} equals the current CHAMPION
-     *       variant's id (or, if no variant configs exist yet, falls back to the old
-     *       unfiltered behaviour for backward compatibility with pre-multi-strategy setups);</li>
-     *   <li>marks every other (SHADOW) variant's unprocessed BUY signals for this symbol as
-     *       processed WITHOUT executing them - they are tracked (persisted, visible via the
-     *       signals table) but never reach {@link TradingService#queueSignal}, so they can never
-     *       be executed against the "default" portfolio.</li>
+     *   <li>the CHAMPION variant (or, when no strategy configs exist yet, the single
+     *       pre-multi-strategy signal stream) still executes through {@link TradingService}
+     *       against the shared, order-executing "default" engine, exactly as before;</li>
+     *   <li>every other active (SHADOW) variant executes through
+     *       {@link com.swingtrade.domain.service.PaperPortfolioService#executeVariantBuy}, which
+     *       simulates the fill directly against that variant's own
+     *       {@code paper_trading_portfolio} row - its own capital, its own capacity check - never
+     *       touching the shared engine's position book;</li>
+     *   <li>a signal belonging to no currently-active variant is quarantined (marked processed
+     *       without executing) exactly as the earlier §7.2 fix did, generalized to the full set
+     *       of active variant ids via {@link com.swingtrade.domain.store.SignalStore#markProcessedExcludingStrategies}.</li>
      * </ul>
-     * This satisfies the routing gap's safety requirement (a SHADOW variant's signal is never
-     * executed against "default") even though full per-variant paper execution is deferred.
+     * Each variant's execution loop is wrapped so one variant's failure (a bug, insufficient
+     * capital, a persistence error) cannot block another variant's execution for the same symbol.
      */
     private String stagePaperTrade(String symbol) {
         // strategyConfigStore/paperPortfolioService are null in the pre-multi-strategy test
         // fixture constructor (see JobOrchestratorService(DataIngestionService, ..., int, long,
         // boolean) below) - guarded the same way llmAnalysisGate etc. already are, so those
         // callers keep the old unfiltered, single-"default"-portfolio behaviour.
-        String championVariantId = strategyConfigStore == null ? null : strategyConfigStore.findCurrentChampion()
-            .map(StrategyConfig::variantId)
-            .orElse(null);
-
-        List<Signal> unprocessed;
-        if (championVariantId != null) {
-            int quarantined = signalStore.markProcessedExcludingStrategy(symbol, championVariantId);
-            if (quarantined > 0) {
-                logger.info("Quarantined {} non-champion (shadow) variant signal(s) for {} from paper execution",
-                    quarantined, symbol);
-            }
-            unprocessed = signalStore.findUnprocessedByStrategy(championVariantId)
-                .stream()
-                .filter(s -> s.symbol().equals(symbol))
-                .toList();
-        } else {
-            // No strategy configs exist yet (or none is CHAMPION) - preserve pre-multi-strategy
-            // behaviour: a single shared signal stream feeds the single shared "default" portfolio.
-            unprocessed = signalStore.findUnprocessed()
-                .stream()
-                .filter(s -> s.symbol().equals(symbol))
-                .toList();
+        if (strategyConfigStore == null) {
+            return executeVariantSignals(symbol, "default", true,
+                signalStore.findUnprocessed().stream().filter(s -> s.symbol().equals(symbol)).toList());
         }
 
+        String championVariantId = strategyConfigStore.findCurrentChampion()
+            .map(StrategyConfig::variantId)
+            .orElse(null);
+        List<String> activeVariantIds = strategyConfigStore.findAllCurrent().stream()
+            .filter(StrategyConfig::isActive)
+            .map(StrategyConfig::variantId)
+            .toList();
+
+        if (activeVariantIds.isEmpty()) {
+            // No active variants configured at all - preserve pre-multi-strategy behaviour.
+            return executeVariantSignals(symbol, "default", true,
+                signalStore.findUnprocessed().stream().filter(s -> s.symbol().equals(symbol)).toList());
+        }
+
+        int quarantined = signalStore.markProcessedExcludingStrategies(symbol, activeVariantIds);
+        if (quarantined > 0) {
+            logger.info("Quarantined {} signal(s) for {} belonging to no active variant from paper execution",
+                quarantined, symbol);
+        }
+
+        StringBuilder summary = new StringBuilder();
+        for (String variantId : activeVariantIds) {
+            boolean isChampion = variantId.equals(championVariantId);
+            List<Signal> unprocessed;
+            try {
+                unprocessed = signalStore.findUnprocessedByStrategy(variantId).stream()
+                    .filter(s -> s.symbol().equals(symbol))
+                    .toList();
+            } catch (Exception e) {
+                logger.warn("Failed to load unprocessed signals for variant {} on {}: {}",
+                    variantId, symbol, e.getMessage(), e);
+                continue;
+            }
+            if (unprocessed.isEmpty()) {
+                continue;
+            }
+            // Per-variant failure isolation: one variant's exception must never block another's.
+            String variantSummary;
+            try {
+                variantSummary = executeVariantSignals(symbol, variantId, isChampion, unprocessed);
+            } catch (Exception e) {
+                logger.error("Paper trade execution failed entirely for variant {} on {}: {}",
+                    variantId, symbol, e.getMessage(), e);
+                variantSummary = "0 trade(s) executed (variant failed: " + e.getMessage() + ")";
+            }
+            if (summary.length() > 0) summary.append(" | ");
+            summary.append(variantId).append(": ").append(variantSummary);
+        }
+        return summary.length() == 0 ? "no active variant signals to execute" : summary.toString();
+    }
+
+    /**
+     * Executes every signal in {@code unprocessed} for a single portfolio/variant
+     * ({@code portfolioId}). When {@code useSharedEngine} is true (the CHAMPION variant, or the
+     * pre-multi-strategy fallback), orders route through {@link TradingService} against the
+     * shared "default" engine exactly as before Phase 5. Otherwise (a SHADOW variant) orders
+     * route through {@link com.swingtrade.domain.service.PaperPortfolioService#executeVariantBuy}
+     * against that variant's own independent portfolio.
+     */
+    private String executeVariantSignals(String symbol, String portfolioId, boolean useSharedEngine,
+                                          List<Signal> unprocessed) {
         int executed = 0;
         int failedToQueue = 0;
         int blockedBySentiment = 0;
@@ -710,15 +747,8 @@ public class JobOrchestratorService {
                     continue;
                 }
 
-                // Per-portfolio daily loss breaker (plan §7.2). championVariantId is null when
-                // no strategy configs exist yet (pre-multi-strategy fallback, above); in that
-                // case the "default" portfolio may not even exist yet, so PaperPortfolioService
-                // treats it as not-breached. RiskControlsService/DailyLossCircuitBreaker already
-                // apply a global breaker on the same "default" engine downstream of queueSignal -
-                // this check additionally covers the champion's own portfolio_id row explicitly
-                // per §7.2, and is the mechanism that will protect shadow portfolios once they
-                // gain their own execution path.
-                String portfolioId = championVariantId != null ? championVariantId : "default";
+                // Per-portfolio daily loss breaker (plan §7.2), now consulted for every
+                // variant's own portfolio, not just the champion's.
                 if (paperPortfolioService != null && paperPortfolioService.isDailyLossBreached(portfolioId)) {
                     try {
                         signalStore.markProcessed(signal.id());
@@ -734,15 +764,22 @@ public class JobOrchestratorService {
                 }
             }
 
-            // Queue before marking processed. A capacity rejection returns null and must leave
-            // the signal retryable. If persistence fails after a queue succeeds, queueSignal's
-            // signal-id dedupe returns the existing pending order on the next run.
             try {
-                var queuedOrder = tradingService.queueSignal(signal, latest.close());
-                if (queuedOrder == null) {
+                boolean success;
+                if (useSharedEngine) {
+                    // Queue before marking processed. A capacity rejection returns null and must
+                    // leave the signal retryable. If persistence fails after a queue succeeds,
+                    // queueSignal's signal-id dedupe returns the existing pending order next run.
+                    var queuedOrder = tradingService.queueSignal(signal, latest.close());
+                    success = queuedOrder != null;
+                } else {
+                    success = paperPortfolioService != null
+                        && paperPortfolioService.executeVariantBuy(portfolioId, signal, latest.close());
+                }
+                if (!success) {
                     failedToQueue++;
-                    logger.warn("Could not queue BUY signal {} for {}; leaving it unprocessed for retry",
-                        signal.id(), symbol);
+                    logger.warn("Could not execute BUY signal {} for {} on portfolio {}; "
+                        + "leaving it unprocessed for retry", signal.id(), symbol, portfolioId);
                     continue;
                 }
                 signalStore.markProcessed(signal.id());
@@ -750,8 +787,8 @@ public class JobOrchestratorService {
             } catch (Exception e) {
                 failedToQueue++;
                 logger.warn("""
-                    Failed to queue or mark signal {} for {} — leaving the signal retryable: {}""",
-                    signal.id(), symbol, e.getMessage());
+                    Failed to execute or mark signal {} for {} on portfolio {} — leaving the signal retryable: {}""",
+                    signal.id(), symbol, portfolioId, e.getMessage());
                 continue;
             }
         }

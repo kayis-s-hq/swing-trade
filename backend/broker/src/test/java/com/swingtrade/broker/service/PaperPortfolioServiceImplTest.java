@@ -1,9 +1,12 @@
 package com.swingtrade.broker.service;
 
+import com.swingtrade.broker.entity.PaperTradingOrderEntity;
 import com.swingtrade.broker.entity.PaperTradingPortfolioEntity;
 import com.swingtrade.broker.entity.PaperTradingSnapshotEntity;
+import com.swingtrade.broker.repository.PaperTradingOrderRepository;
 import com.swingtrade.broker.repository.PaperTradingPortfolioRepository;
 import com.swingtrade.broker.repository.PaperTradingSnapshotRepository;
+import com.swingtrade.domain.Signal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -33,12 +36,14 @@ class PaperPortfolioServiceImplTest {
     private PaperTradingSnapshotRepository snapshotRepo;
     @Mock
     private PaperTradingStateService defaultPortfolioStateService;
+    @Mock
+    private PaperTradingOrderRepository orderRepo;
 
     private PaperPortfolioServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new PaperPortfolioServiceImpl(portfolioRepo, snapshotRepo, defaultPortfolioStateService);
+        service = new PaperPortfolioServiceImpl(portfolioRepo, snapshotRepo, defaultPortfolioStateService, orderRepo);
     }
 
     @Nested
@@ -179,6 +184,111 @@ class PaperPortfolioServiceImplTest {
             service.snapshotAllPortfolios();
 
             verify(snapshotRepo, times(2)).save(any());
+        }
+    }
+
+    @Nested
+    class ExecuteVariantBuy {
+
+        private final Signal signal = new Signal(
+            1L, "RELIANCE", java.time.LocalDate.now(), Signal.SignalType.BUY,
+            new BigDecimal("0.8"), "setup", new BigDecimal("100"), new BigDecimal("95"),
+            new BigDecimal("110"), new BigDecimal("2"), "{}", java.time.LocalDate.now(), null, null);
+
+        @Test
+        void debitsPortfolioCapitalAndPersistsAPortfolioTaggedOrder() {
+            PaperTradingPortfolioEntity entity = new PaperTradingPortfolioEntity();
+            entity.setPortfolioId("PULLBACK_B");
+            entity.setInitialCapital(new BigDecimal("500000"));
+            entity.setCurrentCapital(new BigDecimal("500000"));
+            entity.setOpenPositionCount(0);
+            when(portfolioRepo.findByPortfolioId("PULLBACK_B")).thenReturn(Optional.of(entity));
+            when(orderRepo.findByPortfolioIdOrderByCreatedAtDesc("PULLBACK_B")).thenReturn(List.of());
+
+            boolean result = service.executeVariantBuy("PULLBACK_B", signal, new BigDecimal("100"));
+
+            assertThat(result).isTrue();
+            ArgumentCaptor<PaperTradingPortfolioEntity> portfolioCaptor =
+                ArgumentCaptor.forClass(PaperTradingPortfolioEntity.class);
+            verify(portfolioRepo).save(portfolioCaptor.capture());
+            assertThat(portfolioCaptor.getValue().getCurrentCapital()).isLessThan(new BigDecimal("500000"));
+            assertThat(portfolioCaptor.getValue().getOpenPositionCount()).isEqualTo(1);
+
+            ArgumentCaptor<PaperTradingOrderEntity> orderCaptor = ArgumentCaptor.forClass(PaperTradingOrderEntity.class);
+            verify(orderRepo).save(orderCaptor.capture());
+            assertThat(orderCaptor.getValue().getPortfolioId()).isEqualTo("PULLBACK_B");
+            assertThat(orderCaptor.getValue().getSymbol()).isEqualTo("RELIANCE");
+            assertThat(orderCaptor.getValue().getStatus()).isEqualTo("FILLED");
+        }
+
+        @Test
+        void rejectsWhenPortfolioDoesNotExist() {
+            when(portfolioRepo.findByPortfolioId("UNKNOWN")).thenReturn(Optional.empty());
+
+            boolean result = service.executeVariantBuy("UNKNOWN", signal, new BigDecimal("100"));
+
+            assertThat(result).isFalse();
+            verify(orderRepo, never()).save(any());
+        }
+
+        @Test
+        void rejectsWhenCapitalDepleted() {
+            PaperTradingPortfolioEntity entity = new PaperTradingPortfolioEntity();
+            entity.setPortfolioId("PULLBACK_B");
+            entity.setInitialCapital(new BigDecimal("500000"));
+            entity.setCurrentCapital(BigDecimal.ZERO);
+            when(portfolioRepo.findByPortfolioId("PULLBACK_B")).thenReturn(Optional.of(entity));
+
+            boolean result = service.executeVariantBuy("PULLBACK_B", signal, new BigDecimal("100"));
+
+            assertThat(result).isFalse();
+            verify(orderRepo, never()).save(any());
+            verify(portfolioRepo, never()).save(any());
+        }
+
+        @Test
+        void isIdempotentForAnAlreadyExecutedSignal() {
+            PaperTradingPortfolioEntity entity = new PaperTradingPortfolioEntity();
+            entity.setPortfolioId("PULLBACK_B");
+            entity.setInitialCapital(new BigDecimal("500000"));
+            entity.setCurrentCapital(new BigDecimal("500000"));
+            when(portfolioRepo.findByPortfolioId("PULLBACK_B")).thenReturn(Optional.of(entity));
+            PaperTradingOrderEntity existing = new PaperTradingOrderEntity();
+            existing.setSignalId("1");
+            when(orderRepo.findByPortfolioIdOrderByCreatedAtDesc("PULLBACK_B")).thenReturn(List.of(existing));
+
+            boolean result = service.executeVariantBuy("PULLBACK_B", signal, new BigDecimal("100"));
+
+            assertThat(result).isTrue();
+            verify(orderRepo, never()).save(any());
+            verify(portfolioRepo, never()).save(any());
+        }
+
+        @Test
+        void twoDifferentPortfoliosExecuteIndependentlyWithoutSharedState() {
+            PaperTradingPortfolioEntity championPortfolio = new PaperTradingPortfolioEntity();
+            championPortfolio.setPortfolioId("CHAMPION_X");
+            championPortfolio.setInitialCapital(new BigDecimal("500000"));
+            championPortfolio.setCurrentCapital(new BigDecimal("500000"));
+            PaperTradingPortfolioEntity shadowPortfolio = new PaperTradingPortfolioEntity();
+            shadowPortfolio.setPortfolioId("SHADOW_Y");
+            shadowPortfolio.setInitialCapital(new BigDecimal("300000"));
+            shadowPortfolio.setCurrentCapital(new BigDecimal("300000"));
+            when(portfolioRepo.findByPortfolioId("CHAMPION_X")).thenReturn(Optional.of(championPortfolio));
+            when(portfolioRepo.findByPortfolioId("SHADOW_Y")).thenReturn(Optional.of(shadowPortfolio));
+            when(orderRepo.findByPortfolioIdOrderByCreatedAtDesc(any())).thenReturn(List.of());
+
+            boolean championResult = service.executeVariantBuy("CHAMPION_X", signal, new BigDecimal("100"));
+            boolean shadowResult = service.executeVariantBuy("SHADOW_Y", signal, new BigDecimal("100"));
+
+            assertThat(championResult).isTrue();
+            assertThat(shadowResult).isTrue();
+            // Each portfolio's own capital was debited independently - neither call affected the
+            // other portfolio's entity.
+            assertThat(championPortfolio.getCurrentCapital()).isLessThan(new BigDecimal("500000"));
+            assertThat(shadowPortfolio.getCurrentCapital()).isLessThan(new BigDecimal("300000"));
+            verify(portfolioRepo).save(championPortfolio);
+            verify(portfolioRepo).save(shadowPortfolio);
         }
     }
 }

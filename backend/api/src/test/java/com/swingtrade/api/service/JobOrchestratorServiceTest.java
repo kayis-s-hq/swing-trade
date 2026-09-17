@@ -968,6 +968,7 @@ class JobOrchestratorServiceTest {
                 com.swingtrade.domain.StrategyMode.CHAMPION, new java.math.BigDecimal("500000"),
                 true, null, null, LocalDateTime.now());
             when(strategyConfigStore.findCurrentChampion()).thenReturn(Optional.of(champion));
+            lenient().when(strategyConfigStore.findAllCurrent()).thenReturn(List.of(champion));
         }
 
         @Test
@@ -977,7 +978,7 @@ class JobOrchestratorServiceTest {
             // the shadow's signal exists in the DB (per §7.1's fan-out) but must never reach
             // tradingService.queueSignal.
             when(signalStore.findUnprocessedByStrategy(CHAMPION_VARIANT)).thenReturn(List.of(championSignal));
-            when(signalStore.markProcessedExcludingStrategy(SYMBOL, CHAMPION_VARIANT)).thenReturn(1);
+            when(signalStore.markProcessedExcludingStrategies(SYMBOL, List.of(CHAMPION_VARIANT))).thenReturn(1);
             when(tradingService.queueSignal(eq(championSignal), eq(latestCandle.close())))
                 .thenReturn(new com.swingtrade.domain.Order());
 
@@ -990,7 +991,7 @@ class JobOrchestratorServiceTest {
             verify(tradingService, never()).queueSignal(eq(shadowSignal), any());
             // The shadow variant's own unprocessed signal was quarantined (marked processed)
             // rather than executed.
-            verify(signalStore).markProcessedExcludingStrategy(SYMBOL, CHAMPION_VARIANT);
+            verify(signalStore).markProcessedExcludingStrategies(SYMBOL, List.of(CHAMPION_VARIANT));
             // findUnprocessed() (the old symbol-only, strategy-blind query) must never be used
             // once a CHAMPION variant is configured - that was the routing gap.
             verify(signalStore, never()).findUnprocessed();
@@ -1000,7 +1001,7 @@ class JobOrchestratorServiceTest {
         @DisplayName("Daily loss breach on the champion portfolio blocks new BUY entries")
         void killSwitchBlocksNewEntriesOnBreach() throws InterruptedException {
             when(signalStore.findUnprocessedByStrategy(CHAMPION_VARIANT)).thenReturn(List.of(championSignal));
-            when(signalStore.markProcessedExcludingStrategy(SYMBOL, CHAMPION_VARIANT)).thenReturn(0);
+            when(signalStore.markProcessedExcludingStrategies(SYMBOL, List.of(CHAMPION_VARIANT))).thenReturn(0);
             when(paperPortfolioService.isDailyLossBreached(CHAMPION_VARIANT)).thenReturn(true);
 
             service.startRun(JobRun.TriggerType.SCHEDULED);
@@ -1012,6 +1013,75 @@ class JobOrchestratorServiceTest {
 
             JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
             assertThat(paperTradeStage.getResultSummary()).contains("blocked by daily loss breaker");
+        }
+
+        @Test
+        @DisplayName("A SHADOW variant executes its own BUY against its own portfolio, independently of the CHAMPION")
+        void shadowVariantExecutesAgainstItsOwnPortfolio() throws InterruptedException {
+            String shadowVariant = "PULLBACK_B";
+            com.swingtrade.domain.StrategyConfig shadow = new com.swingtrade.domain.StrategyConfig(
+                2L, shadowVariant, 1, "PULLBACK", java.util.Map.of(), java.util.Map.of(), "hash2",
+                com.swingtrade.domain.StrategyMode.SHADOW, new java.math.BigDecimal("500000"),
+                true, null, null, LocalDateTime.now());
+            com.swingtrade.domain.StrategyConfig champion = new com.swingtrade.domain.StrategyConfig(
+                1L, CHAMPION_VARIANT, 1, "BREAKOUT", java.util.Map.of(), java.util.Map.of(), "hash",
+                com.swingtrade.domain.StrategyMode.CHAMPION, new java.math.BigDecimal("500000"),
+                true, null, null, LocalDateTime.now());
+            when(strategyConfigStore.findAllCurrent()).thenReturn(List.of(champion, shadow));
+
+            when(signalStore.findUnprocessedByStrategy(CHAMPION_VARIANT)).thenReturn(List.of(championSignal));
+            when(signalStore.findUnprocessedByStrategy(shadowVariant)).thenReturn(List.of(shadowSignal));
+            when(signalStore.markProcessedExcludingStrategies(SYMBOL, List.of(CHAMPION_VARIANT, shadowVariant)))
+                .thenReturn(0);
+            when(tradingService.queueSignal(eq(championSignal), eq(latestCandle.close())))
+                .thenReturn(new com.swingtrade.domain.Order());
+            when(paperPortfolioService.executeVariantBuy(eq(shadowVariant), eq(shadowSignal), eq(latestCandle.close())))
+                .thenReturn(true);
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            // Champion routes through the shared engine; the shared engine is never touched with
+            // the shadow's signal.
+            verify(tradingService).queueSignal(eq(championSignal), eq(latestCandle.close()));
+            verify(tradingService, never()).queueSignal(eq(shadowSignal), any());
+            // Shadow routes through its own independent portfolio execution path.
+            verify(paperPortfolioService).executeVariantBuy(shadowVariant, shadowSignal, latestCandle.close());
+            verify(paperPortfolioService, never()).executeVariantBuy(eq(CHAMPION_VARIANT), any(), any());
+            verify(signalStore).markProcessed(championSignal.id());
+            verify(signalStore).markProcessed(shadowSignal.id());
+        }
+
+        @Test
+        @DisplayName("A SHADOW variant's execution failure does not block the CHAMPION's own execution")
+        void oneVariantFailureDoesNotBlockAnother() throws InterruptedException {
+            String shadowVariant = "PULLBACK_B";
+            com.swingtrade.domain.StrategyConfig shadow = new com.swingtrade.domain.StrategyConfig(
+                2L, shadowVariant, 1, "PULLBACK", java.util.Map.of(), java.util.Map.of(), "hash2",
+                com.swingtrade.domain.StrategyMode.SHADOW, new java.math.BigDecimal("500000"),
+                true, null, null, LocalDateTime.now());
+            com.swingtrade.domain.StrategyConfig champion = new com.swingtrade.domain.StrategyConfig(
+                1L, CHAMPION_VARIANT, 1, "BREAKOUT", java.util.Map.of(), java.util.Map.of(), "hash",
+                com.swingtrade.domain.StrategyMode.CHAMPION, new java.math.BigDecimal("500000"),
+                true, null, null, LocalDateTime.now());
+            when(strategyConfigStore.findAllCurrent()).thenReturn(List.of(champion, shadow));
+
+            when(signalStore.findUnprocessedByStrategy(CHAMPION_VARIANT)).thenReturn(List.of(championSignal));
+            when(signalStore.findUnprocessedByStrategy(shadowVariant))
+                .thenThrow(new RuntimeException("simulated shadow lookup failure"));
+            when(signalStore.markProcessedExcludingStrategies(SYMBOL, List.of(CHAMPION_VARIANT, shadowVariant)))
+                .thenReturn(0);
+            when(tradingService.queueSignal(eq(championSignal), eq(latestCandle.close())))
+                .thenReturn(new com.swingtrade.domain.Order());
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            // Champion still executes despite the shadow variant's lookup blowing up.
+            verify(tradingService).queueSignal(eq(championSignal), eq(latestCandle.close()));
+            verify(signalStore).markProcessed(championSignal.id());
         }
     }
 

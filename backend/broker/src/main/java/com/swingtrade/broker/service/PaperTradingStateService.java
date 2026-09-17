@@ -279,7 +279,7 @@ public class PaperTradingStateService {
             OptimisticLockRetryHelper.execute(() -> {
                 PaperTradingOrderEntity entity = orderRepo.findByOrderId(order.getOrderId()).orElse(null);
                 if (entity == null) {
-                    entity = new PaperTradingOrderEntity(order);
+                    entity = new PaperTradingOrderEntity(order, "default");
                 } else {
                     entity.setStatus(order.getStatus() != null ? order.getStatus().name() : entity.getStatus());
                     entity.setUpdatedAt(LocalDateTime.now());

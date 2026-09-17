@@ -79,6 +79,11 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
+    public int markProcessedExcludingStrategies(String symbol, List<String> strategies) {
+        return repository.markProcessedExcludingStrategies(symbol, strategies);
+    }
+
+    @Override
     public Signal save(Signal signal) {
         return repository.save(SignalEntity.fromDomain(signal)).toDomain();
     }
