@@ -10,11 +10,16 @@ Last checked: 2026-09-17 (data coverage verification)
 - [x] Broker coverage remediation completed 2026-09-17: risk-control orchestration,
   notification, configuration, and paper-engine behavior now have focused tests; broker
   JaCoCo verification passed. The full Gradle build then reached the data module, where its
-  aggregate coverage is 57% (2,192/3,833 lines) against the 80% gate; focused
+  aggregate coverage is 58% (2,207/3,833 lines) against the 80% gate; focused
   WatchlistService, DataIngestionService, TradeLabelService, SignalEntity, PositionEntity,
   TradeEntity, CandidateScanResultEntity, and the remaining simple entity/domain persistence
   contracts coverage was added, but this remains the next full-build blocker. The data PMD test
   violation was also removed and the scoped verifier passed.
+
+- [x] Provider limiter delegation coverage extended 2026-09-17: all market-data operations,
+  including price bands, bulk quotes, metadata, symbol search, and connectivity, are now
+  covered through the shared rate-limited decorator. Full data tests and the aggregate report
+  passed; the 80% data threshold remains the next blocker.
 
 - [x] Sentiment accuracy confidence normalization corrected 2026-09-17: the aggregate
   confidence endpoint now returns a normalized 0–1 value (rounded to four decimals) rather
