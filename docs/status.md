@@ -1,6 +1,12 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-17 (documentation/lint and analytics remediation verification)
+Last checked: 2026-09-17 (strategy provenance verification)
+
+- [x] Strategy configuration provenance persisted 2026-09-17: configured signals now retain
+  their variant ID and immutable configuration version; legacy signals are backfilled to version
+  1, and the strategy column accepts the documented 40-character variant limit. Schema v60,
+  focused data/API tests, `./bin/verify-changes`, local Flyway migration, API health, positions,
+  and request/portfolio metrics checks passed.
 
 - [x] Local runtime revalidation 2026-09-17: the API migrated the PostgreSQL-backed schema to
   v55, reported healthy database/readiness status, and served

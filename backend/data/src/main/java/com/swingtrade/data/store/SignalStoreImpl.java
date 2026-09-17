@@ -86,9 +86,12 @@ public class SignalStoreImpl implements SignalStore {
 
     @Override
     public Signal save(Signal signal, String warningFlag, String strategy) {
-        SignalEntity entity = SignalEntity.fromDomain(signal, warningFlag);
-        entity.setStrategy(strategy);
-        return repository.save(entity).toDomain();
+        return save(signal, warningFlag, strategy, 1);
+    }
+
+    @Override
+    public Signal save(Signal signal, String warningFlag, String strategy, Integer strategyVersion) {
+        return repository.save(SignalEntity.fromDomain(signal, warningFlag, strategy, strategyVersion)).toDomain();
     }
 
     @Override

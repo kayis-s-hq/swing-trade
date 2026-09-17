@@ -38,6 +38,9 @@ public interface SignalStore {
 
     Signal save(Signal signal, String warningFlag, String strategy);
 
+    /** Saves a signal with its strategy variant and immutable configuration version. */
+    Signal save(Signal signal, String warningFlag, String strategy, Integer strategyVersion);
+
     void markProcessed(Long signalId);
 
     Optional<Signal> findLatestBySymbol(String symbol);
