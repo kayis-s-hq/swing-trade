@@ -235,7 +235,7 @@ public class SentimentAccuracyService {
             .filter(e -> e.getLlmConfidence() != null)
             .mapToDouble(e -> e.getLlmConfidence())
             .sum();
-        return Math.round((sum / total) * 10000.0) / 100.0;
+        return Math.round((sum / total) * 10000.0) / 10000.0;
     }
 
     private BigDecimal returnForWindow(SentimentAccuracyEntity e, String window) {
