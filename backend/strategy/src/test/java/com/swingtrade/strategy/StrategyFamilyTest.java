@@ -74,8 +74,10 @@ class StrategyFamilyTest {
     @Test
     void registryExplicitlyIncludesTheStandardSetups() {
         var priceAction = new PriceActionStrategy();
+        var confluence = new PriceActionConfluenceStrategy();
         var registry = new StrategyRegistry(java.util.List.of(
             priceAction,
+            confluence,
             new PullbackInUptrendStrategy(),
             new VolatilitySqueezeStrategy(),
             new FiftyTwoWeekHighBreakoutStrategy(),
@@ -83,5 +85,29 @@ class StrategyFamilyTest {
 
         assertThat(registry.find(FiftyTwoWeekHighBreakoutStrategy.NAME)).isPresent();
         assertThat(registry.find(Rsi2MeanReversionStrategy.NAME)).isPresent();
+        assertThat(registry.find(PriceActionConfluenceStrategy.NAME)).isPresent();
+    }
+
+    @Test
+    void priceActionConfluence_acceptsThreeOfFourAndConfiguredRsiRange() {
+        var strategy = new PriceActionConfluenceStrategy(new BigDecimal("45"), new BigDecimal("60"));
+
+        assertThat(strategy.isEntrySignal(indicators("103", "100", "95", "55", "100", "100", "105")))
+            .isTrue(); // trend, RSI, and high pass; volume does not
+        assertThat(strategy.isEntrySignal(indicators("103", "100", "95", "61", "100", "100", "105")))
+            .isFalse(); // only trend and high pass
+        assertThat(strategy.rsiBelowLowerBound(indicators("103", "100", "95", "44", "100", "100", "105")))
+            .isTrue();
+        assertThat(strategy.entryRsiDescription()).isEqualTo("RSI between 45-60");
+    }
+
+    @Test
+    void priceActionConfluence_readsExistingStrategyConfigParameters() {
+        var strategy = PriceActionConfluenceStrategy.fromParameters(
+            java.util.Map.of("rsiLower", "48", "rsiUpper", 62));
+
+        assertThat(strategy.rsiInEntryRange(indicators("101", "100", "95", "62", "100", "100", "105")))
+            .isTrue();
+        assertThat(strategy.entryRsiDescription()).isEqualTo("RSI between 48-62");
     }
 }

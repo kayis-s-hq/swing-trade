@@ -29,6 +29,11 @@ public class PullbackInUptrendStrategy implements TradingStrategy {
     }
 
     @Override
+    public boolean regimeFilterEnabled() {
+        return true;
+    }
+
+    @Override
     public boolean isEntrySignal(Indicators i) {
         return trendAligned(i) && rsiInEntryRange(i) && volumeSurge(i)
             && pullbackNearEma20(i) && nearWeeklyHigh(i);

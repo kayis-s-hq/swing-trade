@@ -144,6 +144,7 @@ public class JobOrchestratorService {
     private final boolean llmAnalysisAdvisoryOnly;
     private final StrategyConfigRepository strategyConfigRepository;
     private final StrategyRegistry strategyRegistry;
+    private final LiveEligibilityService liveEligibilityService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public JobOrchestratorService(
@@ -170,6 +171,7 @@ public class JobOrchestratorService {
             SentimentStore sentimentStore,
             StrategyConfigRepository strategyConfigRepository,
             StrategyRegistry strategyRegistry,
+            LiveEligibilityService liveEligibilityService,
             @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
             @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs,
             @Value("${job.orchestrator.reaper.enabled:true}") boolean reaperEnabled,
@@ -206,6 +208,7 @@ public class JobOrchestratorService {
         this.llmAnalysisAdvisoryOnly = llmAnalysisAdvisoryOnly;
         this.strategyConfigRepository = strategyConfigRepository;
         this.strategyRegistry = strategyRegistry;
+        this.liveEligibilityService = liveEligibilityService;
     }
 
     /** Compatibility fixture constructor for pre-LLM pipeline tests. */
@@ -219,7 +222,7 @@ public class JobOrchestratorService {
             SentimentStore st, int max, long poll, boolean reaper, boolean llmEnabled,
             boolean llmAdvisory) {
         this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,ta,fs,ca,sy,br,lr,lg,st,null,null,
-            max,poll,reaper,llmEnabled,llmAdvisory);
+            null, max,poll,reaper,llmEnabled,llmAdvisory);
     }
 
     /** Compatibility fixture constructor for pre-LLM pipeline tests. */
@@ -227,7 +230,7 @@ public class JobOrchestratorService {
             SignalPipeline p, SentimentGate sg, BacktestEngine b, TradingService t,
             JobRunRepository jr, JobRunStageRepository js, SignalStore ss, WatchlistStore w,
             CandleStore c, JobOrchestratorMetrics m, int max, long poll, boolean reaper) {
-        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
+        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
     }
 
     /**
@@ -632,6 +635,7 @@ public class JobOrchestratorService {
         int failedToQueue = 0;
         int blockedBySentiment = 0;
         int blockedByLlm = 0;
+        int blockedByEligibility = 0;
         for (Signal signal : unprocessed) {
             OhlcvCandle latest = candleStore.findLatestBySymbol(symbol)
                 .orElse(null);
@@ -669,6 +673,15 @@ public class JobOrchestratorService {
                     logger.info("Blocked BUY signal {} for {} by LLM analysis: {}", signal.id(), symbol, llmVerdict.reason());
                     continue;
                 }
+                if (liveEligibilityService != null) {
+                    var eligibility = liveEligibilityService.assess(symbol, signal.date(), latest.close());
+                    if (!eligibility.eligible()) {
+                        blockedByEligibility++;
+                        logger.info("Blocked BUY signal {} for {} by live eligibility: unavailable={}, rejected={}",
+                            signal.id(), symbol, eligibility.unavailableInputs(), eligibility.rejectionReasons());
+                        continue;
+                    }
+                }
             }
 
             // Queue before marking processed. A capacity rejection returns null and must leave
@@ -697,6 +710,8 @@ public class JobOrchestratorService {
             summary.append(", ").append(blockedBySentiment).append(" blocked by sentiment");
         }
         if (blockedByLlm > 0) summary.append(", ").append(blockedByLlm).append(" blocked by LLM analysis");
+        if (blockedByEligibility > 0) summary.append(", ").append(blockedByEligibility)
+            .append(" blocked by live eligibility");
         if (failedToQueue > 0) {
             summary.append(", ").append(failedToQueue).append(" failed to queue (see logs)");
         }

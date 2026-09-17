@@ -22,6 +22,7 @@ public class StrategyRegistry {
 
     private static final Set<String> EXPLICITLY_ENABLED_NAMES = Set.of(
         PriceActionStrategy.NAME,
+        PriceActionConfluenceStrategy.NAME,
         PullbackInUptrendStrategy.NAME,
         VolatilitySqueezeStrategy.NAME,
         FiftyTwoWeekHighBreakoutStrategy.NAME,

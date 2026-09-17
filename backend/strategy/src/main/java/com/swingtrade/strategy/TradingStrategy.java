@@ -1,5 +1,11 @@
 package com.swingtrade.strategy;
 
+import com.swingtrade.domain.MarketRegime;
+import com.swingtrade.domain.MarketRegimeAssessment;
+
+import java.util.Set;
+
+
 /**
  * A named set of entry/exit rules, evaluated against a single bar's {@link Indicators}.
  *
@@ -13,6 +19,42 @@ package com.swingtrade.strategy;
  * single production strategy and do not expose selection; only backtest/testing paths do.
  */
 public interface TradingStrategy {
+
+    /** Configured strategies opt into the market-regime overlay explicitly. */
+    default boolean regimeFilterEnabled() {
+        return false;
+    }
+
+    /** Regimes in which an opted-in strategy may open a position. */
+    default Set<MarketRegime> allowedMarketRegimes() {
+        return Set.of(MarketRegime.BULLISH);
+    }
+
+    /** Final entry eligibility; missing regime facts fail closed when enabled. */
+    default boolean isEntryEligible(Indicators indicators, MarketRegimeAssessment regime) {
+        if (!isEntrySignal(indicators)) {
+            return false;
+        }
+        return !regimeFilterEnabled()
+            || regime != null
+            && regime.eligible()
+            && allowedMarketRegimes().contains(regime.regime());
+    }
+
+    /** Number of entry rules that must pass for this strategy to enter. */
+    default int requiredEntryRules() {
+        return 4;
+    }
+
+    /** Human-readable description of this strategy's entry confluence. */
+    default String entryConfluenceDescription() {
+        return "All entry rules passed";
+    }
+
+    /** Human-readable description of this strategy's RSI entry range. */
+    default String entryRsiDescription() {
+        return "RSI between 50-65";
+    }
 
     /**
      * Unique, stable name used to select this strategy (e.g. via {@link StrategyRegistry}

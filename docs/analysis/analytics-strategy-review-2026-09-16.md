@@ -146,7 +146,7 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 - [~] 39 Exit management (trailing, partial, breakeven)
 - [~] 40 Sector / correlation exposure limits
 - [~] 41 Parameter optimization with overfit control
-- [ ] 42 Entry strictness produces almost no BUYs
+- [~] 42 Entry strictness produces almost no BUYs
 
 ---
 
@@ -381,8 +381,9 @@ supports those semantics; sector rotation remains open.
 No index-trend or volatility gate exists; momentum breakouts lose heavily in falling markets.
 **Fix:** `RegimeService`: Nifty vs 200-day average, India VIX band, and breadth (% of NIFTY 500 above 50-day average). Each strategy declares allowed regimes.
 
-Bounded fail-closed market-regime and relative-strength policy contracts now exist; Nifty history,
-VIX/breadth ingestion, and live wiring remain open.
+Bounded fail-closed market-regime and relative-strength policy contracts now exist. The signal engine
+can apply the market-regime gate for explicitly opted-in strategies; Nifty history, VIX/breadth
+ingestion, strategy opt-in defaults, relative-strength live wiring, and sector data remain open.
 
 ### 37. GAP — Relative strength
 Entry rules ignore performance vs the index and sector.
@@ -392,8 +393,9 @@ Entry rules ignore performance vs the index and sector.
 **Fix:** Reject if 20-day average traded value < ₹5 Cr, the stock is in ASM/GSM or F&O ban, it has a 5%/10% price band, or results or a board meeting falls within 5 trading days.
 
 An explicit eligibility policy now evaluates liquidity, surveillance flags, price-band input, and
-results/board-meeting windows without inferring unavailable external facts. Data population and live
-wiring remain open.
+results/board-meeting windows without inferring unavailable external facts. The live orchestrator now
+invokes this policy before queuing BUYs; missing surveillance/event/band data fails closed. Data
+population and richer API reporting remain open.
 
 ### 39. PARTIALLY FIXED — Exit management
 Exits use a fixed 2×ATR stop, 2.5R target, EMA trend-break and time stop. Partial exit exists in `PaperTradingEngine` but the strategy never uses it.
@@ -412,10 +414,12 @@ statistics, drawdown-spike checks, approximate deflated-Sharpe decisions, and ex
 The evaluator is not yet wired to a production optimization job, heatmap report, or automatic
 strategy-config promotion.
 
-### 42. BUG (behavioral) — Entry confluence produces almost no BUYs
+### 42. PARTIALLY FIXED — Entry confluence produces almost no BUYs
 4-of-4 entry vs 1-of-3 exit. The 2026-09-03 roadmap records zero BUYs across 14 stocks. RSI 50–65 plus "within 3% of 52w high"
 plus a 1.5× volume surge rarely line up on the same bar, because a strong stock near its highs usually has RSI > 65.
-**Fix:** Backtest 3-of-4 and RSI 55–75 variants on the portfolio engine (#17) with costs (#11) before changing live rules.
+An opt-in `PRICE_ACTION_3_OF_4` strategy now supports configurable RSI bounds and requires three of
+four rules, so it can be evaluated through the existing backtest path without changing live defaults.
+Actual portfolio outcome comparison and a data-backed choice of RSI 55–75 remain open.
 
 ---
 

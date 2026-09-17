@@ -19,6 +19,8 @@ package com.swingtrade.strategy;
 import com.swingtrade.core.metrics.SignalMetrics;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.OhlcvDataQuality;
+import com.swingtrade.domain.MarketRegimeAssessment;
+import com.swingtrade.domain.policy.MarketRegimePolicy;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.domain.StrategyParams;
@@ -59,6 +61,7 @@ public class PriceActionSignalEngine {
     private static final Logger logger = LoggerFactory.getLogger(PriceActionSignalEngine.class);
 
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
+    private static final String MARKET_INDEX_SYMBOL = "NIFTY50";
 
     // Package-private (not private): reused directly by BacktestEngine so the backtest's
     // entry rules can never drift from the live signal engine's thresholds.
@@ -80,11 +83,19 @@ public class PriceActionSignalEngine {
     private final CandleStore candleStore;
     private final SignalMetrics signalMetrics;
     private final TradingStrategy strategy;
+    private final MarketRegimePolicy marketRegimePolicy;
 
     public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics, PriceActionStrategy strategy) {
+        this(candleStore, signalMetrics, strategy, new BoundedMarketRegimePolicy());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics, PriceActionStrategy strategy,
+                                   MarketRegimePolicy marketRegimePolicy) {
         this.candleStore = candleStore;
         this.signalMetrics = signalMetrics;
         this.strategy = strategy;
+        this.marketRegimePolicy = marketRegimePolicy;
     }
 
     /**
@@ -160,6 +171,10 @@ public class PriceActionSignalEngine {
 
         Indicators indicators = new Indicators(price, ema20, ema50, rsi, volume, volumeMa, weeklyHigh);
 
+        MarketRegimeAssessment regime = selectedStrategy.regimeFilterEnabled()
+            ? assessMarketRegime()
+            : null;
+
         List<String> passed = new ArrayList<>();
         List<String> failed = new ArrayList<>();
 
@@ -168,7 +183,7 @@ public class PriceActionSignalEngine {
             "Price > EMA20 > EMA50 (price=" + fmt(price) + ", ema20=" + fmt(ema20) + ", ema50=" + fmt(ema50) + ")");
 
         boolean rsiInRange = selectedStrategy.rsiInEntryRange(indicators);
-        recordRule(rsiInRange, passed, failed, "RSI between 50-65 (rsi=" + fmt(rsi) + ")");
+        recordRule(rsiInRange, passed, failed, selectedStrategy.entryRsiDescription() + " (rsi=" + fmt(rsi) + ")");
 
         boolean volumeSurge = selectedStrategy.volumeSurge(indicators);
         recordRule(volumeSurge, passed, failed,
@@ -179,16 +194,21 @@ public class PriceActionSignalEngine {
             "Price within 3% of 52-week high (price=" + fmt(price) + ", 52wHigh=" + fmt(weeklyHigh) + ")");
 
         int rulesPassed = (trendAligned ? 1 : 0) + (rsiInRange ? 1 : 0) + (volumeSurge ? 1 : 0) + (nearWeeklyHigh ? 1 : 0);
-        // All 4 entry rules must hold — see docs/backtesting.md "Entry rules (same as the live
-        // signal engine)". BacktestEngine.tryEnter evaluates entry through the same
-        // TradingStrategy instance so the backtest can never drift from these thresholds.
-        boolean enoughRulesPassed = selectedStrategy.isEntrySignal(indicators);
+        // BacktestEngine.tryEnter evaluates entry through the same TradingStrategy instance so
+        // the backtest can never drift from this strategy's confluence or thresholds.
+        boolean technicalEntry = selectedStrategy.isEntrySignal(indicators);
+        boolean enoughRulesPassed = selectedStrategy.isEntryEligible(indicators, regime);
+        if (technicalEntry && !enoughRulesPassed) {
+            String regimeReason = regime == null ? "REGIME_ASSESSMENT_UNAVAILABLE" : regime.reason();
+            failed.add("Market regime gate failed (" + regimeReason + ")");
+        }
 
         SignalType type;
         String reasoning;
         if (enoughRulesPassed) {
             type = SignalType.BUY;
-            reasoning = "All entry rules passed: %s".formatted(String.join("; ", passed));
+            reasoning = "%s passed: %s".formatted(selectedStrategy.entryConfluenceDescription(),
+                String.join("; ", passed));
         } else {
             // Exit confluence: ANY 1 of 3 trend/RSI conditions fires a SELL — deliberately looser
             // than the strict "all 4 of 4" entry confluence ("enter carefully, exit quickly").
@@ -214,7 +234,8 @@ public class PriceActionSignalEngine {
                 reasoning = "Exit rule triggered (%d of 3): %s".formatted(exitPassed.size(), String.join("; ", exitPassed));
             } else {
                 type = SignalType.HOLD;
-                reasoning = "Entry rules failed (%d of 4 passed): %s".formatted(rulesPassed, String.join("; ", failed));
+                reasoning = "Entry rules failed (%d of 4 passed; required %d): %s".formatted(
+                    rulesPassed, selectedStrategy.requiredEntryRules(), String.join("; ", failed));
             }
         }
 
@@ -225,6 +246,20 @@ public class PriceActionSignalEngine {
 
         return new SignalResult(symbol, date, type, rsi.doubleValue(), ema20.doubleValue(),
             ema50.doubleValue(), atr.doubleValue(), reasoning);
+    }
+
+    private MarketRegimeAssessment assessMarketRegime() {
+        try {
+            MarketRegimeAssessment assessment = marketRegimePolicy.assess(
+                candleStore.findTopBySymbolOrderByDateDesc(MARKET_INDEX_SYMBOL,
+                    BoundedMarketRegimePolicy.LOOKBACK_DAYS));
+            return assessment != null
+                ? assessment
+                : MarketRegimeAssessment.unavailable("REGIME_ASSESSMENT_UNAVAILABLE");
+        } catch (RuntimeException e) {
+            logger.warn("Market regime assessment failed; configured entry will be blocked", e);
+            return MarketRegimeAssessment.unavailable("REGIME_ASSESSMENT_UNAVAILABLE");
+        }
     }
 
     private void recordRule(boolean conditionMet, List<String> passed, List<String> failed, String description) {

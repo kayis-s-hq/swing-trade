@@ -26,6 +26,11 @@ public class Rsi2MeanReversionStrategy implements TradingStrategy {
     }
 
     @Override
+    public boolean regimeFilterEnabled() {
+        return true;
+    }
+
+    @Override
     public boolean isEntrySignal(Indicators i) {
         return trendAligned(i) && i.rsi().compareTo(RSI_ENTRY_THRESHOLD) < 0;
     }

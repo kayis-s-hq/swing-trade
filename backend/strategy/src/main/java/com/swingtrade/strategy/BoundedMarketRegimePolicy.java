@@ -4,6 +4,7 @@ import com.swingtrade.domain.MarketRegime;
 import com.swingtrade.domain.MarketRegimeAssessment;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.policy.MarketRegimePolicy;
+import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -14,6 +15,7 @@ import java.util.List;
  * Bounded index trend policy. It is deliberately not wired into live signal generation;
  * callers opt in by invoking this policy.
  */
+@Component
 public final class BoundedMarketRegimePolicy implements MarketRegimePolicy {
 
     public static final int LOOKBACK_DAYS = 200;

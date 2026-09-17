@@ -28,6 +28,11 @@ public class VolatilitySqueezeStrategy implements TradingStrategy {
     }
 
     @Override
+    public boolean regimeFilterEnabled() {
+        return true;
+    }
+
+    @Override
     public boolean isEntrySignal(Indicators i) {
         return trendAligned(i) && rsiInEntryRange(i) && volumeSurge(i) && nearWeeklyHigh(i);
     }

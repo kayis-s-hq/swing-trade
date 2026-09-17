@@ -24,6 +24,11 @@ public class FiftyTwoWeekHighBreakoutStrategy implements TradingStrategy {
     }
 
     @Override
+    public boolean regimeFilterEnabled() {
+        return true;
+    }
+
+    @Override
     public boolean isEntrySignal(Indicators i) {
         return trendAligned(i) && volumeSurge(i) && nearWeeklyHigh(i);
     }

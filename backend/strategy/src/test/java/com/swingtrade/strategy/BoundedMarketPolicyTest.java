@@ -29,7 +29,18 @@ class BoundedMarketPolicyTest {
         List<OhlcvCandle> stock = candles(63, 100, 0.2);
 
         assertThat(new BoundedMarketRegimePolicy().assess(List.of()).eligible()).isFalse();
-        assertThat(new BoundedRelativeStrengthPolicy().assess(stock, List.of()).eligible()).isFalse();
+        RelativeStrengthAssessment assessment = new BoundedRelativeStrengthPolicy().assess(stock, List.of());
+
+        assertThat(assessment.eligible()).isFalse();
+        assertThat(assessment.reason()).isEqualTo("INDEX_DATA_UNAVAILABLE");
+    }
+
+    @Test
+    void relativeStrengthFailsClosedWhenIndexArgumentIsMissing() {
+        RelativeStrengthAssessment assessment = new BoundedRelativeStrengthPolicy().assess(candles(63, 100, 0.2), null);
+
+        assertThat(assessment.eligible()).isFalse();
+        assertThat(assessment.reason()).isEqualTo("INDEX_DATA_UNAVAILABLE");
     }
 
     @Test
