@@ -65,8 +65,9 @@ public class SentimentAccuracyService {
                 classifyReturn(returnForWindow(e, entry.getKey())))).count();
             double accuracy = total > 0 ? (double) correct / total : 0.0;
             double avgReturn = list.stream()
-                .filter(e -> e.getActualReturn5d() != null)
-                .mapToDouble(e -> e.getActualReturn5d().doubleValue())
+                .map(e -> returnForWindow(e, entry.getKey()))
+                .filter(java.util.Objects::nonNull)
+                .mapToDouble(BigDecimal::doubleValue)
                 .average().orElse(0.0);
 
             result.add(new AccuracyByWindow(

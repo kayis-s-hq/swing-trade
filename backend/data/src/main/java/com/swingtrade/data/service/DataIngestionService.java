@@ -338,14 +338,13 @@ public class DataIngestionService {
             org.springframework.data.domain.Pageable.unpaged()
         );
 
-        report.setActualTradingDays(candles.size());
+        Set<LocalDate> actualDates = candles.stream()
+            .map(OhlcvCandleEntity::getDate)
+            .collect(Collectors.toSet());
+        report.setActualTradingDays(actualDates.size());
 
         // Find gaps
         List<LocalDate> tradingDays = getTradingDays(fromDate, toDate);
-        List<LocalDate> actualDates = candles.stream()
-            .map(OhlcvCandleEntity::getDate)
-            .toList();
-
         List<DataGap> gaps = new ArrayList<>();
         LocalDate currentGapStart = null;
 
@@ -373,6 +372,11 @@ public class DataIngestionService {
         // Check for price anomalies
         List<PriceAnomaly> anomalies = findPriceAnomalies(candles);
         report.setAnomalies(anomalies);
+
+        if (report.isCritical()) {
+            logger.warn("Critical data quality issues for {} from {} to {}: gapRate={}%, gaps={}, anomalies={}",
+                stockSymbol, fromDate, toDate, report.getGapPercentage(), gaps.size(), anomalies.size());
+        }
 
         return report;
     }
@@ -538,25 +542,37 @@ public class DataIngestionService {
         public long getExpectedTradingDays() { return expectedTradingDays; }
         public void setExpectedTradingDays(long expectedTradingDays) {
             this.expectedTradingDays = expectedTradingDays;
-            this.hasIssues = actualTradingDays < expectedTradingDays;
+            refreshIssueState();
         }
         public long getActualTradingDays() { return actualTradingDays; }
         public void setActualTradingDays(long actualTradingDays) {
             this.actualTradingDays = actualTradingDays;
-            this.hasIssues = actualTradingDays < expectedTradingDays;
+            refreshIssueState();
         }
         public List<DataGap> getGaps() { return gaps; }
         public void setGaps(List<DataGap> gaps) {
-            this.gaps = gaps;
-            this.hasIssues = !gaps.isEmpty();
+            this.gaps = gaps == null ? new ArrayList<>() : gaps;
+            refreshIssueState();
         }
         public List<PriceAnomaly> getAnomalies() { return anomalies; }
         public void setAnomalies(List<PriceAnomaly> anomalies) {
-            this.anomalies = anomalies;
-            this.hasIssues = !anomalies.isEmpty();
+            this.anomalies = anomalies == null ? new ArrayList<>() : anomalies;
+            refreshIssueState();
         }
         public boolean hasIssues() { return hasIssues; }
         public void setHasIssues(boolean hasIssues) { this.hasIssues = hasIssues; }
+        public double getGapPercentage() {
+            return expectedTradingDays == 0 ? 0.0
+                : ((expectedTradingDays - Math.min(expectedTradingDays, actualTradingDays)) * 100.0)
+                    / expectedTradingDays;
+        }
+        public boolean isCritical() { return getGapPercentage() > 10.0 || !anomalies.isEmpty(); }
+
+        private void refreshIssueState() {
+            this.hasIssues = actualTradingDays < expectedTradingDays
+                || !gaps.isEmpty()
+                || !anomalies.isEmpty();
+        }
     }
 
     /**

@@ -69,6 +69,26 @@ class DataIngestionServiceTest {
     }
 
     @Test
+    @DisplayName("data quality keeps gap issues and reports distinct actual sessions")
+    void dataQualityKeepsGapIssuesAndUsesDistinctDates() {
+        LocalDate monday = LocalDate.of(2026, 1, 5);
+        OhlcvCandleEntity first = candle("RELIANCE", monday);
+        OhlcvCandleEntity duplicate = candle("RELIANCE", monday);
+        when(candleRepository.findBySymbolAndDateRange(eq("RELIANCE"), eq(monday),
+            eq(monday.plusDays(2)), any())).thenReturn(List.of(first, duplicate));
+
+        DataIngestionService.DataQualityReport report =
+            dataIngestionService.validateDataQuality("RELIANCE", monday, monday.plusDays(2));
+
+        assert report.getExpectedTradingDays() == 3;
+        assert report.getActualTradingDays() == 1;
+        assert report.hasIssues();
+        assert report.getGapPercentage() > 10.0;
+        assert report.isCritical();
+        assert report.getGaps().size() == 1;
+    }
+
+    @Test
     @DisplayName("testGetLatestCandle_ReturnsLatestData")
     void testGetLatestCandle() {
         // Given: Mock repository returns a candle
@@ -134,6 +154,10 @@ class DataIngestionServiceTest {
         OhlcvCandleEntity candle = new OhlcvCandleEntity();
         candle.setSymbol(symbol);
         candle.setDate(date);
+        candle.setOpenPrice(BigDecimal.valueOf(100));
+        candle.setHighPrice(BigDecimal.valueOf(105));
+        candle.setLowPrice(BigDecimal.valueOf(95));
+        candle.setClosePrice(BigDecimal.valueOf(102));
         return candle;
     }
 }

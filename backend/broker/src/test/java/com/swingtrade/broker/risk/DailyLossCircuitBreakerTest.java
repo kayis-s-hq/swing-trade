@@ -153,6 +153,26 @@ class DailyLossCircuitBreakerTest {
     }
 
     @Test
+    void historicalRealizedLossDoesNotTripTodaysCircuit() {
+        LocalDate yesterday = LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(1);
+        Position historicalLoss = new Position(
+            null, "PAPER", "TCS", new BigDecimal("100"), yesterday,
+            300, new BigDecimal("90"), new BigDecimal("125"),
+            PositionStatus.CLOSED, "test", new BigDecimal("50"),
+            null, null, Exchange.NSE, TradeDirection.LONG,
+            new BigDecimal("100"), BigDecimal.ZERO, new BigDecimal("-15000"), BigDecimal.ZERO,
+            yesterday.atStartOfDay(), yesterday.atTime(15, 30), "historical", null
+        );
+        when(positionManager.getClosedPositions()).thenReturn(java.util.List.of(historicalLoss));
+        when(positionManager.getOpenPositions()).thenReturn(java.util.List.of());
+
+        dailyLossCircuitBreaker.updateWithCurrentPositions();
+
+        assertThat(dailyLossCircuitBreaker.getCurrentDailyPnL()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(dailyLossCircuitBreaker.isCircuitOpen()).isFalse();
+    }
+
+    @Test
     void testGetCircuitOpenTime() {
         // When
         LocalDateTime actualTime = dailyLossCircuitBreaker.getCircuitOpenTime();
