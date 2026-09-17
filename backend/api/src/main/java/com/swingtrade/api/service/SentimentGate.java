@@ -49,6 +49,7 @@ public class SentimentGate {
         this(sentimentService, sentimentStore, null);
     }
 
+    @Autowired
     public SentimentGate(SentimentService sentimentService, SentimentStore sentimentStore,
                          SignalStore signalStore) {
         this.sentimentService = sentimentService;
