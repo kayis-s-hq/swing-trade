@@ -1,6 +1,6 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-16 (analytics remediation verification)
+Last checked: 2026-09-17 (analytics remediation verification)
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
@@ -20,6 +20,15 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 - [x] Verified 2026-09-01: `:api:test`, `:data:test`, all 277 dashboard tests, dashboard typecheck, lint, formatting, and production build passed. Dev-stack health, `/api/candidate-scans/settings`, `/api/candidate-scans`, and the dashboard returned HTTP 200. The latest persisted full-universe run completed 2,635 symbols with 5 qualifiers; current development settings are 50% minimum win rate, >0% total return, 8 workers, and 3 backfill years.
 
 ## Data-integrity remediation
+
+- [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
+  affected backend suite passed; the foreground local API stayed healthy through
+  startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL
+  health, `/api/strategy-configs`, `/api/signals/gate-effectiveness`, and the
+  dashboard root each returned successfully. No database data was reset. The
+  remaining analytics limitations are still listed in the review as partial,
+  including authoritative benchmark/universe ingestion, persistent evaluation,
+  and full portfolio/live wiring.
 
 - [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
   as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API

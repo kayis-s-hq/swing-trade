@@ -104,7 +104,9 @@ public class BacktestEngine {
     @org.springframework.beans.factory.annotation.Autowired
     public BacktestEngine(CandleStore candleStore, WatchlistStore watchlistStore,
                           PriceActionSignalEngine priceActionSignalEngine, StrategyRegistry strategyRegistry,
-                          ObjectMapper objectMapper, String reportsDir, PriceBandStore priceBandStore,
+                          ObjectMapper objectMapper,
+                          @Value("${backtest.reports.dir:reports}") String reportsDir,
+                          PriceBandStore priceBandStore,
                           UniverseSnapshotStore universeSnapshotStore, CorporateActionStore corporateActionStore) {
         this.candleStore = candleStore;
         this.watchlistStore = watchlistStore;
