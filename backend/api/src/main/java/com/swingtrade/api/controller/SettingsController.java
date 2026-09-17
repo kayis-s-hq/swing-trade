@@ -343,8 +343,22 @@ public class SettingsController {
                 Map.of("role", "system", "content", "Respond with a single word."),
                 Map.of("role", "user", "content", "Respond with a single word.")
             );
-            String response = client.generateChatCompletion(messages, 16, 0.0)
-                .block(Duration.ofSeconds(30));
+            LlmServerManager manager = switch (selector.resolve()) {
+                case LOCAL -> localServerManager;
+                case PI_SSH -> piServerManager;
+                case OPENAI, OLLAMA -> null;
+            };
+            if (manager != null) {
+                manager.ensureRunning();
+                manager.beginRequest();
+            }
+            String response;
+            try {
+                response = client.generateChatCompletion(messages, 16, 0.0)
+                    .block(Duration.ofSeconds(30));
+            } finally {
+                if (manager != null) manager.endRequest();
+            }
             boolean ok = response != null && !response.isBlank();
             result.put("success", ok);
             result.put("message", ok ? "OpenAI-compatible LLM responded successfully" : "LLM returned empty response");
