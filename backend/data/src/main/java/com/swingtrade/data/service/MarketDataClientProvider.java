@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -26,9 +27,19 @@ public class MarketDataClientProvider {
     private final AppSettingsService appSettingsService;
     private final AtomicReference<String> activeBroker;
 
-    @Autowired
     public MarketDataClientProvider(Map<String, MarketDataClient> clients, AppSettingsService appSettingsService) {
         this.clients = normalizeClientNames(clients);
+        this.appSettingsService = appSettingsService;
+        String configuredBroker = appSettingsService.get(SELECTED_BROKER_SETTING, "yahoo");
+        this.activeBroker = new AtomicReference<>(this.clients.containsKey(configuredBroker)
+            ? configuredBroker : "yahoo");
+        logger.info("Market data provider initialized without request throttling (compatibility constructor)");
+    }
+
+    @Autowired
+    MarketDataClientProvider(Map<String, MarketDataClient> clients, AppSettingsService appSettingsService,
+                             @Value("${market-data.rate-limit-ms:250}") long rateLimitMillis) {
+        this.clients = rateLimitClients(normalizeClientNames(clients), rateLimitMillis);
         this.appSettingsService = appSettingsService;
         String configuredBroker = appSettingsService.get(SELECTED_BROKER_SETTING, "yahoo");
         this.activeBroker = new AtomicReference<>(this.clients.containsKey(configuredBroker)
@@ -51,6 +62,15 @@ public class MarketDataClientProvider {
             normalized.putIfAbsent(FYERS, fyersClient);
         }
         return normalized;
+    }
+
+    private static Map<String, MarketDataClient> rateLimitClients(Map<String, MarketDataClient> clients,
+                                                                   long rateLimitMillis) {
+        Map<String, MarketDataClient> limited = new HashMap<>();
+        clients.forEach((name, client) -> limited.put(name,
+            client instanceof RateLimitedMarketDataClient ? client
+                : new RateLimitedMarketDataClient(client, rateLimitMillis)));
+        return limited;
     }
 
     /**

@@ -68,4 +68,9 @@ class MarketDataClientProviderTest {
 
         assertThat(provider.getActiveBroker()).isEqualTo("yahoo");
     }
+
+    @Test
+    void compatibilityConstructorDoesNotWrapClients() {
+        assertThat(provider.getClient()).isSameAs(yahoo);
+    }
 }
