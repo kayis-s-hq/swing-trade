@@ -88,7 +88,12 @@ public class DataIngestionService {
      * @param yearsBack number of years to backfill
      */
     @Transactional
-    public BackfillOutcome backfillStockData(String stockSymbol, int yearsBack) {
+    public void backfillStockData(String stockSymbol, int yearsBack) {
+        backfillStockDataWithOutcome(stockSymbol, yearsBack);
+    }
+
+    @Transactional
+    public BackfillOutcome backfillStockDataWithOutcome(String stockSymbol, int yearsBack) {
         logger.info("Starting backfill for {}: {} years of historical data", stockSymbol, yearsBack);
 
         LocalDate toDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));

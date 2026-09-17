@@ -461,7 +461,7 @@ public class CandidateScanService {
         if (candles < MIN_CANDLES) {
             publish(runId, "STAGE_STARTED", symbol, "INFO",
                 "Data: fetching " + backfillYears + " years of OHLCV history.");
-            outcome = ingestionService.backfillStockData(symbol, backfillYears);
+            outcome = ingestionService.backfillStockDataWithOutcome(symbol, backfillYears);
             fetched = true;
             candles = (int) candleStore.countBySymbol(symbol);
         }
