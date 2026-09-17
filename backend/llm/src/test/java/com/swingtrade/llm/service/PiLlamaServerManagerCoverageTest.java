@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * these tests verify the branches that can be observed without a Pi, a local
  * llama-server, or a network listener.</p>
  */
+@SuppressWarnings("PMD.AvoidAccessibilityAlteration")
 class PiLlamaServerManagerCoverageTest {
 
     private TestSettingsStore settings;

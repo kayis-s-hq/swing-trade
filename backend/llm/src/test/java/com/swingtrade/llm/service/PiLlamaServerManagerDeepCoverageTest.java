@@ -33,6 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Deep lifecycle and transport coverage without contacting a Pi or starting a process. */
+@SuppressWarnings("PMD.AvoidAccessibilityAlteration")
 class PiLlamaServerManagerDeepCoverageTest {
 
     @Test

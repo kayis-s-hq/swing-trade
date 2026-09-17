@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
  * <p>The process handle is seeded only where the existing implementation
  * requires one to exercise stop/status behavior. No child process is started.
  */
+@SuppressWarnings("PMD.AvoidAccessibilityAlteration")
 class LlamaServerManagerCoverageTest {
 
     private LlamaCppServerManager manager;

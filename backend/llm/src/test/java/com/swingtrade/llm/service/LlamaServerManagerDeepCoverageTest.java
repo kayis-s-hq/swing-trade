@@ -32,6 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Additional lifecycle, configuration, and HTTP coverage without starting a process or using the network. */
+@SuppressWarnings("PMD.AvoidAccessibilityAlteration")
 class LlamaServerManagerDeepCoverageTest {
 
     private LlamaCppServerManager manager;

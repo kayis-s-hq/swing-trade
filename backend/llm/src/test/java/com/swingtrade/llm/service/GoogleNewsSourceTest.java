@@ -6,6 +6,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@SuppressWarnings("PMD.AvoidAccessibilityAlteration")
 class GoogleNewsSourceTest {
     private static final String RSS = "<rss><channel><item><title>TCS earnings beat</title><link>https://news.example/tcs</link><description>&lt;p&gt;Revenue grew&lt;/p&gt;</description><pubDate>Tue, 15 Sep 2026 10:00:00 GMT</pubDate></item></channel></rss>";
 
