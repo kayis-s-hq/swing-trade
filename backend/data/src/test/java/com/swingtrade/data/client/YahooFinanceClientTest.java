@@ -514,4 +514,61 @@ class YahooFinanceClientTest {
         ChartMeta meta = client.fetchChartMeta("INVALID");
         assertThat(meta).isNull();
     }
+
+    @Test
+    void fetchQuotesParsesNumericFieldsAndSkipsNonEquityRows() {
+        mockWebServer.enqueue(new MockResponse().setBody("""
+            {"finance":{"result":[
+              {"symbol":"TCS.NS","shortName":"TCS","longName":"TCS Limited","quoteType":"EQUITY",
+               "regularMarketPrice":100.5,"regularMarketChange":1.5,"regularMarketChangePercent":1.52,
+               "regularMarketDayHigh":102,"regularMarketDayLow":99,"regularMarketPreviousClose":99,
+               "fiftyTwoWeekHigh":120,"fiftyTwoWeekLow":80,"regularMarketVolume":1000,
+               "currency":"INR","marketState":"REGULAR","fiftyDayAverage":98,"twoHundredDayAverage":90},
+              {"symbol":"INDEX","quoteType":"NONE"},
+              {"quoteType":"EQUITY"}]}}""").addHeader("Content-Type", "application/json"));
+
+        List<com.swingtrade.data.service.QuoteData> quotes = client.fetchQuotes(List.of("TCS", "INDEX"));
+
+        assertThat(quotes).hasSize(1);
+        assertThat(quotes.getFirst().symbol()).isEqualTo("TCS.NS");
+        assertThat(quotes.getFirst().regularMarketPrice()).isEqualByComparingTo("100.5");
+        assertThat(quotes.getFirst().regularMarketVolume()).isEqualTo(1000L);
+    }
+
+    @Test
+    void quoteAndSearchRequestsReturnEmptyForInvalidInputsOrResponses() {
+        assertThat(client.fetchQuotes(null)).isEmpty();
+        assertThat(client.fetchQuotes(List.of())).isEmpty();
+        assertThat(client.fetchQuote("TCS")).isNull();
+
+        mockWebServer.enqueue(new MockResponse().setBody("{\"finance\":{\"result\":null}}"));
+        assertThat(client.fetchQuotes(List.of("TCS"))).isEmpty();
+        assertThat(client.searchSymbols(null)).isEmpty();
+        assertThat(client.searchSymbols("  ")).isEmpty();
+    }
+
+    @Test
+    void searchSymbolsKeepsYahooEquitiesAndFiltersOtherQuotes() {
+        mockWebServer.enqueue(new MockResponse().setBody("""
+            {"quotes":[
+              {"symbol":"TCS.NS","shortname":"TCS","longname":"TCS Limited","quoteType":"EQUITY",
+               "exchange":"NSI","exchangeName":"NSE","isYahooFinance":true},
+              {"symbol":"TCS.BO","quoteType":"EQUITY","isYahooFinance":false},
+              {"symbol":"TCS","quoteType":"ETF","isYahooFinance":true}]}
+            """).addHeader("Content-Type", "application/json"));
+
+        List<com.swingtrade.data.service.SearchResult> results = client.searchSymbols("  TCS  ");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.getFirst().symbol()).isEqualTo("TCS.NS");
+        assertThat(results.getFirst().exchange()).isEqualTo("NSI");
+    }
+
+    @Test
+    void quoteAndSearchHttpFailuresFailClosed() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
+        assertThat(client.fetchQuotes(List.of("TCS"))).isEmpty();
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
+        assertThat(client.searchSymbols("TCS")).isEmpty();
+    }
 }
