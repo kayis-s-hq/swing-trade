@@ -178,6 +178,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   limiter waits are exported as `data_rate_limit_hits{source=...}`. Data/API tests and
   `./bin/verify-changes` passed.
 
+- [x] Yahoo usage boundary documented 2026-09-17: `docs/yahoo-finance-api.md` now states that
+  Yahoo is limited to local development, paper experiments, and backfills, and documents the
+  single-day `period1`/exclusive-`period2` request and unusable-close warning behavior.
+
 - [x] Incremental backfill verified 2026-09-17: `POST /api/data/pull/incremental` now exposes
   bounded single-symbol pulls, `getExistingDataWindow` reports stored bounds, routine backfills skip
   an already populated tail, long ranges are split into configurable 30-day provider requests, and
