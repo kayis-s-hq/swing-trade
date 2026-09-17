@@ -22,10 +22,7 @@ public class CandleStoreImpl implements CandleStore {
 
     @Override
     public Optional<OhlcvCandle> findBySymbolAndDate(String symbol, LocalDate date) {
-        return repository.findAllBySymbolOrderByDateDesc(symbol).stream()
-            .filter(c -> c.getDate().equals(date))
-            .findFirst()
-            .map(OhlcvCandleEntity::toDomain);
+        return repository.findBySymbolAndDate(symbol, date).map(OhlcvCandleEntity::toDomain);
     }
 
     @Override

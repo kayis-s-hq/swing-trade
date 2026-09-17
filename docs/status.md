@@ -10,7 +10,7 @@ Last checked: 2026-09-17 (data coverage verification)
 - [x] Broker coverage remediation completed 2026-09-17: risk-control orchestration,
   notification, configuration, and paper-engine behavior now have focused tests; broker
   JaCoCo verification passed. The full Gradle build then reached the data module, where its
-  aggregate coverage is 57% (2,175/3,833 lines) against the 80% gate; focused
+  aggregate coverage is 57% (2,192/3,833 lines) against the 80% gate; focused
   WatchlistService, DataIngestionService, TradeLabelService, SignalEntity, PositionEntity,
   TradeEntity, CandidateScanResultEntity, and the remaining simple entity/domain persistence
   contracts coverage was added, but this remains the next full-build blocker. The data PMD test

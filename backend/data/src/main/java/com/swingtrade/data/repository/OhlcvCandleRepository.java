@@ -75,6 +75,9 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
      */
     List<OhlcvCandleEntity> findAllBySymbolOrderByDateDesc(String symbol);
 
+    /** Finds the unique candle for a symbol on a trading date. */
+    Optional<OhlcvCandleEntity> findBySymbolAndDate(String symbol, LocalDate date);
+
     /**
      * Finds all unique symbols that have candle data.
      *
