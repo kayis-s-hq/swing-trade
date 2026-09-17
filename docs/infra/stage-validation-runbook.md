@@ -1,8 +1,9 @@
 # Stage validation runbook
 
 The manual `./dev-stack.sh stage` deployment path performs read-only validation
-against the deployed stage API. Use `STAGE_API_URL` (default
-`http://piworm.local:8081`), `STAGE_DASHBOARD_URL`, and `PROMETHEUS_URL`
+against the deployed stage API and dashboard. Use `STAGE_API_URL` (default
+`http://piworm.local:8081`), `STAGE_DASHBOARD_URL` (default
+`http://piworm.local:8082`), and `PROMETHEUS_URL`
 (`http://piworm.local:9090`) when the defaults do not apply. The stage database
 must contain the reviewed NSE holiday calendar and the successful Flyway
 version expected by the deployed application.

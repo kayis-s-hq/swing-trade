@@ -10,6 +10,7 @@ Stage runs entirely in Docker containers on pi-node. Monitoring is built in — 
 | PostgreSQL | `swing_trade_stage_postgres` | 5436 | swing-trade-stage_swingtrade-network |
 | Redis | `swing_trade_stage_redis` | 6380 | swing-trade-stage_swingtrade-network |
 | Spring Boot API | `swing-trade-stage-api` | 8081 | swing-trade-stage_swingtrade-network |
+| Vue dashboard | `swing-trade-stage-dashboard` | 8082 | swing-trade-stage_swingtrade-network |
 | Prometheus | `pi-prometheus` | 9090 | pi-stack_monitoring + swing-trade-stage_swingtrade-network |
 | Grafana | `pi-grafana` | 3001 | pi-stack_monitoring |
 
@@ -49,6 +50,8 @@ Prometheus reachability:
 ./dev-stack.sh stage
 curl -sf http://piworm.local:8081/actuator/health
 curl -sf http://piworm.local:9090/api/v1/targets
+# Dashboard smoke check
+curl -sfI http://piworm.local:8082/
 ```
 
 The former self-hosted GitHub Actions definitions are retained for historical
