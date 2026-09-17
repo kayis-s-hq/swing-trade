@@ -30,14 +30,18 @@ public class CandidateScanHandoffDispatcher {
                 if (scan.getQualifiedSymbols() == 0) { markNotRequired(scan); continue; }
                 var existingJob = jobRuns.findFirstByCandidateScanRunIdOrderByStartedAtDesc(scan.getRunId());
                 if (existingJob.isPresent()) {
-                    scan.setOrchestrationJobRunId(existingJob.get().getRunId());
-                    if ("RUNNING".equals(existingJob.get().getStatus())
-                            || "COMPLETED".equals(existingJob.get().getStatus())) {
+                    var job = existingJob.get();
+                    scan.setOrchestrationJobRunId(job.getRunId());
+                    if ("RUNNING".equals(job.getStatus())) {
+                        continue;
+                    } else if ("COMPLETED".equals(job.getStatus())) {
                         scan.setOrchestrationStatus("STARTED");
                         scan.setOrchestrationError(null);
                     } else {
-                        scan.setOrchestrationStatus("FAILED");
-                        scan.setOrchestrationError(existingJob.get().getErrorMessage());
+                        scan.setOrchestrationStatus("PENDING");
+                        scan.setOrchestrationError(job.getErrorMessage());
+                        scan.setOrchestrationJobRunId(null);
+                        jobRuns.clearCandidateScanRunId(job.getRunId());
                     }
                     runs.save(scan);
                     continue;
