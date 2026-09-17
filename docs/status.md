@@ -10,10 +10,11 @@ Last checked: 2026-09-17 (data coverage verification)
 - [x] Broker coverage remediation completed 2026-09-17: risk-control orchestration,
   notification, configuration, and paper-engine behavior now have focused tests; broker
   JaCoCo verification passed. The full Gradle build then reached the data module, where its
-  aggregate coverage is 47% (1,809/3,833 lines) against the 80% gate; focused
+  aggregate coverage is 54% (2,067/3,833 lines) against the 80% gate; focused
   WatchlistService, DataIngestionService, TradeLabelService, SignalEntity, PositionEntity,
-  TradeEntity, and CandidateScanResultEntity coverage was added, but this remains the next
-  full-build blocker. The data PMD test violation was also removed and the scoped verifier passed.
+  TradeEntity, CandidateScanResultEntity, and the remaining simple entity/domain persistence
+  contracts coverage was added, but this remains the next full-build blocker. The data PMD test
+  violation was also removed and the scoped verifier passed.
 
 - [x] Exchange price-band ingestion wired 2026-09-17: Fyers `lower_ckt`/`upper_ckt`
   quote fields now flow through the rate-limited market-data client and are persisted by
