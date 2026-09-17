@@ -413,9 +413,11 @@ public class SettingsController {
         try {
             logger.info("Stopping Pi llama-server via SSH...");
             piServerManager.stop();
-            result.put("success", true);
-            result.put("running", false);
-            result.put("message", "Pi llama-server stopped");
+            boolean running = piServerManager.isRunning();
+            boolean stopped = "STOPPED".equals(piServerManager.lifecycleStatus().get("state")) && !running;
+            result.put("success", stopped);
+            result.put("running", running);
+            result.put("message", stopped ? "Pi llama-server stopped" : "Failed to confirm Pi llama-server stopped");
             return ResponseEntity.ok(ApiResponse.ok(result));
         } catch (Exception e) {
             logger.warn("Pi stop failed: {}", e.getMessage());

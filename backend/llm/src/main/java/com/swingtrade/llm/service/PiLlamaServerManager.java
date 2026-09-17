@@ -195,6 +195,10 @@ public class PiLlamaServerManager implements LlmServerManager {
     public void restart() {
         logger.info("Restarting llama-server on Pi with updated model");
         stop();
+        if (running || !"STOPPED".equals(lifecycleState)) {
+            String reason = lastFailureReason == null ? "llama-server shutdown was not confirmed" : lastFailureReason;
+            throw new IllegalStateException("llama-server restart aborted on Pi: " + reason);
+        }
         try {
             String modelPath = getModelPath();
             startServer(modelPath);
