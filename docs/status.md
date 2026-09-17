@@ -10,7 +10,7 @@ Last checked: 2026-09-17 (data coverage verification)
 - [x] Broker coverage remediation completed 2026-09-17: risk-control orchestration,
   notification, configuration, and paper-engine behavior now have focused tests; broker
   JaCoCo verification passed. The full Gradle build then reached the data module, where its
-  aggregate coverage is 74% (2,840/3,856 lines) against the 80% gate; focused
+  aggregate coverage is 75% (2,879/3,856 lines) against the 80% gate; focused
   WatchlistService, DataIngestionService, TradeLabelService, SignalEntity, PositionEntity,
   TradeEntity, CandidateScanResultEntity, and the remaining simple entity/domain persistence
   contracts coverage was added, but this remains the next full-build blocker. The data PMD test
@@ -58,6 +58,10 @@ Last checked: 2026-09-17 (data coverage verification)
 - [x] Yahoo quote/search coverage extended 2026-09-17: bulk quote parsing, invalid quote
   filtering, symbol-search filtering, empty inputs, and HTTP failures are covered by the
   MockWebServer suite. Full data tests and the aggregate report passed; the 80% threshold remains open.
+
+- [x] Application-settings coverage extended 2026-09-17: DB reads and cache hits, defaults,
+  environment overrides, read-only override writes, upserts, and null-value normalization are
+  covered by focused tests. Full data tests and the aggregate report passed; the 80% threshold remains open.
 
 - [x] Sentiment accuracy confidence normalization corrected 2026-09-17: the aggregate
   confidence endpoint now returns a normalized 0–1 value (rounded to four decimals) rather
