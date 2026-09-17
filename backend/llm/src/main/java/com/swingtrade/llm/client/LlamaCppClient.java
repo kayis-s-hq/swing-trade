@@ -77,11 +77,12 @@ public class LlamaCppClient implements LlmClient {
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(ChatCompletionResponse.class)
-                .map(response -> {
+                .flatMap(response -> {
                     if (response != null && response.getChoices() != null && !response.getChoices().isEmpty()) {
-                        return response.getChoices().get(0).getMessage().getContent();
+                        ChatChoice choice = response.getChoices().get(0);
+                        return Mono.justOrEmpty(choice.getMessage() == null ? null : choice.getMessage().getContent());
                     }
-                    return null;
+                    return Mono.empty();
                 })
                 .doOnSuccess(result -> logger.debug("Chat completion complete, received {} chars",
                         result != null ? result.length() : 0))

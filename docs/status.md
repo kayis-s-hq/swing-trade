@@ -78,10 +78,11 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   November 8 Muhurat session as partial. `MarketCalendar` now honors exchange-declared partial
   sessions even when they fall on a weekend; full data tests and `./bin/verify-changes` passed.
 
-- [x] LLM news filtering hardened 2026-09-17: future-dated articles and short, untrusted
+- [x] LLM news filtering and client resilience hardened 2026-09-17: future-dated articles and short, untrusted
   articles without trading relevance are now rejected fail-closed instead of being admitted by
-  the baseline relevance score. Backend tests and `./bin/verify-changes` passed; the LLM module's
-  aggregate coverage is 45% (1,408/3,121 lines), with external source/server adapters still open.
+  the baseline relevance score, while empty chat choices now complete empty instead of throwing a
+  Reactor null-value error. Backend tests and `./bin/verify-changes` passed; the LLM module's
+  aggregate coverage is 66.6% (2,079/3,123 lines), with ingestion and server-manager branches still open.
 
 - [x] Strategy coverage gate restored 2026-09-17: focused tests now cover the previously
   uncovered advanced indicator validation and calculations. Strategy tests, JaCoCo verification,
