@@ -66,6 +66,19 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
+    public List<Signal> findUnprocessedByStrategy(String strategy) {
+        return repository.findUnprocessedBuySignalsSinceAndStrategy(LocalDate.now().minusDays(30), strategy).stream()
+            .map(SignalEntity::toDomain)
+            .toList();
+    }
+
+    @Override
+    @Transactional
+    public int markProcessedExcludingStrategy(String symbol, String strategy) {
+        return repository.markProcessedExcludingStrategy(symbol, strategy);
+    }
+
+    @Override
     public Signal save(Signal signal) {
         return repository.save(SignalEntity.fromDomain(signal)).toDomain();
     }

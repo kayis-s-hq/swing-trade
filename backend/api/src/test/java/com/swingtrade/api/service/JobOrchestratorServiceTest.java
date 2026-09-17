@@ -143,6 +143,10 @@ class JobOrchestratorServiceTest {
 
     @Mock
     private SentimentStore sentimentStore;
+    @Mock
+    private com.swingtrade.domain.store.StrategyConfigStore strategyConfigStore;
+    @Mock
+    private com.swingtrade.domain.service.PaperPortfolioService paperPortfolioService;
 
     private UUID runId;
 
@@ -608,7 +612,7 @@ class JobOrchestratorServiceTest {
                 jobRunRepository, jobRunStageRepository, signalStore, watchlistStore,
                 candleStore, jobOrchestratorMetrics, technicalAnalysisService, fundamentalScorer,
                 compositeAnalysisService, synthesisService, backtestResultStore, llmAnalysisResultStore,
-                llmAnalysisGate, sentimentStore, 3, 1000L, true, true, true);
+                llmAnalysisGate, sentimentStore, strategyConfigStore, paperPortfolioService, 3, 1000L, true, true, true);
 
             stageState = new ConcurrentHashMap<>();
             runState = new AtomicReference<>();
@@ -865,6 +869,149 @@ class JobOrchestratorServiceTest {
             assertThat(paperTradeStage.getResultSummary())
                 .contains("0 trade(s) executed")
                 .contains("1 failed to queue");
+        }
+    }
+
+    // ==================== stagePaperTrade — per-variant routing (plan §7.2) ====================
+
+    @Nested
+    @DisplayName("stagePaperTrade — variant routing gap fix")
+    class StagePaperTradeVariantRouting {
+
+        private AtomicReference<JobRunEntity> runState;
+        private ConcurrentHashMap<String, JobRunStageEntity> stageState;
+        private CountDownLatch runCompleted;
+
+        private static final String CHAMPION_VARIANT = "BREAKOUT_STRICT";
+        private static final String SHADOW_VARIANT = "PULLBACK_B";
+
+        private final com.swingtrade.domain.Signal championSignal = new com.swingtrade.domain.Signal(
+                42L, SYMBOL, LocalDate.now(IST), com.swingtrade.domain.Signal.SignalType.BUY,
+                java.math.BigDecimal.valueOf(0.8), "strong setup",
+                java.math.BigDecimal.valueOf(100), java.math.BigDecimal.valueOf(95),
+                java.math.BigDecimal.valueOf(110), java.math.BigDecimal.valueOf(2),
+                "{}", LocalDate.now(IST), null, null);
+
+        private final com.swingtrade.domain.Signal shadowSignal = new com.swingtrade.domain.Signal(
+                43L, SYMBOL, LocalDate.now(IST), com.swingtrade.domain.Signal.SignalType.BUY,
+                java.math.BigDecimal.valueOf(0.7), "shadow setup",
+                java.math.BigDecimal.valueOf(100), java.math.BigDecimal.valueOf(95),
+                java.math.BigDecimal.valueOf(110), java.math.BigDecimal.valueOf(2),
+                "{}", LocalDate.now(IST), null, null);
+
+        private final com.swingtrade.domain.OhlcvCandle latestCandle = com.swingtrade.domain.OhlcvCandle.of(
+                SYMBOL, LocalDate.now(IST), java.math.BigDecimal.valueOf(99),
+                java.math.BigDecimal.valueOf(101), java.math.BigDecimal.valueOf(98),
+                java.math.BigDecimal.valueOf(100), 1000L);
+
+        @BeforeEach
+        void setUp() {
+            runId = UUID.randomUUID();
+            runState = new AtomicReference<>();
+            stageState = new ConcurrentHashMap<>();
+            runCompleted = new CountDownLatch(1);
+
+            service = new JobOrchestratorService(
+                    dataIngestionService, newsIngestionService, sentimentService,
+                    signalPipeline, sentimentGate, backtestEngine, tradingService,
+                    jobRunRepository, jobRunStageRepository, signalStore, watchlistStore,
+                    candleStore, jobOrchestratorMetrics, technicalAnalysisService, fundamentalScorer,
+                    compositeAnalysisService, synthesisService, backtestResultStore, llmAnalysisResultStore,
+                    llmAnalysisGate, sentimentStore, strategyConfigStore, paperPortfolioService,
+                    3, 1000L, true, false, true);
+
+            when(watchlistStore.getActiveWatchlistSymbols()).thenReturn(List.of(SYMBOL));
+            when(jobRunRepository.save(any(JobRunEntity.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = invocation.getArgument(0);
+                runState.set(entity);
+                if (!JobRun.Status.RUNNING.name().equals(entity.getStatus())) {
+                    runCompleted.countDown();
+                }
+                return entity;
+            });
+            when(jobRunRepository.findByRunId(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(runState.get()));
+            when(jobRunRepository.incrementCompletedCount(any(UUID.class))).thenAnswer(invocation -> {
+                JobRunEntity entity = runState.get();
+                entity.setCompletedCount(entity.getCompletedCount() + 1);
+                return 1;
+            });
+            when(jobRunStageRepository.save(any(JobRunStageEntity.class))).thenAnswer(invocation -> {
+                JobRunStageEntity entity = invocation.getArgument(0);
+                stageState.put(entity.getStageName(), entity);
+                return entity;
+            });
+            when(jobRunStageRepository.findByRunIdAndSymbolAndStageName(
+                    any(UUID.class), eq(SYMBOL), anyString()))
+                .thenAnswer(invocation -> {
+                    JobRunStageEntity entity = stageState.get(invocation.getArgument(2));
+                    return entity == null ? List.of() : List.of(entity);
+                });
+            when(jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(any(UUID.class)))
+                .thenAnswer(invocation -> List.copyOf(stageState.values()));
+
+            when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 100)).thenReturn(List.of(latestCandle));
+            lenient().when(newsIngestionService.fetchStockNews(SYMBOL)).thenReturn(List.of());
+            lenient().when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
+                .thenReturn(SentimentResult.create(
+                    SYMBOL, LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL,
+                    "No news", "", 0.0));
+            when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.empty());
+            when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+            lenient().when(sentimentGate.evaluatePersisted(eq(SYMBOL), any(LocalDate.class)))
+                .thenReturn(SentimentGate.SentimentVerdict.allow());
+            when(candleStore.findLatestBySymbol(SYMBOL)).thenReturn(Optional.of(latestCandle));
+
+            com.swingtrade.domain.StrategyConfig champion = new com.swingtrade.domain.StrategyConfig(
+                1L, CHAMPION_VARIANT, 1, "BREAKOUT", java.util.Map.of(), java.util.Map.of(), "hash",
+                com.swingtrade.domain.StrategyMode.CHAMPION, new java.math.BigDecimal("500000"),
+                true, null, null, LocalDateTime.now());
+            when(strategyConfigStore.findCurrentChampion()).thenReturn(Optional.of(champion));
+        }
+
+        @Test
+        @DisplayName("A SHADOW variant's BUY signal is never executed against the champion/default portfolio")
+        void shadowVariantSignalIsQuarantinedNotExecuted() throws InterruptedException {
+            // Only the CHAMPION variant's own signal is returned by the strategy-scoped query;
+            // the shadow's signal exists in the DB (per §7.1's fan-out) but must never reach
+            // tradingService.queueSignal.
+            when(signalStore.findUnprocessedByStrategy(CHAMPION_VARIANT)).thenReturn(List.of(championSignal));
+            when(signalStore.markProcessedExcludingStrategy(SYMBOL, CHAMPION_VARIANT)).thenReturn(1);
+            when(tradingService.queueSignal(eq(championSignal), eq(latestCandle.close())))
+                .thenReturn(new com.swingtrade.domain.Order());
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            // The champion signal is the only one ever passed to the shared paper engine.
+            verify(tradingService).queueSignal(eq(championSignal), eq(latestCandle.close()));
+            verify(tradingService, never()).queueSignal(eq(shadowSignal), any());
+            // The shadow variant's own unprocessed signal was quarantined (marked processed)
+            // rather than executed.
+            verify(signalStore).markProcessedExcludingStrategy(SYMBOL, CHAMPION_VARIANT);
+            // findUnprocessed() (the old symbol-only, strategy-blind query) must never be used
+            // once a CHAMPION variant is configured - that was the routing gap.
+            verify(signalStore, never()).findUnprocessed();
+        }
+
+        @Test
+        @DisplayName("Daily loss breach on the champion portfolio blocks new BUY entries")
+        void killSwitchBlocksNewEntriesOnBreach() throws InterruptedException {
+            when(signalStore.findUnprocessedByStrategy(CHAMPION_VARIANT)).thenReturn(List.of(championSignal));
+            when(signalStore.markProcessedExcludingStrategy(SYMBOL, CHAMPION_VARIANT)).thenReturn(0);
+            when(paperPortfolioService.isDailyLossBreached(CHAMPION_VARIANT)).thenReturn(true);
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            verify(tradingService, never()).queueSignal(any(), any());
+            verify(signalStore).markProcessed(42L);
+
+            JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
+            assertThat(paperTradeStage.getResultSummary()).contains("blocked by daily loss breaker");
         }
     }
 

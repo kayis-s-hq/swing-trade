@@ -1,7 +1,10 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.core.metrics.JobOrchestratorMetrics;
+import com.swingtrade.domain.StrategyConfig;
+import com.swingtrade.domain.service.PaperPortfolioService;
 import com.swingtrade.domain.service.TradingService;
+import com.swingtrade.domain.store.StrategyConfigStore;
 import com.swingtrade.data.entity.JobRunEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.repository.JobRunRepository;
@@ -137,6 +140,8 @@ public class JobOrchestratorService {
     private final LlmAnalysisResultStore llmAnalysisResultStore;
     private final LlmAnalysisGate llmAnalysisGate;
     private final SentimentStore sentimentStore;
+    private final StrategyConfigStore strategyConfigStore;
+    private final PaperPortfolioService paperPortfolioService;
     private final boolean llmAnalysisEnabled;
     private final boolean llmAnalysisAdvisoryOnly;
 
@@ -163,6 +168,8 @@ public class JobOrchestratorService {
             LlmAnalysisResultStore llmAnalysisResultStore,
             LlmAnalysisGate llmAnalysisGate,
             SentimentStore sentimentStore,
+            StrategyConfigStore strategyConfigStore,
+            PaperPortfolioService paperPortfolioService,
             @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
             @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs,
             @Value("${job.orchestrator.reaper.enabled:true}") boolean reaperEnabled,
@@ -195,6 +202,8 @@ public class JobOrchestratorService {
         this.llmAnalysisResultStore = llmAnalysisResultStore;
         this.llmAnalysisGate = llmAnalysisGate;
         this.sentimentStore = sentimentStore;
+        this.strategyConfigStore = strategyConfigStore;
+        this.paperPortfolioService = paperPortfolioService;
         this.llmAnalysisEnabled = llmAnalysisEnabled;
         this.llmAnalysisAdvisoryOnly = llmAnalysisAdvisoryOnly;
     }
@@ -204,7 +213,7 @@ public class JobOrchestratorService {
             SignalPipeline p, SentimentGate sg, BacktestEngine b, TradingService t,
             JobRunRepository jr, JobRunStageRepository js, SignalStore ss, WatchlistStore w,
             CandleStore c, JobOrchestratorMetrics m, int max, long poll, boolean reaper) {
-        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
+        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
     }
 
     /**
@@ -604,16 +613,65 @@ public class JobOrchestratorService {
         return StageExecutionResult.completed(summary);
     }
 
+    /**
+     * PAPER_TRADE stage (plan §7.2). Fixes the cross-contamination gap flagged in the §7.1
+     * follow-up: {@code SignalStore.findUnprocessed()} used to be filtered only by symbol, with
+     * no awareness of which strategy variant produced a signal - so a SHADOW variant's BUY
+     * (persisted per-variant since §7.1's fan-out) could be picked up here and executed through
+     * the single shared paper engine/"default" portfolio just like the CHAMPION's own signal.
+     *
+     * <p><b>Interpretation applied here</b> (see {@link com.swingtrade.domain.service.PaperPortfolioService}'s
+     * javadoc): {@code PaperTradingEngine} is still a single, process-wide in-memory engine with
+     * one live portfolio ({@code "default"}) - it is not portfolio-parametrized. Making every
+     * SHADOW variant's BUY execute against its own independently-simulated portfolio would
+     * require that engine to become portfolio-aware, which is a larger rearchitecture out of
+     * this fix's scope. Given that, this stage now:
+     * <ul>
+     *   <li>only ever queues BUY signals whose {@code strategy} equals the current CHAMPION
+     *       variant's id (or, if no variant configs exist yet, falls back to the old
+     *       unfiltered behaviour for backward compatibility with pre-multi-strategy setups);</li>
+     *   <li>marks every other (SHADOW) variant's unprocessed BUY signals for this symbol as
+     *       processed WITHOUT executing them - they are tracked (persisted, visible via the
+     *       signals table) but never reach {@link TradingService#queueSignal}, so they can never
+     *       be executed against the "default" portfolio.</li>
+     * </ul>
+     * This satisfies the routing gap's safety requirement (a SHADOW variant's signal is never
+     * executed against "default") even though full per-variant paper execution is deferred.
+     */
     private String stagePaperTrade(String symbol) {
-        List<Signal> unprocessed = signalStore.findUnprocessed()
-            .stream()
-            .filter(s -> s.symbol().equals(symbol))
-            .toList();
+        // strategyConfigStore/paperPortfolioService are null in the pre-multi-strategy test
+        // fixture constructor (see JobOrchestratorService(DataIngestionService, ..., int, long,
+        // boolean) below) - guarded the same way llmAnalysisGate etc. already are, so those
+        // callers keep the old unfiltered, single-"default"-portfolio behaviour.
+        String championVariantId = strategyConfigStore == null ? null : strategyConfigStore.findCurrentChampion()
+            .map(StrategyConfig::variantId)
+            .orElse(null);
+
+        List<Signal> unprocessed;
+        if (championVariantId != null) {
+            int quarantined = signalStore.markProcessedExcludingStrategy(symbol, championVariantId);
+            if (quarantined > 0) {
+                logger.info("Quarantined {} non-champion (shadow) variant signal(s) for {} from paper execution",
+                    quarantined, symbol);
+            }
+            unprocessed = signalStore.findUnprocessedByStrategy(championVariantId)
+                .stream()
+                .filter(s -> s.symbol().equals(symbol))
+                .toList();
+        } else {
+            // No strategy configs exist yet (or none is CHAMPION) - preserve pre-multi-strategy
+            // behaviour: a single shared signal stream feeds the single shared "default" portfolio.
+            unprocessed = signalStore.findUnprocessed()
+                .stream()
+                .filter(s -> s.symbol().equals(symbol))
+                .toList();
+        }
 
         int executed = 0;
         int failedToQueue = 0;
         int blockedBySentiment = 0;
         int blockedByLlm = 0;
+        int blockedByKillSwitch = 0;
         for (Signal signal : unprocessed) {
             OhlcvCandle latest = candleStore.findLatestBySymbol(symbol)
                 .orElse(null);
@@ -651,6 +709,29 @@ public class JobOrchestratorService {
                     logger.info("Blocked BUY signal {} for {} by LLM analysis: {}", signal.id(), symbol, llmVerdict.reason());
                     continue;
                 }
+
+                // Per-portfolio daily loss breaker (plan §7.2). championVariantId is null when
+                // no strategy configs exist yet (pre-multi-strategy fallback, above); in that
+                // case the "default" portfolio may not even exist yet, so PaperPortfolioService
+                // treats it as not-breached. RiskControlsService/DailyLossCircuitBreaker already
+                // apply a global breaker on the same "default" engine downstream of queueSignal -
+                // this check additionally covers the champion's own portfolio_id row explicitly
+                // per §7.2, and is the mechanism that will protect shadow portfolios once they
+                // gain their own execution path.
+                String portfolioId = championVariantId != null ? championVariantId : "default";
+                if (paperPortfolioService != null && paperPortfolioService.isDailyLossBreached(portfolioId)) {
+                    try {
+                        signalStore.markProcessed(signal.id());
+                    } catch (Exception e) {
+                        logger.warn("Failed to mark kill-switch-blocked signal {} processed for {}: {}",
+                            signal.id(), symbol, e.getMessage());
+                        continue;
+                    }
+                    blockedByKillSwitch++;
+                    logger.warn("Blocked BUY signal {} for {}: daily loss breaker tripped for portfolio {}",
+                        signal.id(), symbol, portfolioId);
+                    continue;
+                }
             }
 
             // Queue before marking processed. A capacity rejection returns null and must leave
@@ -679,6 +760,9 @@ public class JobOrchestratorService {
             summary.append(", ").append(blockedBySentiment).append(" blocked by sentiment");
         }
         if (blockedByLlm > 0) summary.append(", ").append(blockedByLlm).append(" blocked by LLM analysis");
+        if (blockedByKillSwitch > 0) {
+            summary.append(", ").append(blockedByKillSwitch).append(" blocked by daily loss breaker");
+        }
         if (failedToQueue > 0) {
             summary.append(", ").append(failedToQueue).append(" failed to queue (see logs)");
         }

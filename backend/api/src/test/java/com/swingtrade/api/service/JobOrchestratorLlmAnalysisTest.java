@@ -10,6 +10,7 @@ import com.swingtrade.domain.SynthesisResult;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.store.*;
+import com.swingtrade.domain.service.PaperPortfolioService;
 import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.llm.service.*;
 import com.swingtrade.strategy.BacktestEngine;
@@ -50,7 +51,8 @@ class JobOrchestratorLlmAnalysisTest {
             mock(TradingService.class), mock(JobRunRepository.class), mock(JobRunStageRepository.class), mock(SignalStore.class),
             mock(WatchlistStore.class), mock(CandleStore.class), mock(JobOrchestratorMetrics.class),
             mock(TechnicalAnalysisService.class), mock(FundamentalScorer.class), compositeService, synthesisService,
-            backtestStore, resultStore, mock(LlmAnalysisGate.class), sentimentStore, 1, 1000, false, true, true);
+            backtestStore, resultStore, mock(LlmAnalysisGate.class), sentimentStore,
+            mock(StrategyConfigStore.class), mock(PaperPortfolioService.class), 1, 1000, false, true, true);
 
         Method stage = JobOrchestratorService.class.getDeclaredMethod("stageLlmAnalysis", UUID.class, String.class, LocalDate.class);
         stage.setAccessible(true);
@@ -141,7 +143,8 @@ class JobOrchestratorLlmAnalysisTest {
             mock(WatchlistStore.class), mock(CandleStore.class), mock(JobOrchestratorMetrics.class),
             mock(TechnicalAnalysisService.class), mock(FundamentalScorer.class), mock(CompositeAnalysisService.class),
             mock(SynthesisService.class), mock(BacktestResultStore.class), mock(LlmAnalysisResultStore.class),
-            mock(LlmAnalysisGate.class), mock(SentimentStore.class), 1, 1000, false, true, true);
+            mock(LlmAnalysisGate.class), mock(SentimentStore.class),
+            mock(StrategyConfigStore.class), mock(PaperPortfolioService.class), 1, 1000, false, true, true);
 
         Class<?> executorIfc = Class.forName("com.swingtrade.api.service.JobOrchestratorService$StageExecutor");
         Class<?> resultCls = Class.forName("com.swingtrade.api.service.JobOrchestratorService$StageExecutionResult");
@@ -208,6 +211,7 @@ class JobOrchestratorLlmAnalysisTest {
             mock(SentimentService.class), mock(SignalPipeline.class), sentiment, mock(BacktestEngine.class), trading,
             mock(JobRunRepository.class), mock(JobRunStageRepository.class), signals, mock(WatchlistStore.class),
             candles, mock(JobOrchestratorMetrics.class), mock(TechnicalAnalysisService.class), mock(FundamentalScorer.class),
-            composite, synthesis, backtests, results, gate, sentiments, 1, 1000, false, enabled, advisory);
+            composite, synthesis, backtests, results, gate, sentiments,
+            mock(StrategyConfigStore.class), mock(PaperPortfolioService.class), 1, 1000, false, enabled, advisory);
     }
 }

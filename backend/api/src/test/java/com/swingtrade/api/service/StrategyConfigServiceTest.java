@@ -2,6 +2,7 @@ package com.swingtrade.api.service;
 
 import com.swingtrade.domain.StrategyConfig;
 import com.swingtrade.domain.StrategyMode;
+import com.swingtrade.domain.service.PaperPortfolioService;
 import com.swingtrade.domain.store.StrategyConfigStore;
 import com.swingtrade.strategy.LegacyPriceActionAdapter;
 import com.swingtrade.strategy.ParamSchemaValidator;
@@ -25,8 +26,11 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,6 +38,9 @@ class StrategyConfigServiceTest {
 
     @Mock
     private StrategyConfigStore store;
+
+    @Mock
+    private PaperPortfolioService paperPortfolioService;
 
     private StrategyConfigService service;
 
@@ -43,7 +50,7 @@ class StrategyConfigServiceTest {
         StrategyTypeRegistry registry = new StrategyTypeRegistry(List.of(breakout));
         ParamSchemaValidator validator = new ParamSchemaValidator();
         StrategyConfigHasher hasher = new StrategyConfigHasher(new ObjectMapper());
-        service = new StrategyConfigService(store, registry, validator, hasher);
+        service = new StrategyConfigService(store, registry, validator, hasher, paperPortfolioService);
     }
 
     private StrategyConfig config(String variantId, int version, StrategyMode mode) {
@@ -108,6 +115,39 @@ class StrategyConfigServiceTest {
         StrategyConfig result = service.changeMode("V1", "SHADOW", false);
 
         assertThat(result.mode()).isEqualTo(StrategyMode.SHADOW);
+    }
+
+    @Test
+    void changeModeToShadowProvisionsPaperPortfolio() {
+        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)))
+            .thenReturn(Optional.of(config("V1", 1, StrategyMode.SHADOW)));
+        when(store.countActive()).thenReturn(3L);
+
+        service.changeMode("V1", "SHADOW", false);
+
+        verify(paperPortfolioService).ensurePortfolio("V1", new BigDecimal("500000"));
+    }
+
+    @Test
+    void changeModeToChampionProvisionsPaperPortfolio() {
+        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)))
+            .thenReturn(Optional.of(config("V1", 1, StrategyMode.CHAMPION)));
+        when(store.countActive()).thenReturn(3L);
+        when(store.findCurrentChampion()).thenReturn(Optional.empty());
+
+        service.changeMode("V1", "CHAMPION", true);
+
+        verify(paperPortfolioService).ensurePortfolio("V1", new BigDecimal("500000"));
+    }
+
+    @Test
+    void changeModeToOffDoesNotProvisionPaperPortfolio() {
+        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.SHADOW)))
+            .thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)));
+
+        service.changeMode("V1", "OFF", false);
+
+        verify(paperPortfolioService, never()).ensurePortfolio(anyString(), any());
     }
 
     @Test

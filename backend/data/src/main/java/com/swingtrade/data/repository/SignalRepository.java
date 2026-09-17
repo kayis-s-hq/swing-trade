@@ -182,6 +182,32 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
     );
 
     /**
+     * Finds unprocessed BUY signals from the last 30 days for a specific strategy variant
+     * (plan §7.2 routing gap fix - see {@link com.swingtrade.data.store.SignalStoreImpl}).
+     *
+     * @param since    the cutoff date
+     * @param strategy the variant id
+     * @return list of unprocessed BUY signals for that strategy
+     */
+    @Query("SELECT s FROM SignalEntity s WHERE s.signalType = 'BUY' AND s.date >= :since "
+        + "AND s.processed = false AND s.strategy = :strategy ORDER BY s.date ASC")
+    List<SignalEntity> findUnprocessedBuySignalsSinceAndStrategy(
+        @Param("since") LocalDate since,
+        @Param("strategy") String strategy
+    );
+
+    /**
+     * Marks every unprocessed BUY signal for {@code symbol} whose {@code strategy} is not
+     * {@code strategy} as processed, without executing them (plan §7.2 quarantine of
+     * non-champion variant signals from the single shared paper engine).
+     */
+    @Modifying
+    @Query("UPDATE SignalEntity s SET s.processed = true WHERE s.symbol = :symbol "
+        + "AND s.signalType = 'BUY' AND s.processed = false "
+        + "AND (s.strategy IS NULL OR s.strategy <> :strategy)")
+    int markProcessedExcludingStrategy(@Param("symbol") String symbol, @Param("strategy") String strategy);
+
+    /**
      * Deletes all signals for a specific symbol and date.
      */
     @Modifying

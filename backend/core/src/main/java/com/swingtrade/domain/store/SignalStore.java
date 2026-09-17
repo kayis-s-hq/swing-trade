@@ -22,6 +22,29 @@ public interface SignalStore {
 
     List<Signal> findUnprocessed();
 
+    /**
+     * Unprocessed BUY signals produced by a specific strategy variant (plan §7.1's fan-out
+     * persists {@code strategy = variantId} per signal row). Used by the PAPER_TRADE stage
+     * (plan §7.2) to route a variant's own signals to its own paper portfolio instead of the
+     * single shared engine picking up any variant's row regardless of provenance.
+     *
+     * @param strategy the variant id (the {@code strategy} column)
+     */
+    List<Signal> findUnprocessedByStrategy(String strategy);
+
+    /**
+     * Marks every unprocessed BUY signal for {@code symbol} whose {@code strategy} is NOT
+     * {@code strategy} as processed, without executing them. Used to quarantine non-champion
+     * (SHADOW) variant signals away from the single live paper engine (plan §7.2 routing gap
+     * fix) - see {@code JobOrchestratorService.stagePaperTrade}'s comment for why this
+     * quarantines rather than executes per-variant today.
+     *
+     * @param symbol   the stock symbol
+     * @param strategy the strategy/variant id whose signals must NOT be touched
+     * @return number of signals marked processed
+     */
+    int markProcessedExcludingStrategy(String symbol, String strategy);
+
     Signal save(Signal signal);
 
     /**

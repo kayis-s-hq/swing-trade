@@ -3,6 +3,7 @@ package com.swingtrade.api.service;
 import com.swingtrade.domain.PortfolioAction;
 import com.swingtrade.domain.StrategyConfig;
 import com.swingtrade.domain.StrategyMode;
+import com.swingtrade.domain.service.PaperPortfolioService;
 import com.swingtrade.domain.store.StrategyConfigStore;
 import com.swingtrade.strategy.ParamSchemaValidator;
 import com.swingtrade.strategy.ParamValidationResult;
@@ -46,17 +47,20 @@ public class StrategyConfigService {
     private final StrategyTypeRegistry typeRegistry;
     private final ParamSchemaValidator validator;
     private final StrategyConfigHasher hasher;
+    private final PaperPortfolioService paperPortfolioService;
 
     public StrategyConfigService(
         StrategyConfigStore store,
         StrategyTypeRegistry typeRegistry,
         ParamSchemaValidator validator,
-        StrategyConfigHasher hasher
+        StrategyConfigHasher hasher,
+        PaperPortfolioService paperPortfolioService
     ) {
         this.store = store;
         this.typeRegistry = typeRegistry;
         this.validator = validator;
         this.hasher = hasher;
+        this.paperPortfolioService = paperPortfolioService;
     }
 
     public List<SignalStrategy> listTypes() {
@@ -168,6 +172,14 @@ public class StrategyConfigService {
         }
 
         store.updateMode(variantId, newMode);
+
+        // Plan §7.2: a paper_trading_portfolio row per variant, created on first SHADOW (or
+        // CHAMPION) activation with the variant's paper_capital. ensurePortfolio() is idempotent,
+        // so a later re-activation of an already-provisioned variant is a no-op here.
+        if (newMode == StrategyMode.SHADOW || newMode == StrategyMode.CHAMPION) {
+            paperPortfolioService.ensurePortfolio(variantId, current.paperCapital());
+        }
+
         return store.findCurrent(variantId).orElseThrow();
     }
 
