@@ -1,7 +1,11 @@
 package com.swingtrade.llm.service;
 
 import com.swingtrade.domain.CompositeAnalysis;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.llm.SynthesisEvaluation;
+import com.swingtrade.llm.SynthesisEvaluationEntity;
+import com.swingtrade.llm.SynthesisEvaluationRepository;
 import com.swingtrade.llm.SynthesisOutput;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +15,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.*;
 
 class SynthesisEvaluationServiceTest {
 
@@ -60,6 +65,41 @@ class SynthesisEvaluationServiceTest {
 
         assertThatThrownBy(() -> service.recordOutcome("RELIANCE", date, 21, BigDecimal.ZERO))
             .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void evaluatesOnlyCompletePersistedForwardWindows() {
+        SynthesisEvaluationRepository repository = mock(SynthesisEvaluationRepository.class);
+        CandleStore candleStore = mock(CandleStore.class);
+        SynthesisEvaluationService service = new SynthesisEvaluationService(repository);
+        var evaluation = service.record(composite(), output("BUY"));
+        SynthesisEvaluationEntity entity = new SynthesisEvaluationEntity(evaluation);
+        when(repository.findByOutcomeMeasuredAtIsNullAndAnalysisDateBeforeOrderByAnalysisDateAsc(
+                LocalDate.of(2026, 8, 25))).thenReturn(List.of(entity));
+        OhlcvCandle entry = candle("RELIANCE", LocalDate.of(2026, 8, 17), "100");
+        OhlcvCandle exit = candle("RELIANCE", LocalDate.of(2026, 8, 24), "105");
+        when(candleStore.findFirstBySymbolAndDateAfterOrderByDateAsc("RELIANCE", evaluation.analysisDate()))
+                .thenReturn(java.util.Optional.of(entry));
+        when(candleStore.findNthBySymbolAndDateAfterOrderByDateAsc("RELIANCE", entry.date(), 5))
+                .thenReturn(java.util.Optional.of(exit));
+        when(repository.findBySymbolAndAnalysisDate("RELIANCE", evaluation.analysisDate()))
+                .thenReturn(java.util.Optional.of(entity));
+
+        assertThat(service.evaluatePending(candleStore, LocalDate.of(2026, 8, 25), 5)).isEqualTo(1);
+        assertThat(entity.toDomain().outcome().forwardReturnPct()).isEqualByComparingTo("5.000000");
+        verify(repository).save(entity);
+    }
+
+    private SynthesisOutput output(String recommendation) {
+        var output = new SynthesisOutput();
+        output.setRecommendation(recommendation);
+        output.setConfidence(0.8);
+        return output;
+    }
+
+    private OhlcvCandle candle(String symbol, LocalDate date, String close) {
+        return OhlcvCandle.of(symbol, date, new BigDecimal(close), new BigDecimal(close),
+                new BigDecimal(close), new BigDecimal(close), 100L);
     }
 
     private CompositeAnalysis composite() {

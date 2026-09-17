@@ -67,7 +67,8 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   measured outcomes now persist in the V51 `synthesis_evaluations` table and reload
   after cache misses/API restarts. AOT processing, local schema migration, API boot,
   affected backend tests, and `./bin/verify-changes` passed. Scheduled outcome
-  collection and aggregate reporting remain separate follow-ups.
+  collection is now automated by the bounded persisted-candle evaluator; aggregate
+  reporting remains a separate follow-up.
 
 - [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
   as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API

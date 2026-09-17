@@ -5,9 +5,14 @@ import com.swingtrade.llm.SynthesisOutput;
 import com.swingtrade.llm.SynthesisEvaluationEntity;
 import com.swingtrade.llm.SynthesisEvaluationRepository;
 import com.swingtrade.domain.CompositeAnalysis;
+import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.store.CandleStore;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.List;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,6 +73,40 @@ public class SynthesisEvaluationService {
                 .map(SynthesisEvaluationEntity::toDomain)
                 .map(value -> { evaluations.put(key, value); return value; })
                 .orElse(null);
+    }
+
+    /**
+     * Measures persisted decisions once their complete forward window exists.
+     * Missing or unusable candles are skipped and remain eligible for a later run.
+     * The return is expressed in percentage points, matching {@code forwardReturnPct}.
+     */
+    public int evaluatePending(CandleStore candleStore, LocalDate asOfDate, int horizonDays) {
+        if (repository == null || candleStore == null || asOfDate == null
+                || horizonDays < 1 || horizonDays > 20) {
+            return 0;
+        }
+        int processed = 0;
+        for (SynthesisEvaluationEntity entity : repository
+                .findByOutcomeMeasuredAtIsNullAndAnalysisDateBeforeOrderByAnalysisDateAsc(asOfDate)) {
+            OhlcvCandle entry = candleStore
+                    .findFirstBySymbolAndDateAfterOrderByDateAsc(entity.getSymbol(), entity.getAnalysisDate())
+                    .orElse(null);
+            if (entry == null || entry.close() == null || entry.close().signum() <= 0) continue;
+            OhlcvCandle exit = candleStore
+                    .findNthBySymbolAndDateAfterOrderByDateAsc(entity.getSymbol(), entry.date(), horizonDays)
+                    .orElse(null);
+            if (exit == null || exit.date().isAfter(asOfDate)
+                    || exit.close() == null || exit.close().signum() <= 0) continue;
+
+            BigDecimal forwardReturnPct = exit.close().subtract(entry.close())
+                    .multiply(BigDecimal.valueOf(100))
+                    .divide(entry.close(), 6, RoundingMode.HALF_UP);
+            if (recordOutcome(entity.getSymbol(), entity.getAnalysisDate(), horizonDays,
+                    forwardReturnPct) != null) {
+                processed++;
+            }
+        }
+        return processed;
     }
 
     private void persist(SynthesisEvaluation evaluation) {
