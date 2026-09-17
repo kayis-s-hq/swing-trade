@@ -21,6 +21,8 @@ public class EodIngestionScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(EodIngestionScheduler.class);
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    /** Persisted benchmark symbol required for portfolio and excess-return metrics. */
+    static final String NIFTY_50_SYMBOL = "NIFTY50";
 
     private final DataIngestionService dataIngestionService;
     private final WatchlistRepository watchlistRepository;
@@ -57,20 +59,23 @@ public class EodIngestionScheduler {
         long start = System.currentTimeMillis();
 
         List<WatchlistEntity> watchlist = watchlistRepository.findByIsActiveTrueOrderBySymbolAsc();
-        if (watchlist.isEmpty()) {
-            logger.info("Watchlist is empty — nothing to ingest");
-            return;
-        }
+        List<String> symbols = new java.util.ArrayList<>(watchlist.stream()
+                .map(WatchlistEntity::getSymbol)
+                .filter(symbol -> symbol != null && !symbol.isBlank())
+                .toList());
+        if (!symbols.contains(NIFTY_50_SYMBOL)) symbols.add(NIFTY_50_SYMBOL);
+        logger.info("EOD ingestion scheduled for {} watchlist symbols plus benchmark {}",
+                watchlist.size(), NIFTY_50_SYMBOL);
 
         int success = 0;
         int failures = 0;
 
-        for (WatchlistEntity entry : watchlist) {
+        for (String symbol : symbols) {
             try {
-                dataIngestionService.processSingleStock(entry.getSymbol(), yesterday);
+                dataIngestionService.processSingleStock(symbol, yesterday);
                 success++;
             } catch (Exception e) {
-                logger.warn("EOD ingestion failed for {}: {}", entry.getSymbol(), e.getMessage());
+                logger.warn("EOD ingestion failed for {}: {}", symbol, e.getMessage());
                 failures++;
             }
 

@@ -22,6 +22,11 @@ Last checked: 2026-09-17 (strategy provenance verification)
   mixed language remains neutral/unknown rather than forcing a polarity. LLM tests and
   `./bin/verify-changes` passed.
 
+- [x] Daily benchmark ingestion wired 2026-09-17: the EOD scheduler now persists the NIFTY50
+  candle alongside active watchlist symbols, including when the watchlist is empty, enabling
+  benchmark and excess-return metrics to accumulate without backtest-time network calls. Data
+  scheduler tests and `./bin/verify-changes` passed.
+
 - [x] Local runtime revalidation 2026-09-17: the API migrated the PostgreSQL-backed schema to
   v55, reported healthy database/readiness status, and served
   `GET /api/signals/gate-effectiveness` successfully (empty result set in the current data window).
