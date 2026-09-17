@@ -87,6 +87,13 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   measured, correct, accuracy, and recommendation counts. LLM/API tests and
   `./bin/verify-changes` passed.
 
+- [x] Partial-target exit management verified 2026-09-17: the shared risk policy
+  takes a bounded 50% leg at 2R, keeps the remainder under trailing/breakeven
+  management, and applies the behavior in both backtest and paper monitoring.
+  Paper state persists `partial_exit_taken` via migration V52, preventing duplicate
+  exits after restart. Strategy/broker tests, full verifier, AOT, and local API boot
+  against PostgreSQL passed.
+
 - [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
   as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API
   tests passed; cross-sectional rank and authoritative index ingestion remain open.

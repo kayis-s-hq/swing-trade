@@ -283,7 +283,8 @@ public class PositionManager {
         // Update quantity and track realized P&L
         Position updated = position.withQuantityAndRealizedPnL(
             remainingShares,
-            position.realizedPnL().add(realizedPnL)
+            position.realizedPnL().add(realizedPnL),
+            true
         ).withValuation(position.currentPrice(), currentUnrealized);
 
         if (remainingShares == 0) {

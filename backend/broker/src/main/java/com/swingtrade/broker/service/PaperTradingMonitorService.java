@@ -113,7 +113,8 @@ public class PaperTradingMonitorService {
             return false;
         }
         RiskManagementPolicy policy = new TrailingBreakevenPolicy(
-                properties.getBreakevenRiskMultiple(), properties.getTrailingStopPct());
+                properties.getBreakevenRiskMultiple(), properties.getTrailingStopPct(),
+                properties.getPartialExitRiskMultiple(), properties.getPartialExitRatio());
         BigDecimal highestCloseBeforeBar = ohlcvCandleRepository.findAllBySymbolOrderByDateDesc(position.symbol())
                 .stream()
                 .map(OhlcvCandleEntity::toDomain)
@@ -124,9 +125,23 @@ public class PaperTradingMonitorService {
                 .max(BigDecimal::compareTo)
                 .orElse(position.entryPrice());
         RiskManagementPolicy.RiskManagementDecision decision = policy.evaluate(
-                new RiskManagementPolicy.RiskManagementContext(position.entryPrice(), position.stopLoss(),
-                        position.target(), candle.close(), candle.low(), highestCloseBeforeBar,
-                        (int) ChronoUnit.DAYS.between(position.entryDate(), candle.date())));
+                        new RiskManagementPolicy.RiskManagementContext(position.entryPrice(), position.stopLoss(),
+                        position.target(), candle.close(), candle.low(), candle.high(), highestCloseBeforeBar,
+                        (int) ChronoUnit.DAYS.between(position.entryDate(), candle.date()),
+                        position.partialExitTaken()));
+        if (decision.partialExitRatio() != null) {
+            BigDecimal fill = candle.open();
+            if (fill == null || fill.compareTo(decision.stopPrice()) > 0) fill = decision.stopPrice();
+            try {
+                engine.partialExitPosition(position.positionId(), decision.partialExitRatio(), fill);
+                logger.info("Partial managed exit for {} at {}: {}", position.positionId(), fill,
+                        decision.partialExitRatio());
+                return true;
+            } catch (IllegalArgumentException e) {
+                logger.warn("Unable to apply partial managed exit for {}: {}", position.positionId(), e.getMessage());
+                return false;
+            }
+        }
         if (!decision.exit()) return false;
 
         BigDecimal fill = candle.open();

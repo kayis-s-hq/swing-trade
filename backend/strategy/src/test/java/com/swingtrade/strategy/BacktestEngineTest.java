@@ -335,6 +335,37 @@ class BacktestEngineTest {
         }
 
         @Test
+        @DisplayName("risk policy records a partial target leg and continues the remainder")
+        void managedPartialExitKeepsRemainderInBacktest() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
+            stub(candles);
+
+            var policy = (com.swingtrade.domain.RiskManagementPolicy) context -> {
+                if (!context.partialExitTaken() && context.holdingDays() >= 1) {
+                    return com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision
+                            .partialExit(context.entryPrice(), new BigDecimal("0.5"));
+                }
+                return context.partialExitTaken() && context.holdingDays() >= 2
+                        ? com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision
+                            .exit(context.currentClose(), "BREAKEVEN_STOP")
+                        : com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision.hold();
+            };
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5,
+                    20, false, 21, policy);
+
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
+
+            assertThat(result.trades()).hasSize(2);
+            assertThat(result.trades()).extracting(BacktestTrade::quantity)
+                    .satisfiesExactlyInAnyOrder(
+                            quantity -> assertThat(quantity).isGreaterThan(0),
+                            quantity -> assertThat(quantity).isGreaterThan(0));
+            assertThat(result.trades().get(1).quantity()).isGreaterThanOrEqualTo(result.trades().get(0).quantity());
+            assertThat(result.trades().get(0).exitReason()).isEqualTo(ExitReason.TARGET_HIT);
+        }
+
+        @Test
         @DisplayName("price crashes through the ATR stop -> STOP_LOSS exit at the stop price")
         void stopLossExit() {
             List<OhlcvCandle> candles = buildEntrySetupCandles();

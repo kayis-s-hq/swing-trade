@@ -50,6 +50,8 @@ public class PaperTradingProperties {
     private boolean riskManagementEnabled = false;
     private double breakevenRiskMultiple = 1.0;
     private double trailingStopPct = 0.05;
+    private double partialExitRiskMultiple = 2.0;
+    private BigDecimal partialExitRatio = BigDecimal.valueOf(0.5);
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -95,4 +97,10 @@ public class PaperTradingProperties {
 
     public double getTrailingStopPct() { return trailingStopPct; }
     public void setTrailingStopPct(double trailingStopPct) { this.trailingStopPct = trailingStopPct; }
+
+    public double getPartialExitRiskMultiple() { return partialExitRiskMultiple; }
+    public void setPartialExitRiskMultiple(double partialExitRiskMultiple) { this.partialExitRiskMultiple = partialExitRiskMultiple; }
+
+    public BigDecimal getPartialExitRatio() { return partialExitRatio; }
+    public void setPartialExitRatio(BigDecimal partialExitRatio) { this.partialExitRatio = partialExitRatio; }
 }

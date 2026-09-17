@@ -507,8 +507,28 @@ public class BacktestEngine {
                 RiskManagementPolicy.RiskManagementDecision managedDecision = config.riskManagementPolicy()
                         .evaluate(new RiskManagementPolicy.RiskManagementContext(
                                 open.entryPrice(), open.stopLoss(), open.target(), close, low,
-                                open.highestCloseBeforeBar(), i - open.entryIndex()));
-                if (managedDecision.exit()) {
+                                high, open.highestCloseBeforeBar(), i - open.entryIndex(),
+                                open.partialExitTaken()));
+                boolean partialExit = false;
+                if (managedDecision.partialExitRatio() != null) {
+                    int partialQuantity = (int) Math.floor(open.quantity()
+                            * managedDecision.partialExitRatio().doubleValue());
+                    if (partialQuantity > 0 && partialQuantity < open.quantity()) {
+                        BigDecimal partialPrice = managedDecision.stopPrice();
+                        BigDecimal barOpen = openPriceForBar(openPrice, i);
+                        if (barOpen.compareTo(partialPrice) >= 0) partialPrice = barOpen;
+                        BacktestTrade partialTrade = closeTrade(symbol, open, partialPrice,
+                                chronologicalCandles.get(i).date(), i, ExitReason.TARGET_HIT, config,
+                                partialQuantity);
+                        trades.add(partialTrade);
+                        capital += partialTrade.pnl();
+                        open = new OpenPosition(open.entryIndex(), open.entryDate(), open.entryPrice(),
+                                open.stopLoss(), open.target(), open.quantity() - partialQuantity,
+                                streak, open.highestCloseBeforeBar().max(close), true);
+                        partialExit = true;
+                    }
+                }
+                if (!partialExit && managedDecision.exit()) {
                     reason = managedExitReason(managedDecision.reason());
                     exitPrice = managedDecision.stopPrice();
                 }
@@ -517,22 +537,22 @@ public class BacktestEngine {
                 // backtest can never drift from its rules.
                 boolean signalExitTriggered = strategy.isSignalExit(exitIndicators);
 
-                if (reason == null && low.compareTo(open.stopLoss()) <= 0) {
+                if (!partialExit && reason == null && low.compareTo(open.stopLoss()) <= 0) {
                     reason = ExitReason.STOP_LOSS;
                     BigDecimal barOpen = openPriceForBar(openPrice, i);
                     exitPrice = barOpen.compareTo(open.stopLoss()) <= 0
                             ? barOpen : open.stopLoss();
-                } else if (reason == null && high.compareTo(open.target()) >= 0) {
+                } else if (!partialExit && reason == null && high.compareTo(open.target()) >= 0) {
                     reason = ExitReason.TARGET_HIT;
                     BigDecimal barOpen = openPriceForBar(openPrice, i);
                     exitPrice = barOpen.compareTo(open.target()) >= 0 ? barOpen : open.target();
-                } else if (reason == null && config.signalExitEnabled() && signalExitTriggered) {
+                } else if (!partialExit && reason == null && config.signalExitEnabled() && signalExitTriggered) {
                     reason = ExitReason.SIGNAL_EXIT;
                     exitPrice = close;
-                } else if (reason == null && streak >= config.trendBreakStreakDays()) {
+                } else if (!partialExit && reason == null && streak >= config.trendBreakStreakDays()) {
                     reason = ExitReason.TREND_BREAK;
                     exitPrice = close;
-                } else if (reason == null && (i - open.entryIndex()) >= config.maxHoldingDays()) {
+                } else if (!partialExit && reason == null && (i - open.entryIndex()) >= config.maxHoldingDays()) {
                     reason = ExitReason.TIME_STOP;
                     exitPrice = close;
                 }
@@ -545,10 +565,10 @@ public class BacktestEngine {
                     trades.add(trade);
                     capital += trade.pnl();
                     open = null;
-                } else {
+                } else if (!partialExit) {
                     open = new OpenPosition(open.entryIndex(), open.entryDate(), open.entryPrice(),
                             open.stopLoss(), open.target(), open.quantity(), streak,
-                            open.highestCloseBeforeBar().max(close));
+                            open.highestCloseBeforeBar().max(close), open.partialExitTaken());
                 }
             }
 
@@ -628,22 +648,27 @@ public class BacktestEngine {
 
         LocalDate entryDate = chronologicalCandles.get(entryIndex).date();
         return new OpenPosition(entryIndex, entryDate, entryPrice, stopLoss, target, quantity,
-                0, entryPrice);
+                0, entryPrice, false);
     }
 
     private BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
                                      int exitIndex, ExitReason reason, BacktestConfig config) {
+        return closeTrade(symbol, open, exitPrice, exitDate, exitIndex, reason, config, open.quantity);
+    }
+
+    private BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
+                                     int exitIndex, ExitReason reason, BacktestConfig config, int quantity) {
         exitPrice = exitPrice.multiply(BigDecimal.valueOf(1 - config.slippagePct()));
-        double grossPnl = exitPrice.subtract(open.entryPrice).doubleValue() * open.quantity;
-        BigDecimal costs = DEFAULT_COST_MODEL.roundTripCost(open.entryPrice, exitPrice, open.quantity,
+        double grossPnl = exitPrice.subtract(open.entryPrice).doubleValue() * quantity;
+        BigDecimal costs = DEFAULT_COST_MODEL.roundTripCost(open.entryPrice, exitPrice, quantity,
             BigDecimal.valueOf(config.brokeragePerTrade()));
         double netPnl = grossPnl - costs.doubleValue();
-        double entryCost = open.entryPrice.doubleValue() * open.quantity;
+        double entryCost = open.entryPrice.doubleValue() * quantity;
         double pnlPct = entryCost != 0 ? (netPnl / entryCost) * 100.0 : 0.0;
         int holdingDays = exitIndex - open.entryIndex;
 
         return new BacktestTrade(symbol, open.entryDate, exitDate, open.entryPrice, exitPrice,
-                open.stopLoss, open.target, open.quantity, reason, netPnl, pnlPct, holdingDays);
+                open.stopLoss, open.target, quantity, reason, netPnl, pnlPct, holdingDays);
     }
 
     private static ExitReason managedExitReason(String reason) {
@@ -812,7 +837,8 @@ public class BacktestEngine {
                                 BigDecimal target,
                                 int quantity,
                                 int belowEma20Streak,
-                                BigDecimal highestCloseBeforeBar) {
+                                BigDecimal highestCloseBeforeBar,
+                                boolean partialExitTaken) {
         OpenPosition {
             belowEma20Streak = Math.max(0, belowEma20Streak);
             highestCloseBeforeBar = highestCloseBeforeBar == null ? entryPrice : highestCloseBeforeBar;
@@ -820,7 +846,7 @@ public class BacktestEngine {
 
         OpenPosition(int entryIndex, LocalDate entryDate, BigDecimal entryPrice, BigDecimal stopLoss,
                      BigDecimal target, int quantity) {
-            this(entryIndex, entryDate, entryPrice, stopLoss, target, quantity, 0, entryPrice);
+            this(entryIndex, entryDate, entryPrice, stopLoss, target, quantity, 0, entryPrice, false);
         }
     }
 }
