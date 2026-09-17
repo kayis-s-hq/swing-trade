@@ -82,7 +82,8 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   articles without trading relevance are now rejected fail-closed instead of being admitted by
   the baseline relevance score, while empty chat choices now complete empty instead of throwing a
   Reactor null-value error. Backend tests and `./bin/verify-changes` passed; the LLM module's
-  aggregate coverage is 66.6% (2,079/3,123 lines), with ingestion and server-manager branches still open.
+  aggregate coverage is now 80.0% (2,499/3,123 lines), clearing its JaCoCo gate after adding
+  deterministic source, ingestion, server-manager, PDF, sentiment, and utility coverage.
 
 - [x] Strategy coverage gate restored 2026-09-17: focused tests now cover the previously
   uncovered advanced indicator validation and calculations. Strategy tests, JaCoCo verification,
