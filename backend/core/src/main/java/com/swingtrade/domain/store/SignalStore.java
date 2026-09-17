@@ -4,7 +4,9 @@ import com.swingtrade.domain.Signal;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import com.swingtrade.domain.SignalStrategyMetadata;
 
 public interface SignalStore {
 
@@ -24,6 +26,9 @@ public interface SignalStore {
     List<String> findStrategiesBySymbolAndDate(String symbol, LocalDate date);
 
     Optional<String> findStrategyById(Long signalId);
+
+    /** Returns persisted strategy provenance for the supplied signal IDs in one lookup. */
+    Map<Long, SignalStrategyMetadata> findStrategyMetadataByIds(List<Long> signalIds);
 
     List<Signal> findByType(Signal.SignalType type);
 

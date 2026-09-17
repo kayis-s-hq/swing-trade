@@ -25,6 +25,7 @@ public class SignalResponse {
     private List<String> indicators;
     private LocalDate generatedAt;
     private String strategy;
+    private Integer strategyVersion;
     private String sentimentScore;
     private String sentimentReasoning;
 
@@ -168,6 +169,14 @@ public class SignalResponse {
 
     public void setStrategy(String strategy) {
         this.strategy = strategy;
+    }
+
+    public Integer getStrategyVersion() {
+        return strategyVersion;
+    }
+
+    public void setStrategyVersion(Integer strategyVersion) {
+        this.strategyVersion = strategyVersion;
     }
 
     public String getSentimentScore() {

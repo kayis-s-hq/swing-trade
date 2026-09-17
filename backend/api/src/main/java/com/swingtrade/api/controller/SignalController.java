@@ -112,13 +112,7 @@ public class SignalController {
     @GetMapping("/latest")
     public ResponseEntity<List<SignalResponse>> getLatestSignals() {
         logger.debug("Fetching latest signals from DB");
-        List<Signal> all = signalStore.findAll().stream()
-            .sorted(java.util.Comparator.comparing(
-                (Signal s) -> s.date() != null ? s.date() : java.time.LocalDate.now()
-            ).reversed())
-            .toList();
-        List<SignalResponse> signals = all.stream().map(SignalResponse::new).collect(Collectors.toList());
-        return ResponseEntity.ok(signals);
+        return ResponseEntity.ok(signalService.getLatestSignals());
     }
 
     /**

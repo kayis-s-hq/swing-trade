@@ -6,6 +6,7 @@ import com.swingtrade.api.dto.SignalQueryResult.SentimentAnalysis;
 import com.swingtrade.api.dto.SignalQueryResult.TechnicalAnalysis;
 import com.swingtrade.api.dto.SignalResponse;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.SignalStrategyMetadata;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.SignalStore;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Service for managing trading signals
@@ -45,8 +47,7 @@ public class SignalService {
     public List<SignalResponse> getLatestSignals() {
         // Latest signal per symbol, computed at the DB level (no full-table load).
         return signalStore.findLatestSignalPerSymbol().stream()
-                .map(SignalResponse::new)
-                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+                .collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toList(), this::toResponses));
     }
 
     /**
@@ -56,8 +57,7 @@ public class SignalService {
      */
     public List<SignalResponse> getSignalsBySymbol(String symbol) {
         return signalStore.findBySymbol(symbol).stream()
-                .map(SignalResponse::new)
-                .toList();
+                .collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toList(), this::toResponses));
     }
 
     /**
@@ -69,8 +69,7 @@ public class SignalService {
      */
     public List<SignalResponse> getSignalsByDateRange(LocalDate startDate, LocalDate endDate, String signalType) {
         return signalStore.findByDateRangeAndType(startDate, endDate, Signal.SignalType.valueOf(signalType)).stream()
-                .map(SignalResponse::new)
-                .toList();
+                .collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toList(), this::toResponses));
     }
 
     /**
@@ -81,8 +80,7 @@ public class SignalService {
      */
     public List<SignalResponse> getSignalsByDateRange(LocalDate startDate, LocalDate endDate) {
         return signalStore.findByDateRange(startDate, endDate).stream()
-                .map(SignalResponse::new)
-                .toList();
+                .collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toList(), this::toResponses));
     }
 
     /**
@@ -92,8 +90,7 @@ public class SignalService {
      */
     public List<SignalResponse> getSignalsByType(String signalType) {
         return signalStore.findByType(Signal.SignalType.valueOf(signalType)).stream()
-                .map(SignalResponse::new)
-                .toList();
+                .collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toList(), this::toResponses));
     }
 
     /**
@@ -105,8 +102,21 @@ public class SignalService {
         BigDecimal threshold = BigDecimal.valueOf(minConfidence);
         return signalStore.findByMinConfidence(minConfidence).stream()
                 .filter(signal -> signal.confidence() != null && signal.confidence().compareTo(threshold) >= 0)
-                .map(SignalResponse::new)
-                .toList();
+                .collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toList(), this::toResponses));
+    }
+
+    private List<SignalResponse> toResponses(List<Signal> signals) {
+        Map<Long, SignalStrategyMetadata> metadata = signalStore.findStrategyMetadataByIds(
+                signals.stream().map(Signal::id).filter(java.util.Objects::nonNull).toList());
+        return signals.stream().map(signal -> {
+            SignalResponse response = new SignalResponse(signal);
+            SignalStrategyMetadata provenance = metadata.get(signal.id());
+            if (provenance != null) {
+                response.setStrategy(provenance.strategy());
+                response.setStrategyVersion(provenance.version());
+            }
+            return response;
+        }).collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
     }
 
     /**
