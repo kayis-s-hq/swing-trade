@@ -2,6 +2,7 @@ package com.swingtrade.strategy;
 
 import com.swingtrade.domain.MarketRegime;
 import com.swingtrade.domain.MarketRegimeAssessment;
+import com.swingtrade.domain.RelativeStrengthAssessment;
 
 import java.util.Set;
 
@@ -30,15 +31,29 @@ public interface TradingStrategy {
         return Set.of(MarketRegime.BULLISH);
     }
 
+    /** Configured strategies opt into the relative-strength overlay explicitly. */
+    default boolean relativeStrengthFilterEnabled() {
+        return false;
+    }
+
     /** Final entry eligibility; missing regime facts fail closed when enabled. */
     default boolean isEntryEligible(Indicators indicators, MarketRegimeAssessment regime) {
+        return isEntryEligible(indicators, regime, null);
+    }
+
+    /** Final entry eligibility including the optional index-relative-strength assessment. */
+    default boolean isEntryEligible(Indicators indicators, MarketRegimeAssessment regime,
+                                    RelativeStrengthAssessment relativeStrength) {
         if (!isEntrySignal(indicators)) {
             return false;
         }
-        return !regimeFilterEnabled()
+        boolean regimeEligible = !regimeFilterEnabled()
             || regime != null
             && regime.eligible()
             && allowedMarketRegimes().contains(regime.regime());
+        boolean relativeStrengthEligible = !relativeStrengthFilterEnabled()
+            || relativeStrength != null && relativeStrength.eligible();
+        return regimeEligible && relativeStrengthEligible;
     }
 
     /** Number of entry rules that must pass for this strategy to enter. */

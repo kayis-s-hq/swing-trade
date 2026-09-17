@@ -20,7 +20,9 @@ import com.swingtrade.core.metrics.SignalMetrics;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.OhlcvDataQuality;
 import com.swingtrade.domain.MarketRegimeAssessment;
+import com.swingtrade.domain.RelativeStrengthAssessment;
 import com.swingtrade.domain.policy.MarketRegimePolicy;
+import com.swingtrade.domain.policy.RelativeStrengthPolicy;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.domain.StrategyParams;
@@ -84,18 +86,26 @@ public class PriceActionSignalEngine {
     private final SignalMetrics signalMetrics;
     private final TradingStrategy strategy;
     private final MarketRegimePolicy marketRegimePolicy;
+    private final RelativeStrengthPolicy relativeStrengthPolicy;
 
     public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics, PriceActionStrategy strategy) {
-        this(candleStore, signalMetrics, strategy, new BoundedMarketRegimePolicy());
+        this(candleStore, signalMetrics, strategy, new BoundedMarketRegimePolicy(), new BoundedRelativeStrengthPolicy());
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics, PriceActionStrategy strategy,
                                    MarketRegimePolicy marketRegimePolicy) {
+        this(candleStore, signalMetrics, strategy, marketRegimePolicy, new BoundedRelativeStrengthPolicy());
+    }
+
+    public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics, PriceActionStrategy strategy,
+                                   MarketRegimePolicy marketRegimePolicy,
+                                   RelativeStrengthPolicy relativeStrengthPolicy) {
         this.candleStore = candleStore;
         this.signalMetrics = signalMetrics;
         this.strategy = strategy;
         this.marketRegimePolicy = marketRegimePolicy;
+        this.relativeStrengthPolicy = relativeStrengthPolicy;
     }
 
     /**
@@ -174,6 +184,9 @@ public class PriceActionSignalEngine {
         MarketRegimeAssessment regime = selectedStrategy.regimeFilterEnabled()
             ? assessMarketRegime()
             : null;
+        RelativeStrengthAssessment relativeStrength = selectedStrategy.relativeStrengthFilterEnabled()
+            ? assessRelativeStrength(chronologicalCandles, date)
+            : null;
 
         List<String> passed = new ArrayList<>();
         List<String> failed = new ArrayList<>();
@@ -197,10 +210,17 @@ public class PriceActionSignalEngine {
         // BacktestEngine.tryEnter evaluates entry through the same TradingStrategy instance so
         // the backtest can never drift from this strategy's confluence or thresholds.
         boolean technicalEntry = selectedStrategy.isEntrySignal(indicators);
-        boolean enoughRulesPassed = selectedStrategy.isEntryEligible(indicators, regime);
+        boolean enoughRulesPassed = selectedStrategy.isEntryEligible(indicators, regime, relativeStrength);
         if (technicalEntry && !enoughRulesPassed) {
             String regimeReason = regime == null ? "REGIME_ASSESSMENT_UNAVAILABLE" : regime.reason();
-            failed.add("Market regime gate failed (" + regimeReason + ")");
+            if (selectedStrategy.regimeFilterEnabled() && (regime == null || !regime.eligible())) {
+                failed.add("Market regime gate failed (" + regimeReason + ")");
+            }
+            if (selectedStrategy.relativeStrengthFilterEnabled()
+                && (relativeStrength == null || !relativeStrength.eligible())) {
+                String reason = relativeStrength == null ? "INDEX_DATA_UNAVAILABLE" : relativeStrength.reason();
+                failed.add("Relative-strength gate failed (" + reason + ")");
+            }
         }
 
         SignalType type;
@@ -259,6 +279,23 @@ public class PriceActionSignalEngine {
         } catch (RuntimeException e) {
             logger.warn("Market regime assessment failed; configured entry will be blocked", e);
             return MarketRegimeAssessment.unavailable("REGIME_ASSESSMENT_UNAVAILABLE");
+        }
+    }
+
+    private RelativeStrengthAssessment assessRelativeStrength(List<OhlcvCandle> stockCandles, LocalDate asOf) {
+        try {
+            List<OhlcvCandle> indexCandles = candleStore
+                .findTopBySymbolOrderByDateDesc(MARKET_INDEX_SYMBOL, BoundedRelativeStrengthPolicy.LOOKBACK_DAYS * 2)
+                .stream()
+                .filter(candle -> candle.date() != null && !candle.date().isAfter(asOf))
+                .toList();
+            RelativeStrengthAssessment assessment = relativeStrengthPolicy.assess(stockCandles, indexCandles);
+            return assessment != null
+                ? assessment
+                : RelativeStrengthAssessment.unavailable("INDEX_DATA_UNAVAILABLE");
+        } catch (RuntimeException e) {
+            logger.warn("Relative-strength assessment failed; configured entry will be blocked", e);
+            return RelativeStrengthAssessment.unavailable("INDEX_DATA_UNAVAILABLE");
         }
     }
 

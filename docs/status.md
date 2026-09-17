@@ -21,6 +21,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 ## Data-integrity remediation
 
+- [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
+  as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API
+  tests passed; cross-sectional rank and authoritative index ingestion remain open.
+
 - [x] Strategy-policy wiring follow-up verified 2026-09-17: opted-in strategies can apply the
   fail-closed market-regime gate, live BUY queueing invokes explicit eligibility checks, and an
   opt-in 3-of-4 price-action strategy supports configurable RSI bounds. Full affected backend tests

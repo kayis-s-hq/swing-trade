@@ -382,12 +382,15 @@ No index-trend or volatility gate exists; momentum breakouts lose heavily in fal
 **Fix:** `RegimeService`: Nifty vs 200-day average, India VIX band, and breadth (% of NIFTY 500 above 50-day average). Each strategy declares allowed regimes.
 
 Bounded fail-closed market-regime and relative-strength policy contracts now exist. The signal engine
-can apply the market-regime gate for explicitly opted-in strategies; Nifty history, VIX/breadth
-ingestion, strategy opt-in defaults, relative-strength live wiring, and sector data remain open.
+can apply both gates for explicitly opted-in strategies and supplies as-of stock/index candles to the
+relative-strength policy; Nifty history, VIX/breadth ingestion, strategy opt-in defaults, and sector
+data remain open.
 
-### 37. GAP — Relative strength
+### 37. PARTIALLY FIXED — Relative strength
 Entry rules ignore performance vs the index and sector.
-**Fix:** Add an RS line (stock/Nifty) with a rising 63-day RS rank filter (for example, top 30% of universe).
+The signal engine now supports an opt-in 63-session adjusted-close excess-return gate against NIFTY50,
+with missing index history failing closed. Cross-sectional rank/sector-relative data and production
+strategy opt-in remain open.
 
 ### 38. GAP — Liquidity, surveillance and event filters
 **Fix:** Reject if 20-day average traded value < ₹5 Cr, the stock is in ASM/GSM or F&O ban, it has a 5%/10% price band, or results or a board meeting falls within 5 trading days.
