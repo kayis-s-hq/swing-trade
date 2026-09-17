@@ -284,7 +284,7 @@ public class SentimentService {
             var selectedBackend = clientProvider.getBackend();
             String provider = selectedBackend == null ? "unknown" : selectedBackend.getKey();
             SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult,
-                    articleCountForLlm, articleIds, provider);
+                    articleIds.size(), articleIds, provider);
 
             // Persist to database
             try {
