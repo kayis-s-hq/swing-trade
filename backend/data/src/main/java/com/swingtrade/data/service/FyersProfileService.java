@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Fyers v3 profile and funds service.
@@ -18,13 +19,19 @@ public class FyersProfileService {
 
     private static final Logger logger = LoggerFactory.getLogger(FyersProfileService.class);
     private final FyersAuthService authService;
+    private final Supplier<FyersClass> sdkProvider;
 
     public FyersProfileService(FyersAuthService authService) {
+        this(authService, FyersClass::getInstance);
+    }
+
+    FyersProfileService(FyersAuthService authService, Supplier<FyersClass> sdkProvider) {
         this.authService = authService;
+        this.sdkProvider = sdkProvider;
     }
 
     private FyersClass getSdk() {
-        FyersClass sdk = FyersClass.getInstance();
+        FyersClass sdk = sdkProvider.get();
         sdk.clientId = authService.getClientId();
         String token = authService.getAccessToken();
         if (token != null) sdk.accessToken = token;
