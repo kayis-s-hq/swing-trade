@@ -2,8 +2,10 @@ package com.swingtrade.domain.store;
 
 import com.swingtrade.domain.Signal;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface SignalStore {
@@ -28,6 +30,20 @@ public interface SignalStore {
     Signal save(Signal signal, String warningFlag);
 
     Signal save(Signal signal, String warningFlag, String strategy);
+
+    /**
+     * Saves a signal produced by the configurable multi-strategy fan-out (plan §7.1), with the
+     * additional provenance columns V47 added: {@code strategy_version}, {@code strategy_score},
+     * {@code rule_outcomes}, {@code gate_outcomes}.
+     *
+     * @param strategyVersion the variant's version number
+     * @param strategyScore   {@link com.swingtrade.domain.Signal}-independent score in [0,1]
+     * @param ruleOutcomes    serialisable rule outcomes (may be {@code null})
+     * @param gateOutcomes    serialisable gate outcomes (may be {@code null})
+     */
+    Signal saveVariantSignal(Signal signal, String warningFlag, String strategy, int strategyVersion,
+                              BigDecimal strategyScore, List<Map<String, Object>> ruleOutcomes,
+                              List<Map<String, Object>> gateOutcomes);
 
     void markProcessed(Long signalId);
 
@@ -91,6 +107,9 @@ public interface SignalStore {
     int deleteBySymbolAndDate(String symbol, LocalDate date);
 
     int deleteBySymbolAndDateAndStrategy(String symbol, LocalDate date, String strategy);
+
+    /** Idempotency key extended with strategy version (plan §7.1, replaces the F5 key above). */
+    int deleteBySymbolAndDateAndStrategyAndVersion(String symbol, LocalDate date, String strategy, int strategyVersion);
 
     /**
      * Deletes all signals for a given date. Used to clear stale signals before regeneration.

@@ -325,20 +325,25 @@ public class JobOrchestratorService {
             acquireSlot(symbol);
             try {
                 // Set by the SIGNAL stage's executor for the signal context used by the
-                // PAPER_TRADE stage. NEWS and SENTIMENT intentionally run for every symbol;
-                // their output is useful for monitoring SELL/HOLD names as well as BUYs.
+                // PAPER_TRADE stage. NEWS always runs for every symbol; SENTIMENT is gated (see
+                // sentimentTrigger below) once any multi-strategy variant is active (plan §7.1).
                 Signal.SignalType[] signalType = {null};
+                // True if the legacy signal was a BUY, or any active variant with sentimentGate
+                // enabled produced a BUY for this symbol/day (plan §7.1 item 5). Defaults to
+                // true when no variants are active at all, preserving today's "always run
+                // sentiment" behaviour for the pre-multi-strategy / no-variants-configured case.
+                boolean[] sentimentTrigger = {false};
 
                 List<StageDef> stageDefs = new java.util.ArrayList<>(List.of(
                     new StageDef(JobRunStage.StageName.DATA_FETCH,
                         () -> StageExecutionResult.completed(stageDataFetch(symbol)), TIMEOUT_DATA_FETCH),
                     new StageDef(JobRunStage.StageName.SIGNAL,
-                        () -> stageSignal(symbol, signalType), TIMEOUT_SIGNAL),
+                        () -> stageSignal(symbol, signalType, sentimentTrigger), TIMEOUT_SIGNAL),
                     new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol), TIMEOUT_BACKTEST),
                     new StageDef(JobRunStage.StageName.NEWS,
                         () -> StageExecutionResult.completed(stageNews(symbol)), TIMEOUT_NEWS),
                     new StageDef(JobRunStage.StageName.SENTIMENT,
-                        () -> StageExecutionResult.completed(stageSentiment(symbol, today)), TIMEOUT_SENTIMENT),
+                        () -> stageSentimentGated(symbol, today, sentimentTrigger[0]), TIMEOUT_SENTIMENT),
                     new StageDef(JobRunStage.StageName.PAPER_TRADE,
                         () -> StageExecutionResult.completed(stagePaperTrade(symbol)), TIMEOUT_PAPER_TRADE)
                 ));
@@ -509,11 +514,48 @@ public class JobOrchestratorService {
         return result.score() + ", confidence " + result.confidence();
     }
 
-    private StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut) {
+    /**
+     * Gates the SENTIMENT stage per plan §7.1 item 5: skips the (relatively expensive) sentiment
+     * analysis call when neither the legacy signal nor any active sentimentGate-enabled variant
+     * produced a BUY for this symbol/day.
+     */
+    private StageExecutionResult stageSentimentGated(String symbol, LocalDate date, boolean trigger) {
+        if (!trigger) {
+            return StageExecutionResult.skipped(
+                "No BUY signal (legacy or sentimentGate-enabled variant) for " + symbol + " on " + date);
+        }
+        return StageExecutionResult.completed(stageSentiment(symbol, date));
+    }
+
+    private StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
+                                               boolean[] sentimentTriggerOut) {
         var signal = signalPipeline.generatePrimarySignal(symbol);
         signalTypeOut[0] = signal.map(Signal::type).orElse(null);
+        boolean legacyBuy = signalTypeOut[0] == Signal.SignalType.BUY;
+
+        // Multi-strategy variant fan-out (plan §7.1). Runs in addition to the legacy signal
+        // above; failures for individual variants are isolated inside generateVariantSignals
+        // and never fail this stage.
+        List<SignalPipeline.VariantSignalOutcome> variantOutcomes;
+        try {
+            variantOutcomes = signalPipeline.generateVariantSignals(symbol);
+        } catch (Exception e) {
+            logger.error("Variant signal fan-out failed entirely for {}: {}", symbol, e.getMessage(), e);
+            variantOutcomes = List.of();
+        }
+        boolean anyVariantSentimentBuy = variantOutcomes.stream()
+            .anyMatch(o -> o.sentimentGateEnabled() && o.type() == Signal.SignalType.BUY);
+        // Preserve today's "always run sentiment" behaviour when the multi-strategy feature is
+        // unused (no active variants configured at all) - only gate once a variant actually
+        // exists to gate for.
+        boolean noVariantsConfigured = !signalPipeline.hasActiveVariants();
+        sentimentTriggerOut[0] = legacyBuy || anyVariantSentimentBuy || noVariantsConfigured;
+
         String summary = signal.map(s -> "%s signal generated, confidence %.0f%%"
             .formatted(s.type(), s.confidence().doubleValue() * 100)).orElse("no signal");
+        if (!variantOutcomes.isEmpty()) {
+            summary += "; " + variantOutcomes.size() + " variant(s) evaluated";
+        }
         return StageExecutionResult.completed(summary);
     }
 

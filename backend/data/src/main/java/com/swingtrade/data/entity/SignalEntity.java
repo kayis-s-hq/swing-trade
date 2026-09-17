@@ -9,10 +9,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 /**
  * JPA entity for the Signal domain model.
@@ -78,6 +82,20 @@ public class SignalEntity {
 
     @Column(name = "strategy_version")
     private Integer strategyVersion = 1;
+
+    // Multi-strategy provenance (V47, plan §4.2/§7.1): populated only for signals produced by
+    // the configurable SignalStrategy SPI fan-out (JobOrchestratorService's SIGNAL stage calling
+    // SignalPipeline#generateVariantSignals); rows written by the legacy engine leave these null.
+    @Column(name = "strategy_score", precision = 5)
+    private BigDecimal strategyScore;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "rule_outcomes")
+    private List<Map<String, Object>> ruleOutcomes;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "gate_outcomes")
+    private List<Map<String, Object>> gateOutcomes;
 
     // Warning flag constants
     public static final String WARNING_NONE = "";
@@ -350,5 +368,29 @@ public class SignalEntity {
 
     public void setProcessed(Boolean processed) {
         this.processed = processed;
+    }
+
+    public BigDecimal getStrategyScore() {
+        return strategyScore;
+    }
+
+    public void setStrategyScore(BigDecimal strategyScore) {
+        this.strategyScore = strategyScore;
+    }
+
+    public List<Map<String, Object>> getRuleOutcomes() {
+        return ruleOutcomes;
+    }
+
+    public void setRuleOutcomes(List<Map<String, Object>> ruleOutcomes) {
+        this.ruleOutcomes = ruleOutcomes;
+    }
+
+    public List<Map<String, Object>> getGateOutcomes() {
+        return gateOutcomes;
+    }
+
+    public void setGateOutcomes(List<Map<String, Object>> gateOutcomes) {
+        this.gateOutcomes = gateOutcomes;
     }
 }

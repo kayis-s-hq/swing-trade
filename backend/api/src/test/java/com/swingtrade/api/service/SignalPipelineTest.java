@@ -19,11 +19,21 @@ package com.swingtrade.api.service;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.Position;
+import com.swingtrade.domain.StrategyConfig;
+import com.swingtrade.domain.StrategyMode;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PositionStore;
+import com.swingtrade.domain.store.StrategyConfigStore;
 import com.swingtrade.strategy.ExitReason;
+import com.swingtrade.strategy.GateEvaluator;
+import com.swingtrade.strategy.GateOutcome;
 import com.swingtrade.strategy.PriceActionSignalEngine;
+import com.swingtrade.strategy.RuleOutcome;
 import com.swingtrade.strategy.SignalResult;
+import com.swingtrade.strategy.SignalStrategy;
+import com.swingtrade.strategy.StrategyDecision;
+import com.swingtrade.strategy.StrategyParamsView;
+import com.swingtrade.strategy.StrategyTypeRegistry;
 import com.swingtrade.api.dto.PositionResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +48,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +57,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -73,11 +87,21 @@ class SignalPipelineTest {
     @Mock
     private PositionService positionService;
 
+    @Mock
+    private StrategyConfigStore strategyConfigStore;
+
+    @Mock
+    private StrategyTypeRegistry strategyTypeRegistry;
+
+    @Mock
+    private GateEvaluator gateEvaluator;
+
     private SignalPipeline pipeline;
 
     @BeforeEach
     void setUp() {
-        pipeline = new SignalPipeline(candleStore, priceActionEngine, persistenceService, sentimentGate, positionStore, positionService);
+        pipeline = new SignalPipeline(candleStore, priceActionEngine, persistenceService, sentimentGate,
+            positionStore, positionService, strategyConfigStore, strategyTypeRegistry, gateEvaluator);
     }
 
     private List<OhlcvCandle> descendingCandles(int count) {
@@ -330,6 +354,126 @@ class SignalPipelineTest {
             pipeline.generatePriceActionSignal(SYMBOL);
 
             verifyNoInteractions(positionService);
+        }
+    }
+
+    @Nested
+    @DisplayName("generateVariantSignals")
+    class GenerateVariantSignals {
+
+        private StrategyConfig configOf(String variantId, StrategyMode mode) {
+            return new StrategyConfig(1L, variantId, 1, "PULLBACK", Map.of(), Map.of(), "hash-" + variantId,
+                mode, BigDecimal.valueOf(100000), true, null, null, null);
+        }
+
+        private StrategyDecision buyDecision() {
+            return new StrategyDecision(Signal.SignalType.BUY, BigDecimal.valueOf(0.8),
+                List.of(new RuleOutcome("trendUp", true, BigDecimal.ONE, true, "trend is up")),
+                null, null, "BUY reasoning");
+        }
+
+        private StrategyDecision holdDecision() {
+            return new StrategyDecision(Signal.SignalType.HOLD, BigDecimal.valueOf(0.2),
+                List.of(new RuleOutcome("trendUp", false, BigDecimal.ONE, true, "trend is flat")),
+                null, null, "HOLD reasoning");
+        }
+
+        @Test
+        @DisplayName("persists one row per active variant, HOLD suppressed for SHADOW, kept for CHAMPION")
+        void perVariantFanOutWithHoldFiltering() {
+            List<OhlcvCandle> candles = descendingCandles(60);
+            when(candleStore.findTopBySymbolOrderByDateDesc(eq(SYMBOL), eq(100))).thenReturn(candles);
+
+            StrategyConfig shadowBuy = configOf("PULLBACK_A", StrategyMode.SHADOW);
+            StrategyConfig shadowHold = configOf("PULLBACK_B", StrategyMode.SHADOW);
+            StrategyConfig champion = configOf("PULLBACK_C", StrategyMode.CHAMPION);
+            when(strategyConfigStore.findAllCurrent()).thenReturn(List.of(shadowBuy, shadowHold, champion));
+
+            SignalStrategy strategy = mock(SignalStrategy.class);
+            when(strategy.evaluateEntry(any(), any(Integer.class), any())).thenReturn(buyDecision(), holdDecision(), holdDecision());
+            when(strategyTypeRegistry.findByType("PULLBACK")).thenReturn(Optional.of(strategy));
+
+            when(persistenceService.saveVariantSignal(any(), any(), anyString(), any(Integer.class), any(), any(), any()))
+                .thenAnswer(inv -> Signal.create(SYMBOL, LocalDate.now(), Signal.SignalType.BUY, BigDecimal.ONE, "r"));
+
+            List<SignalPipeline.VariantSignalOutcome> outcomes = pipeline.generateVariantSignals(SYMBOL);
+
+            assertThat(outcomes).hasSize(3);
+            assertThat(outcomes.stream().filter(o -> o.variantId().equals("PULLBACK_A")).findFirst().orElseThrow().persisted())
+                .isTrue();
+            assertThat(outcomes.stream().filter(o -> o.variantId().equals("PULLBACK_B")).findFirst().orElseThrow().persisted())
+                .isFalse();
+            assertThat(outcomes.stream().filter(o -> o.variantId().equals("PULLBACK_C")).findFirst().orElseThrow().persisted())
+                .isTrue();
+
+            // Only PULLBACK_A (BUY) and PULLBACK_C (CHAMPION HOLD) are persisted; PULLBACK_B's
+            // shadow HOLD is suppressed for table-growth control.
+            verify(persistenceService, times(2)).saveVariantSignal(any(), any(), anyString(), any(Integer.class), any(), any(), any());
+            verify(persistenceService).deleteBySymbolAndDateAndStrategyAndVersion(eq(SYMBOL), any(), eq("PULLBACK_A"), eq(1));
+            verify(persistenceService, never()).deleteBySymbolAndDateAndStrategyAndVersion(eq(SYMBOL), any(), eq("PULLBACK_B"), eq(1));
+        }
+
+        @Test
+        @DisplayName("one variant throwing does not block other variants for the same symbol")
+        void perVariantFailureIsolation() {
+            List<OhlcvCandle> candles = descendingCandles(60);
+            when(candleStore.findTopBySymbolOrderByDateDesc(eq(SYMBOL), eq(100))).thenReturn(candles);
+
+            StrategyConfig broken = configOf("BROKEN", StrategyMode.SHADOW);
+            StrategyConfig healthy = new StrategyConfig(1L, "HEALTHY", 1, "SQUEEZE", Map.of(), Map.of(),
+                "hash-healthy", StrategyMode.SHADOW, BigDecimal.valueOf(100000), true, null, null, null);
+            when(strategyConfigStore.findAllCurrent()).thenReturn(List.of(broken, healthy));
+
+            // "PULLBACK" (broken's type) is unregistered -> findByType returns empty -> throws.
+            when(strategyTypeRegistry.findByType("PULLBACK")).thenReturn(Optional.empty());
+            SignalStrategy healthyStrategy = mock(SignalStrategy.class);
+            when(healthyStrategy.evaluateEntry(any(), any(Integer.class), any())).thenReturn(buyDecision());
+            when(strategyTypeRegistry.findByType("SQUEEZE")).thenReturn(Optional.of(healthyStrategy));
+
+            when(persistenceService.saveVariantSignal(any(), any(), anyString(), any(Integer.class), any(), any(), any()))
+                .thenAnswer(inv -> Signal.create(SYMBOL, LocalDate.now(), Signal.SignalType.BUY, BigDecimal.ONE, "r"));
+
+            List<SignalPipeline.VariantSignalOutcome> outcomes = pipeline.generateVariantSignals(SYMBOL);
+
+            // The broken variant produced no outcome at all; the healthy one still completed.
+            assertThat(outcomes).hasSize(1);
+            assertThat(outcomes.get(0).variantId()).isEqualTo("HEALTHY");
+            assertThat(outcomes.get(0).persisted()).isTrue();
+        }
+
+        @Test
+        @DisplayName("gate_outcomes are populated when regimeGate applies")
+        void gateOutcomesPopulatedWhenRegimeGateApplies() {
+            List<OhlcvCandle> candles = descendingCandles(60);
+            when(candleStore.findTopBySymbolOrderByDateDesc(eq(SYMBOL), eq(100))).thenReturn(candles);
+
+            StrategyConfig withRegimeGate = new StrategyConfig(1L, "PULLBACK_A", 1, "PULLBACK", Map.of(),
+                Map.of("regimeGate", true), "hash-a", StrategyMode.SHADOW, BigDecimal.valueOf(100000),
+                true, null, null, null);
+            when(strategyConfigStore.findAllCurrent()).thenReturn(List.of(withRegimeGate));
+
+            SignalStrategy strategy = mock(SignalStrategy.class);
+            StrategyDecision decision = buyDecision();
+            when(strategy.evaluateEntry(any(), any(Integer.class), any())).thenReturn(decision);
+            when(strategyTypeRegistry.findByType("PULLBACK")).thenReturn(Optional.of(strategy));
+
+            GateOutcome passOutcome = GateOutcome.pass("regimeGate", "No index data available; gate skipped");
+            when(gateEvaluator.applyRegimeGate(eq(decision), any(), eq(null), any()))
+                .thenReturn(GateEvaluator.GateResult.unblocked(decision, List.of(passOutcome)));
+
+            when(persistenceService.saveVariantSignal(any(), any(), anyString(), any(Integer.class), any(), any(), any()))
+                .thenAnswer(inv -> Signal.create(SYMBOL, LocalDate.now(), Signal.SignalType.BUY, BigDecimal.ONE, "r"));
+
+            pipeline.generateVariantSignals(SYMBOL);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<Map<String, Object>>> gateOutcomesCaptor = ArgumentCaptor.forClass(List.class);
+            verify(persistenceService).saveVariantSignal(any(), any(), eq("PULLBACK_A"), eq(1), any(),
+                any(), gateOutcomesCaptor.capture());
+
+            List<Map<String, Object>> capturedGateOutcomes = gateOutcomesCaptor.getValue();
+            assertThat(capturedGateOutcomes)
+                .anyMatch(m -> "regimeGate".equals(m.get("gate")) && Boolean.FALSE.equals(m.get("blocked")));
         }
     }
 }

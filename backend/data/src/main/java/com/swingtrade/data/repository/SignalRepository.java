@@ -194,6 +194,20 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
                                          @Param("strategy") String strategy);
 
     /**
+     * Deletes signals for a specific symbol/date/strategy/strategy-version - the multi-variant
+     * idempotency key (plan §7.1, replaces the old symbol/date/strategy-only key used by
+     * {@link #deleteBySymbolAndDateAndStrategy}) since several variants can now share a
+     * {@code strategy} (variantId) across versions but only the current version's row should
+     * survive a regeneration.
+     */
+    @Modifying
+    @Query("DELETE FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date "
+        + "AND s.strategy = :strategy AND s.strategyVersion = :strategyVersion")
+    int deleteBySymbolAndDateAndStrategyAndVersion(@Param("symbol") String symbol, @Param("date") LocalDate date,
+                                                    @Param("strategy") String strategy,
+                                                    @Param("strategyVersion") int strategyVersion);
+
+    /**
      * Deletes all signals for a specific date.
      */
     @Modifying

@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -78,6 +79,19 @@ public class SignalStoreImpl implements SignalStore {
     public Signal save(Signal signal, String warningFlag, String strategy) {
         SignalEntity entity = SignalEntity.fromDomain(signal, warningFlag);
         entity.setStrategy(strategy);
+        return repository.save(entity).toDomain();
+    }
+
+    @Override
+    public Signal saveVariantSignal(Signal signal, String warningFlag, String strategy, int strategyVersion,
+                                     BigDecimal strategyScore, List<Map<String, Object>> ruleOutcomes,
+                                     List<Map<String, Object>> gateOutcomes) {
+        SignalEntity entity = SignalEntity.fromDomain(signal, warningFlag);
+        entity.setStrategy(strategy);
+        entity.setStrategyVersion(strategyVersion);
+        entity.setStrategyScore(strategyScore);
+        entity.setRuleOutcomes(ruleOutcomes);
+        entity.setGateOutcomes(gateOutcomes);
         return repository.save(entity).toDomain();
     }
 
@@ -166,6 +180,13 @@ public class SignalStoreImpl implements SignalStore {
     @Transactional
     public int deleteBySymbolAndDateAndStrategy(String symbol, LocalDate date, String strategy) {
         return repository.deleteBySymbolAndDateAndStrategy(symbol, date, strategy);
+    }
+
+    @Override
+    @Transactional
+    public int deleteBySymbolAndDateAndStrategyAndVersion(String symbol, LocalDate date, String strategy,
+                                                            int strategyVersion) {
+        return repository.deleteBySymbolAndDateAndStrategyAndVersion(symbol, date, strategy, strategyVersion);
     }
 
     @Override

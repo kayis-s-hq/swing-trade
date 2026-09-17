@@ -20,11 +20,25 @@ import com.swingtrade.data.entity.SignalEntity;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.RiskCalculator;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.StrategyConfig;
+import com.swingtrade.domain.StrategyMode;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PositionStore;
+import com.swingtrade.domain.store.StrategyConfigStore;
 import com.swingtrade.strategy.ExitReason;
+import com.swingtrade.strategy.GateEvaluator;
+import com.swingtrade.strategy.GateOutcome;
+import com.swingtrade.strategy.MarketContext;
+import com.swingtrade.strategy.OverlayConfigResolver;
 import com.swingtrade.strategy.PriceActionSignalEngine;
+import com.swingtrade.strategy.RegimeGateConfig;
+import com.swingtrade.strategy.RuleOutcome;
+import com.swingtrade.strategy.SentimentGateConfig;
 import com.swingtrade.strategy.SignalResult;
+import com.swingtrade.strategy.SignalStrategy;
+import com.swingtrade.strategy.StrategyDecision;
+import com.swingtrade.strategy.StrategyParamsView;
+import com.swingtrade.strategy.StrategyTypeRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -35,7 +49,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Generic signal generation pipeline shared by both the primary swing strategy
@@ -56,19 +73,28 @@ public class SignalPipeline {
     private final SentimentGate sentimentGate;
     private final PositionStore positionStore;
     private final PositionService positionService;
+    private final StrategyConfigStore strategyConfigStore;
+    private final StrategyTypeRegistry strategyTypeRegistry;
+    private final GateEvaluator gateEvaluator;
 
     public SignalPipeline(CandleStore candleStore,
                           PriceActionSignalEngine priceActionEngine,
                           SignalPersistenceService persistenceService,
                           SentimentGate sentimentGate,
                           PositionStore positionStore,
-                          PositionService positionService) {
+                          PositionService positionService,
+                          StrategyConfigStore strategyConfigStore,
+                          StrategyTypeRegistry strategyTypeRegistry,
+                          GateEvaluator gateEvaluator) {
         this.candleStore = candleStore;
         this.priceActionEngine = priceActionEngine;
         this.persistenceService = persistenceService;
         this.sentimentGate = sentimentGate;
         this.positionStore = positionStore;
         this.positionService = positionService;
+        this.strategyConfigStore = strategyConfigStore;
+        this.strategyTypeRegistry = strategyTypeRegistry;
+        this.gateEvaluator = gateEvaluator;
     }
 
     /**
@@ -206,6 +232,158 @@ public class SignalPipeline {
         return java.util.Optional.of(saved);
     }
 
+    /**
+     * True if any variant is currently active (SHADOW/CHAMPION), used by
+     * {@code JobOrchestratorService} to keep the pre-multi-strategy "always run sentiment"
+     * behaviour when the feature is entirely unused (plan §7.1 item 5).
+     */
+    public boolean hasActiveVariants() {
+        return strategyConfigStore.findAllCurrent().stream().anyMatch(StrategyConfig::isActive);
+    }
+
+    /**
+     * Evaluates every active (SHADOW/CHAMPION) {@link StrategyConfig} variant for {@code symbol}
+     * against one shared {@link MarketContext} (built once, not per variant) and persists one
+     * {@code signals} row per variant - plan §7.1.
+     *
+     * <p>Table-growth control: non-HOLD rows are persisted for SHADOW variants; CHAMPION
+     * persists every row, including HOLD, for a full audit trail. Idempotency key is
+     * (symbol, date, strategy=variantId, strategy_version) - replaces the F5
+     * (symbol, date, strategy) key, which cannot disambiguate two versions of the same variant.
+     *
+     * <p>Per-variant failure isolation: one variant throwing (bad params, missing indicator,
+     * gate error) is logged and skipped; it never prevents other variants - or this method as a
+     * whole - from completing for the symbol.
+     *
+     * <p><b>Simplifications (see phase report):</b> (1) {@code regimeGate} is evaluated with no
+     * live index series wired in this phase (see {@link com.swingtrade.strategy.IndexSeries}'s
+     * javadoc) - {@link GateEvaluator#applyRegimeGate} treats a {@code null} series as "skip,
+     * pass", so the gate is a documented no-op until Nifty data is ingested. (2) {@code
+     * sentimentGate} cannot be fully applied here because the SENTIMENT stage runs strictly
+     * after SIGNAL in the job pipeline (see {@code JobOrchestratorService}) - a BUY from a
+     * variant with {@code sentimentGate} enabled is persisted with the same
+     * {@code PENDING_SENTIMENT} warning-flag convention the legacy engine uses, and a
+     * {@code sentimentGate} outcome recorded as a deferred pass; real per-variant blocking based
+     * on the actual sentiment result is left to the paper-trading phase (plan §7.2), which is out
+     * of scope here. (3) this variant fan-out runs in addition to, not instead of, the legacy
+     * {@link #generatePrimarySignal} call - no variant here replaces the existing
+     * {@code BREAKOUT_STRICT} production signal; cutting a CHAMPION variant over to be the
+     * production signal is a later-phase promotion concern (plan §7.4), not this method's job.
+     *
+     * @param symbol the stock symbol
+     * @return one outcome per active variant that was evaluated (variants that failed entirely -
+     *     e.g. an unknown strategy type - do not appear at all rather than a partial entry)
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<VariantSignalOutcome> generateVariantSignals(String symbol) {
+        List<StrategyConfig> activeConfigs = strategyConfigStore.findAllCurrent().stream()
+            .filter(StrategyConfig::isActive)
+            .toList();
+        if (activeConfigs.isEmpty()) {
+            return List.of();
+        }
+
+        List<OhlcvCandle> candles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 100);
+        if (candles.size() < MIN_CANDLES) {
+            logger.debug("Not enough candles for {} to evaluate variants: {} available", symbol, candles.size());
+            return List.of();
+        }
+        List<OhlcvCandle> chronologicalCandles = new ArrayList<>(candles);
+        Collections.reverse(chronologicalCandles);
+        LocalDate latestDate = chronologicalCandles.get(chronologicalCandles.size() - 1).date();
+
+        MarketContext ctx;
+        try {
+            ctx = MarketContext.of(symbol, chronologicalCandles);
+        } catch (RuntimeException e) {
+            logger.warn("Could not build MarketContext for {}: {}", symbol, e.getMessage());
+            return List.of();
+        }
+        int barIndex = ctx.barCount() - 1;
+
+        List<VariantSignalOutcome> outcomes = new ArrayList<>();
+        for (StrategyConfig config : activeConfigs) {
+            try {
+                outcomes.add(evaluateAndPersistVariant(symbol, latestDate, ctx, barIndex, config));
+            } catch (Exception e) {
+                logger.error("Variant {} v{} ({}) failed for {} on {}: {}",
+                    config.variantId(), config.version(), config.strategyType(), symbol, latestDate,
+                    e.getMessage(), e);
+            }
+        }
+        return outcomes;
+    }
+
+    private VariantSignalOutcome evaluateAndPersistVariant(String symbol, LocalDate date, MarketContext ctx,
+                                                            int barIndex, StrategyConfig config) {
+        SignalStrategy strategy = strategyTypeRegistry.findByType(config.strategyType())
+            .orElseThrow(() -> new IllegalStateException("Unknown strategy type: " + config.strategyType()));
+        StrategyParamsView params = StrategyParamsView.of(config.params());
+        StrategyDecision decision = strategy.evaluateEntry(ctx, barIndex, params);
+
+        Optional<RegimeGateConfig> regimeGateConfig = OverlayConfigResolver.regimeGate(config.overlays());
+        Optional<SentimentGateConfig> sentimentGateConfig = OverlayConfigResolver.sentimentGate(config.overlays());
+
+        List<GateOutcome> gateOutcomes = new ArrayList<>();
+        StrategyDecision afterGates = decision;
+        if (regimeGateConfig.isPresent()) {
+            GateEvaluator.GateResult regimeResult = gateEvaluator.applyRegimeGate(
+                afterGates, date, null, regimeGateConfig.get());
+            afterGates = regimeResult.decision();
+            gateOutcomes.addAll(regimeResult.outcomes());
+        }
+
+        boolean sentimentGateEnabled = sentimentGateConfig.isPresent();
+        String warningFlag = SignalEntity.WarningFlag.NONE.code();
+        if (afterGates.type() == Signal.SignalType.BUY && sentimentGateEnabled) {
+            gateOutcomes.add(GateOutcome.pass("sentimentGate",
+                "Sentiment not yet available at SIGNAL stage; deferred to a later stage"));
+            warningFlag = SignalEntity.WarningFlag.PENDING_SENTIMENT.code();
+        }
+
+        boolean isChampion = config.mode() == StrategyMode.CHAMPION;
+        boolean shouldPersist = isChampion || afterGates.type() != Signal.SignalType.HOLD;
+
+        if (shouldPersist) {
+            persistenceService.deleteBySymbolAndDateAndStrategyAndVersion(
+                symbol, date, config.variantId(), config.version());
+            Signal baseSignal = Signal.create(
+                symbol, date, afterGates.type(), afterGates.score(), afterGates.reasoning());
+            persistenceService.saveVariantSignal(baseSignal, warningFlag, config.variantId(), config.version(),
+                afterGates.score(), toOutcomeMaps(afterGates.rules()), toGateOutcomeMaps(gateOutcomes));
+        }
+
+        return new VariantSignalOutcome(config.variantId(), config.version(), afterGates.type(),
+            sentimentGateEnabled, shouldPersist);
+    }
+
+    private List<Map<String, Object>> toOutcomeMaps(List<RuleOutcome> rules) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (RuleOutcome rule : rules) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("key", rule.key());
+            map.put("passed", rule.passed());
+            map.put("weight", rule.weight());
+            map.put("mandatory", rule.mandatory());
+            map.put("detail", rule.detail());
+            result.add(map);
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> toGateOutcomeMaps(List<GateOutcome> gates) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (GateOutcome gate : gates) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("gate", gate.gate());
+            map.put("blocked", gate.blocked());
+            map.put("reason", gate.reason());
+            map.put("score", gate.score());
+            result.add(map);
+        }
+        return result;
+    }
+
     // ---- Private helpers ----
 
     /**
@@ -261,6 +439,21 @@ public class SignalPipeline {
 
     private double clamp(double value) {
         return Math.max(0.0, Math.min(1.0, value));
+    }
+
+    /**
+     * One active variant's evaluation outcome for a symbol/day (plan §7.1), used by
+     * {@code JobOrchestratorService} to decide whether the SENTIMENT stage needs to run.
+     *
+     * @param variantId              the variant's stable id (persisted as {@code signals.strategy})
+     * @param strategyVersion        the variant's version number
+     * @param type                   the final (post-gate) decision type
+     * @param sentimentGateEnabled   true if this variant's overlays enable {@code sentimentGate}
+     * @param persisted              true if a signals row was actually written (false when a
+     *                               SHADOW variant's HOLD was suppressed for table-growth control)
+     */
+    public record VariantSignalOutcome(String variantId, int strategyVersion, Signal.SignalType type,
+                                        boolean sentimentGateEnabled, boolean persisted) {
     }
 
 }
