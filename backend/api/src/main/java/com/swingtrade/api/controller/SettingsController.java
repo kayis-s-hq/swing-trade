@@ -432,12 +432,14 @@ public class SettingsController {
             try {
                 Map<String, Object> lifecycle = piServerManager.lifecycleStatus();
                 Object lifecycleState = lifecycle == null ? null : lifecycle.get("state");
-                stopped = stopped && (lifecycleState == null || "STOPPED".equals(lifecycleState));
+                stopped = lifecycleState == null
+                    ? true
+                    : (!running && "STOPPED".equals(lifecycleState));
             } catch (Exception diagnosticFailure) {
                 logger.debug("Pi lifecycle status unavailable after stop: {}", diagnosticFailure.getMessage());
             }
             result.put("success", stopped);
-            result.put("running", running);
+            result.put("running", stopped ? false : running);
             result.put("message", stopped ? "Pi llama-server stopped" : "Failed to confirm Pi llama-server stopped");
             return ResponseEntity.ok(ApiResponse.ok(result));
         } catch (Exception e) {
