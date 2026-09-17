@@ -27,7 +27,8 @@ public class StrategyRegistry {
         PullbackInUptrendStrategy.NAME,
         VolatilitySqueezeStrategy.NAME,
         FiftyTwoWeekHighBreakoutStrategy.NAME,
-        Rsi2MeanReversionStrategy.NAME
+        Rsi2MeanReversionStrategy.NAME,
+        RelativeStrengthMomentumStrategy.NAME
     );
 
     private final Map<String, TradingStrategy> strategiesByName;
@@ -67,6 +68,10 @@ public class StrategyRegistry {
         if (PriceActionConfluenceStrategy.NAME.equals(config.strategyType())) {
             // Build a request-scoped instance so one variant's RSI range cannot leak into another.
             return Optional.of(PriceActionConfluenceStrategy.fromParameters(config.params()));
+        }
+        if (RelativeStrengthMomentumStrategy.NAME.equals(config.strategyType())) {
+            // Build a request-scoped instance so one variant's RS threshold cannot leak into another.
+            return Optional.of(RelativeStrengthMomentumStrategy.fromParameters(config.params()));
         }
         return find(config.strategyType());
     }
