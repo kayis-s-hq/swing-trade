@@ -359,8 +359,9 @@ nearly all tied (3 categories), so the prior no-ties shortcut distorted IC. "UP/
 uses raw returns, so a bull market can make POSITIVE look accurate.
 The IC calculation now uses Pearson correlation over average ranks, correcting the tied-score
 distortion, and the monitoring windows now average the selected 1/5/21-day horizon correctly.
-Accuracy is still based on raw returns, no Nifty excess-return input exists, and no gate/composite
-weight consumes trailing IC.
+Accuracy records now retain optional NIFTY excess returns and an explicit raw/excess label basis;
+new labels use excess returns only when exact persisted benchmark dates are available, with legacy
+rows falling back to raw returns. No gate/composite weight consumes trailing IC yet.
 
 ---
 

@@ -25,6 +25,11 @@ Last checked: 2026-09-17 (documentation/lint and analytics remediation verificat
   empty; daily loss protection now scopes realized P&L to the current India-market date; sentiment
   accuracy windows average their own horizons. Focused data, accuracy, and broker tests passed.
 
+- [x] Excess-return sentiment labels added 2026-09-17: accuracy records now retain optional
+  persisted-NIFTY excess returns and a `RAW_RETURN`/`EXCESS_RETURN` basis; new labels use the
+  benchmark only when exact dates are available and legacy rows remain compatible. Schema v57,
+  affected data/API tests, local PostgreSQL migration, health, and data-quality API checks passed.
+
 - [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
   producing signal variant, support multiple strategies per symbol/date, and report/filter by the
   stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade

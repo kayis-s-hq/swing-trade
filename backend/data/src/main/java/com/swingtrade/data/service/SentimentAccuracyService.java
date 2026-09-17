@@ -62,7 +62,7 @@ public class SentimentAccuracyService {
             var list = entry.getValue();
             int total = list.size();
             long correct = list.stream().filter(e -> isCorrect(e.getLlmScore(),
-                classifyReturn(returnForWindow(e, entry.getKey())))).count();
+                classifyReturn(labelReturnForWindow(e, entry.getKey())))).count();
             double accuracy = total > 0 ? (double) correct / total : 0.0;
             double avgReturn = list.stream()
                 .map(e -> returnForWindow(e, entry.getKey()))
@@ -239,6 +239,15 @@ public class SentimentAccuracyService {
             case "5-day" -> e.getActualReturn5d();
             default -> e.getActualReturn21d();
         };
+    }
+
+    private BigDecimal labelReturnForWindow(SentimentAccuracyEntity e, String window) {
+        BigDecimal excess = switch (window) {
+            case "1-day" -> e.getExcessReturn1d();
+            case "5-day" -> e.getExcessReturn5d();
+            default -> e.getExcessReturn21d();
+        };
+        return excess != null ? excess : returnForWindow(e, window);
     }
 
     private String classifyReturn(BigDecimal value) {
