@@ -482,6 +482,25 @@ export interface StrategyConfig {
   createdAt: string
 }
 
+export type PromotionEligibilityStatus = 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'INSUFFICIENT_SAMPLE'
+
+export interface PromotionConditionResult {
+  name: string
+  met: boolean
+  actualValue: string
+  threshold: string
+  note: string | null
+}
+
+export interface PromotionEligibilityResponse {
+  challengerVariantId: string
+  championVariantId: string
+  status: PromotionEligibilityStatus
+  conditions: PromotionConditionResult[]
+  notes: string[]
+  dataLimitations: string[]
+}
+
 // ---------------------------------------------------------------------------
 // Job Orchestrator
 // ---------------------------------------------------------------------------

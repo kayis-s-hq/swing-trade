@@ -2,15 +2,23 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import StrategiesView from './StrategiesView.vue'
 
+interface PromotionState {
+  loading: boolean
+  error: string | null
+  result: Record<string, unknown> | null
+}
+
 const storeMock = vi.hoisted(() => ({
   state: {
     strategies: null as unknown[] | null,
     loading: false,
     error: null as Error | null,
     errorMessage: '',
+    promotionEligibility: {} as Record<string, PromotionState>,
   },
   load: vi.fn(),
   retry: vi.fn(),
+  loadPromotionEligibility: vi.fn(),
 }))
 
 vi.mock('../stores/strategies', () => ({
@@ -27,8 +35,12 @@ vi.mock('../stores/strategies', () => ({
     get errorMessage() {
       return storeMock.state.errorMessage
     },
+    get promotionEligibility() {
+      return storeMock.state.promotionEligibility
+    },
     load: storeMock.load,
     retry: storeMock.retry,
+    loadPromotionEligibility: storeMock.loadPromotionEligibility,
   }),
 }))
 
@@ -57,6 +69,7 @@ describe('StrategiesView', () => {
     storeMock.state.loading = false
     storeMock.state.error = null
     storeMock.state.errorMessage = ''
+    storeMock.state.promotionEligibility = {}
     vi.clearAllMocks()
   })
 
@@ -92,5 +105,99 @@ describe('StrategiesView', () => {
     expect(retry).toBeDefined()
     await retry!.trigger('click')
     expect(storeMock.retry).toHaveBeenCalledOnce()
+  })
+
+  describe('promotion eligibility', () => {
+    const champion = { ...config, variantId: 'DEFAULT', mode: 'CHAMPION', current: true }
+    const shadow = { ...config, variantId: 'RS_NIFTY', mode: 'SHADOW', current: true }
+
+    it('requests promotion eligibility for active shadow variants but not the champion', async () => {
+      storeMock.state.strategies = [champion, shadow]
+      mountView()
+      await flushPromises()
+
+      expect(storeMock.loadPromotionEligibility).toHaveBeenCalledWith('RS_NIFTY')
+      expect(storeMock.loadPromotionEligibility).not.toHaveBeenCalledWith('DEFAULT')
+    })
+
+    it('renders the per-condition checklist verbatim from the API response', async () => {
+      storeMock.state.strategies = [champion, shadow]
+      storeMock.state.promotionEligibility.RS_NIFTY = {
+        loading: false,
+        error: null,
+        result: {
+          challengerVariantId: 'RS_NIFTY',
+          championVariantId: 'DEFAULT',
+          status: 'NOT_ELIGIBLE',
+          conditions: [
+            {
+              name: 'sample_size',
+              met: true,
+              actualValue: '65d tenure, 40 closed trades',
+              threshold: '>=60d and >=30 trades',
+              note: null,
+            },
+          ],
+          notes: [],
+          dataLimitations: ['Only SHADOW tenure is computed from real data.'],
+        },
+      }
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('sample_size')
+      expect(wrapper.text()).toContain('65d tenure, 40 closed trades')
+      expect(wrapper.text()).toContain('>=60d and >=30 trades')
+      expect(wrapper.text()).toContain('Only SHADOW tenure is computed from real data.')
+      expect(wrapper.text()).toContain('Not eligible')
+    })
+
+    it('frames INSUFFICIENT_SAMPLE as "not enough data yet", not a failure', async () => {
+      storeMock.state.strategies = [champion, shadow]
+      storeMock.state.promotionEligibility.RS_NIFTY = {
+        loading: false,
+        error: null,
+        result: {
+          challengerVariantId: 'RS_NIFTY',
+          championVariantId: 'DEFAULT',
+          status: 'INSUFFICIENT_SAMPLE',
+          conditions: [],
+          notes: [],
+          dataLimitations: [],
+        },
+      }
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Insufficient sample')
+      expect(wrapper.text()).toContain('Not enough data yet to judge')
+      expect(wrapper.text()).toContain('not a rejection')
+    })
+
+    it('shows a loading state for a variant whose eligibility check is in flight', async () => {
+      storeMock.state.strategies = [champion, shadow]
+      storeMock.state.promotionEligibility.RS_NIFTY = {
+        loading: true,
+        error: null,
+        result: null,
+      }
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Checking promotion eligibility...')
+    })
+
+    it('shows an error state for a variant whose eligibility check failed', async () => {
+      storeMock.state.strategies = [champion, shadow]
+      storeMock.state.promotionEligibility.RS_NIFTY = {
+        loading: false,
+        error: 'The backend could not be reached.',
+        result: null,
+      }
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('The backend could not be reached.')
+    })
   })
 })

@@ -99,14 +99,107 @@
           </p>
         </article>
       </div>
+
+      <section v-if="shadowVariantIds.length > 0" class="mt-8">
+        <h2 class="font-display text-lg font-semibold text-text-primary">
+          Promotion eligibility
+        </h2>
+        <p class="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
+          Compares each shadow variant against the current champion. This is informational only
+          — promotion still requires a separate manual action.
+        </p>
+        <div class="mt-4 grid gap-4 lg:grid-cols-2">
+          <article
+            v-for="variantId in shadowVariantIds"
+            :key="variantId"
+            class="card-panel p-5"
+            data-testid="promotion-eligibility-card"
+          >
+            <div class="flex items-start justify-between gap-4">
+              <h3 class="text-sm font-semibold text-text-primary">{{ variantId }}</h3>
+              <span
+                v-if="promotionState(variantId)?.result"
+                class="shrink-0 rounded-full border border-border-default bg-bg-hover px-2.5 py-1 text-xs font-semibold text-text-primary"
+              >
+                {{ statusLabel(promotionState(variantId)!.result!.status) }}
+              </span>
+            </div>
+
+            <p
+              v-if="promotionState(variantId)?.loading"
+              class="mt-3 text-sm text-text-muted"
+              role="status"
+            >
+              Checking promotion eligibility...
+            </p>
+
+            <p
+              v-else-if="promotionState(variantId)?.error"
+              class="mt-3 text-sm text-danger"
+              role="alert"
+            >
+              {{ promotionState(variantId)?.error }}
+            </p>
+
+            <template v-else-if="promotionState(variantId)?.result">
+              <p
+                v-if="promotionState(variantId)!.result!.status === 'INSUFFICIENT_SAMPLE'"
+                class="mt-3 rounded-lg border border-border-subtle bg-bg-hover px-3 py-2 text-sm text-text-muted"
+              >
+                Not enough data yet to judge — this is not a rejection, just an early result.
+              </p>
+
+              <ul class="mt-4 space-y-2 border-t border-border-subtle pt-4">
+                <li
+                  v-for="condition in promotionState(variantId)!.result!.conditions"
+                  :key="condition.name"
+                  class="text-sm"
+                >
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold"
+                      :class="
+                        condition.met
+                          ? 'bg-bg-hover text-text-primary'
+                          : 'bg-bg-hover text-text-muted'
+                      "
+                    >
+                      {{ condition.met ? 'Met' : 'Not met' }}
+                    </span>
+                    <span class="font-medium text-text-primary">{{ condition.name }}</span>
+                  </div>
+                  <p class="mt-1 text-text-muted">
+                    {{ condition.actualValue }} (threshold: {{ condition.threshold }})
+                  </p>
+                  <p v-if="condition.note" class="mt-1 text-text-muted">{{ condition.note }}</p>
+                </li>
+              </ul>
+
+              <div
+                v-if="promotionState(variantId)!.result!.dataLimitations.length > 0"
+                class="mt-4 border-t border-border-subtle pt-4"
+              >
+                <p class="text-xs font-medium uppercase tracking-[0.1em] text-text-muted">
+                  Data limitations
+                </p>
+                <ul class="mt-2 space-y-1 text-sm text-text-muted">
+                  <li v-for="(limitation, index) in promotionState(variantId)!.result!.dataLimitations" :key="index">
+                    {{ limitation }}
+                  </li>
+                </ul>
+              </div>
+            </template>
+          </article>
+        </div>
+      </section>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useStrategiesStore } from '../stores/strategies'
-import type { StrategyMode } from '../api/types'
+import type { PromotionEligibilityStatus, StrategyConfig, StrategyMode } from '../api/types'
 
 const store = useStrategiesStore()
 const strategies = computed(() => store.strategies)
@@ -114,7 +207,32 @@ const loading = computed(() => store.loading)
 const error = computed(() => store.error)
 const errorMessage = computed(() => store.errorMessage)
 
+const championVariantId = computed<string | null>(() => {
+  const champion = (strategies.value ?? []).find(
+    (strategy: StrategyConfig) => strategy.current && strategy.mode === 'CHAMPION'
+  )
+  return champion?.variantId ?? null
+})
+
+const shadowVariantIds = computed<string[]>(() => {
+  const champion = championVariantId.value
+  if (!champion) return []
+  return (strategies.value ?? [])
+    .filter((strategy: StrategyConfig) => strategy.current && strategy.mode === 'SHADOW')
+    .map((strategy: StrategyConfig) => strategy.variantId)
+    .filter((variantId: string) => variantId !== champion)
+})
+
+const promotionState = (variantId: string) => store.promotionEligibility[variantId]
+
 const modeLabel = (mode: StrategyMode): string => mode.replace('_', ' ')
+
+const statusLabel = (status: PromotionEligibilityStatus): string =>
+  ({
+    ELIGIBLE: 'Eligible',
+    NOT_ELIGIBLE: 'Not eligible',
+    INSUFFICIENT_SAMPLE: 'Insufficient sample',
+  })[status]
 
 const modeClass = (mode: StrategyMode): string =>
   ({
@@ -131,7 +249,18 @@ const formatCapital = (value: number): string =>
     maximumFractionDigits: 0,
   }).format(value)
 
+function loadPromotionEligibilityForShadows(): void {
+  for (const variantId of shadowVariantIds.value) {
+    if (!store.promotionEligibility[variantId]) {
+      void store.loadPromotionEligibility(variantId)
+    }
+  }
+}
+
+watch(shadowVariantIds, loadPromotionEligibilityForShadows)
+
 onMounted(() => {
   if (!store.strategies) void store.load()
+  else loadPromotionEligibilityForShadows()
 })
 </script>

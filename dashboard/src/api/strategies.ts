@@ -1,7 +1,18 @@
 import { apiRequest } from './shared'
-import type { StrategyConfig, StrategyMode } from './types'
+import type {
+  PromotionConditionResult,
+  PromotionEligibilityResponse,
+  PromotionEligibilityStatus,
+  StrategyConfig,
+  StrategyMode,
+} from './types'
 
 const MODES = new Set<StrategyMode>(['OFF', 'BACKTEST_ONLY', 'SHADOW', 'CHAMPION'])
+const PROMOTION_STATUSES = new Set<PromotionEligibilityStatus>([
+  'ELIGIBLE',
+  'NOT_ELIGIBLE',
+  'INSUFFICIENT_SAMPLE',
+])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -41,4 +52,48 @@ export function getStrategies(signal?: AbortSignal): Promise<StrategyConfig[]> {
     signal,
     validate: validateStrategies,
   })
+}
+
+function isPromotionCondition(value: unknown): value is PromotionConditionResult {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.name === 'string' &&
+    typeof value.met === 'boolean' &&
+    typeof value.actualValue === 'string' &&
+    typeof value.threshold === 'string' &&
+    (value.note === null || typeof value.note === 'string')
+  )
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function isPromotionEligibilityResponse(value: unknown): value is PromotionEligibilityResponse {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.challengerVariantId === 'string' &&
+    typeof value.championVariantId === 'string' &&
+    typeof value.status === 'string' &&
+    PROMOTION_STATUSES.has(value.status as PromotionEligibilityStatus) &&
+    Array.isArray(value.conditions) &&
+    value.conditions.every(isPromotionCondition) &&
+    isStringArray(value.notes) &&
+    isStringArray(value.dataLimitations)
+  )
+}
+
+export function fetchPromotionEligibility(
+  variantId: string,
+  signal?: AbortSignal
+): Promise<PromotionEligibilityResponse> {
+  return apiRequest<PromotionEligibilityResponse>(
+    `/strategy-configs/${encodeURIComponent(variantId)}/promotion-eligibility`,
+    {
+      method: 'GET',
+      responseContract: 'envelope',
+      signal,
+      validate: isPromotionEligibilityResponse,
+    }
+  )
 }
