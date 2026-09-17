@@ -26,7 +26,7 @@ Dev runs PostgreSQL on pi-node and the Spring Boot API plus Vue dashboard locall
 
 ## Stage Deployment
 
-### Local Development (`dev-stack.sh stage`)
+### Stage Deployment (`dev-stack.sh stage`)
 ```bash
 ./dev-stack.sh stage
 ```
