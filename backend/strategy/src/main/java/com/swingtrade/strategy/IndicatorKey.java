@@ -16,6 +16,17 @@ public enum IndicatorKey {
     VOLUME,
     VOLUME_MA,
     HIGHEST_HIGH,
+    LOWEST_LOW,
+    /** Bollinger Bands middle band (SMA of close), added for the SQUEEZE type (plan §5.3). */
+    BB_MIDDLE,
+    /** Bollinger Bands upper band, keyed together with its {@code k} multiplier (plan §5.3). */
+    BB_UPPER,
+    /** Bollinger Bands lower band, keyed together with its {@code k} multiplier (plan §5.3). */
+    BB_LOWER,
+    /** Keltner Channel middle line (EMA of typical price), added for the SQUEEZE type (plan §5.3). */
+    KELTNER_MIDDLE,
+    /** Keltner Channel upper band, keyed together with its ATR multiplier (plan §5.3). */
+    KELTNER_UPPER,
     INDEX_CLOSE,
     INDEX_EMA
 }

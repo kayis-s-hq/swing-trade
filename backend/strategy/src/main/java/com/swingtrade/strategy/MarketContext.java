@@ -10,12 +10,18 @@ import org.ta4j.core.indicators.ATRIndicator;
 import org.ta4j.core.indicators.EMAIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsUpperIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.indicators.helpers.HighPriceIndicator;
 import org.ta4j.core.indicators.helpers.HighestValueIndicator;
+import org.ta4j.core.indicators.helpers.LowestValueIndicator;
 import org.ta4j.core.indicators.helpers.LowPriceIndicator;
 import org.ta4j.core.indicators.helpers.OpenPriceIndicator;
 import org.ta4j.core.indicators.helpers.VolumeIndicator;
+import org.ta4j.core.indicators.keltner.KeltnerChannelMiddleIndicator;
+import org.ta4j.core.indicators.keltner.KeltnerChannelUpperIndicator;
 import org.ta4j.core.num.DecimalNum;
 import org.ta4j.core.num.Num;
 
@@ -56,6 +62,7 @@ public final class MarketContext {
     private final VolumeIndicator volumeIndicator;
 
     private final Map<IndicatorCacheKey, Indicator<Num>> cache = new ConcurrentHashMap<>();
+    private final Map<ScaledIndicatorCacheKey, Indicator<Num>> scaledCache = new ConcurrentHashMap<>();
 
     private MarketContext(String symbol, List<OhlcvCandle> chronologicalCandles) {
         this.symbol = symbol;
@@ -141,6 +148,53 @@ public final class MarketContext {
         return (HighestValueIndicator) cache.computeIfAbsent(
             new IndicatorCacheKey(IndicatorKey.HIGHEST_HIGH, boundedPeriod),
             key -> new HighestValueIndicator(highPriceIndicator, boundedPeriod));
+    }
+
+    @SuppressWarnings("unchecked")
+    private LowestValueIndicator lowestLow(int period) {
+        int boundedPeriod = Math.min(period, series.getBarCount());
+        return (LowestValueIndicator) cache.computeIfAbsent(
+            new IndicatorCacheKey(IndicatorKey.LOWEST_LOW, boundedPeriod),
+            key -> new LowestValueIndicator(lowPriceIndicator, boundedPeriod));
+    }
+
+    @SuppressWarnings("unchecked")
+    private BollingerBandsMiddleIndicator bbMiddle(int period) {
+        return (BollingerBandsMiddleIndicator) cache.computeIfAbsent(
+            new IndicatorCacheKey(IndicatorKey.BB_MIDDLE, period),
+            key -> new BollingerBandsMiddleIndicator(new SMAIndicator(closePriceIndicator, period)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private BollingerBandsUpperIndicator bbUpper(int period, BigDecimal k) {
+        return (BollingerBandsUpperIndicator) scaledCache.computeIfAbsent(
+            new ScaledIndicatorCacheKey(IndicatorKey.BB_UPPER, period, k.doubleValue()),
+            key -> new BollingerBandsUpperIndicator(bbMiddle(period),
+                new org.ta4j.core.indicators.statistics.StandardDeviationIndicator(closePriceIndicator, period),
+                DecimalNum.valueOf(k)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private BollingerBandsLowerIndicator bbLower(int period, BigDecimal k) {
+        return (BollingerBandsLowerIndicator) scaledCache.computeIfAbsent(
+            new ScaledIndicatorCacheKey(IndicatorKey.BB_LOWER, period, k.doubleValue()),
+            key -> new BollingerBandsLowerIndicator(bbMiddle(period),
+                new org.ta4j.core.indicators.statistics.StandardDeviationIndicator(closePriceIndicator, period),
+                DecimalNum.valueOf(k)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private KeltnerChannelMiddleIndicator keltnerMiddle(int period) {
+        return (KeltnerChannelMiddleIndicator) cache.computeIfAbsent(
+            new IndicatorCacheKey(IndicatorKey.KELTNER_MIDDLE, period),
+            key -> new KeltnerChannelMiddleIndicator(series, period));
+    }
+
+    @SuppressWarnings("unchecked")
+    private KeltnerChannelUpperIndicator keltnerUpper(int period, BigDecimal atrMult) {
+        return (KeltnerChannelUpperIndicator) scaledCache.computeIfAbsent(
+            new ScaledIndicatorCacheKey(IndicatorKey.KELTNER_UPPER, period, atrMult.doubleValue()),
+            key -> new KeltnerChannelUpperIndicator(keltnerMiddle(period), atrMult.doubleValue(), period));
     }
 
     /**
@@ -288,6 +342,56 @@ public final class MarketContext {
             return numToBigDecimal(MarketContext.this.highestHigh(period).getValue(checkView(index)));
         }
 
+        public BigDecimal lowestLow(int period) {
+            return lowestLow(period, barIndex);
+        }
+
+        public BigDecimal lowestLow(int period, int index) {
+            return numToBigDecimal(MarketContext.this.lowestLow(period).getValue(checkView(index)));
+        }
+
+        public BigDecimal bbMiddle(int period) {
+            return bbMiddle(period, barIndex);
+        }
+
+        public BigDecimal bbMiddle(int period, int index) {
+            return numToBigDecimal(MarketContext.this.bbMiddle(period).getValue(checkView(index)));
+        }
+
+        public BigDecimal bbUpper(int period, BigDecimal k) {
+            return bbUpper(period, k, barIndex);
+        }
+
+        public BigDecimal bbUpper(int period, BigDecimal k, int index) {
+            return numToBigDecimal(MarketContext.this.bbUpper(period, k).getValue(checkView(index)));
+        }
+
+        public BigDecimal bbLower(int period, BigDecimal k) {
+            return bbLower(period, k, barIndex);
+        }
+
+        public BigDecimal bbLower(int period, BigDecimal k, int index) {
+            return numToBigDecimal(MarketContext.this.bbLower(period, k).getValue(checkView(index)));
+        }
+
+        /** {@code (upper-lower)/middle} - the raw Bollinger Band width ratio (plan §5.3). */
+        public BigDecimal bbWidth(int period, BigDecimal k, int index) {
+            BigDecimal middle = bbMiddle(period, index);
+            if (middle.signum() == 0) {
+                return BigDecimal.ZERO;
+            }
+            return bbUpper(period, k, index).subtract(bbLower(period, k, index))
+                .divide(middle, 10, java.math.RoundingMode.HALF_UP);
+        }
+
+        public BigDecimal keltnerUpper(int period, BigDecimal atrMult) {
+            return keltnerUpper(period, atrMult, barIndex);
+        }
+
+        public BigDecimal keltnerUpper(int period, BigDecimal atrMult, int index) {
+            return numToBigDecimal(MarketContext.this.keltnerUpper(period, atrMult).getValue(checkView(index)));
+        }
+
         private int checkView(int index) {
             if (index > barIndex) {
                 throw new IllegalStateException(
@@ -301,5 +405,12 @@ public final class MarketContext {
     }
 
     private record IndicatorCacheKey(IndicatorKey key, int period) {
+    }
+
+    /**
+     * Cache key for indicators keyed on both a period and a decimal multiplier (Bollinger
+     * {@code k}, Keltner ATR multiplier) - plan §5.3.
+     */
+    private record ScaledIndicatorCacheKey(IndicatorKey key, int period, double multiplier) {
     }
 }
