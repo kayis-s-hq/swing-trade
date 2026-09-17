@@ -130,9 +130,6 @@ public class BacktestCompareService {
             foldResults.add(persistFold(config, 0, request.start(), request.end(), result));
         }
 
-        logExperiment(config, request.start(), request.end(),
-            foldResults.isEmpty() ? Map.of() : foldResults.get(foldResults.size() - 1).metrics());
-
         long trials = Math.max(1, experimentLogRepository.countDistinctParamsHashByStrategyType(config.strategyType()));
         double lastFoldSharpe = foldResults.isEmpty() ? 0.0
             : ((Number) foldResults.get(foldResults.size() - 1).metrics().getOrDefault("sharpeRatio", 0.0)).doubleValue();
@@ -140,6 +137,15 @@ public class BacktestCompareService {
             : Math.max(2, foldResults.get(foldResults.size() - 1).equityCurve().size());
         double dsr = DeflatedSharpeRatio.compute(lastFoldSharpe, (int) Math.min(trials, Integer.MAX_VALUE),
             observations, 0.0);
+
+        // Fold in the OOS Sharpe (aliased for the promotion-eligibility lookup, plan §7.4) and this
+        // run's DSR p-value before persisting, so a later findTopByVariantIdAndVersionOrderByCreatedAtDesc
+        // read can recover both without recomputing anything.
+        Map<String, Object> loggedMetrics = foldResults.isEmpty() ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(foldResults.get(foldResults.size() - 1).metrics());
+        loggedMetrics.put("oosSharpe", lastFoldSharpe);
+        loggedMetrics.put("dsrPValue", dsr);
+        logExperiment(config, request.start(), request.end(), loggedMetrics);
 
         return new BacktestCompareResponse.VariantResult(config.variantId(), config.version(), config.strategyType(),
             foldResults, dsr, trials, unstable, sharpeStdDev);

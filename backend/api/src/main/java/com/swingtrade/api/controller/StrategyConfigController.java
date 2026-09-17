@@ -5,10 +5,12 @@ import com.swingtrade.api.dto.strategy.CreateVariantRequest;
 import com.swingtrade.api.dto.strategy.CreateVersionRequest;
 import com.swingtrade.api.dto.strategy.ModeChangeRequest;
 import com.swingtrade.api.dto.strategy.ParamDefResponse;
+import com.swingtrade.api.dto.strategy.PromotionEligibilityResponse;
 import com.swingtrade.api.dto.strategy.StrategyTypeResponse;
 import com.swingtrade.api.dto.strategy.StrategyVariantResponse;
 import com.swingtrade.api.dto.strategy.ValidateParamsRequest;
 import com.swingtrade.api.dto.strategy.ValidateParamsResponse;
+import com.swingtrade.api.service.PromotionEligibilityService;
 import com.swingtrade.api.service.StrategyConfigService;
 import com.swingtrade.domain.StrategyConfig;
 import jakarta.validation.Valid;
@@ -32,9 +34,11 @@ import java.util.List;
 public class StrategyConfigController {
 
     private final StrategyConfigService service;
+    private final PromotionEligibilityService promotionEligibilityService;
 
-    public StrategyConfigController(StrategyConfigService service) {
+    public StrategyConfigController(StrategyConfigService service, PromotionEligibilityService promotionEligibilityService) {
         this.service = service;
+        this.promotionEligibilityService = promotionEligibilityService;
     }
 
     @GetMapping("/strategy-types")
@@ -84,6 +88,12 @@ public class StrategyConfigController {
     public StrategyVariantResponse changeMode(@PathVariable String variantId, @Valid @RequestBody ModeChangeRequest request) {
         StrategyConfig updated = service.changeMode(variantId, request.mode(), request.confirm());
         return StrategyVariantResponse.from(updated);
+    }
+
+    /** Plan §7.4/§8: champion/challenger promotion-eligibility checklist for a SHADOW variant. */
+    @GetMapping("/strategies/{variantId}/promotion-eligibility")
+    public PromotionEligibilityResponse promotionEligibility(@PathVariable String variantId) {
+        return promotionEligibilityService.evaluate(variantId);
     }
 
     @PostMapping("/strategies/validate")
