@@ -63,6 +63,12 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   including authoritative benchmark/universe ingestion, persistent evaluation,
   and full portfolio/live wiring.
 
+- [x] Synthesis evaluation persistence verified 2026-09-17: evaluation records and
+  measured outcomes now persist in the V51 `synthesis_evaluations` table and reload
+  after cache misses/API restarts. AOT processing, local schema migration, API boot,
+  affected backend tests, and `./bin/verify-changes` passed. Scheduled outcome
+  collection and aggregate reporting remain separate follow-ups.
+
 - [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
   as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API
   tests passed; cross-sectional rank and authoritative index ingestion remain open.
