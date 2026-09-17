@@ -35,7 +35,7 @@ public class DailyLossCircuitBreaker {
     private BigDecimal initialCapital;
 
     // Track daily P&L
-    private final Map<LocalDate, BigDecimal> dailyPnLTracker = new ConcurrentHashMap<>();
+    final Map<LocalDate, BigDecimal> dailyPnLTracker = new ConcurrentHashMap<>();
 
     // Circuit breaker state
     private volatile boolean isCircuitOpen = false;

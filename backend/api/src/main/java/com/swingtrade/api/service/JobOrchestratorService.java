@@ -450,7 +450,7 @@ public class JobOrchestratorService {
      *
      * @return true if the stage completed successfully, false if it errored, timed out, or skipped
      */
-    private boolean executeStage(UUID runId, String symbol, JobRunStage.StageName stage,
+    boolean executeStage(UUID runId, String symbol, JobRunStage.StageName stage,
                               StageExecutor executor, long timeoutSec) {
         String key = inFlightKey(runId, symbol);
         long start = System.currentTimeMillis();
@@ -616,7 +616,7 @@ public class JobOrchestratorService {
         }
     }
 
-    private StageExecutionResult stageLlmAnalysis(UUID runId, String symbol, LocalDate date) {
+    StageExecutionResult stageLlmAnalysis(UUID runId, String symbol, LocalDate date) {
         CompositeAnalysis.TechnicalScore technical;
         CompositeAnalysis.FundamentalScore fundamentals;
         boolean inputFallback = false;
@@ -648,7 +648,7 @@ public class JobOrchestratorService {
         return StageExecutionResult.completed(summary);
     }
 
-    private String stagePaperTrade(String symbol) {
+    String stagePaperTrade(String symbol) {
         return stagePaperTrade(symbol, Set.of(), false);
     }
 
@@ -1171,7 +1171,7 @@ public class JobOrchestratorService {
     }
 
     @FunctionalInterface
-    private interface StageExecutor {
+    interface StageExecutor {
         StageExecutionResult execute() throws Exception;
     }
 
@@ -1179,7 +1179,7 @@ public class JobOrchestratorService {
     private record StageDef(JobRunStage.StageName name, StageExecutor executor, long timeoutSec) {}
 
     /** A stage can complete normally or skip without being treated as an operational error. */
-    private record StageExecutionResult(JobRunStage.Status status, String summary) {
+    record StageExecutionResult(JobRunStage.Status status, String summary) {
         private static StageExecutionResult completed(String summary) {
             return new StageExecutionResult(JobRunStage.Status.COMPLETED, summary);
         }

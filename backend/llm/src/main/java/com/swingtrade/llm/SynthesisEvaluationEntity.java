@@ -74,10 +74,14 @@ public class SynthesisEvaluationEntity {
         this.eventRiskDetected = evaluation.eventRiskDetected();
         this.eventRiskReason = evaluation.eventRiskReason();
         this.recordedAt = evaluation.recordedAt();
-        applyOutcome(evaluation.outcome());
+        applyOutcomeFields(evaluation.outcome());
     }
 
     public void applyOutcome(SynthesisEvaluation.OutcomeMeasurement outcome) {
+        applyOutcomeFields(outcome);
+    }
+
+    private void applyOutcomeFields(SynthesisEvaluation.OutcomeMeasurement outcome) {
         if (outcome == null) {
             outcomeHorizonDays = null;
             outcomeForwardReturnPct = null;

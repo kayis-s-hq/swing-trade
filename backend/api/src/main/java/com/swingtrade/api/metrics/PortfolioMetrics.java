@@ -46,20 +46,20 @@ public class PortfolioMetrics {
                 .register(meterRegistry);
     }
 
-    public void registerActivePositionsGauge(Object positionTracker) {
+    public final void registerActivePositionsGauge(Object positionTracker) {
         Gauge.builder("portfolio.active_positions", positionTracker,
                 p -> ((TradingService) p).getOpenPositions().size())
                 .description("Number of active positions")
                 .register(meterRegistry);
     }
 
-    public void registerTotalPnLGauge(Object portfolio, java.util.function.ToDoubleFunction<Object> pnlProvider) {
+    public final void registerTotalPnLGauge(Object portfolio, java.util.function.ToDoubleFunction<Object> pnlProvider) {
         Gauge.builder("portfolio.total_pnl", portfolio, pnlProvider)
                 .description("Total portfolio P&L")
                 .register(meterRegistry);
     }
 
-    public void registerDailyReturnGauge(Object portfolio, java.util.function.ToDoubleFunction<Object> dailyReturnProvider) {
+    public final void registerDailyReturnGauge(Object portfolio, java.util.function.ToDoubleFunction<Object> dailyReturnProvider) {
         Gauge.builder("portfolio.daily_return", portfolio, dailyReturnProvider)
                 .description("Daily portfolio return percentage")
                 .register(meterRegistry);

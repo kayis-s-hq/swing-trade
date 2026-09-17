@@ -5,17 +5,22 @@ import com.swingtrade.data.repository.JobRunRepository;
 import com.swingtrade.data.repository.JobRunStageRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.domain.CompositeAnalysis;
-import com.swingtrade.domain.LlmAnalysisResult;
 import com.swingtrade.domain.SynthesisResult;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.OhlcvCandle;
-import com.swingtrade.domain.store.*;
+import com.swingtrade.domain.store.BacktestResultStore;
+import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.LlmAnalysisResultStore;
+import com.swingtrade.domain.store.SentimentStore;
+import com.swingtrade.domain.store.SignalStore;
+import com.swingtrade.domain.store.WatchlistStore;
 import com.swingtrade.domain.service.TradingService;
-import com.swingtrade.llm.service.*;
+import com.swingtrade.llm.service.NewsIngestionService;
+import com.swingtrade.llm.service.SentimentService;
+import com.swingtrade.llm.service.SynthesisService;
 import com.swingtrade.strategy.BacktestEngine;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.math.BigDecimal;
 import java.util.List;
@@ -25,7 +30,12 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.argThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class JobOrchestratorLlmAnalysisTest {
     @Test void fallbackIsPersistedAndStageCompletes() throws Exception {
@@ -52,9 +62,7 @@ class JobOrchestratorLlmAnalysisTest {
             mock(TechnicalAnalysisService.class), mock(FundamentalScorer.class), compositeService, synthesisService,
             backtestStore, resultStore, mock(LlmAnalysisGate.class), sentimentStore, 1, 1000, false, true, true);
 
-        Method stage = JobOrchestratorService.class.getDeclaredMethod("stageLlmAnalysis", UUID.class, String.class, LocalDate.class);
-        stage.setAccessible(true);
-        stage.invoke(service, UUID.randomUUID(), "TCS", LocalDate.now());
+        service.stageLlmAnalysis(UUID.randomUUID(), "TCS", LocalDate.now());
 
         verify(resultStore).saveOrUpdate(argThat(r -> !r.success() && r.fallbackUsed()));
     }
@@ -143,21 +151,12 @@ class JobOrchestratorLlmAnalysisTest {
             mock(SynthesisService.class), mock(BacktestResultStore.class), mock(LlmAnalysisResultStore.class),
             mock(LlmAnalysisGate.class), mock(SentimentStore.class), 1, 1000, false, true, true);
 
-        Class<?> executorIfc = Class.forName("com.swingtrade.api.service.JobOrchestratorService$StageExecutor");
-        Class<?> resultCls = Class.forName("com.swingtrade.api.service.JobOrchestratorService$StageExecutionResult");
-        var resultCtor = resultCls.getDeclaredConstructor(com.swingtrade.domain.JobRunStage.Status.class, String.class);
-        resultCtor.setAccessible(true);
-        Object sleepyExecutor = java.lang.reflect.Proxy.newProxyInstance(
-            executorIfc.getClassLoader(), new Class<?>[]{executorIfc},
-            (proxy, method, args) -> {
-                Thread.sleep(2000);
-                return resultCtor.newInstance(com.swingtrade.domain.JobRunStage.Status.COMPLETED, "should not get here");
-            });
-
-        Method executeStage = JobOrchestratorService.class.getDeclaredMethod("executeStage",
-            UUID.class, String.class, com.swingtrade.domain.JobRunStage.StageName.class, executorIfc, long.class);
-        executeStage.setAccessible(true);
-        boolean succeeded = (boolean) executeStage.invoke(service, UUID.randomUUID(), "TCS",
+        JobOrchestratorService.StageExecutor sleepyExecutor = () -> {
+            Thread.sleep(2000);
+            return new JobOrchestratorService.StageExecutionResult(
+                com.swingtrade.domain.JobRunStage.Status.COMPLETED, "should not get here");
+        };
+        boolean succeeded = service.executeStage(UUID.randomUUID(), "TCS",
             com.swingtrade.domain.JobRunStage.StageName.LLM_ANALYSIS, sleepyExecutor, 1L);
 
         assertThat(succeeded).isFalse();
@@ -182,15 +181,11 @@ class JobOrchestratorLlmAnalysisTest {
                                     BacktestResultStore bs, SentimentStore st, CompositeAnalysis composite) throws Exception {
         var service = newService(mock(LlmAnalysisGate.class), mock(SentimentGate.class), mock(SignalStore.class),
             mock(CandleStore.class), mock(TradingService.class), true, true, cs, ss, rs, bs, st);
-        Method stage = JobOrchestratorService.class.getDeclaredMethod("stageLlmAnalysis", UUID.class, String.class, LocalDate.class);
-        stage.setAccessible(true);
-        stage.invoke(service, UUID.randomUUID(), "TCS", LocalDate.now());
+        service.stageLlmAnalysis(UUID.randomUUID(), "TCS", LocalDate.now());
     }
 
     private static String invokePaperTrade(JobOrchestratorService service) throws Exception {
-        Method stage = JobOrchestratorService.class.getDeclaredMethod("stagePaperTrade", String.class);
-        stage.setAccessible(true);
-        return (String) stage.invoke(service, "TCS");
+        return service.stagePaperTrade("TCS");
     }
 
     private static JobOrchestratorService newService(LlmAnalysisGate gate, SentimentGate sentiment,

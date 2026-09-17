@@ -78,6 +78,11 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   November 8 Muhurat session as partial. `MarketCalendar` now honors exchange-declared partial
   sessions even when they fall on a weekend; full data tests and `./bin/verify-changes` passed.
 
+- [x] LLM news filtering hardened 2026-09-17: future-dated articles and short, untrusted
+  articles without trading relevance are now rejected fail-closed instead of being admitted by
+  the baseline relevance score. Backend tests and `./bin/verify-changes` passed; the LLM module's
+  aggregate coverage is 45% (1,408/3,121 lines), with external source/server adapters still open.
+
 - [x] Local V62 runtime migration verified 2026-09-17: the DevStack PostgreSQL database advanced
   from schema V61 to V62, read-only queries confirmed the corrected 2026 holiday rows, and the
   API health endpoint returned 200 with PostgreSQL reported `UP`. No application data was reset.
