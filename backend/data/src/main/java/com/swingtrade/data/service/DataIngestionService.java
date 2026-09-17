@@ -88,15 +88,16 @@ public class DataIngestionService {
      * @param yearsBack number of years to backfill
      */
     @Transactional
-    public void backfillStockData(String stockSymbol, int yearsBack) {
+    public BackfillOutcome backfillStockData(String stockSymbol, int yearsBack) {
         logger.info("Starting backfill for {}: {} years of historical data", stockSymbol, yearsBack);
 
         LocalDate toDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
         LocalDate fromDate = toDate.minusYears(yearsBack);
 
-        processStockData(stockSymbol, fromDate, toDate);
+        BackfillOutcome outcome = processStockDataWithOutcome(stockSymbol, fromDate, toDate);
 
-        logger.info("Backfill completed for {}", stockSymbol);
+        logger.info("Backfill completed for {}: {}", stockSymbol, outcome.sourceOutcome());
+        return outcome;
     }
 
     /**
@@ -107,13 +108,27 @@ public class DataIngestionService {
      * @param toDate end date
      */
     public void processStockData(String symbol, LocalDate fromDate, LocalDate toDate) {
+        processStockDataWithOutcome(symbol, fromDate, toDate);
+    }
+
+    /** Returns source quality rather than making callers infer it from a candle count. */
+    public BackfillOutcome processStockDataWithOutcome(String symbol, LocalDate fromDate, LocalDate toDate) {
         logger.info("Processing data for {} from {} to {}", symbol, fromDate, toDate);
 
         // Batch-fetch all candles in one API call
-        Iterable<CandleData> candles = marketDataClientProvider.getClient().fetchCandles(symbol, fromDate, toDate);
+        Iterable<CandleData> candles;
+        try {
+            candles = marketDataClientProvider.getClient().fetchCandles(symbol, fromDate, toDate);
+        } catch (RuntimeException e) {
+            logger.warn("Market data source failed for {}: {}", symbol, e.getMessage());
+            return new BackfillOutcome("TRANSIENT_SOURCE_FAILURE", 0, 0, 0, e.getMessage());
+        }
         int saved = 0;
         int skipped = 0;
+        int invalid = 0;
+        int fetched = 0;
         for (CandleData candle : candles) {
+            fetched++;
             if (isNseTradingSession(candle.date()) && CandleValidator.isValid(candle)) {
                 Integer insertedResult = txTemplate.execute(status -> saveCandle(symbol, candle));
                 int inserted = insertedResult == null ? 1 : insertedResult;
@@ -124,11 +139,18 @@ public class DataIngestionService {
                 }
             } else {
                 skipped++;
+                invalid++;
             }
         }
         logger.info("Processed {}: {} candles fetched, {} newly saved, {} rejected by validation",
             symbol, saved + skipped, saved, skipped);
+        String outcome = fetched == 0 ? "NO_USABLE_DATA" : invalid > 0 && saved == 0
+            ? "INVALID_ROWS_REJECTED" : "DATA_RECEIVED";
+        return new BackfillOutcome(outcome, fetched, saved, invalid, null);
     }
+
+    public record BackfillOutcome(String sourceOutcome, int fetchedRows, int savedRows,
+                                  int invalidRows, String errorMessage) {}
 
     /**
      * Process a single stock for a specific date.

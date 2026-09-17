@@ -56,6 +56,7 @@ public class JobRunEntity {
 
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
+    @Column(name = "candidate_scan_run_id") private UUID candidateScanRunId;
 
     public JobRunEntity() {}
 
@@ -107,4 +108,6 @@ public class JobRunEntity {
     public void setFailedCount(int failedCount) { this.failedCount = failedCount; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public UUID getCandidateScanRunId() { return candidateScanRunId; }
+    public void setCandidateScanRunId(UUID candidateScanRunId) { this.candidateScanRunId = candidateScanRunId; }
 }

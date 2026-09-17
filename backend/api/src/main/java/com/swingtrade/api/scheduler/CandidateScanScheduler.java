@@ -1,8 +1,6 @@
 package com.swingtrade.api.scheduler;
 
 import com.swingtrade.api.service.CandidateScanService;
-import com.swingtrade.api.service.JobOrchestratorService;
-import com.swingtrade.domain.JobRun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,26 +21,16 @@ public class CandidateScanScheduler {
     private static final Logger logger = LoggerFactory.getLogger(CandidateScanScheduler.class);
 
     private final CandidateScanService candidateScanService;
-    private final JobOrchestratorService orchestratorService;
     private final boolean schedulerEnabled;
     private final boolean candidateScanSchedulerEnabled;
 
     @Autowired
     public CandidateScanScheduler(CandidateScanService candidateScanService,
-                                  JobOrchestratorService orchestratorService,
                                   @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled,
                                   @Value("${app.features.candidate-scan.scheduler.enabled:true}") boolean candidateScanSchedulerEnabled) {
         this.candidateScanService = candidateScanService;
-        this.orchestratorService = orchestratorService;
         this.schedulerEnabled = schedulerEnabled;
         this.candidateScanSchedulerEnabled = candidateScanSchedulerEnabled;
-    }
-
-    /** Backwards-compatible constructor for scheduler unit tests. */
-    public CandidateScanScheduler(CandidateScanService candidateScanService,
-                                  boolean schedulerEnabled,
-                                  boolean candidateScanSchedulerEnabled) {
-        this(candidateScanService, null, schedulerEnabled, candidateScanSchedulerEnabled);
     }
 
     @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Kolkata")
@@ -59,35 +47,10 @@ public class CandidateScanScheduler {
         logger.info("Starting scheduled candidate scan");
         try {
             var run = candidateScanService.start();
-            if (run != null && orchestratorService != null) {
-                Thread.startVirtualThread(() -> awaitScanThenOrchestrate(run.getRunId()));
-            }
+            if (run != null) candidateScanService.scheduleHandoff(run.getRunId());
         } catch (IllegalStateException e) {
             logger.info("Skipping scheduled candidate scan: a scan is already in progress ({})", e.getMessage());
         }
     }
 
-    private void awaitScanThenOrchestrate(java.util.UUID runId) {
-        try {
-            while (true) {
-                var run = candidateScanService.getRun(runId);
-                if (run == null || !"RUNNING".equals(run.getStatus()) && !"PAUSED".equals(run.getStatus())) {
-                    break;
-                }
-                Thread.sleep(30_000L);
-            }
-            var run = candidateScanService.getRun(runId);
-            if (run != null && "COMPLETED".equals(run.getStatus()) && !orchestratorService.findActiveRun().isPresent()) {
-                logger.info("Candidate scan {} completed; starting scheduled orchestration", runId);
-                orchestratorService.startRun(JobRun.TriggerType.SCHEDULED);
-            } else {
-                logger.info("Candidate scan {} ended with status {}; orchestration not started", runId,
-                    run == null ? "MISSING" : run.getStatus());
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } catch (Exception e) {
-            logger.warn("Unable to start orchestration after candidate scan {}: {}", runId, e.getMessage());
-        }
-    }
 }

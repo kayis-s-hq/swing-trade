@@ -4,6 +4,8 @@ import com.swingtrade.data.entity.CandidateScanResultEntity;
 import com.swingtrade.data.entity.CandidateScanRunEntity;
 import com.swingtrade.data.repository.CandidateScanResultRepository;
 import com.swingtrade.data.repository.CandidateScanRunRepository;
+import com.swingtrade.data.repository.CandidateHistoryEligibilityRepository;
+import com.swingtrade.data.entity.CandidateHistoryEligibilityEntity;
 import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.data.service.AppSettingsService;
@@ -64,6 +66,7 @@ public class CandidateScanService {
     private final FyersSymbolRepository symbolRepository;
     private final CandidateScanRunRepository runRepository;
     private final CandidateScanResultRepository resultRepository;
+    private final CandidateHistoryEligibilityRepository eligibilityRepository;
     private final DataIngestionService ingestionService;
     private final WatchlistService watchlistService;
     private final CandleStore candleStore;
@@ -87,6 +90,7 @@ public class CandidateScanService {
     public CandidateScanService(FyersSymbolRepository symbolRepository,
                                 CandidateScanRunRepository runRepository,
                                 CandidateScanResultRepository resultRepository,
+                                CandidateHistoryEligibilityRepository eligibilityRepository,
                                 DataIngestionService ingestionService,
                                 WatchlistService watchlistService,
                                 AppSettingsService appSettingsService,
@@ -99,6 +103,7 @@ public class CandidateScanService {
         this.symbolRepository = symbolRepository;
         this.runRepository = runRepository;
         this.resultRepository = resultRepository;
+        this.eligibilityRepository = eligibilityRepository;
         this.ingestionService = ingestionService;
         this.watchlistService = watchlistService;
         this.appSettingsService = appSettingsService;
@@ -122,7 +127,7 @@ public class CandidateScanService {
                                 PriceActionSignalEngine signalEngine,
                                 BacktestEngine backtestEngine,
                                 int backfillYears, long delayMs, int maxConcurrent) {
-        this(symbolRepository, runRepository, resultRepository, ingestionService, null,
+        this(symbolRepository, runRepository, resultRepository, null, ingestionService, null,
             appSettingsService, candleStore, signalEngine, backtestEngine,
             backfillYears, delayMs, maxConcurrent);
     }
@@ -144,16 +149,28 @@ public class CandidateScanService {
     }
 
     @Transactional
-    public CandidateScanRunEntity start() {
+    public CandidateScanRunEntity start() { return start(false); }
+
+    /** Scheduled scans persist a handoff request; manual scans intentionally remain scan-only. */
+    @Transactional
+    public CandidateScanRunEntity startScheduled() {
+        CandidateScanRunEntity run = start(true);
+        return run;
+    }
+
+    /** Marks a just-created scan as eligible for the durable scheduled handoff. */
+    @Transactional
+    public void scheduleHandoff(UUID runId) {
+        CandidateScanRunEntity run = getRun(runId);
+        if (run != null) { run.setOrchestrationStatus("PENDING"); runRepository.save(run); }
+    }
+
+    private CandidateScanRunEntity start(boolean scheduled) {
         UUID existing = activeRun.get();
         if (existing != null || runRepository.existsByStatus("RUNNING")) {
             throw new IllegalStateException("Candidate scan already running: " + existing);
         }
 
-        // Candidate Explorer is a current-run view, not a scan archive. Remove the
-        // previous run and its child results before creating the replacement snapshot.
-        resultRepository.deleteAllInBatch();
-        runRepository.deleteAllInBatch();
         maxConcurrent = configuredMaxConcurrent();
         semaphore = new Semaphore(maxConcurrent);
 
@@ -169,6 +186,7 @@ public class CandidateScanService {
         run.setStatus("RUNNING");
         run.setTotalSymbols(symbols.size());
         run.setStartedAt(LocalDateTime.now(MARKET_ZONE));
+        run.setOrchestrationStatus(scheduled ? "PENDING" : "NOT_REQUIRED");
         runRepository.save(run);
         activeRun.set(run.getRunId());
         cancellations.put(run.getRunId(), new AtomicBoolean(false));
@@ -303,6 +321,10 @@ public class CandidateScanService {
         return runRepository.findByRunId(runId).orElse(null);
     }
 
+    public boolean hasActiveRun() {
+        return activeRun.get() != null || runRepository.existsByStatus("RUNNING") || runRepository.existsByStatus("PAUSED");
+    }
+
     public List<CandidateScanResultEntity> getResults(UUID runId, int offset, int limit) {
         return getResultsPage(runId, offset, limit, "", "").items();
     }
@@ -403,6 +425,10 @@ public class CandidateScanService {
             run.setStatus(isCancelled(runId) || error != null ? "CANCELLED" : "COMPLETED");
             run.setCompletedAt(LocalDateTime.now(MARKET_ZONE));
             if (error != null) run.setErrorMessage(error.getMessage());
+            if ("COMPLETED".equals(run.getStatus()) && run.getQualifiedSymbols() == 0
+                && "PENDING".equals(run.getOrchestrationStatus())) {
+                run.setOrchestrationStatus("NOT_REQUIRED");
+            }
             runRepository.save(run);
             publish(runId, run.getStatus().equals("COMPLETED") ? "RUN_COMPLETED" : "RUN_CANCELLED",
                 null, error == null ? "SUCCESS" : "WARN",
@@ -418,11 +444,19 @@ public class CandidateScanService {
         int backfillYears = configuredBackfillYears();
         int candles = (int) candleStore.countBySymbol(symbol);
         boolean fetched = false;
+        DataIngestionService.BackfillOutcome outcome = null;
+        CandidateHistoryEligibilityEntity eligibility = eligibilityRepository == null ? null
+            : eligibilityRepository.findById(symbol).orElse(null);
         publish(runId, "STAGE_STARTED", symbol, "INFO", "Data: checking OHLCV history.");
+        LocalDate today = LocalDate.now(MARKET_ZONE);
+        if (candles < MIN_CANDLES && eligibility != null && eligibility.getRetryAfter() != null
+            && today.isBefore(eligibility.getRetryAfter())) {
+            return saveInsufficientResult(runId, symbol, candles, eligibility, "History retry scheduled");
+        }
         if (candles < MIN_CANDLES) {
             publish(runId, "STAGE_STARTED", symbol, "INFO",
                 "Data: fetching " + backfillYears + " years of OHLCV history.");
-            ingestionService.backfillStockData(symbol, backfillYears);
+            outcome = ingestionService.backfillStockData(symbol, backfillYears);
             fetched = true;
             candles = (int) candleStore.countBySymbol(symbol);
         }
@@ -432,9 +466,32 @@ public class CandidateScanService {
         result.setRunId(runId);
         result.setSymbol(symbol);
         result.setCandleCount(candles);
+        List<com.swingtrade.domain.OhlcvCandle> availableCandles = new ArrayList<>(candleStore.findAllBySymbolOrderByDateDesc(symbol));
+        availableCandles.sort(java.util.Comparator.comparing(com.swingtrade.domain.OhlcvCandle::date));
+        if (!availableCandles.isEmpty()) {
+            result.setFirstAvailableDate(availableCandles.getFirst().date());
+            result.setLastAvailableDate(availableCandles.getLast().date());
+        }
+        if (outcome != null) {
+            result.setSourceOutcome(outcome.sourceOutcome());
+            result.setInvalidRows(outcome.invalidRows());
+        } else if (eligibility != null) {
+            result.setSourceOutcome(eligibility.getSourceOutcome());
+            result.setInvalidRows(eligibility.getInvalidRows());
+        } else result.setSourceOutcome("EXISTING_HISTORY");
         if (candles < MIN_CANDLES) {
+            if (outcome != null && "TRANSIENT_SOURCE_FAILURE".equals(outcome.sourceOutcome())) {
+                result.setDataStatus("ERROR");
+                result.setReason("Market-data source failed; history will be retried on the next scan");
+                result.setErrorMessage(outcome.errorMessage());
+                resultRepository.save(result);
+                return false;
+            }
             result.setDataStatus("INSUFFICIENT");
-            result.setReason("Insufficient OHLCV history (" + candles + " candles)");
+            LocalDate retryAfter = today.plusDays(7);
+            result.setRetryAfter(retryAfter);
+            result.setReason("Insufficient OHLCV history (" + candles + " candles); retry after " + retryAfter);
+            persistEligibility(symbol, result, retryAfter, outcome == null ? null : outcome.errorMessage());
             resultRepository.save(result);
             return false;
         }
@@ -499,6 +556,27 @@ public class CandidateScanService {
         }
         resultRepository.save(result);
         return qualified;
+    }
+
+    private boolean saveInsufficientResult(UUID runId, String symbol, int candles,
+                                           CandidateHistoryEligibilityEntity eligibility, String reason) {
+        CandidateScanResultEntity result = new CandidateScanResultEntity();
+        result.setRunId(runId); result.setSymbol(symbol); result.setCandleCount(candles);
+        result.setDataStatus("INSUFFICIENT"); result.setSourceOutcome(eligibility.getSourceOutcome());
+        result.setInvalidRows(eligibility.getInvalidRows()); result.setFirstAvailableDate(eligibility.getFirstAvailableDate());
+        result.setLastAvailableDate(eligibility.getLastAvailableDate()); result.setRetryAfter(eligibility.getRetryAfter());
+        result.setReason(reason + "; retry after " + eligibility.getRetryAfter());
+        resultRepository.save(result);
+        return false;
+    }
+
+    private void persistEligibility(String symbol, CandidateScanResultEntity result, LocalDate retryAfter, String error) {
+        if (eligibilityRepository == null) return;
+        CandidateHistoryEligibilityEntity record = eligibilityRepository.findById(symbol).orElseGet(CandidateHistoryEligibilityEntity::new);
+        record.setSymbol(symbol); record.setCandleCount(result.getCandleCount()); record.setFirstAvailableDate(result.getFirstAvailableDate());
+        record.setLastAvailableDate(result.getLastAvailableDate()); record.setSourceOutcome(result.getSourceOutcome());
+        record.setInvalidRows(result.getInvalidRows()); record.setRetryAfter(retryAfter); record.setErrorMessage(error);
+        record.setUpdatedAt(LocalDateTime.now(MARKET_ZONE)); eligibilityRepository.save(record);
     }
 
     private String qualificationReason(SignalResult signal, BacktestResult backtest, BacktestResult oosBacktest, int minTrades,

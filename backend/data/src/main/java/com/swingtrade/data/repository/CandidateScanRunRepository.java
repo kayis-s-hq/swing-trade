@@ -12,4 +12,5 @@ public interface CandidateScanRunRepository extends JpaRepository<CandidateScanR
     List<CandidateScanRunEntity> findByStatus(String status);
     List<CandidateScanRunEntity> findTop20ByOrderByStartedAtDesc();
     boolean existsByStatus(String status);
+    List<CandidateScanRunEntity> findByStatusAndOrchestrationStatus(String status, String orchestrationStatus);
 }

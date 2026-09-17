@@ -37,6 +37,10 @@ public class CandidateScanRunEntity {
     private LocalDateTime completedAt;
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
+    @Column(name = "orchestration_status", nullable = false, length = 16)
+    private String orchestrationStatus = "NOT_REQUIRED";
+    @Column(name = "orchestration_job_run_id") private UUID orchestrationJobRunId;
+    @Column(name = "orchestration_error", columnDefinition = "TEXT") private String orchestrationError;
 
     public Long getId() { return id; }
     public UUID getRunId() { return runId; }
@@ -57,4 +61,10 @@ public class CandidateScanRunEntity {
     public void setCompletedAt(LocalDateTime value) { this.completedAt = value; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String value) { this.errorMessage = value; }
+    public String getOrchestrationStatus() { return orchestrationStatus; }
+    public void setOrchestrationStatus(String value) { this.orchestrationStatus = value; }
+    public UUID getOrchestrationJobRunId() { return orchestrationJobRunId; }
+    public void setOrchestrationJobRunId(UUID value) { this.orchestrationJobRunId = value; }
+    public String getOrchestrationError() { return orchestrationError; }
+    public void setOrchestrationError(String value) { this.orchestrationError = value; }
 }

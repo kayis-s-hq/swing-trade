@@ -429,6 +429,9 @@ public class SettingsController {
     @GetMapping("/settings/pi/status")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getPiServerStatus() {
         Map<String, Object> result = new LinkedHashMap<>();
+        // Preserve the existing response while exposing lazy-start/idle-stop diagnostics.
+        Map<String, Object> lifecycle = piServerManager.lifecycleStatus();
+        if (lifecycle != null) result.putAll(lifecycle);
         boolean running = piServerManager.isRunning();
         result.put("running", running);
         result.put("success", true);

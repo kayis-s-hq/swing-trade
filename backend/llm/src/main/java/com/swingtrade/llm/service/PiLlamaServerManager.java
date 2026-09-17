@@ -59,6 +59,11 @@ public class PiLlamaServerManager implements LlmServerManager {
         return t;
     });
     private final AtomicLong idleCheckTime = new AtomicLong(0);
+    private final AtomicLong startAttempts = new AtomicLong(0);
+    private final AtomicLong idleStops = new AtomicLong(0);
+    private volatile String lifecycleState = "STOPPED";
+    private volatile String lastFailureReason;
+    private volatile long lastReadinessMillis = -1;
 
     // Requests currently being served. The idle monitor refuses to stop the
     // server while this is non-zero (see beginRequest/endRequest).
@@ -109,6 +114,7 @@ public class PiLlamaServerManager implements LlmServerManager {
             logger.info("llama-server on Pi already inference-ready on {}:{} (adopting existing process)",
                     sshHost, port);
             running = true;
+            lifecycleState = "READY";
             startIdleMonitor();
             return;
         }
@@ -123,12 +129,16 @@ public class PiLlamaServerManager implements LlmServerManager {
         }
 
         try {
+            startAttempts.incrementAndGet();
+            lifecycleState = "STARTING";
             String modelPath = getModelPath();
             logger.info("Starting llama-server on {}:{} (model: {}, threads: {}, context: {})",
                     sshHost, port, modelPath, threads, contextSize);
             startServer(modelPath);
             logger.info("llama-server started successfully on {}:{}", sshHost, port);
         } catch (Exception e) {
+            lifecycleState = "FAILED";
+            lastFailureReason = e.getMessage();
             logger.error("Failed to start llama-server on Pi: {}", e.getMessage(), e);
             throw new IllegalStateException("llama-server failed to start on Pi: " + e.getMessage(), e);
         } finally {
@@ -152,6 +162,7 @@ public class PiLlamaServerManager implements LlmServerManager {
             logger.warn("Failed to stop llama-server on Pi: {}", e.getMessage());
         }
         running = false;
+        lifecycleState = "STOPPED";
         cancelIdleMonitor();
         logger.info("llama-server stopped on Pi");
     }
@@ -181,6 +192,7 @@ public class PiLlamaServerManager implements LlmServerManager {
     }
 
     private void startServer(String modelPath) throws Exception {
+        long startedAt = System.currentTimeMillis();
         String binPath = appSettingsStore.get("llamacpp.bin")
                 .orElse("/home/dietpi/llama.cpp/build/bin/llama-server");
 
@@ -213,6 +225,9 @@ public class PiLlamaServerManager implements LlmServerManager {
         }
 
         running = true;
+        lifecycleState = "READY";
+        lastFailureReason = null;
+        lastReadinessMillis = System.currentTimeMillis() - startedAt;
         idleCheckTime.set(System.currentTimeMillis());
         startIdleMonitor();
     }
@@ -239,6 +254,7 @@ public class PiLlamaServerManager implements LlmServerManager {
 
                 logger.info("llama-server on Pi idle for {}s >= {}s, auto-stopping",
                         idleSeconds, idleTimeoutSec);
+                idleStops.incrementAndGet();
                 stop();
             } catch (Exception e) {
                 logger.debug("Idle monitor check failed: {}", e.getMessage());
@@ -354,6 +370,19 @@ public class PiLlamaServerManager implements LlmServerManager {
     private String getModelPath() {
         return appSettingsStore.get("llamacpp.model")
                 .orElse("/home/dietpi/.synapse/models/Qwen3.5-2B_Q4_k_m.gguf");
+    }
+
+    /** Additive status used by monitoring without changing LLM request behavior. */
+    public java.util.Map<String, Object> lifecycleStatus() {
+        return java.util.Map.ofEntries(
+            java.util.Map.entry("state", lifecycleState),
+            java.util.Map.entry("running", running),
+            java.util.Map.entry("startAttempts", startAttempts.get()),
+            java.util.Map.entry("idleStops", idleStops.get()),
+            java.util.Map.entry("inFlightRequests", inFlightRequests.get()),
+            java.util.Map.entry("modelPath", getModelPath()),
+            java.util.Map.entry("readinessMillis", lastReadinessMillis),
+            java.util.Map.entry("failureReason", lastFailureReason == null ? "" : lastFailureReason));
     }
 
     private String readPiLog() {

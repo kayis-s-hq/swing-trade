@@ -217,6 +217,11 @@ public class JobOrchestratorService {
      *     before either has persisted its RUNNING row.
      */
     public JobRun startRun(JobRun.TriggerType triggerType) {
+        return startRun(triggerType, null);
+    }
+
+    /** Starts a run with an internal link to the scheduled candidate scan that selected it. */
+    public JobRun startRun(JobRun.TriggerType triggerType, UUID candidateScanRunId) {
         LocalDate today = LocalDate.now(IST);
         JobRun run;
         synchronized (runStartLock) {
@@ -232,7 +237,9 @@ public class JobOrchestratorService {
                 java.time.LocalDateTime.now(IST),
                 null, 0, 0, 0, null
             );
-            jobRunRepository.save(JobRunEntity.fromDomain(run));
+            JobRunEntity entity = JobRunEntity.fromDomain(run);
+            entity.setCandidateScanRunId(candidateScanRunId);
+            jobRunRepository.save(entity);
         }
         jobMetrics.recordRunStarted();
 
