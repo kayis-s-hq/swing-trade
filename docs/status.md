@@ -13,6 +13,10 @@ Last checked: 2026-09-17 (strategy provenance verification)
   preserving fail-closed behavior for rows without either timestamp. Schema v61 and the
   change-aware backend verification passed.
 
+- [x] Historical keyword fallback date corrected 2026-09-17: an LLM outage during analysis of
+  an earlier trading date now persists the keyword result under that requested date instead of
+  silently using the runtime date. LLM tests and `./bin/verify-changes` passed.
+
 - [x] Local runtime revalidation 2026-09-17: the API migrated the PostgreSQL-backed schema to
   v55, reported healthy database/readiness status, and served
   `GET /api/signals/gate-effectiveness` successfully (empty result set in the current data window).

@@ -269,7 +269,7 @@ public class SentimentService {
                 logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", stockSymbol, LlmErrorUtils.describeError(llmEx));
                 // Build a simple result from headlines
                 List<String> headlines = newsContent.stream().toList();
-                SentimentResult fallback = keywordBasedSentiment(stockSymbol, headlines);
+                SentimentResult fallback = keywordBasedSentiment(stockSymbol, date, headlines);
                 analysisResult = new SentimentOutput(
                         switch (fallback.score()) {
                             case POSITIVE -> SentimentType.POSITIVE;
@@ -729,7 +729,8 @@ public class SentimentService {
      * Classifies each headline by its overall sentiment using phrase matching,
      * then aggregates into a composite result.
      */
-    private SentimentResult keywordBasedSentiment(String symbol, List<String> headlines) {
+    private SentimentResult keywordBasedSentiment(String symbol, LocalDate analysisDate,
+                                                  List<String> headlines) {
         int posCount = 0, negCount = 0, neuCount = 0;
         List<String> posHeadlines = new ArrayList<>();
         List<String> negHeadlines = new ArrayList<>();
@@ -794,7 +795,7 @@ public class SentimentService {
         List<String> uniqueFlags = allFlags.stream().distinct().toList();
         List<String> uniqueCatalysts = allCatalysts.stream().distinct().toList();
 
-        return SentimentResult.create(symbol, LocalDate.now(), score,
+        return SentimentResult.create(symbol, analysisDate, score,
                 reasoning.toString(), "", confidence,
                 uniqueFlags.isEmpty() ? List.of() : uniqueFlags,
                 uniqueCatalysts.isEmpty() ? List.of() : uniqueCatalysts);
