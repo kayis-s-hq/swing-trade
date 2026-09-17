@@ -211,7 +211,7 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   suite and `./bin/verify-changes` passed.
 
 - [x] Runtime API verification extended 2026-09-17: against the existing PostgreSQL
-  development database (schema V50), `/api/health` returned 200, data validation returned
+  development database (schema V62), `/api/health` returned 200, data validation returned
   200 with persisted TCS gap results, and CSV export returned 200 with attachment headers
   and candle rows. No data was reset.
 
