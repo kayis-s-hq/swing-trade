@@ -186,6 +186,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   and return gauges now read from the core `TradingService` instead of a hardcoded zero or an
   API-to-broker concrete dependency. Metric registration coverage and `./bin/verify-changes` passed.
 
+- [x] API latency metrics verified 2026-09-17: the servlet layer now records
+  `api_request_duration_seconds` with bounded method/status tags, including requests whose handler
+  fails. Filter coverage and `./bin/verify-changes` passed.
+
 - [x] Incremental backfill verified 2026-09-17: `POST /api/data/pull/incremental` now exposes
   bounded single-symbol pulls, `getExistingDataWindow` reports stored bounds, routine backfills skip
   an already populated tail, long ranges are split into configurable 30-day provider requests, and
