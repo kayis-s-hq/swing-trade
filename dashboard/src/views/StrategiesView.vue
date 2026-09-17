@@ -365,16 +365,110 @@
         <!-- Live shadow leaderboard -->
         <section class="card-panel p-5">
           <h2 class="mb-3 text-lg font-semibold text-text-primary">Live shadow leaderboard</h2>
-          <div class="rounded-lg border border-dashed border-border-default p-6 text-center">
-            <p class="text-sm font-medium text-text-primary">Coming soon</p>
+          <p class="mb-4 text-xs text-text-muted">
+            Per-portfolio equity/open positions and gate-blocked signal aggregates are not yet
+            exposed by any backend endpoint. Promotion eligibility below reflects
+            PromotionEligibilityChecker output; nothing here auto-promotes.
+          </p>
+
+          <div
+            v-if="activeVariants.length === 0"
+            class="rounded-lg border border-dashed border-border-default p-6 text-center"
+          >
+            <p class="text-sm font-medium text-text-primary">No active variants</p>
             <p class="mt-1 text-xs text-text-muted">
-              No backend endpoint currently exposes per-portfolio equity/open positions,
-              gate-blocked signal aggregates, or a promotion-eligibility check
-              (PromotionEligibilityChecker has no REST endpoint yet). This section will render
-              real data — including an ELIGIBLE / NOT_ELIGIBLE / INSUFFICIENT_SAMPLE checklist,
-              always shown in neutral styling since promotion still requires manual
-              confirmation — once those endpoints exist.
+              Set a variant to SHADOW or CHAMPION mode to see it here.
             </p>
+          </div>
+
+          <div v-else class="flex flex-col gap-4">
+            <div
+              v-for="variant in activeVariants"
+              :key="variant.variantId"
+              class="rounded-lg border border-border-subtle p-4"
+            >
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-sm font-semibold text-text-primary">{{ variant.variantId }}</span>
+                <span
+                  v-if="variant.mode === 'CHAMPION'"
+                  class="rounded-full bg-bg-secondary px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-text-muted"
+                >
+                  Current champion
+                </span>
+              </div>
+
+              <template v-if="variant.mode === 'CHAMPION'">
+                <p class="text-xs text-text-muted">
+                  This is the current champion. There is no promotion checklist to compare it
+                  against.
+                </p>
+              </template>
+
+              <template v-else>
+                <div v-if="store.promotionEligibilityLoading[variant.variantId]" class="py-4">
+                  <LoadingSpinner message="Checking promotion eligibility..." />
+                </div>
+
+                <div
+                  v-else-if="store.promotionEligibilityError[variant.variantId]"
+                  class="flex flex-col items-start gap-2"
+                >
+                  <p class="text-xs text-danger">
+                    {{ store.promotionEligibilityError[variant.variantId]!.message }}
+                  </p>
+                  <button
+                    class="rounded-md border border-border-subtle px-3 py-1.5 text-xs text-text-muted"
+                    @click="store.loadPromotionEligibility(variant.variantId)"
+                  >
+                    Retry
+                  </button>
+                </div>
+
+                <div v-else-if="eligibilityFor(variant.variantId)" class="flex flex-col gap-3">
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="rounded-full bg-bg-secondary px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-text-muted"
+                    >
+                      {{ statusLabel(eligibilityFor(variant.variantId)!.status) }}
+                    </span>
+                    <span class="text-xs text-text-muted">
+                      vs champion {{ eligibilityFor(variant.variantId)!.championVariantId }}
+                      · tenure {{ eligibilityFor(variant.variantId)!.tenureCalendarDays }}d
+                    </span>
+                  </div>
+
+                  <p
+                    v-if="eligibilityFor(variant.variantId)!.status === 'INSUFFICIENT_SAMPLE'"
+                    class="text-xs text-text-muted"
+                  >
+                    Not enough data yet to judge promotion eligibility. This is not a rejection
+                    — check back once more live trades have accumulated.
+                  </p>
+                  <p v-else class="text-xs text-text-muted">
+                    Promotion always requires a manual confirmation step; this checklist is
+                    informational only.
+                  </p>
+
+                  <ul class="flex flex-col gap-2">
+                    <li
+                      v-for="cond in conditionRows(eligibilityFor(variant.variantId)!)"
+                      :key="cond.label"
+                      class="flex flex-col gap-0.5 rounded-md bg-bg-secondary px-3 py-2"
+                    >
+                      <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-text-primary">{{ cond.label }}</span>
+                        <span class="text-[11px] font-medium text-text-muted">
+                          {{ cond.met ? 'Met' : 'Not met' }}
+                        </span>
+                      </div>
+                      <span class="text-[11px] text-text-muted">
+                        {{ cond.actualValue }} (threshold: {{ cond.threshold }})
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </template>
+            </div>
           </div>
         </section>
       </template>
@@ -383,9 +477,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useStrategiesStore, MAX_ACTIVE_VARIANTS } from '../stores/strategies'
-import type { StrategyVariant, ParamDef, ValidateParamsResult } from '../api/strategies'
+import type {
+  StrategyVariant,
+  ParamDef,
+  ValidateParamsResult,
+  PromotionEligibilityResult,
+} from '../api/strategies'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 
@@ -569,6 +668,55 @@ function winRateWithCi(metrics: Record<string, unknown>): string {
   }
   return `${Number(winRate).toFixed(3)} [${Number(ciLow).toFixed(3)}, ${Number(ciHigh).toFixed(3)}]`
 }
+
+const activeVariants = computed(() =>
+  store.variants.filter((v) => v.mode === 'SHADOW' || v.mode === 'CHAMPION')
+)
+
+function eligibilityFor(variantId: string): PromotionEligibilityResult | undefined {
+  return store.promotionEligibility[variantId]
+}
+
+function statusLabel(status: PromotionEligibilityResult['status']): string {
+  switch (status) {
+    case 'ELIGIBLE':
+      return 'Eligible'
+    case 'NOT_ELIGIBLE':
+      return 'Not eligible'
+    case 'INSUFFICIENT_SAMPLE':
+      return 'Insufficient sample'
+  }
+}
+
+function conditionRows(
+  result: PromotionEligibilityResult
+): Array<{ label: string; met: boolean; actualValue: string; threshold: string }> {
+  return [
+    { label: 'Tenure and sample size', ...result.tenureAndSampleSize },
+    { label: 'Expectancy vs champion', ...result.expectancyVsChampion },
+    { label: 'Drawdown guard', ...result.drawdownGuard },
+    { label: 'Walk-forward and overfitting', ...result.walkForwardAndOverfitting },
+  ]
+}
+
+// Fetches promotion eligibility for every SHADOW variant whenever the active variant set
+// changes (e.g. after loadAll() resolves, or a mode change adds/removes a SHADOW variant).
+// The champion itself is skipped — there is nothing to compare it against.
+watch(
+  activeVariants,
+  (next) => {
+    for (const variant of next) {
+      if (
+        variant.mode === 'SHADOW' &&
+        !store.promotionEligibility[variant.variantId] &&
+        !store.promotionEligibilityLoading[variant.variantId]
+      ) {
+        store.loadPromotionEligibility(variant.variantId)
+      }
+    }
+  },
+  { immediate: true }
+)
 
 onMounted(() => {
   store.loadAll()

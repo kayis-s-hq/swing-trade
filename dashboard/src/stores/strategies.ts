@@ -10,11 +10,13 @@ import {
   changeStrategyMode,
   validateStrategyParams,
   compareBacktests,
+  fetchPromotionEligibility,
   type StrategyTypeInfo,
   type StrategyVariant,
   type ValidateParamsResult,
   type BacktestCompareRequest,
   type BacktestCompareResult,
+  type PromotionEligibilityResult,
 } from '../api/strategies'
 import { asAppError, type AppError } from '../errors/appError'
 
@@ -33,6 +35,10 @@ export const useStrategiesStore = defineStore('strategies', () => {
   const mutationError = ref<AppError | null>(null)
   const comparing = ref(false)
   const compareError = ref<AppError | null>(null)
+
+  const promotionEligibility = ref<Record<string, PromotionEligibilityResult>>({})
+  const promotionEligibilityLoading = ref<Record<string, boolean>>({})
+  const promotionEligibilityError = ref<Record<string, AppError | null>>({})
 
   const activeCount = () =>
     variants.value.filter((v) => v.mode === 'SHADOW' || v.mode === 'CHAMPION').length
@@ -170,6 +176,22 @@ export const useStrategiesStore = defineStore('strategies', () => {
     }
   }
 
+  async function loadPromotionEligibility(variantId: string): Promise<void> {
+    promotionEligibilityLoading.value = { ...promotionEligibilityLoading.value, [variantId]: true }
+    promotionEligibilityError.value = { ...promotionEligibilityError.value, [variantId]: null }
+    try {
+      const result = await fetchPromotionEligibility(variantId)
+      promotionEligibility.value = { ...promotionEligibility.value, [variantId]: result }
+    } catch (err) {
+      promotionEligibilityError.value = {
+        ...promotionEligibilityError.value,
+        [variantId]: asAppError(err),
+      }
+    } finally {
+      promotionEligibilityLoading.value = { ...promotionEligibilityLoading.value, [variantId]: false }
+    }
+  }
+
   return {
     types,
     variants,
@@ -181,6 +203,9 @@ export const useStrategiesStore = defineStore('strategies', () => {
     mutationError,
     comparing,
     compareError,
+    promotionEligibility,
+    promotionEligibilityLoading,
+    promotionEligibilityError,
     activeCount,
     loadAll,
     loadVersions,
@@ -190,5 +215,6 @@ export const useStrategiesStore = defineStore('strategies', () => {
     setMode,
     validateParams,
     runCompare,
+    loadPromotionEligibility,
   }
 })

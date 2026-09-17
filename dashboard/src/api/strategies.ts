@@ -175,3 +175,31 @@ export async function compareBacktests(
     responseContract: 'direct',
   })
 }
+
+/** Mirrors backend PromotionEligibilityResponse.Condition (plan §7.4). */
+export interface PromotionEligibilityCondition {
+  met: boolean
+  actualValue: string
+  threshold: string
+}
+
+/** Mirrors backend PromotionEligibilityResponse (plan §7.4/§8). */
+export interface PromotionEligibilityResult {
+  challengerVariantId: string
+  championVariantId: string
+  tenureCalendarDays: number
+  status: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'INSUFFICIENT_SAMPLE'
+  tenureAndSampleSize: PromotionEligibilityCondition
+  expectancyVsChampion: PromotionEligibilityCondition
+  drawdownGuard: PromotionEligibilityCondition
+  walkForwardAndOverfitting: PromotionEligibilityCondition
+}
+
+export async function fetchPromotionEligibility(
+  variantId: string
+): Promise<PromotionEligibilityResult> {
+  return apiRequest<PromotionEligibilityResult>(
+    `/strategies/${encodeURIComponent(variantId)}/promotion-eligibility`,
+    { responseContract: 'direct' }
+  )
+}
