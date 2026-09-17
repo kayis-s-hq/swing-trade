@@ -7,6 +7,10 @@ import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.PriceBandPolicy;
+import com.swingtrade.domain.RiskManagementPolicy;
+import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.strategy.TrailingBreakevenPolicy;
 import com.swingtrade.domain.store.PriceBandStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +18,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.math.BigDecimal;
+import java.time.temporal.ChronoUnit;
 
 /**
  * EOD position monitor.
@@ -72,10 +78,14 @@ public class PaperTradingMonitorService {
                 // snapshot captured before this loop and would overwrite whatever
                 // updatePositionsFromDomain just wrote with stale values.
                 if (priceBandStore == null) {
-                    engine.updatePositionsFromDomain(candle);
+                    if (!applyRiskManagement(pos, candle, null)) {
+                        engine.updatePositionsFromDomain(candle);
+                    }
                 } else {
                     PriceBand band = priceBandStore.findBySymbolAndDate(pos.symbol(), candle.date()).orElse(null);
-                    engine.updatePositionsFromDomain(candle, band);
+                    if (!applyRiskManagement(pos, candle, band)) {
+                        engine.updatePositionsFromDomain(candle, band);
+                    }
                 }
 
             } catch (Exception e) {
@@ -92,6 +102,40 @@ public class PaperTradingMonitorService {
         }
 
         logger.info("Position monitoring complete");
+    }
+
+    private boolean applyRiskManagement(Position position, OhlcvCandle candle, PriceBand band) {
+        if (!properties.isRiskManagementEnabled() || position.direction() != TradeDirection.LONG
+                || position.stopLoss() == null || position.target() == null) {
+            return false;
+        }
+        if (PriceBandPolicy.blocksLongExit(band, candle)) {
+            return false;
+        }
+        RiskManagementPolicy policy = new TrailingBreakevenPolicy(
+                properties.getBreakevenRiskMultiple(), properties.getTrailingStopPct());
+        BigDecimal highestCloseBeforeBar = ohlcvCandleRepository.findAllBySymbolOrderByDateDesc(position.symbol())
+                .stream()
+                .map(OhlcvCandleEntity::toDomain)
+                .filter(previous -> previous != null && previous.date() != null
+                        && previous.date().isBefore(candle.date())
+                        && previous.close() != null && previous.close().signum() > 0)
+                .map(OhlcvCandle::close)
+                .max(BigDecimal::compareTo)
+                .orElse(position.entryPrice());
+        RiskManagementPolicy.RiskManagementDecision decision = policy.evaluate(
+                new RiskManagementPolicy.RiskManagementContext(position.entryPrice(), position.stopLoss(),
+                        position.target(), candle.close(), candle.low(), highestCloseBeforeBar,
+                        (int) ChronoUnit.DAYS.between(position.entryDate(), candle.date())));
+        if (!decision.exit()) return false;
+
+        BigDecimal fill = candle.open();
+        if (fill == null || (fill.compareTo(decision.stopPrice()) > 0)) {
+            fill = decision.stopPrice();
+        }
+        engine.closePosition(position.positionId(), fill, decision.reason());
+        logger.info("Managed risk exit for {} at {}: {}", position.positionId(), fill, decision.reason());
+        return true;
     }
 
     private OhlcvCandle fetchLatestCandle(String symbol) {

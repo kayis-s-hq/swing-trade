@@ -76,6 +76,12 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   explicitly unavailable. Strategy/API tests and `./bin/verify-changes` passed.
   Authoritative NIFTY TRI and benchmark attribution remain open.
 
+- [x] Paper-monitor risk management verified 2026-09-17: the optional configured
+  breakeven/trailing policy now runs before fixed stop/target checks, derives the
+  highest completed persisted close, honors locked lower circuits, and uses adverse
+  gap-through fills. Broker tests and `./bin/verify-changes` passed; the feature
+  remains opt-in by default (`paper.trading.risk-management-enabled=false`).
+
 - [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
   as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API
   tests passed; cross-sectional rank and authoritative index ingestion remain open.

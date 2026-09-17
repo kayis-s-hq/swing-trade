@@ -47,6 +47,9 @@ public class PaperTradingProperties {
     private boolean statePersistenceEnabled = true;
     private String snapshotCron = "0 45 15 * * MON-FRI";
     private String monitorCron = "0 45 16 * * MON-FRI";
+    private boolean riskManagementEnabled = false;
+    private double breakevenRiskMultiple = 1.0;
+    private double trailingStopPct = 0.05;
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -83,4 +86,13 @@ public class PaperTradingProperties {
 
     public String getMonitorCron() { return monitorCron; }
     public void setMonitorCron(String monitorCron) { this.monitorCron = monitorCron; }
+
+    public boolean isRiskManagementEnabled() { return riskManagementEnabled; }
+    public void setRiskManagementEnabled(boolean riskManagementEnabled) { this.riskManagementEnabled = riskManagementEnabled; }
+
+    public double getBreakevenRiskMultiple() { return breakevenRiskMultiple; }
+    public void setBreakevenRiskMultiple(double breakevenRiskMultiple) { this.breakevenRiskMultiple = breakevenRiskMultiple; }
+
+    public double getTrailingStopPct() { return trailingStopPct; }
+    public void setTrailingStopPct(double trailingStopPct) { this.trailingStopPct = trailingStopPct; }
 }
