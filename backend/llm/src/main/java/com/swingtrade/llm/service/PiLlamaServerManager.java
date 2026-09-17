@@ -186,6 +186,8 @@ public class PiLlamaServerManager implements LlmServerManager {
             startServer(modelPath);
             logger.info("llama-server restarted on Pi");
         } catch (Exception e) {
+            lifecycleState = "FAILED";
+            lastFailureReason = e.getMessage();
             logger.error("Failed to restart llama-server on Pi: {}", e.getMessage(), e);
             throw new IllegalStateException("llama-server restart failed on Pi: " + e.getMessage(), e);
         }

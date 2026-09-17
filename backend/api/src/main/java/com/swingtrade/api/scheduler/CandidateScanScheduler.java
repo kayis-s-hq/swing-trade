@@ -46,8 +46,7 @@ public class CandidateScanScheduler {
 
         logger.info("Starting scheduled candidate scan");
         try {
-            var run = candidateScanService.start();
-            if (run != null) candidateScanService.scheduleHandoff(run.getRunId());
+            candidateScanService.startScheduled();
         } catch (IllegalStateException e) {
             logger.info("Skipping scheduled candidate scan: a scan is already in progress ({})", e.getMessage());
         }
