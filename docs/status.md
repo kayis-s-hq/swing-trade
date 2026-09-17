@@ -2,6 +2,10 @@
 
 Last checked: 2026-09-17 (documentation/lint and analytics remediation verification)
 
+- [x] Local runtime revalidation 2026-09-17: the API migrated the PostgreSQL-backed schema to
+  v55, reported healthy database/readiness status, and served
+  `GET /api/signals/gate-effectiveness` successfully (empty result set in the current data window).
+
 - [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
   producing signal variant, support multiple strategies per symbol/date, and report/filter by the
   stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade
