@@ -1,5 +1,6 @@
 package com.swingtrade.strategy;
 
+import com.swingtrade.domain.StrategyConfig;
 import java.math.BigDecimal;
 
 import org.junit.jupiter.api.Test;
@@ -109,5 +110,22 @@ class StrategyFamilyTest {
         assertThat(strategy.rsiInEntryRange(indicators("101", "100", "95", "62", "100", "100", "105")))
             .isTrue();
         assertThat(strategy.entryRsiDescription()).isEqualTo("RSI between 48-62");
+    }
+
+    @Test
+    void registryResolvesConfiguredParametersPerVariant() {
+        var priceAction = new PriceActionStrategy();
+        var confluence = new PriceActionConfluenceStrategy();
+        var registry = new StrategyRegistry(java.util.List.of(priceAction, confluence), priceAction);
+        var config = StrategyConfig.create("WIDE_RSI", 1, PriceActionConfluenceStrategy.NAME,
+            java.util.Map.of("rsiLower", "45", "rsiUpper", "72"), java.util.Map.of(),
+            StrategyConfig.Mode.SHADOW, new BigDecimal("100000"), true, null,
+            java.time.LocalDateTime.now());
+
+        var resolved = registry.resolve(config);
+
+        assertThat(resolved).isPresent();
+        assertThat(resolved.orElseThrow().entryRsiDescription()).isEqualTo("RSI between 45-72");
+        assertThat(registry.resolve(null)).isEmpty();
     }
 }

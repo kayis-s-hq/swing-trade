@@ -375,8 +375,10 @@ gating, and per-variant portfolios remain open.
 
 The configuration API and dashboard management surface are now available, and two additional strategy
 families can run through the existing strategy registry. Live orchestration now treats CHAMPION configs
-as trade-authoritative, fans out SHADOW signals without trading, and excludes OFF/BACKTEST_ONLY configs;
-per-variant portfolio isolation and production data population remain open.
+as trade-authoritative, fans out SHADOW signals without trading, and excludes OFF/BACKTEST_ONLY configs.
+Persisted `PRICE_ACTION_3_OF_4` RSI bounds are now resolved per configured variant through a
+request-scoped strategy instance, so invalid parameter maps fail closed and one variant cannot leak
+its bounds into another. Per-variant portfolio isolation and production data population remain open.
 
 ### 35. GAP — Add standard NSE swing setups
 **Fix:** Add `TradingStrategy` beans, backtest each, and enable only those passing out-of-sample:

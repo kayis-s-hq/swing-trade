@@ -559,7 +559,14 @@ public class JobOrchestratorService {
             boolean championSeen = configs.stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count() == 1;
             int generated = 0;
             for (StrategyConfig config : configs) {
-                var selected = strategyRegistry.find(config.strategyType());
+                java.util.Optional<com.swingtrade.strategy.TradingStrategy> selected;
+                try {
+                    selected = strategyRegistry.resolve(config);
+                } catch (IllegalArgumentException e) {
+                    logger.warn("Skipping configured strategy {}: invalid parameters: {}",
+                        config.variantId(), e.getMessage());
+                    continue;
+                }
                 if (selected.isEmpty()) {
                     logger.warn("Skipping configured strategy {}: unsupported strategy type {} (fail-closed)",
                         config.variantId(), config.strategyType());
