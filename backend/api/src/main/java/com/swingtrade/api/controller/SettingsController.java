@@ -428,9 +428,14 @@ public class SettingsController {
             logger.info("Stopping Pi llama-server via SSH...");
             piServerManager.stop();
             boolean running = piServerManager.isRunning();
-            Map<String, Object> lifecycle = piServerManager.lifecycleStatus();
-            Object lifecycleState = lifecycle == null ? null : lifecycle.get("state");
-            boolean stopped = !running && (lifecycleState == null || "STOPPED".equals(lifecycleState));
+            boolean stopped = !running;
+            try {
+                Map<String, Object> lifecycle = piServerManager.lifecycleStatus();
+                Object lifecycleState = lifecycle == null ? null : lifecycle.get("state");
+                stopped = stopped && (lifecycleState == null || "STOPPED".equals(lifecycleState));
+            } catch (Exception diagnosticFailure) {
+                logger.debug("Pi lifecycle status unavailable after stop: {}", diagnosticFailure.getMessage());
+            }
             result.put("success", stopped);
             result.put("running", running);
             result.put("message", stopped ? "Pi llama-server stopped" : "Failed to confirm Pi llama-server stopped");
