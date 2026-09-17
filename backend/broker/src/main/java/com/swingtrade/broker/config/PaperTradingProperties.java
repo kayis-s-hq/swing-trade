@@ -52,6 +52,7 @@ public class PaperTradingProperties {
     private double trailingStopPct = 0.05;
     private double partialExitRiskMultiple = 2.0;
     private BigDecimal partialExitRatio = BigDecimal.valueOf(0.5);
+    private double chandelierAtrMultiple = 3.0;
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -103,4 +104,7 @@ public class PaperTradingProperties {
 
     public BigDecimal getPartialExitRatio() { return partialExitRatio; }
     public void setPartialExitRatio(BigDecimal partialExitRatio) { this.partialExitRatio = partialExitRatio; }
+
+    public double getChandelierAtrMultiple() { return chandelierAtrMultiple; }
+    public void setChandelierAtrMultiple(double chandelierAtrMultiple) { this.chandelierAtrMultiple = chandelierAtrMultiple; }
 }

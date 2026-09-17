@@ -7,11 +7,17 @@ import java.math.RoundingMode;
 
 /** Moves a stop to breakeven, then trails the highest completed close by a fixed percentage. */
 public record TrailingBreakevenPolicy(double breakevenRiskMultiple, double trailingStopPct,
-                                     double partialExitRiskMultiple, BigDecimal partialExitRatio)
+                                     double partialExitRiskMultiple, BigDecimal partialExitRatio,
+                                     double chandelierAtrMultiple)
         implements RiskManagementPolicy {
 
     public TrailingBreakevenPolicy(double breakevenRiskMultiple, double trailingStopPct) {
-        this(breakevenRiskMultiple, trailingStopPct, 2.0, BigDecimal.valueOf(0.5));
+        this(breakevenRiskMultiple, trailingStopPct, 2.0, BigDecimal.valueOf(0.5), 3.0);
+    }
+
+    public TrailingBreakevenPolicy(double breakevenRiskMultiple, double trailingStopPct,
+                                  double partialExitRiskMultiple, BigDecimal partialExitRatio) {
+        this(breakevenRiskMultiple, trailingStopPct, partialExitRiskMultiple, partialExitRatio, 3.0);
     }
 
     public TrailingBreakevenPolicy {
@@ -21,7 +27,8 @@ public record TrailingBreakevenPolicy(double breakevenRiskMultiple, double trail
         }
         if (!Double.isFinite(partialExitRiskMultiple) || partialExitRiskMultiple < 1.5
                 || partialExitRiskMultiple > 2.0 || partialExitRatio == null
-                || partialExitRatio.signum() <= 0 || partialExitRatio.compareTo(BigDecimal.ONE) >= 0) {
+                || partialExitRatio.signum() <= 0 || partialExitRatio.compareTo(BigDecimal.ONE) >= 0
+                || !Double.isFinite(chandelierAtrMultiple) || chandelierAtrMultiple <= 0) {
             throw new IllegalArgumentException("Partial exit parameters must be bounded");
         }
     }
@@ -44,8 +51,11 @@ public record TrailingBreakevenPolicy(double breakevenRiskMultiple, double trail
         if (context.highestCloseBeforeBar().compareTo(breakevenTrigger) >= 0) {
             stop = context.entryPrice();
             reason = "BREAKEVEN_STOP";
-            BigDecimal trailing = context.highestCloseBeforeBar().multiply(
-                    BigDecimal.ONE.subtract(BigDecimal.valueOf(trailingStopPct)));
+            BigDecimal trailing = context.currentAtr() != null && context.currentAtr().signum() > 0
+                    ? context.highestCloseBeforeBar().subtract(context.currentAtr()
+                        .multiply(BigDecimal.valueOf(chandelierAtrMultiple)))
+                    : context.highestCloseBeforeBar().multiply(
+                        BigDecimal.ONE.subtract(BigDecimal.valueOf(trailingStopPct)));
             if (trailing.compareTo(stop) > 0) {
                 stop = trailing;
                 reason = "TRAILING_STOP";

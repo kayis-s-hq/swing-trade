@@ -24,13 +24,21 @@ public interface RiskManagementPolicy {
             BigDecimal currentHigh,
             BigDecimal highestCloseBeforeBar,
             int holdingDays,
-            boolean partialExitTaken
+            boolean partialExitTaken,
+            BigDecimal currentAtr
     ) {
         public RiskManagementContext(BigDecimal entryPrice, BigDecimal initialStop, BigDecimal target,
                                      BigDecimal currentClose, BigDecimal currentLow,
                                      BigDecimal highestCloseBeforeBar, int holdingDays) {
             this(entryPrice, initialStop, target, currentClose, currentLow, currentClose,
-                    highestCloseBeforeBar, holdingDays, false);
+                    highestCloseBeforeBar, holdingDays, false, null);
+        }
+
+        public RiskManagementContext(BigDecimal entryPrice, BigDecimal initialStop, BigDecimal target,
+                                     BigDecimal currentClose, BigDecimal currentLow, BigDecimal currentHigh,
+                                     BigDecimal highestCloseBeforeBar, int holdingDays, boolean partialExitTaken) {
+            this(entryPrice, initialStop, target, currentClose, currentLow, currentHigh,
+                    highestCloseBeforeBar, holdingDays, partialExitTaken, null);
         }
 
         public RiskManagementContext {

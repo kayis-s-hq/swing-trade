@@ -508,7 +508,7 @@ public class BacktestEngine {
                         .evaluate(new RiskManagementPolicy.RiskManagementContext(
                                 open.entryPrice(), open.stopLoss(), open.target(), close, low,
                                 high, open.highestCloseBeforeBar(), i - open.entryIndex(),
-                                open.partialExitTaken()));
+                                open.partialExitTaken(), numToBigDecimal(atr.getValue(Math.max(0, i - 1)))));
                 boolean partialExit = false;
                 if (managedDecision.partialExitRatio() != null) {
                     int partialQuantity = (int) Math.floor(open.quantity()

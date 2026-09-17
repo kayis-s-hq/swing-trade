@@ -28,6 +28,19 @@ class TrailingBreakevenPolicyTest {
         assertThat(decision.reason()).isEqualTo("TRAILING_STOP");
     }
 
+    @Test
+    void usesThreeAtrChandelierWhenAtrIsAvailable() {
+        RiskManagementPolicy.RiskManagementContext context = new RiskManagementPolicy.RiskManagementContext(
+                BigDecimal.valueOf(100), BigDecimal.valueOf(90), BigDecimal.valueOf(125),
+                BigDecimal.valueOf(100), BigDecimal.valueOf(100), BigDecimal.valueOf(100),
+                BigDecimal.valueOf(110), 4, true, BigDecimal.valueOf(3));
+
+        RiskManagementPolicy.RiskManagementDecision decision = policy.evaluate(context);
+
+        assertThat(decision.exit()).isTrue();
+        assertThat(decision.stopPrice()).isEqualByComparingTo("101.00000000");
+    }
+
     private RiskManagementPolicy.RiskManagementContext context(double high, double low,
                                                                  double highest, boolean partialTaken) {
         return new RiskManagementPolicy.RiskManagementContext(
