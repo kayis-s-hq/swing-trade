@@ -2,6 +2,7 @@ package com.swingtrade.api.service;
 
 import com.swingtrade.core.metrics.JobOrchestratorMetrics;
 import com.swingtrade.domain.service.TradingService;
+import com.swingtrade.domain.service.VariantTradingService;
 import com.swingtrade.data.entity.JobRunEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.repository.JobRunRepository;
@@ -145,6 +146,7 @@ public class JobOrchestratorService {
     private final StrategyConfigRepository strategyConfigRepository;
     private final StrategyRegistry strategyRegistry;
     private final LiveEligibilityService liveEligibilityService;
+    private final VariantTradingService variantTradingService;
     private GateEffectivenessAuditService gateEffectivenessAuditService;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -178,6 +180,7 @@ public class JobOrchestratorService {
             StrategyConfigRepository strategyConfigRepository,
             StrategyRegistry strategyRegistry,
             LiveEligibilityService liveEligibilityService,
+            VariantTradingService variantTradingService,
             @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
             @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs,
             @Value("${job.orchestrator.reaper.enabled:true}") boolean reaperEnabled,
@@ -215,6 +218,7 @@ public class JobOrchestratorService {
         this.strategyConfigRepository = strategyConfigRepository;
         this.strategyRegistry = strategyRegistry;
         this.liveEligibilityService = liveEligibilityService;
+        this.variantTradingService = variantTradingService;
     }
 
     /** Compatibility fixture constructor for pre-LLM pipeline tests. */
@@ -228,7 +232,7 @@ public class JobOrchestratorService {
             SentimentStore st, int max, long poll, boolean reaper, boolean llmEnabled,
             boolean llmAdvisory) {
         this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,ta,fs,ca,sy,br,lr,lg,st,null,null,
-            null, max,poll,reaper,llmEnabled,llmAdvisory);
+            null, null, max,poll,reaper,llmEnabled,llmAdvisory);
     }
 
     /** Compatibility fixture constructor for pre-LLM pipeline tests. */
@@ -236,7 +240,7 @@ public class JobOrchestratorService {
             SignalPipeline p, SentimentGate sg, BacktestEngine b, TradingService t,
             JobRunRepository jr, JobRunStageRepository js, SignalStore ss, WatchlistStore w,
             CandleStore c, JobOrchestratorMetrics m, int max, long poll, boolean reaper) {
-        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
+        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
     }
 
     /**
@@ -653,6 +657,9 @@ public class JobOrchestratorService {
     }
 
     private String stagePaperTrade(String symbol, Set<Long> tradeableSignalIds, boolean configuredLiveRun) {
+        if (configuredLiveRun) {
+            stageVariantPaperTrade(symbol);
+        }
         List<Signal> unprocessed = signalStore.findUnprocessed()
             .stream()
             .filter(s -> s.symbol().equals(symbol))
@@ -765,6 +772,52 @@ public class JobOrchestratorService {
             summary.append(", ").append(failedToQueue).append(" failed to queue (see logs)");
         }
         return summary.toString();
+    }
+
+    /**
+     * Runs every active variant's own simulated paper trading — SHADOW variants entirely,
+     * and the CHAMPION too (in addition to its existing real order-queueing path below),
+     * so every variant's own portfolio bookkeeping is directly comparable. Each variant is
+     * isolated in its own try/catch: one variant's failure for this symbol/day must not
+     * block another variant's execution (task constraint 4).
+     */
+    private void stageVariantPaperTrade(String symbol) {
+        if (variantTradingService == null) return;
+        List<StrategyConfig> configs = liveConfigs();
+        if (configs.isEmpty()) return;
+        OhlcvCandle latest = candleStore.findLatestBySymbol(symbol).orElse(null);
+        if (latest == null || latest.close() == null) return;
+
+        for (StrategyConfig config : configs) {
+            String variantId = config.variantId();
+            try {
+                variantTradingService.ensurePortfolio(variantId, config.paperCapital());
+                variantTradingService.evaluateOpenPositions(variantId, symbol, latest);
+
+                List<Signal> variantSignals = signalStore.findUnprocessed().stream()
+                    .filter(s -> s.symbol().equals(symbol))
+                    .filter(s -> signalStore.findStrategyById(s.id())
+                        .map(variantId::equals).orElse(false))
+                    .toList();
+                for (Signal signal : variantSignals) {
+                    try {
+                        if (signal.type() == Signal.SignalType.BUY) {
+                            variantTradingService.openPosition(variantId, signal, latest.close());
+                        } else if (signal.type() == Signal.SignalType.SELL) {
+                            variantTradingService.closePosition(variantId, symbol, latest.close(),
+                                "Strategy SELL signal");
+                        }
+                        signalStore.markProcessed(signal.id());
+                    } catch (RuntimeException e) {
+                        logger.warn("Variant {} failed to process signal {} for {}: {}",
+                            variantId, signal.id(), symbol, e.getMessage());
+                    }
+                }
+            } catch (RuntimeException e) {
+                logger.warn("Variant paper trading failed for {} on {} (isolated, other variants unaffected): {}",
+                    variantId, symbol, e.getMessage());
+            }
+        }
     }
 
     private List<StrategyConfig> liveConfigs() {

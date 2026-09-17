@@ -118,4 +118,18 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
      */
     @Query("SELECT p.positionId FROM PositionEntity p WHERE p.positionId IS NOT NULL")
     List<String> findAllPositionIds();
+
+    /** Open positions for a given strategy variant's own paper-trading portfolio. */
+    @Query("SELECT p FROM PositionEntity p WHERE p.portfolioId = :portfolioId "
+        + "AND p.symbol = :symbol AND p.status = 'OPEN'")
+    List<PositionEntity> findOpenByPortfolioIdAndSymbol(@Param("portfolioId") String portfolioId,
+                                                         @Param("symbol") String symbol);
+
+    /** All closed/stopped/target-hit trades for a given strategy variant's portfolio. */
+    @Query("SELECT p FROM PositionEntity p WHERE p.portfolioId = :portfolioId "
+        + "AND p.status <> 'OPEN' ORDER BY p.entryDate DESC")
+    List<PositionEntity> findClosedByPortfolioId(@Param("portfolioId") String portfolioId);
+
+    @Query("SELECT COUNT(p) FROM PositionEntity p WHERE p.portfolioId = :portfolioId AND p.status = 'OPEN'")
+    long countOpenByPortfolioId(@Param("portfolioId") String portfolioId);
 }

@@ -120,6 +120,19 @@ public class PositionEntity {
     @Column(name = "exit_reason", length = 64)
     private String exitReason;
 
+    // Attributes a shadow/champion strategy-variant's own paper-trading portfolio (V63).
+    // Null for pre-existing champion/"default" positions opened before per-variant paper
+    // trading existed; set to StrategyConfig.variantId() for positions opened against a
+    // variant's own portfolio row. Deliberately NOT surfaced on the immutable Position
+    // domain record — variant paper trading reads/writes this entity field directly via
+    // PositionRepository rather than round-tripping through Position, to avoid widening
+    // that widely-shared record for a broker-module-only concern.
+    @Column(name = "portfolio_id", length = 40)
+    private String portfolioId;
+
+    public String getPortfolioId() { return portfolioId; }
+    public void setPortfolioId(String portfolioId) { this.portfolioId = portfolioId; }
+
     public PositionEntity() {
     }
 

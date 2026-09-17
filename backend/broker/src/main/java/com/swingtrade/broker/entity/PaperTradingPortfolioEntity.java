@@ -32,7 +32,10 @@ public class PaperTradingPortfolioEntity {
     @Version
     private Integer version;
 
-    @Column(name = "portfolio_id", length = 32)
+    // Widened to 40 (V63) to match strategy_config.variant_id's length — every active
+    // strategy variant now gets its own portfolio row keyed by portfolio_id = variantId,
+    // not just the fixed "default" singleton.
+    @Column(name = "portfolio_id", length = 40)
     private String portfolioId;
 
     @Column(name = "initial_capital", precision = 15, scale = 2)

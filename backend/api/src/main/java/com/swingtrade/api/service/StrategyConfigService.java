@@ -6,6 +6,7 @@ import com.swingtrade.api.dto.StrategyModeRequest;
 import com.swingtrade.data.entity.StrategyConfigEntity;
 import com.swingtrade.data.repository.StrategyConfigRepository;
 import com.swingtrade.domain.StrategyConfig;
+import com.swingtrade.domain.service.VariantTradingService;
 import com.swingtrade.domain.store.StrategyConfigStore;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -23,13 +24,34 @@ public class StrategyConfigService {
     private final StrategyConfigStore store;
     private final StrategyConfigRepository repository;
     private final EntityManager entityManager;
+    private final VariantTradingService variantTradingService;
 
     public StrategyConfigService(StrategyConfigStore store,
                                  StrategyConfigRepository repository,
-                                 EntityManager entityManager) {
+                                 EntityManager entityManager,
+                                 VariantTradingService variantTradingService) {
         this.store = store;
         this.repository = repository;
         this.entityManager = entityManager;
+        this.variantTradingService = variantTradingService;
+    }
+
+    /**
+     * Auto-creates the variant's own paper-trading portfolio the moment it becomes
+     * SHADOW or CHAMPION (task constraint 1). Idempotent and isolated: a failure here
+     * must not block the strategy-config write itself, since the portfolio can still
+     * be created lazily on the next job run if this best-effort call fails.
+     */
+    private void ensurePaperPortfolioIfLive(StrategyConfig config) {
+        if (variantTradingService == null || config == null) return;
+        if (config.mode() == StrategyConfig.Mode.SHADOW || config.mode() == StrategyConfig.Mode.CHAMPION) {
+            try {
+                variantTradingService.ensurePortfolio(config.variantId(), config.paperCapital());
+            } catch (RuntimeException e) {
+                // Best-effort: the job orchestrator's PAPER_TRADE stage also calls
+                // ensurePortfolio() on every run, so a transient failure here is not fatal.
+            }
+        }
     }
 
     public List<StrategyConfigResponse> list(String variantId, StrategyConfig.Mode mode) {
@@ -77,7 +99,9 @@ public class StrategyConfigService {
         StrategyConfig config = StrategyConfig.create(variantId, version, request.strategyType().trim(),
             request.params(), request.normalizedOverlays(), request.mode(), request.paperCapital(), true,
             request.notes(), LocalDateTime.now());
-        return StrategyConfigResponse.from(store.save(config));
+        StrategyConfig saved = store.save(config);
+        ensurePaperPortfolioIfLive(saved);
+        return StrategyConfigResponse.from(saved);
     }
 
     @Transactional
@@ -93,7 +117,9 @@ public class StrategyConfigService {
         StrategyConfig next = StrategyConfig.create(normalized, current.version() + 1, current.strategyType(),
             current.params(), current.overlays(), request.mode(), current.paperCapital(), true,
             request.notes() == null ? current.notes() : request.notes(), LocalDateTime.now());
-        return StrategyConfigResponse.from(store.save(next));
+        StrategyConfig saved = store.save(next);
+        ensurePaperPortfolioIfLive(saved);
+        return StrategyConfigResponse.from(saved);
     }
 
     public StrategyConfigResponse delete(String variantId) {

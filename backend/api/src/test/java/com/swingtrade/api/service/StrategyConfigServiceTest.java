@@ -5,6 +5,7 @@ import com.swingtrade.api.dto.StrategyModeRequest;
 import com.swingtrade.data.entity.StrategyConfigEntity;
 import com.swingtrade.data.repository.StrategyConfigRepository;
 import com.swingtrade.domain.StrategyConfig;
+import com.swingtrade.domain.service.VariantTradingService;
 import com.swingtrade.domain.store.StrategyConfigStore;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
@@ -41,7 +42,7 @@ class StrategyConfigServiceTest {
         when(clearCurrentQuery.setParameter(any(String.class), any())).thenReturn(clearCurrentQuery);
         when(clearCurrentQuery.executeUpdate()).thenReturn(1);
         when(repository.findAll()).thenReturn(List.of());
-        service = new StrategyConfigService(store, repository, entityManager);
+        service = new StrategyConfigService(store, repository, entityManager, mock(VariantTradingService.class));
     }
 
     @Test
