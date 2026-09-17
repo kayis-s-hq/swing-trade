@@ -99,6 +99,9 @@ API: http://localhost:8080
 | `/api/positions/performance` | GET | P&L and trade performance |
 | `/api/watchlist` | GET/POST | Read or add active watchlist symbols |
 | `/api/data/pull` | POST | Pull historical data for active watchlist symbols |
+| `/api/candidate-scans` | GET/POST | Browse or start candidate scans; qualified results can activate the pilot wishlist |
+| `/api/candidate-scans/{runId}/results` | GET | Browse paginated scan results and source/OOS outcomes |
+| `/api/settings/pi/status` | GET | View lazy Pi llama-server lifecycle and readiness status |
 
 ## Trading Strategy
 

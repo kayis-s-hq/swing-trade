@@ -9,8 +9,9 @@
           Candidate Explorer
         </h1>
         <p class="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
-          Scan the NSE universe for technical BUY signals with a profitable backtest. Review
-          qualified results, then add symbols to the pilot watchlist explicitly.
+          Scan the NSE universe for technical BUY signals with a profitable backtest. Review raw
+          technical signals, in-sample and out-of-sample gates. Qualified symbols are automatically
+          activated on the pilot wishlist.
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -88,6 +89,24 @@
             min="1"
             max="12"
             step="1"
+            class="h-10 rounded-lg border border-border-subtle bg-bg-surface/60 px-3 text-text-primary outline-none focus:border-brand"
+          />
+        </label>
+        <label class="flex flex-col gap-1.5 text-sm">
+          <span class="font-medium text-text-secondary">Minimum trades (each gate)</span>
+          <input
+            v-model.number="settingsForm.minTrades"
+            type="number"
+            min="1"
+            class="h-10 rounded-lg border border-border-subtle bg-bg-surface/60 px-3 text-text-primary outline-none focus:border-brand"
+          />
+        </label>
+        <label class="flex flex-col gap-1.5 text-sm">
+          <span class="font-medium text-text-secondary">Out-of-sample window (days)</span>
+          <input
+            v-model.number="settingsForm.oosDays"
+            type="number"
+            min="60"
             class="h-10 rounded-lg border border-border-subtle bg-bg-surface/60 px-3 text-text-primary outline-none focus:border-brand"
           />
         </label>
@@ -260,6 +279,7 @@
               <th class="px-3 py-3 font-semibold">Win rate</th>
               <th class="px-3 py-3 font-semibold">Return</th>
               <th class="px-3 py-3 font-semibold">Decision</th>
+              <th class="px-3 py-3 font-semibold">History / activation</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border-subtle/70">
@@ -292,6 +312,20 @@
                 <span v-else class="text-xs text-text-muted">{{
                   item.reason ?? item.dataStatus
                 }}</span>
+              </td>
+              <td class="px-3 py-3.5 text-xs text-text-muted">
+                <div>{{ item.sourceOutcome ?? item.dataStatus }}</div>
+                <div v-if="item.firstAvailableDate">
+                  {{ item.firstAvailableDate }} → {{ item.lastAvailableDate }}
+                </div>
+                <div v-if="item.retryAfter">Retry {{ item.retryAfter }}</div>
+                <div v-if="item.activated" class="mt-1 font-semibold text-success">
+                  Activated — auto-added to wishlist
+                </div>
+                <div v-if="item.oosTotalTrades != null">
+                  OOS: {{ item.oosTotalTrades }} trades, {{ percent(item.oosWinRate) }},
+                  {{ percent(item.oosTotalReturn) }}
+                </div>
               </td>
             </tr>
           </tbody>
@@ -327,8 +361,8 @@
     </section>
 
     <p class="mt-4 text-xs leading-5 text-text-muted">
-      Candidate scans never modify the watchlist or invoke paper trading. Qualified symbols can be
-      added explicitly from the Watchlist page after review.
+      Candidate scans never invoke paper trading. Qualified symbols are automatically added to the
+      wishlist; scheduled scans then hand off to orchestration only when qualifiers exist.
     </p>
   </div>
 </template>
@@ -367,7 +401,14 @@ let filterTimer: ReturnType<typeof setTimeout> | undefined
 const logs = ref<CandidateScanLogEvent[]>([])
 const streamConnected = ref(false)
 const showSettings = ref(false)
-const settingsForm = ref({ minWinRate: 45, minTotalReturn: 0, maxConcurrent: 3, backfillYears: 3 })
+const settingsForm = ref({
+  minWinRate: 45,
+  minTotalReturn: 0,
+  maxConcurrent: 3,
+  backfillYears: 3,
+  minTrades: 15,
+  oosDays: 252,
+})
 const settingsSaving = ref(false)
 const settingsSaved = ref(false)
 const settingsError = ref('')
@@ -380,6 +421,8 @@ async function loadSettings() {
       minTotalReturn: Number(settings['candidate-scan.min-total-return']),
       maxConcurrent: Number(settings['candidate-scan.max-concurrent']),
       backfillYears: Number(settings['candidate-scan.backfill-years']),
+      minTrades: Number(settings['candidate-scan.min-trades'] ?? 15),
+      oosDays: Number(settings['candidate-scan.out-of-sample-days'] ?? 252),
     }
   } catch (e) {
     settingsError.value = asAppError(e).message
@@ -396,6 +439,8 @@ async function saveSettings() {
       'candidate-scan.min-total-return': String(settingsForm.value.minTotalReturn),
       'candidate-scan.max-concurrent': String(settingsForm.value.maxConcurrent),
       'candidate-scan.backfill-years': String(settingsForm.value.backfillYears),
+      'candidate-scan.min-trades': String(settingsForm.value.minTrades),
+      'candidate-scan.out-of-sample-days': String(settingsForm.value.oosDays),
     })
     settingsSaved.value = true
   } catch (e) {

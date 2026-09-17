@@ -101,6 +101,9 @@ export interface CandidateScanRun {
   startedAt: string
   completedAt?: string
   errorMessage?: string
+  orchestrationStatus?: 'PENDING' | 'NOT_REQUIRED' | 'STARTED' | 'FAILED'
+  orchestrationJobRunId?: string
+  orchestrationError?: string
 }
 
 export interface CandidateScanResult {
@@ -118,6 +121,21 @@ export interface CandidateScanResult {
   reason?: string
   errorMessage?: string
   createdAt: string
+  sourceOutcome?:
+    | 'EXISTING_HISTORY'
+    | 'DATA_RECEIVED'
+    | 'NO_USABLE_DATA'
+    | 'INVALID_ROWS_REJECTED'
+    | 'TRANSIENT_SOURCE_FAILURE'
+  invalidRows?: number
+  firstAvailableDate?: string
+  lastAvailableDate?: string
+  retryAfter?: string
+  oosStartDate?: string
+  oosEndDate?: string
+  oosTotalTrades?: number
+  oosWinRate?: number
+  oosTotalReturn?: number
 }
 
 export interface CandidateScanSettings {
@@ -125,6 +143,8 @@ export interface CandidateScanSettings {
   'candidate-scan.min-total-return': string
   'candidate-scan.max-concurrent': string
   'candidate-scan.backfill-years': string
+  'candidate-scan.min-trades': string
+  'candidate-scan.out-of-sample-days': string
 }
 
 export interface CandidateScanResultPage {

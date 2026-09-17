@@ -243,6 +243,11 @@ public class JobOrchestratorService {
      *     before either has persisted its RUNNING row.
      */
     public JobRun startRun(JobRun.TriggerType triggerType) {
+        return startRun(triggerType, null);
+    }
+
+    /** Starts a run with an internal link to the scheduled candidate scan that selected it. */
+    public JobRun startRun(JobRun.TriggerType triggerType, UUID candidateScanRunId) {
         LocalDate today = LocalDate.now(IST);
         JobRun run;
         synchronized (runStartLock) {
@@ -258,7 +263,9 @@ public class JobOrchestratorService {
                 java.time.LocalDateTime.now(IST),
                 null, 0, 0, 0, null
             );
-            jobRunRepository.save(JobRunEntity.fromDomain(run));
+            JobRunEntity entity = JobRunEntity.fromDomain(run);
+            entity.setCandidateScanRunId(candidateScanRunId);
+            jobRunRepository.save(entity);
         }
         jobMetrics.recordRunStarted();
 
@@ -600,10 +607,18 @@ public class JobOrchestratorService {
         CompositeAnalysis.TechnicalScore technical;
         CompositeAnalysis.FundamentalScore fundamentals;
         boolean inputFallback = false;
-        try { technical = technicalAnalysisService.compute(symbol); }
-        catch (Exception e) { inputFallback = true; technical = new CompositeAnalysis.TechnicalScore(0, "HOLD", 0, List.of()); }
-        try { fundamentals = fundamentalScorer.compute(symbol); }
-        catch (Exception e) { inputFallback = true; fundamentals = new CompositeAnalysis.FundamentalScore(0, List.of("Unavailable")); }
+        try {
+            technical = technicalAnalysisService.compute(symbol);
+        } catch (Exception e) {
+            inputFallback = true;
+            technical = new CompositeAnalysis.TechnicalScore(0, "HOLD", 0, List.of());
+        }
+        try {
+            fundamentals = fundamentalScorer.compute(symbol);
+        } catch (Exception e) {
+            inputFallback = true;
+            fundamentals = new CompositeAnalysis.FundamentalScore(0, List.of("Unavailable"));
+        }
         CompositeAnalysis.BacktestScore backtest = backtestResultStore.findBySymbolAndDate(symbol, date)
             .map(r -> new CompositeAnalysis.BacktestScore(r.totalTrades(), r.winRate(), r.profitFactor(),
                 r.maxDrawdownPct(), r.totalReturn(), r.expectancy(), r.hasEnoughData()))
@@ -668,7 +683,11 @@ public class JobOrchestratorService {
                     ? llmAnalysisGate.evaluatePersisted(symbol, signal.date()) : null;
                 if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.PENDING) continue;
                 if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.SUPPRESS && !llmAnalysisAdvisoryOnly) {
-                    try { signalStore.markProcessed(signal.id()); } catch (Exception e) { continue; }
+                    try {
+                        signalStore.markProcessed(signal.id());
+                    } catch (Exception e) {
+                        continue;
+                    }
                     blockedByLlm++;
                     logger.info("Blocked BUY signal {} for {} by LLM analysis: {}", signal.id(), symbol, llmVerdict.reason());
                     continue;

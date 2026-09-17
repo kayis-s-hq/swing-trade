@@ -281,8 +281,10 @@ public class SentimentService {
             }
 
             // Build and cache result
+            var selectedBackend = clientProvider.getBackend();
+            String provider = selectedBackend == null ? "unknown" : selectedBackend.getKey();
             SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult,
-                    articleIds.size(), articleIds);
+                    articleIds.size(), articleIds, provider);
 
             // Persist to database
             try {
@@ -510,6 +512,11 @@ public class SentimentService {
     }
 
     private String configuredModel(String provider) {
+        Optional<String> legacySetting = appSettingsStore.get("llamacpp.model");
+        if (("pi_ssh".equals(provider) || "local".equals(provider))
+                && legacySetting != null && legacySetting.isPresent() && !legacySetting.get().isBlank()) {
+            return legacySetting.get();
+        }
         if (llmProperties != null) {
             String configured = switch (provider) {
                 case "pi_ssh" -> llmProperties.getProviders().getPiSsh().getModel();
@@ -519,7 +526,6 @@ public class SentimentService {
             };
             if (configured != null && !configured.isBlank()) return configured;
         }
-        Optional<String> legacySetting = appSettingsStore.get("llamacpp.model");
         return legacySetting != null ? legacySetting.orElse("unknown") : "unknown";
     }
 
@@ -530,10 +536,11 @@ public class SentimentService {
             String stockSymbol,
             LocalDate date,
             SentimentOutput analysisResult,
-            int articleCount, List<Long> articleIds) {
+            int articleCount,
+            List<Long> articleIds,
+            String provider) {
 
-        String modelVersion = appSettingsStore.get("llamacpp.model")
-                .orElse("Qwen3-4B-Instruct");
+        String modelVersion = configuredModel(provider);
         String promptHash = computePromptHash();
 
         SentimentResult.SentimentScore score;

@@ -1,6 +1,7 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-17 (analytics remediation verification)
+Last checked: 2026-09-17 (documentation/lint pass)
+Last checked: 2026-09-17 (documentation/lint and analytics remediation verification)
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
@@ -15,9 +16,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 ## Candidate Explorer
 
-- [x] Candidate scan controls and result browsing implemented: pause/resume/cancel, server-side symbol and signal filtering, bounded pagination, settings-backed scan thresholds, worker concurrency, and backfill years.
+- [x] Candidate scan controls and result browsing implemented: pause/resume/cancel, server-side symbol and signal filtering, bounded pagination, settings-backed scan thresholds, worker concurrency, backfill years, minimum-trade and out-of-sample gates, source outcomes, and persisted restart-safe orchestration handoffs.
+- [x] Qualified candidate results are automatically activated on the pilot wishlist; scheduled scans hand off to orchestration only when qualifiers exist.
 - [x] Interrupted RUNNING and PAUSED scans are cancelled during API startup; paused SSE streams remain reconnectable, and work already active when pause is requested still updates run counters.
-- [x] Verified 2026-09-01: `:api:test`, `:data:test`, all 277 dashboard tests, dashboard typecheck, lint, formatting, and production build passed. Dev-stack health, `/api/candidate-scans/settings`, `/api/candidate-scans`, and the dashboard returned HTTP 200. The latest persisted full-universe run completed 2,635 symbols with 5 qualifiers; current development settings are 50% minimum win rate, >0% total return, 8 workers, and 3 backfill years.
+- [x] Verified 2026-09-01: `:api:test`, `:data:test`, all 277 dashboard tests, dashboard typecheck, lint, formatting, and production build passed. Dev-stack health, `/api/candidate-scans/settings`, `/api/candidate-scans`, and the dashboard returned HTTP 200. The latest persisted full-universe run completed 2,635 symbols with 5 qualifiers; settings at that verification were 50% minimum win rate, >0% total return, 8 workers, and 3 backfill years.
 
 ## Data-integrity remediation
 
@@ -143,7 +145,7 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 - Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
 - Candle uniqueness, market-session validation, reconciliation, and audit logging are implemented.
 - [x] Flyway checksum incident resolved (`950e785f`) — V1 baseline reverted to its original applied checksum; no `flyway repair` needed. Bad watchlist SQL that was briefly in `86849aac` is gone (HDFC deactivation stays in V28, not the frozen V1 baseline).
-- [x] Manual dev-stack verification on pi-node: API booted cleanly against the current database on 2026-08-30; Flyway reported schema version V34 with no pending migrations.
+- [x] Manual dev-stack verification on pi-node: API booted cleanly against the database on 2026-08-30; that verification reported schema version V34. Migrations V35–V46 were added afterward and require deployment verification before claiming the current schema is clean.
 
 ## Data
 

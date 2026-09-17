@@ -224,10 +224,12 @@ intraday execution ordering, missing-candle interpolation, and portfolio-level s
 
 ### 18. PARTIALLY FIXED — Candidate scan qualifies on in-sample backtest
 `CandidateScanService` now runs a configurable 60–1000-day out-of-sample window (252 days by default), persists its date range and metrics separately,
-and requires both the full-history and OOS trade-count, win-rate and return gates before a result qualifies. Candidate discovery remains read-only;
-watchlist activation is handled separately by the API/UI. The windowed backtest retains prior warm-up candles and prevents entries outside the
-evaluation boundary. Multi-fold walk-forward validation now runs bounded chronological folds, while
-portfolio-level OOS evaluation remains open; the current OOS window overlaps
+and requires both the full-history and OOS trade-count, win-rate and return gates before a result qualifies. Candidate discovery records raw signals and separate gates;
+qualified results are automatically activated on the pilot wishlist by the API/UI. The windowed backtest retains prior warm-up candles and prevents entries outside the
+evaluation boundary. Full multi-fold walk-forward validation and portfolio-level OOS evaluation remain open, and the current OOS window overlaps
+and requires both the full-history and OOS trade-count, win-rate and return gates before a result qualifies. Candidate discovery records raw signals and separate gates;
+qualified results are automatically activated on the pilot wishlist by the API/UI. The windowed backtest retains prior warm-up candles and prevents entries outside the
+evaluation boundary. Multi-fold walk-forward validation now runs bounded chronological folds, while portfolio-level OOS evaluation remains open; the current OOS window overlaps
 the descriptive full-history backtest rather than representing a fitted-model holdout.
 **Remaining:** add fitted-parameter train/validate separation and portfolio-level OOS stability reporting.
 
