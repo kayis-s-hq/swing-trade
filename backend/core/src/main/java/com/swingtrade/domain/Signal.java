@@ -95,6 +95,48 @@ public record Signal(
     }
 
     /**
+     * Like {@link #create}, but also carries {@code entryPrice}/{@code stopLoss}/{@code target}
+     * (plan §7.4 gap-fill): a variant's BUY signal must persist the stop/target its strategy
+     * suggested at entry so a later exit-evaluation run has what it needs to close the resulting
+     * shadow position - previously these levels were computed by
+     * {@code SignalStrategy#evaluateEntry} but dropped on the floor before persistence.
+     *
+     * @param entryPrice the entry reference price (typically the bar's close)
+     * @param stopLoss   the suggested stop loss level, or null
+     * @param target     the suggested target level, or null
+     */
+    public static Signal createWithLevels(
+        String symbol,
+        LocalDate date,
+        SignalType type,
+        BigDecimal confidence,
+        String reasoning,
+        BigDecimal entryPrice,
+        BigDecimal stopLoss,
+        BigDecimal target
+    ) {
+        BigDecimal normalizedConfidence = confidence
+            .max(BigDecimal.ZERO)
+            .min(BigDecimal.ONE);
+        return new Signal(
+            null,
+            symbol,
+            date,
+            type,
+            normalizedConfidence,
+            reasoning,
+            entryPrice,
+            stopLoss,
+            target,
+            null,
+            null,
+            LocalDate.now(),
+            null,
+            null
+        );
+    }
+
+    /**
      * Returns true if this is a BUY signal.
      *
      * @return true if BUY

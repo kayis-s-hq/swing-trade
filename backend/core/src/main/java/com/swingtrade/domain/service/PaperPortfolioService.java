@@ -1,8 +1,12 @@
 package com.swingtrade.domain.service;
 
+import com.swingtrade.domain.ShadowClosedTrade;
+import com.swingtrade.domain.ShadowPositionSnapshot;
 import com.swingtrade.domain.Signal;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * Per-variant paper trading portfolio bookkeeping (plan §7.2/§7 Phase 5).
@@ -64,4 +68,51 @@ public interface PaperPortfolioService {
      *     capital/capacity) - the caller should leave the signal unprocessed for retry in that case
      */
     boolean executeVariantBuy(String portfolioId, Signal signal, BigDecimal referencePrice);
+
+    /**
+     * Returns {@code portfolioId}'s currently open shadow position for {@code symbol}, if any
+     * (plan §7.4 gap-fill). At most one is expected to be open at a time per (portfolio, symbol).
+     *
+     * @param portfolioId the variant id (portfolio_id column)
+     * @param symbol      the symbol to look up
+     * @return the open position snapshot, or empty if none is open
+     */
+    Optional<ShadowPositionSnapshot> findOpenShadowPosition(String portfolioId, String symbol);
+
+    /**
+     * Advances the high-water-mark persisted for {@code portfolioId}'s open position on
+     * {@code symbol} to {@code candidateClose} if it is higher, so a trailing stop evaluated on a
+     * later run reflects the highest close observed since entry. A no-op if no position is open.
+     *
+     * @param portfolioId    the variant id (portfolio_id column)
+     * @param symbol         the symbol
+     * @param candidateClose today's close
+     */
+    void advanceShadowPositionHighWaterMark(String portfolioId, String symbol, BigDecimal candidateClose);
+
+    /**
+     * Simulates a SELL fill closing {@code portfolioId}'s open position on {@code symbol}
+     * (plan §7.4 gap-fill): credits the portfolio's capital with proceeds minus commission,
+     * decrements {@code open_position_count}, persists a portfolio-tagged SELL order, and marks
+     * the position closed. Idempotent - if the position is already closed (e.g. a retried run
+     * within the same day), this is a no-op returning false.
+     *
+     * @param portfolioId the variant id (portfolio_id column)
+     * @param symbol      the symbol whose open position should be closed
+     * @param exitPrice   the simulated exit fill price
+     * @param exitReason  the {@code ExitReason} name (e.g. "STOP_LOSS", "TIME_STOP") that
+     *                    triggered this exit - passed as a plain string so this domain interface
+     *                    does not depend on the strategy module's exit-evaluation types
+     * @return true if a position was found open and closed, false if there was nothing to close
+     */
+    boolean executeVariantExit(String portfolioId, String symbol, BigDecimal exitPrice, String exitReason);
+
+    /**
+     * Returns every closed round-trip trade for {@code portfolioId}, most recently exited first
+     * (plan §7.4 gap-fill) - the data source for the champion/challenger promotion-eligibility
+     * checker.
+     *
+     * @param portfolioId the variant id (portfolio_id column)
+     */
+    List<ShadowClosedTrade> findClosedTrades(String portfolioId);
 }

@@ -347,8 +347,14 @@ public class SignalPipeline {
         if (shouldPersist) {
             persistenceService.deleteBySymbolAndDateAndStrategyAndVersion(
                 symbol, date, config.variantId(), config.version());
-            Signal baseSignal = Signal.create(
-                symbol, date, afterGates.type(), afterGates.score(), afterGates.reasoning());
+            // BUY signals carry their suggested stop/target through to persistence (plan §7.4
+            // gap-fill) - paper-trade exit evaluation for the resulting shadow position needs
+            // them later and cannot recompute them without re-running the strategy.
+            Signal baseSignal = afterGates.type() == Signal.SignalType.BUY
+                ? Signal.createWithLevels(symbol, date, afterGates.type(), afterGates.score(),
+                    afterGates.reasoning(), ctx.view(barIndex).close(),
+                    afterGates.suggestedStop(), afterGates.suggestedTarget())
+                : Signal.create(symbol, date, afterGates.type(), afterGates.score(), afterGates.reasoning());
             persistenceService.saveVariantSignal(baseSignal, warningFlag, config.variantId(), config.version(),
                 afterGates.score(), toOutcomeMaps(afterGates.rules()), toGateOutcomeMaps(gateOutcomes));
         }

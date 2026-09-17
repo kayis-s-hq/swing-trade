@@ -3,13 +3,17 @@ package com.swingtrade.broker.service;
 import com.swingtrade.broker.entity.PaperTradingOrderEntity;
 import com.swingtrade.broker.entity.PaperTradingPortfolioEntity;
 import com.swingtrade.broker.entity.PaperTradingSnapshotEntity;
+import com.swingtrade.broker.entity.ShadowPositionEntity;
 import com.swingtrade.broker.repository.PaperTradingOrderRepository;
 import com.swingtrade.broker.repository.PaperTradingPortfolioRepository;
 import com.swingtrade.broker.repository.PaperTradingSnapshotRepository;
+import com.swingtrade.broker.repository.ShadowPositionRepository;
 import com.swingtrade.broker.util.OptimisticLockRetryHelper;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.OrderType;
+import com.swingtrade.domain.ShadowClosedTrade;
+import com.swingtrade.domain.ShadowPositionSnapshot;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.domain.service.PaperPortfolioService;
@@ -24,6 +28,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -54,16 +59,19 @@ public class PaperPortfolioServiceImpl implements PaperPortfolioService {
     private final PaperTradingSnapshotRepository snapshotRepo;
     private final PaperTradingStateService defaultPortfolioStateService;
     private final PaperTradingOrderRepository orderRepo;
+    private final ShadowPositionRepository shadowPositionRepo;
     private final AtomicLong shadowOrderCounter = new AtomicLong(0);
 
     public PaperPortfolioServiceImpl(PaperTradingPortfolioRepository portfolioRepo,
                                       PaperTradingSnapshotRepository snapshotRepo,
                                       PaperTradingStateService defaultPortfolioStateService,
-                                      PaperTradingOrderRepository orderRepo) {
+                                      PaperTradingOrderRepository orderRepo,
+                                      ShadowPositionRepository shadowPositionRepo) {
         this.portfolioRepo = portfolioRepo;
         this.snapshotRepo = snapshotRepo;
         this.defaultPortfolioStateService = defaultPortfolioStateService;
         this.orderRepo = orderRepo;
+        this.shadowPositionRepo = shadowPositionRepo;
     }
 
     @Override
@@ -242,6 +250,23 @@ public class PaperPortfolioServiceImpl implements PaperPortfolioService {
                 PaperTradingOrderEntity orderEntity = new PaperTradingOrderEntity(order, portfolioId);
                 orderRepo.save(orderEntity);
 
+                // Persist open-position state (plan §7.4 gap-fill) so a later run can evaluate an
+                // exit for it: entry price/stop/target/high-water-mark, keyed by
+                // (portfolioId, symbol) - at most one OPEN row is expected per pair.
+                ShadowPositionEntity position = new ShadowPositionEntity();
+                position.setPortfolioId(portfolioId);
+                position.setSymbol(signal.symbol());
+                position.setEntryDate(signal.date() != null ? signal.date() : LocalDate.now());
+                position.setEntryPrice(referencePrice);
+                position.setStopLoss(signal.stopLoss());
+                position.setTarget(signal.target());
+                position.setQuantity(quantity.intValue());
+                position.setHighWaterMark(referencePrice);
+                position.setStatus(ShadowPositionEntity.STATUS_OPEN);
+                position.setCreatedAt(LocalDateTime.now());
+                position.setUpdatedAt(LocalDateTime.now());
+                shadowPositionRepo.save(position);
+
                 logger.info("Executed variant BUY for portfolio {}: {} shares of {} at {} (commission {})",
                     portfolioId, quantity, signal.symbol(), referencePrice, commission);
                 return true;
@@ -269,6 +294,132 @@ public class PaperPortfolioServiceImpl implements PaperPortfolioService {
     private String generateShadowOrderId(String portfolioId) {
         return "SHADOW_" + portfolioId + "_" + shadowOrderCounter.incrementAndGet()
             + "_" + System.nanoTime();
+    }
+
+    @Override
+    public Optional<ShadowPositionSnapshot> findOpenShadowPosition(String portfolioId, String symbol) {
+        if (portfolioId == null || symbol == null) {
+            return Optional.empty();
+        }
+        return shadowPositionRepo.findByPortfolioIdAndSymbolAndStatus(
+                portfolioId, symbol, ShadowPositionEntity.STATUS_OPEN)
+            .map(e -> new ShadowPositionSnapshot(e.getPortfolioId(), e.getSymbol(), e.getEntryDate(),
+                e.getEntryPrice(), e.getStopLoss(), e.getTarget(), e.getQuantity(), e.getHighWaterMark()));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void advanceShadowPositionHighWaterMark(String portfolioId, String symbol, BigDecimal candidateClose) {
+        if (portfolioId == null || symbol == null || candidateClose == null) {
+            return;
+        }
+        try {
+            OptimisticLockRetryHelper.execute(() -> {
+                ShadowPositionEntity position = shadowPositionRepo
+                    .findByPortfolioIdAndSymbolAndStatus(portfolioId, symbol, ShadowPositionEntity.STATUS_OPEN)
+                    .orElse(null);
+                if (position == null) {
+                    return;
+                }
+                BigDecimal current = nz(position.getHighWaterMark());
+                if (candidateClose.compareTo(current) > 0) {
+                    position.setHighWaterMark(candidateClose);
+                    position.setUpdatedAt(LocalDateTime.now());
+                    shadowPositionRepo.save(position);
+                }
+            }, "ShadowPositionEntity:hwm:" + portfolioId + ":" + symbol);
+        } catch (RuntimeException e) {
+            logger.warn("Failed to advance high-water-mark for portfolio {} on {}: {}",
+                portfolioId, symbol, e.getMessage(), e);
+        }
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean executeVariantExit(String portfolioId, String symbol, BigDecimal exitPrice, String exitReason) {
+        if (portfolioId == null || symbol == null || exitPrice == null
+                || exitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        try {
+            return OptimisticLockRetryHelper.execute(() -> {
+                // Idempotent by construction: once closed, this lookup for STATUS_OPEN finds
+                // nothing on a retried/duplicate run within the same day, so no double-exit.
+                ShadowPositionEntity position = shadowPositionRepo
+                    .findByPortfolioIdAndSymbolAndStatus(portfolioId, symbol, ShadowPositionEntity.STATUS_OPEN)
+                    .orElse(null);
+                if (position == null) {
+                    logger.debug("No open shadow position for portfolio {} on {}, nothing to exit",
+                        portfolioId, symbol);
+                    return false;
+                }
+
+                PaperTradingPortfolioEntity portfolio = portfolioRepo.findByPortfolioId(portfolioId).orElse(null);
+                if (portfolio == null) {
+                    logger.warn("Cannot execute variant exit for {}: no portfolio row for {}",
+                        symbol, portfolioId);
+                    return false;
+                }
+
+                BigDecimal quantity = BigDecimal.valueOf(position.getQuantity());
+                BigDecimal proceeds = exitPrice.multiply(quantity);
+                BigDecimal commission = quantity.multiply(COMMISSION_RATE);
+                BigDecimal netProceeds = proceeds.subtract(commission);
+                BigDecimal entryValue = nz(position.getEntryPrice()).multiply(quantity);
+                BigDecimal pnl = netProceeds.subtract(entryValue);
+
+                portfolio.setCurrentCapital(nz(portfolio.getCurrentCapital()).add(netProceeds));
+                portfolio.setTotalRealizedPnl(nz(portfolio.getTotalRealizedPnl()).add(pnl));
+                portfolio.setOpenPositionCount(Math.max(0, portfolio.getOpenPositionCount() - 1));
+                portfolioRepo.save(portfolio);
+
+                position.setStatus(ShadowPositionEntity.STATUS_CLOSED);
+                position.setExitDate(LocalDate.now());
+                position.setExitPrice(exitPrice);
+                position.setExitReason(exitReason);
+                position.setPnl(pnl);
+                position.setUpdatedAt(LocalDateTime.now());
+                shadowPositionRepo.save(position);
+
+                PaperTradingOrderEntity orderEntity = new PaperTradingOrderEntity();
+                orderEntity.setOrderId(generateShadowOrderId(portfolioId));
+                orderEntity.setSymbol(symbol);
+                orderEntity.setType(OrderType.MARKET.name());
+                orderEntity.setDirection("SELL");
+                orderEntity.setQuantity(position.getQuantity());
+                orderEntity.setPrice(exitPrice);
+                orderEntity.setStatus(OrderStatus.FILLED.name());
+                orderEntity.setCommission(commission);
+                orderEntity.setExecutedAt(LocalDateTime.now());
+                orderEntity.setCreatedAt(LocalDateTime.now());
+                orderEntity.setUpdatedAt(LocalDateTime.now());
+                orderEntity.setSignalId(exitReason);
+                orderEntity.setPortfolioId(portfolioId);
+                orderRepo.save(orderEntity);
+
+                logger.info("Executed variant exit for portfolio {}: {} shares of {} at {} reason={} pnl={}",
+                    portfolioId, position.getQuantity(), symbol, exitPrice, exitReason, pnl);
+                return true;
+            }, "ShadowPositionEntity:exit:" + portfolioId + ":" + symbol);
+        } catch (RuntimeException e) {
+            logger.warn("Failed to execute variant exit for portfolio {} on {}: {}",
+                portfolioId, symbol, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    @Override
+    public List<ShadowClosedTrade> findClosedTrades(String portfolioId) {
+        if (portfolioId == null) {
+            return List.of();
+        }
+        return shadowPositionRepo
+            .findByPortfolioIdAndStatusOrderByExitDateDesc(portfolioId, ShadowPositionEntity.STATUS_CLOSED)
+            .stream()
+            .map(e -> new ShadowClosedTrade(e.getPortfolioId(), e.getSymbol(), e.getEntryDate(), e.getExitDate(),
+                e.getEntryPrice(), e.getExitPrice(), e.getStopLoss(), e.getTarget(), e.getQuantity(),
+                e.getExitReason(), e.getPnl()))
+            .toList();
     }
 
     private static BigDecimal nz(BigDecimal value) {
