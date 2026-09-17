@@ -24,6 +24,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -194,7 +196,17 @@ public class CandidateScanService {
         logHistory.put(run.getRunId(), new ConcurrentLinkedDeque<>());
         publish(run.getRunId(), "RUN_STARTED", null, "INFO",
             "Scanning " + symbols.size() + " NSE symbols with up to " + maxConcurrent + " workers.");
-        executor.submit(() -> execute(run.getRunId(), symbols));
+        Runnable scanTask = () -> execute(run.getRunId(), symbols);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    executor.submit(scanTask);
+                }
+            });
+        } else {
+            executor.submit(scanTask);
+        }
         return run;
     }
 

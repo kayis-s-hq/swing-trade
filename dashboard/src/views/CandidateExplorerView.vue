@@ -295,20 +295,6 @@
               <td class="px-3 py-3.5">
                 <span :class="signalClass(item.signalType)">{{ item.signalType ?? '—' }}</span>
               </td>
-              <td class="px-3 py-3.5 text-xs text-text-muted">
-                <div>{{ item.sourceOutcome ?? item.dataStatus }}</div>
-                <div v-if="item.firstAvailableDate">
-                  {{ item.firstAvailableDate }} → {{ item.lastAvailableDate }}
-                </div>
-                <div v-if="item.retryAfter">Retry {{ item.retryAfter }}</div>
-                <div v-if="item.activated" class="mt-1 font-semibold text-success">
-                  Activated — auto-added to wishlist
-                </div>
-                <div v-if="item.oosTotalTrades != null">
-                  OOS: {{ item.oosTotalTrades }} trades, {{ percent(item.oosWinRate) }},
-                  {{ percent(item.oosTotalReturn) }}
-                </div>
-              </td>
               <td class="px-3 py-3.5 text-text-muted">{{ item.totalTrades ?? '—' }}</td>
               <td class="px-3 py-3.5 text-text-primary">{{ percent(item.winRate) }}</td>
               <td
@@ -326,6 +312,20 @@
                 <span v-else class="text-xs text-text-muted">{{
                   item.reason ?? item.dataStatus
                 }}</span>
+              </td>
+              <td class="px-3 py-3.5 text-xs text-text-muted">
+                <div>{{ item.sourceOutcome ?? item.dataStatus }}</div>
+                <div v-if="item.firstAvailableDate">
+                  {{ item.firstAvailableDate }} → {{ item.lastAvailableDate }}
+                </div>
+                <div v-if="item.retryAfter">Retry {{ item.retryAfter }}</div>
+                <div v-if="item.activated" class="mt-1 font-semibold text-success">
+                  Activated — auto-added to wishlist
+                </div>
+                <div v-if="item.oosTotalTrades != null">
+                  OOS: {{ item.oosTotalTrades }} trades, {{ percent(item.oosWinRate) }},
+                  {{ percent(item.oosTotalReturn) }}
+                </div>
               </td>
             </tr>
           </tbody>
