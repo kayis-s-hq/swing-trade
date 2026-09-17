@@ -212,76 +212,11 @@ public class YahooFinanceClient implements MarketDataClient {
     @Override
     public CandleData fetchCandle(String symbol, LocalDate date) {
         try {
-            // Yahoo Finance uses symbols like "RELIANCE.NS" for NSE
-            String yfinanceSymbol = formatSymbolForYahoo(symbol);
-
-            long timestamp = date.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
-            long nextDay = date.plusDays(1).atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
-
-            String uri = String.format(CANDLE_URI_FMT, yfinanceSymbol, timestamp, nextDay);
-
-            String response = executeWithResilience(client ->
-                    client.get().uri(uri)
-                        .retrieve()
-                        .onStatus(s -> s.value() == 404, r -> Mono.empty())
-                        .onStatus(s -> s.value() >= 400,
-                                r -> Mono.error(new YahooHttpException(r.statusCode().value())))
-                        .bodyToMono(String.class));
-
-            if (response == null || response.isEmpty()) return null;
-            JsonNode root = objectMapper.readTree(response);
-            JsonNode result = root.path("chart").path("result");
-            if (!result.isArray() || result.size() == 0) return null;
-            JsonNode quoteObj = result.get(0).path("indicators").path("quote").get(0);
-            JsonNode timestamps = result.get(0).path("timestamp");
-            if (!quoteObj.isObject() || !timestamps.isArray() || timestamps.size() == 0) return null;
-
-            ZoneId exchangeZone = resolveExchangeZone(result.get(0).path("meta"));
-            int row = -1;
-            for (int i = 0; i < timestamps.size(); i++) {
-                LocalDate resolvedDate = LocalDate.ofInstant(
-                    Instant.ofEpochSecond(timestamps.get(i).asLong()), exchangeZone);
-                if (date.equals(resolvedDate)) {
-                    row = i;
-                    break;
-                }
+            for (CandleData candle : fetchCandles(symbol, date, date)) {
+                if (date.equals(candle.date())) return candle;
             }
-            if (row < 0) {
-                logger.warn("Yahoo returned no candle timestamp for {} on {}", symbol, date);
-                return null;
-            }
-
-            JsonNode openArr = quoteObj.path("open");
-            JsonNode highArr = quoteObj.path("high");
-            JsonNode lowArr = quoteObj.path("low");
-            JsonNode closeArr = quoteObj.path("close");
-            JsonNode volumeArr = quoteObj.path("volume");
-            JsonNode adjArr = result.get(0).path("indicators").path("adjclose")
-                .isArray() && result.get(0).path("indicators").path("adjclose").size() > 0
-                    ? result.get(0).path("indicators").path("adjclose").get(0).path("adjclose") : null;
-            if (!closeArr.isArray() || row >= closeArr.size() || closeArr.get(row).isNull()) {
-                logger.warn("Yahoo returned no close values for {} on {}", symbol, date);
-                return null;
-            }
-            if (!openArr.isArray() || !highArr.isArray() || !lowArr.isArray()
-                    || !volumeArr.isArray() || row >= openArr.size() || row >= highArr.size()
-                    || row >= lowArr.size() || row >= volumeArr.size()
-                    || openArr.get(row).isNull() || highArr.get(row).isNull() || lowArr.get(row).isNull()) {
-                logger.warn("Yahoo returned incomplete OHLCV values for {} on {}", symbol, date);
-                return null;
-            }
-            double closeVal = closeArr.get(row).asDouble(0);
-            if (!Double.isFinite(closeVal) || closeVal == 0) {
-                logger.warn("Yahoo returned an unusable close value for {} on {}: {}", symbol, date, closeVal);
-                return null;
-            }
-            long volume = volumeArr.get(row).asLong(0);
-            if (volume == 0) return null;
-            return CandleData.of(symbol, date,
-                parseBigDecimal(openArr.get(row)), parseBigDecimal(highArr.get(row)),
-                parseBigDecimal(lowArr.get(row)), parseBigDecimal(closeArr.get(row)), volume,
-                (adjArr != null && !adjArr.isNull() && row < adjArr.size()) ? parseBigDecimal(adjArr.get(row))
-                    : parseBigDecimal(closeArr.get(row)));
+            logger.warn("Yahoo single-day fetch returned no valid close values for {} on {}", symbol, date);
+            return null;
 
         } catch (Exception e) {
             logger.warn("Failed to fetch candle for {} on {}: {}", symbol, date, e.getMessage());

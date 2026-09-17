@@ -10,7 +10,7 @@ Last checked: 2026-09-17 (data coverage verification)
 - [x] Broker coverage remediation completed 2026-09-17: risk-control orchestration,
   notification, configuration, and paper-engine behavior now have focused tests; broker
   JaCoCo verification passed. The full Gradle build then reached the data module, where its
-  aggregate coverage is 48% (1,849/3,885 lines) against the 80% gate; focused
+  aggregate coverage is 47% (1,809/3,833 lines) against the 80% gate; focused
   WatchlistService, DataIngestionService, TradeLabelService, SignalEntity, PositionEntity,
   TradeEntity, and CandidateScanResultEntity coverage was added, but this remains the next
   full-build blocker. The data PMD test violation was also removed and the scoped verifier passed.
@@ -134,7 +134,9 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 - [x] Yahoo single-candle observability improved 2026-09-17: empty, null, zero, and
   non-finite close responses now emit an explicit symbol/date warning before being rejected.
-  The Yahoo client suite and `./bin/verify-changes` passed.
+  `fetchCandle()` now delegates to the inclusive single-day batch range, avoiding a separate
+  parser and keeping single-day validation consistent with range ingestion. The Yahoo client
+  suite and `./bin/verify-changes` passed.
 
 - [x] Runtime API verification extended 2026-09-17: against the existing PostgreSQL
   development database (schema V50), `/api/health` returned 200, data validation returned

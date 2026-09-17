@@ -123,6 +123,22 @@ class YahooFinanceClientTest {
     }
 
     @Test
+    void fetchCandleRequestsAnInclusiveSingleDayRange() throws Exception {
+        LocalDate date = LocalDate.of(2024, 1, 15);
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(yahooResponse(date, 100.0, 105.0, 99.0, 104.0, 5000000))
+                .addHeader("Content-Type", "application/json"));
+
+        client.fetchCandle("RELIANCE", date);
+
+        var request = mockWebServer.takeRequest();
+        long start = date.atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond();
+        long end = date.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond();
+        assertThat(request.getPath()).contains("period1=" + start);
+        assertThat(request.getPath()).contains("period2=" + end);
+    }
+
+    @Test
     void fetchCandleSelectsRequestedDateWhenResponseContainsMultipleRows() {
         LocalDate requested = LocalDate.of(2024, 1, 15);
         List<Object[]> rows = List.of(
