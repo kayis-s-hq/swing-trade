@@ -1,5 +1,7 @@
 package com.swingtrade.data.service;
 
+import com.swingtrade.core.metrics.DataIngestionMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -72,5 +74,23 @@ class MarketDataClientProviderTest {
     @Test
     void compatibilityConstructorDoesNotWrapClients() {
         assertThat(provider.getClient()).isSameAs(yahoo);
+    }
+
+    @Test
+    void productionConstructorSharesOneLimiterAcrossProviderAliases() {
+        DataIngestionMetrics metrics = new DataIngestionMetrics(new SimpleMeterRegistry());
+        MarketDataClient productionProvider = new MarketDataClientProvider(
+            Map.of("yahoo", yahoo, "fyers", fyers, "fyersServiceClient", fyers),
+            appSettingsService, metrics, 0, 100, 60, 30).getClient();
+
+        MarketDataClientProvider configured = new MarketDataClientProvider(
+            Map.of("yahoo", yahoo, "fyers", fyers, "fyersServiceClient", fyers),
+            appSettingsService, metrics, 0, 100, 60, 30);
+        configured.setActiveBroker("fyers");
+        MarketDataClient fyersAliasLimiter = configured.getClient();
+        configured.setActiveBroker("fyersServiceClient");
+
+        assertThat(productionProvider).isNotSameAs(yahoo);
+        assertThat(configured.getClient()).isSameAs(fyersAliasLimiter);
     }
 }
