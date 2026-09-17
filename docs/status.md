@@ -70,6 +70,12 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   collection is now automated by the bounded persisted-candle evaluator; aggregate
   reporting remains a separate follow-up.
 
+- [x] Portfolio benchmark wiring verified 2026-09-17: shared-capital backtests now
+  attach the persisted NIFTY50 price-series return and excess return when the bounded
+  benchmark adapter has a usable window; missing or malformed benchmark data remains
+  explicitly unavailable. Strategy/API tests and `./bin/verify-changes` passed.
+  Authoritative NIFTY TRI and benchmark attribution remain open.
+
 - [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
   as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API
   tests passed; cross-sectional rank and authoritative index ingestion remain open.

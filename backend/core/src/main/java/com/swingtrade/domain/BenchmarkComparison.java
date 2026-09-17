@@ -16,6 +16,7 @@ public record BenchmarkComparison(
     Availability availability
 ) {
     public static final String BUY_AND_HOLD = "BUY_AND_HOLD";
+    public static final String NIFTY50_PRICE = "NIFTY50_PRICE";
 
     public enum Availability {
         AVAILABLE,
@@ -33,6 +34,11 @@ public record BenchmarkComparison(
 
     public static BenchmarkComparison buyAndHold(double strategyReturnPct, double benchmarkReturnPct) {
         return new BenchmarkComparison(BUY_AND_HOLD, strategyReturnPct, benchmarkReturnPct,
+            strategyReturnPct - benchmarkReturnPct, Availability.AVAILABLE);
+    }
+
+    public static BenchmarkComparison nifty50Price(double strategyReturnPct, double benchmarkReturnPct) {
+        return new BenchmarkComparison(NIFTY50_PRICE, strategyReturnPct, benchmarkReturnPct,
             strategyReturnPct - benchmarkReturnPct, Availability.AVAILABLE);
     }
 

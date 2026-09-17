@@ -2,6 +2,7 @@ package com.swingtrade.strategy;
 
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.BenchmarkComparison;
+import com.swingtrade.domain.BenchmarkCandleSeries;
 import com.swingtrade.domain.CorporateAction;
 import com.swingtrade.domain.HistoricalCandleAdjuster;
 import com.swingtrade.domain.OhlcvCandle;
@@ -11,6 +12,7 @@ import com.swingtrade.domain.PriceBandPolicy;
 import com.swingtrade.domain.RiskManagementPolicy;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.BenchmarkDataAdapter;
 import com.swingtrade.domain.store.PriceBandStore;
 import com.swingtrade.domain.store.CorporateActionStore;
 import com.swingtrade.domain.store.UniverseSnapshotStore;
@@ -46,6 +48,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Simulates the Phase 2 price-action entry rules bar-by-bar against historical candles to
@@ -79,6 +82,7 @@ public class BacktestEngine {
     private final PriceBandStore priceBandStore;
     private final UniverseSnapshotStore universeSnapshotStore;
     private final CorporateActionStore corporateActionStore;
+    private final BenchmarkDataAdapter benchmarkDataAdapter;
 
     public BacktestEngine(CandleStore candleStore,
                           WatchlistStore watchlistStore,
@@ -102,13 +106,25 @@ public class BacktestEngine {
     }
 
     /** Production constructor: historical analytics are fail-closed on missing provenance. */
-    @org.springframework.beans.factory.annotation.Autowired
     public BacktestEngine(CandleStore candleStore, WatchlistStore watchlistStore,
                           PriceActionSignalEngine priceActionSignalEngine, StrategyRegistry strategyRegistry,
                           ObjectMapper objectMapper,
                           @Value("${backtest.reports.dir:reports}") String reportsDir,
                           PriceBandStore priceBandStore,
                           UniverseSnapshotStore universeSnapshotStore, CorporateActionStore corporateActionStore) {
+        this(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry, objectMapper, reportsDir,
+                priceBandStore, universeSnapshotStore, corporateActionStore, emptyBenchmarkDataAdapter());
+    }
+
+    /** Production constructor: historical analytics are fail-closed on missing provenance. */
+    @org.springframework.beans.factory.annotation.Autowired
+    public BacktestEngine(CandleStore candleStore, WatchlistStore watchlistStore,
+                          PriceActionSignalEngine priceActionSignalEngine, StrategyRegistry strategyRegistry,
+                          ObjectMapper objectMapper,
+                          @Value("${backtest.reports.dir:reports}") String reportsDir,
+                          PriceBandStore priceBandStore,
+                          UniverseSnapshotStore universeSnapshotStore, CorporateActionStore corporateActionStore,
+                          BenchmarkDataAdapter benchmarkDataAdapter) {
         this.candleStore = candleStore;
         this.watchlistStore = watchlistStore;
         this.priceActionSignalEngine = priceActionSignalEngine;
@@ -118,6 +134,7 @@ public class BacktestEngine {
         this.priceBandStore = priceBandStore;
         this.universeSnapshotStore = universeSnapshotStore;
         this.corporateActionStore = corporateActionStore;
+        this.benchmarkDataAdapter = benchmarkDataAdapter;
     }
 
     private static UniverseSnapshotStore permissiveUniverseStore() {
@@ -143,6 +160,10 @@ public class BacktestEngine {
             }
             @Override public void save(PriceBand priceBand) {}
         };
+    }
+
+    private static BenchmarkDataAdapter emptyBenchmarkDataAdapter() {
+        return (from, to) -> Optional.empty();
     }
 
     /**
@@ -397,7 +418,15 @@ public class BacktestEngine {
                 logger.warn("Skipping {} in portfolio backtest: {}", symbol, e.getMessage());
             }
         }
-        return portfolioBacktestEngine.simulate(results, config, evaluationStart, evaluationEnd, marketData);
+        Optional<BenchmarkCandleSeries> benchmark;
+        try {
+            benchmark = benchmarkDataAdapter.findNifty50(evaluationStart, evaluationEnd);
+        } catch (RuntimeException e) {
+            logger.warn("NIFTY benchmark unavailable for portfolio backtest: {}", e.getMessage());
+            benchmark = Optional.empty();
+        }
+        return portfolioBacktestEngine.simulate(results, config, evaluationStart, evaluationEnd, marketData,
+                Map.of(), benchmark);
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.swingtrade.strategy;
 
+import com.swingtrade.domain.BenchmarkComparison;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -27,7 +29,8 @@ public record PortfolioBacktestResult(
         int rejectedTrades,
         List<BacktestTrade> trades,
         List<PortfolioEquityPoint> equityCurve,
-        List<String> rejectionReasons
+        List<String> rejectionReasons,
+        BenchmarkComparison benchmarkComparison
 ) {
     /** Source-compatible constructor for callers without rejection-reason details. */
     public PortfolioBacktestResult(LocalDate evaluationStart, LocalDate evaluationEnd, double initialCapital,
@@ -37,12 +40,14 @@ public record PortfolioBacktestResult(
                                    List<BacktestTrade> trades, List<PortfolioEquityPoint> equityCurve) {
         this(evaluationStart, evaluationEnd, initialCapital, finalCapital, totalReturn, maxDrawdownPct,
                 sharpeRatio, cagrPct, sortinoRatio, calmarRatio, totalTrades, winningTrades, rejectedTrades,
-                trades, equityCurve, List.of());
+                trades, equityCurve, List.of(), BenchmarkComparison.unavailable(totalReturn));
     }
 
     public PortfolioBacktestResult {
         trades = List.copyOf(trades);
         equityCurve = List.copyOf(equityCurve);
         rejectionReasons = List.copyOf(rejectionReasons);
+        benchmarkComparison = benchmarkComparison == null
+                ? BenchmarkComparison.unavailable(totalReturn) : benchmarkComparison;
     }
 }

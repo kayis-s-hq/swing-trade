@@ -1,6 +1,8 @@
 package com.swingtrade.strategy;
 
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.BenchmarkCandleSeries;
+import com.swingtrade.domain.BenchmarkComparison;
 import com.swingtrade.domain.CorrelationExposureLimit;
 import com.swingtrade.domain.PortfolioExposurePolicy;
 import com.swingtrade.domain.SectorExposureLimit;
@@ -10,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -100,6 +103,26 @@ class PortfolioBacktestEngineTest {
         assertThat(result.equityCurve().get(1).equity()).isEqualTo(120.0);
         assertThat(result.equityCurve().get(2).unsettledProceeds()).isEqualTo(110.0);
         assertThat(result.equityCurve().get(3).settledCash()).isEqualTo(110.0);
+    }
+
+    @Test
+    void reportsPersistedNiftyPriceBenchmarkAndExcessReturn() {
+        BacktestTrade held = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), 100, 1, 10);
+        Map<String, List<OhlcvCandle>> candles = Map.of("AAA", List.of(
+                candle("AAA", LocalDate.of(2024, 1, 2), 100),
+                candle("AAA", LocalDate.of(2024, 1, 3), 110),
+                candle("AAA", LocalDate.of(2024, 1, 4), 110)));
+        BenchmarkCandleSeries nifty = new BenchmarkCandleSeries("NIFTY50",
+                LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), List.of(
+                candle("NIFTY50", LocalDate.of(2024, 1, 2), 100),
+                candle("NIFTY50", LocalDate.of(2024, 1, 4), 105)));
+
+        PortfolioBacktestResult result = engine.simulate(List.of(result("AAA", held)), config(100),
+                LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), candles, Map.of(), Optional.of(nifty));
+
+        assertThat(result.benchmarkComparison().benchmarkName()).isEqualTo(BenchmarkComparison.NIFTY50_PRICE);
+        assertThat(result.benchmarkComparison().benchmarkReturnPct()).isEqualTo(5.0);
+        assertThat(result.benchmarkComparison().excessReturnPct()).isEqualTo(5.0);
     }
 
     @Test

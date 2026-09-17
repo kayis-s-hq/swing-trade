@@ -1,5 +1,6 @@
 package com.swingtrade.api.dto;
 
+import com.swingtrade.domain.BenchmarkComparison;
 import com.swingtrade.strategy.BacktestTrade;
 import com.swingtrade.strategy.PortfolioBacktestResult;
 import com.swingtrade.strategy.PortfolioEquityPoint;
@@ -23,7 +24,8 @@ public record PortfolioBacktestResponse(
         int winningTrades,
         int rejectedTrades,
         List<PortfolioBacktestTradeResponse> trades,
-        List<PortfolioEquityPointResponse> equityCurve
+        List<PortfolioEquityPointResponse> equityCurve,
+        BenchmarkComparison benchmarkComparison
 ) {
     public static PortfolioBacktestResponse from(PortfolioBacktestResult result) {
         return new PortfolioBacktestResponse(result.evaluationStart(), result.evaluationEnd(),
@@ -32,7 +34,8 @@ public record PortfolioBacktestResponse(
                 result.sortinoRatio(), result.calmarRatio(), result.totalTrades(),
                 result.winningTrades(), result.rejectedTrades(),
                 result.trades().stream().map(PortfolioBacktestTradeResponse::from).toList(),
-                result.equityCurve().stream().map(PortfolioEquityPointResponse::from).toList());
+                result.equityCurve().stream().map(PortfolioEquityPointResponse::from).toList(),
+                result.benchmarkComparison());
     }
 
     public record PortfolioBacktestTradeResponse(

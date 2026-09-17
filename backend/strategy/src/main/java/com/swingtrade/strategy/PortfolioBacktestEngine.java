@@ -1,6 +1,8 @@
 package com.swingtrade.strategy;
 
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.BenchmarkCandleSeries;
+import com.swingtrade.domain.BenchmarkComparison;
 import com.swingtrade.domain.RiskManagementPolicy;
 import com.swingtrade.domain.PortfolioExposureContext;
 import com.swingtrade.domain.PortfolioExposureDecision;
@@ -13,6 +15,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Applies shared-capital and position-capacity constraints to independently generated trade
@@ -22,19 +25,27 @@ final class PortfolioBacktestEngine {
 
     PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
                                      LocalDate evaluationStart, LocalDate evaluationEnd) {
-        return simulate(symbolResults, config, evaluationStart, evaluationEnd, Map.of());
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, Map.of(), Map.of(), Optional.empty());
     }
 
     PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
                                      LocalDate evaluationStart, LocalDate evaluationEnd,
                                      Map<String, List<OhlcvCandle>> marketData) {
-        return simulate(symbolResults, config, evaluationStart, evaluationEnd, marketData, Map.of());
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, marketData, Map.of(), Optional.empty());
     }
 
     PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
                                      LocalDate evaluationStart, LocalDate evaluationEnd,
                                      Map<String, List<OhlcvCandle>> marketData,
                                      Map<String, String> sectors) {
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, marketData, sectors, Optional.empty());
+    }
+
+    PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
+                                     LocalDate evaluationStart, LocalDate evaluationEnd,
+                                     Map<String, List<OhlcvCandle>> marketData,
+                                     Map<String, String> sectors,
+                                     Optional<BenchmarkCandleSeries> benchmark) {
         if (symbolResults == null || config == null || evaluationStart == null || evaluationEnd == null
                 || evaluationStart.isAfter(evaluationEnd)) {
             throw new IllegalArgumentException("Portfolio inputs must be non-null and the window must be ordered");
@@ -152,13 +163,30 @@ final class PortfolioBacktestEngine {
         double maxDrawdown = maxDrawdownPct(equityCurve);
         double cagr = BacktestMetrics.cagrPct(config.initialCapital(), finalCapital,
                 evaluationStart, evaluationEnd);
+        double totalReturn = (finalCapital - config.initialCapital()) / config.initialCapital() * 100.0;
+        BenchmarkComparison benchmarkComparison = benchmark.flatMap(PortfolioBacktestEngine::benchmarkComparison)
+                .map(value -> BenchmarkComparison.nifty50Price(totalReturn, value.benchmarkReturnPct()))
+                .orElseGet(() -> BenchmarkComparison.unavailable(totalReturn));
         return new PortfolioBacktestResult(evaluationStart, evaluationEnd, config.initialCapital(), finalCapital,
-                (finalCapital - config.initialCapital()) / config.initialCapital() * 100.0,
+                totalReturn,
                 maxDrawdown, BacktestMetrics.sharpeRatio(equityCurve.stream()
                         .map(PortfolioEquityPoint::equity).toList()), cagr, BacktestMetrics.sortinoRatio(equityCurve.stream()
                         .map(PortfolioEquityPoint::equity).toList()),
                 BacktestMetrics.calmarRatio(cagr, maxDrawdown), accepted.size(), winners, rejected,
-                accepted, equityCurve, rejectionReasons);
+                accepted, equityCurve, rejectionReasons, benchmarkComparison);
+    }
+
+    private static Optional<BenchmarkComparison> benchmarkComparison(BenchmarkCandleSeries series) {
+        List<OhlcvCandle> candles = series.candles();
+        if (candles.size() < 2) return Optional.empty();
+        OhlcvCandle first = candles.getFirst();
+        OhlcvCandle last = candles.getLast();
+        if (first.close() == null || last.close() == null || first.close().signum() <= 0
+                || last.close().signum() <= 0) return Optional.empty();
+        double returnPct = last.close().subtract(first.close())
+                .divide(first.close(), java.math.MathContext.DECIMAL64)
+                .doubleValue() * 100.0;
+        return Optional.of(BenchmarkComparison.buyAndHold(0.0, returnPct));
     }
 
     private static double entryNotional(BacktestTrade trade) {
