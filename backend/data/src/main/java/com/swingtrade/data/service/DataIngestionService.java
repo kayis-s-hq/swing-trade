@@ -99,10 +99,46 @@ public class DataIngestionService {
         LocalDate toDate = LocalDate.now(ZoneId.of("Asia/Kolkata"));
         LocalDate fromDate = toDate.minusYears(yearsBack);
 
-        BackfillOutcome outcome = processStockDataWithOutcome(stockSymbol, fromDate, toDate);
+        BackfillOutcome outcome = processIncrementalStockData(stockSymbol, fromDate, toDate);
 
         logger.info("Backfill completed for {}: {}", stockSymbol, outcome.sourceOutcome());
         return outcome;
+    }
+
+    /**
+     * Fetches only the unpopulated tail of a requested range. Existing interior gaps are
+     * handled by the bounded repair path; this method prevents a routine backfill from
+     * re-downloading years of already stored candles.
+     */
+    public BackfillOutcome processIncrementalStockData(String symbol, LocalDate requestedFrom,
+                                                       LocalDate toDate) {
+        if (symbol == null || symbol.isBlank() || requestedFrom == null || toDate == null
+                || requestedFrom.isAfter(toDate)) {
+            throw new IllegalArgumentException("symbol and an ordered date range are required");
+        }
+        DataWindow existing = getExistingDataWindow(symbol);
+        LocalDate effectiveFrom = requestedFrom;
+        if (existing.latestDate() != null && existing.latestDate().isAfter(requestedFrom.minusDays(1))) {
+            effectiveFrom = existing.latestDate().plusDays(1);
+        }
+        if (effectiveFrom.isAfter(toDate)) {
+            logger.info("Skipping incremental backfill for {}: existing data reaches {}", symbol,
+                existing.latestDate());
+            return new BackfillOutcome("ALREADY_CURRENT", 0, 0, 0, null);
+        }
+        logger.info("Incremental backfill for {}: requested {} to {}, fetching {} to {}",
+            symbol, requestedFrom, toDate, effectiveFrom, toDate);
+        return processStockDataWithOutcome(symbol, effectiveFrom, toDate);
+    }
+
+    /** Returns the earliest and latest stored candle dates for a symbol. */
+    public DataWindow getExistingDataWindow(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            throw new IllegalArgumentException("symbol is required");
+        }
+        LocalDate earliest = candleRepository.findEarliestBySymbol(symbol).map(OhlcvCandleEntity::getDate).orElse(null);
+        LocalDate latest = candleRepository.findLatestBySymbol(symbol).map(OhlcvCandleEntity::getDate).orElse(null);
+        return new DataWindow(earliest, latest);
     }
 
     /**
@@ -625,4 +661,6 @@ public class DataIngestionService {
 
     public record BackfillOutcome(String sourceOutcome, int fetchedRows, int savedRows,
                                   int invalidRows, String errorMessage) {}
+
+    public record DataWindow(LocalDate earliestDate, LocalDate latestDate) {}
 }

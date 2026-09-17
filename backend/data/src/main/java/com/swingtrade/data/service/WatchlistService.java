@@ -216,10 +216,9 @@ public class WatchlistService {
         for (WatchlistEntity entry : watchlist) {
             progress.updateCurrent(entry.getSymbol());
             try {
-                // Request the complete configured range in one provider call. The database
-                // upsert makes this idempotent while allowing the provider response to repair
-                // internal gaps, not just append after the latest stored candle.
-                dataIngestionService.processStockData(entry.getSymbol(), fromDate, toDate);
+                // Only fetch the missing tail for each symbol; bounded repair handles recent
+                // interior gaps separately and this avoids downloading the full history again.
+                dataIngestionService.processIncrementalStockData(entry.getSymbol(), fromDate, toDate);
 
                 // Update watchlist entry
                 entry.setLastSyncedAt(LocalDateTime.now());

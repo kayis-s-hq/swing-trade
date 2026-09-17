@@ -176,6 +176,11 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   calls, including bulk and metadata methods, while lightweight test construction remains compatible.
   Data/API tests and `./bin/verify-changes` passed.
 
+- [x] Incremental backfill verified 2026-09-17: `POST /api/data/pull/incremental` now exposes
+  bounded single-symbol pulls, `getExistingDataWindow` reports stored bounds, routine backfills skip
+  an already populated tail, and watchlist bulk pulls use the incremental path. Data/API tests and
+  `./bin/verify-changes` passed; bounded interior-gap repair remains handled separately.
+
 - [x] Strategy/risk follow-up verified 2026-09-16: bounded synthesis evaluation, two additional
   opt-in strategy families, portfolio sector/correlation rejection policies, and walk-forward
   parameter stability evaluation are implemented with focused coverage. Full affected backend tests

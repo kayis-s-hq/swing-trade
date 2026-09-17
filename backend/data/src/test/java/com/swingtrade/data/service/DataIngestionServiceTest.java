@@ -150,6 +150,38 @@ class DataIngestionServiceTest {
         assert summary.contains("requested gap repair for 2 sessions");
     }
 
+    @Test
+    void incrementalBackfillFetchesOnlyAfterLatestStoredCandle() {
+        LocalDate from = LocalDate.of(2026, 1, 1);
+        LocalDate latest = LocalDate.of(2026, 6, 1);
+        OhlcvCandleEntity earliest = candle("RELIANCE", from);
+        OhlcvCandleEntity latestCandle = candle("RELIANCE", latest);
+        when(candleRepository.findEarliestBySymbol("RELIANCE")).thenReturn(Optional.of(earliest));
+        when(candleRepository.findLatestBySymbol("RELIANCE")).thenReturn(Optional.of(latestCandle));
+        when(mockClient.fetchCandles("RELIANCE", latest.plusDays(1), LocalDate.of(2026, 6, 10)))
+            .thenReturn(List.of());
+
+        DataIngestionService.BackfillOutcome outcome = dataIngestionService.processIncrementalStockData(
+            "RELIANCE", from, LocalDate.of(2026, 6, 10));
+
+        verify(mockClient).fetchCandles("RELIANCE", latest.plusDays(1), LocalDate.of(2026, 6, 10));
+        assert outcome.sourceOutcome().equals("NO_USABLE_DATA");
+    }
+
+    @Test
+    void incrementalBackfillDoesNotCallProviderWhenRangeAlreadyCurrent() {
+        LocalDate date = LocalDate.of(2026, 6, 10);
+        OhlcvCandleEntity stored = candle("RELIANCE", date);
+        when(candleRepository.findEarliestBySymbol("RELIANCE")).thenReturn(Optional.of(stored));
+        when(candleRepository.findLatestBySymbol("RELIANCE")).thenReturn(Optional.of(stored));
+
+        DataIngestionService.BackfillOutcome outcome = dataIngestionService.processIncrementalStockData(
+            "RELIANCE", LocalDate.of(2026, 1, 1), date);
+
+        verify(mockClient, Mockito.never()).fetchCandles(anyString(), any(LocalDate.class), any(LocalDate.class));
+        assert outcome.sourceOutcome().equals("ALREADY_CURRENT");
+    }
+
     private OhlcvCandleEntity candle(String symbol, LocalDate date) {
         OhlcvCandleEntity candle = new OhlcvCandleEntity();
         candle.setSymbol(symbol);
