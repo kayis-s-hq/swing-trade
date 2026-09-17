@@ -55,7 +55,7 @@ public class CandidateScanHandoffDispatcher {
                 } catch (JobOrchestratorService.ConcurrentRunException ignored) {
                     return;
                 } catch (Exception e) {
-                    scan.setOrchestrationStatus("FAILED"); scan.setOrchestrationError(e.getMessage()); runs.save(scan);
+                    scan.setOrchestrationStatus("PENDING"); scan.setOrchestrationError(e.getMessage()); runs.save(scan);
                     logger.warn("Candidate scan handoff {} failed: {}", scan.getRunId(), e.getMessage());
                 }
             }

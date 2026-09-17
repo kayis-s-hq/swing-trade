@@ -108,8 +108,11 @@ public class PiLlamaServerManager implements LlmServerManager {
         // "Starting llama-server..." + bind-failure log churn on every restart.
         if (healthCheck()) {
             if (!awaitServerReady(STARTUP_TIMEOUT_SECONDS)) {
-                throw new IllegalStateException("llama-server is listening on " + sshHost + ":" + port
-                        + " but did not become inference-ready within " + STARTUP_TIMEOUT_SECONDS + "s");
+                String reason = "llama-server is listening on " + sshHost + ":" + port
+                        + " but did not become inference-ready within " + STARTUP_TIMEOUT_SECONDS + "s";
+                lifecycleState = "FAILED";
+                lastFailureReason = reason;
+                throw new IllegalStateException(reason);
             }
             logger.info("llama-server on Pi already inference-ready on {}:{} (adopting existing process)",
                     sshHost, port);
@@ -149,6 +152,7 @@ public class PiLlamaServerManager implements LlmServerManager {
 
     @Override
     public void stop() {
+        boolean stopped = false;
         try {
             logger.info("Stopping llama-server on {} port {}", sshHost, port);
             String cmd = String.format(
@@ -159,13 +163,22 @@ public class PiLlamaServerManager implements LlmServerManager {
                 throw new IllegalStateException("llama-server remained reachable on " + sshHost + ":" + port
                         + " after " + STOP_TIMEOUT_SECONDS + "s");
             }
+            stopped = true;
         } catch (Exception e) {
+            running = healthCheck();
+            lifecycleState = "FAILED";
+            lastFailureReason = e.getMessage();
             logger.warn("Failed to stop llama-server on Pi: {}", e.getMessage());
         }
-        running = false;
-        lifecycleState = "STOPPED";
-        cancelIdleMonitor();
-        logger.info("llama-server stopped on Pi");
+        if (stopped) {
+            running = false;
+            lifecycleState = "STOPPED";
+            lastFailureReason = null;
+            cancelIdleMonitor();
+            logger.info("llama-server stopped on Pi");
+        } else if (!running) {
+            cancelIdleMonitor();
+        }
     }
 
     @Override

@@ -196,11 +196,25 @@ public class CandidateScanService {
                 public void afterCommit() {
                     executor.submit(scanTask);
                 }
+
+                @Override
+                public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) {
+                        clearRunState(run.getRunId());
+                    }
+                }
             });
         } else {
             executor.submit(scanTask);
         }
         return run;
+    }
+
+    private void clearRunState(UUID runId) {
+        activeRun.compareAndSet(runId, null);
+        cancellations.remove(runId);
+        pauses.remove(runId);
+        logHistory.remove(runId);
     }
 
     private int configuredMaxConcurrent() {
