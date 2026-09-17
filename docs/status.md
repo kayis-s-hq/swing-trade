@@ -181,6 +181,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   an already populated tail, and watchlist bulk pulls use the incremental path. Data/API tests and
   `./bin/verify-changes` passed; bounded interior-gap repair remains handled separately.
 
+- [x] Watchlist backfill parallelism verified 2026-09-17: bulk pulls now use a bounded worker pool
+  (configurable with `DATA_BACKFILL_PARALLELISM`, default 5), isolate failures per symbol, and report
+  failed work in completion percentage. Backend tests and `./bin/verify-changes` passed.
+
 - [x] Strategy/risk follow-up verified 2026-09-16: bounded synthesis evaluation, two additional
   opt-in strategy families, portfolio sector/correlation rejection policies, and walk-forward
   parameter stability evaluation are implemented with focused coverage. Full affected backend tests
