@@ -105,11 +105,16 @@ public class CandidateScanResultEntity {
     public void setReason(String value) { this.reason = value; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String value) { this.errorMessage = value; }
-    public String getSourceOutcome() { return sourceOutcome; } public void setSourceOutcome(String value) { sourceOutcome = value; }
-    public int getInvalidRows() { return invalidRows; } public void setInvalidRows(int value) { invalidRows = value; }
-    public LocalDate getFirstAvailableDate() { return firstAvailableDate; } public void setFirstAvailableDate(LocalDate value) { firstAvailableDate = value; }
-    public LocalDate getLastAvailableDate() { return lastAvailableDate; } public void setLastAvailableDate(LocalDate value) { lastAvailableDate = value; }
-    public LocalDate getRetryAfter() { return retryAfter; } public void setRetryAfter(LocalDate value) { retryAfter = value; }
+    public String getSourceOutcome() { return sourceOutcome; }
+    public void setSourceOutcome(String value) { sourceOutcome = value; }
+    public int getInvalidRows() { return invalidRows; }
+    public void setInvalidRows(int value) { invalidRows = value; }
+    public LocalDate getFirstAvailableDate() { return firstAvailableDate; }
+    public void setFirstAvailableDate(LocalDate value) { firstAvailableDate = value; }
+    public LocalDate getLastAvailableDate() { return lastAvailableDate; }
+    public void setLastAvailableDate(LocalDate value) { lastAvailableDate = value; }
+    public LocalDate getRetryAfter() { return retryAfter; }
+    public void setRetryAfter(LocalDate value) { retryAfter = value; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime value) { this.createdAt = value; }
 }

@@ -549,10 +549,18 @@ public class JobOrchestratorService {
         CompositeAnalysis.TechnicalScore technical;
         CompositeAnalysis.FundamentalScore fundamentals;
         boolean inputFallback = false;
-        try { technical = technicalAnalysisService.compute(symbol); }
-        catch (Exception e) { inputFallback = true; technical = new CompositeAnalysis.TechnicalScore(0, "HOLD", 0, List.of()); }
-        try { fundamentals = fundamentalScorer.compute(symbol); }
-        catch (Exception e) { inputFallback = true; fundamentals = new CompositeAnalysis.FundamentalScore(0, List.of("Unavailable")); }
+        try {
+            technical = technicalAnalysisService.compute(symbol);
+        } catch (Exception e) {
+            inputFallback = true;
+            technical = new CompositeAnalysis.TechnicalScore(0, "HOLD", 0, List.of());
+        }
+        try {
+            fundamentals = fundamentalScorer.compute(symbol);
+        } catch (Exception e) {
+            inputFallback = true;
+            fundamentals = new CompositeAnalysis.FundamentalScore(0, List.of("Unavailable"));
+        }
         CompositeAnalysis.BacktestScore backtest = backtestResultStore.findBySymbolAndDate(symbol, date)
             .map(r -> new CompositeAnalysis.BacktestScore(r.totalTrades(), r.winRate(), r.profitFactor(),
                 r.maxDrawdownPct(), r.totalReturn(), r.expectancy(), r.hasEnoughData()))
@@ -611,7 +619,11 @@ public class JobOrchestratorService {
                     ? llmAnalysisGate.evaluatePersisted(symbol, signal.date()) : null;
                 if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.PENDING) continue;
                 if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.SUPPRESS && !llmAnalysisAdvisoryOnly) {
-                    try { signalStore.markProcessed(signal.id()); } catch (Exception e) { continue; }
+                    try {
+                        signalStore.markProcessed(signal.id());
+                    } catch (Exception e) {
+                        continue;
+                    }
                     blockedByLlm++;
                     logger.info("Blocked BUY signal {} for {} by LLM analysis: {}", signal.id(), symbol, llmVerdict.reason());
                     continue;

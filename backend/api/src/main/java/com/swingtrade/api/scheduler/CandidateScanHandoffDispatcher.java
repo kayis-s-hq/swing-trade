@@ -21,13 +21,18 @@ public class CandidateScanHandoffDispatcher {
     private final Object dispatchLock = new Object();
     public CandidateScanHandoffDispatcher(CandidateScanRunRepository runs, JobRunRepository jobRuns,
                                           JobOrchestratorService orchestrator) {
-        this.runs = runs; this.jobRuns = jobRuns; this.orchestrator = orchestrator;
+        this.runs = runs;
+        this.jobRuns = jobRuns;
+        this.orchestrator = orchestrator;
     }
     @Scheduled(fixedDelayString = "${candidate-scan.handoff-dispatch-ms:60000}")
     public void dispatchPendingHandoffs() {
         synchronized (dispatchLock) {
             for (CandidateScanRunEntity scan : runs.findByStatusAndOrchestrationStatus("COMPLETED", "PENDING")) {
-                if (scan.getQualifiedSymbols() == 0) { markNotRequired(scan); continue; }
+                if (scan.getQualifiedSymbols() == 0) {
+                    markNotRequired(scan);
+                    continue;
+                }
                 var existingJob = jobRuns.findFirstByCandidateScanRunIdOrderByStartedAtDesc(scan.getRunId());
                 if (existingJob.isPresent()) {
                     var job = existingJob.get();
@@ -55,8 +60,10 @@ public class CandidateScanHandoffDispatcher {
                 if (orchestrator.findActiveRun().isPresent()) return;
                 try {
                     JobRun job = orchestrator.startRun(JobRun.TriggerType.SCHEDULED, scan.getRunId());
-                    scan.setOrchestrationJobRunId(job.runId()); scan.setOrchestrationStatus("STARTED");
-                    scan.setOrchestrationError(null); runs.save(scan);
+                    scan.setOrchestrationJobRunId(job.runId());
+                    scan.setOrchestrationStatus("STARTED");
+                    scan.setOrchestrationError(null);
+                    runs.save(scan);
                     logger.info("Started orchestration {} for candidate scan {}", job.runId(), scan.getRunId());
                 } catch (JobOrchestratorService.ConcurrentRunException ignored) {
                     return;
@@ -64,11 +71,17 @@ public class CandidateScanHandoffDispatcher {
                     jobRuns.findFirstByCandidateScanRunIdOrderByStartedAtDesc(scan.getRunId())
                         .filter(job -> "RUNNING".equals(job.getStatus()))
                         .ifPresent(job -> orchestrator.cancelRun(job.getRunId()));
-                    scan.setOrchestrationStatus("PENDING"); scan.setOrchestrationError(e.getMessage()); runs.save(scan);
+                    scan.setOrchestrationStatus("PENDING");
+                    scan.setOrchestrationError(e.getMessage());
+                    runs.save(scan);
                     logger.warn("Candidate scan handoff {} failed: {}", scan.getRunId(), e.getMessage());
                 }
             }
         }
     }
-    @Transactional void markNotRequired(CandidateScanRunEntity scan) { scan.setOrchestrationStatus("NOT_REQUIRED"); runs.save(scan); }
+    @Transactional
+    void markNotRequired(CandidateScanRunEntity scan) {
+        scan.setOrchestrationStatus("NOT_REQUIRED");
+        runs.save(scan);
+    }
 }

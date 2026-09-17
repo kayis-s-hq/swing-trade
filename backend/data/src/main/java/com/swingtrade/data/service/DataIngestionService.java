@@ -154,9 +154,6 @@ public class DataIngestionService {
         return new BackfillOutcome(outcome, fetched, saved, invalid, null);
     }
 
-    public record BackfillOutcome(String sourceOutcome, int fetchedRows, int savedRows,
-                                  int invalidRows, String errorMessage) {}
-
     /**
      * Process a single stock for a specific date.
      *
@@ -609,4 +606,7 @@ public class DataIngestionService {
         public String getDetails() { return details; }
         public void setDetails(String details) { this.details = details; }
     }
+
+    public record BackfillOutcome(String sourceOutcome, int fetchedRows, int savedRows,
+                                  int invalidRows, String errorMessage) {}
 }

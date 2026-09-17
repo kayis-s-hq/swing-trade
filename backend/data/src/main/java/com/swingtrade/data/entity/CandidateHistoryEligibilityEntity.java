@@ -1,6 +1,10 @@
 package com.swingtrade.data.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -18,13 +22,22 @@ public class CandidateHistoryEligibilityEntity {
     @Column(name = "error_message", columnDefinition = "TEXT") private String errorMessage;
     @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
     @Version private Integer version = 0;
-    public String getSymbol(){return symbol;} public void setSymbol(String v){symbol=v;}
-    public int getCandleCount(){return candleCount;} public void setCandleCount(int v){candleCount=v;}
-    public LocalDate getFirstAvailableDate(){return firstAvailableDate;} public void setFirstAvailableDate(LocalDate v){firstAvailableDate=v;}
-    public LocalDate getLastAvailableDate(){return lastAvailableDate;} public void setLastAvailableDate(LocalDate v){lastAvailableDate=v;}
-    public String getSourceOutcome(){return sourceOutcome;} public void setSourceOutcome(String v){sourceOutcome=v;}
-    public int getInvalidRows(){return invalidRows;} public void setInvalidRows(int v){invalidRows=v;}
-    public LocalDate getRetryAfter(){return retryAfter;} public void setRetryAfter(LocalDate v){retryAfter=v;}
-    public String getErrorMessage(){return errorMessage;} public void setErrorMessage(String v){errorMessage=v;}
-    public LocalDateTime getUpdatedAt(){return updatedAt;} public void setUpdatedAt(LocalDateTime v){updatedAt=v;}
+    public String getSymbol() { return symbol; }
+    public void setSymbol(String v) { symbol = v; }
+    public int getCandleCount() { return candleCount; }
+    public void setCandleCount(int v) { candleCount = v; }
+    public LocalDate getFirstAvailableDate() { return firstAvailableDate; }
+    public void setFirstAvailableDate(LocalDate v) { firstAvailableDate = v; }
+    public LocalDate getLastAvailableDate() { return lastAvailableDate; }
+    public void setLastAvailableDate(LocalDate v) { lastAvailableDate = v; }
+    public String getSourceOutcome() { return sourceOutcome; }
+    public void setSourceOutcome(String v) { sourceOutcome = v; }
+    public int getInvalidRows() { return invalidRows; }
+    public void setInvalidRows(int v) { invalidRows = v; }
+    public LocalDate getRetryAfter() { return retryAfter; }
+    public void setRetryAfter(LocalDate v) { retryAfter = v; }
+    public String getErrorMessage() { return errorMessage; }
+    public void setErrorMessage(String v) { errorMessage = v; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime v) { updatedAt = v; }
 }

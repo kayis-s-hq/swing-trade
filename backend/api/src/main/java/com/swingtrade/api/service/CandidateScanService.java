@@ -584,10 +584,15 @@ public class CandidateScanService {
     private boolean saveInsufficientResult(UUID runId, String symbol, int candles,
                                            CandidateHistoryEligibilityEntity eligibility, String reason) {
         CandidateScanResultEntity result = new CandidateScanResultEntity();
-        result.setRunId(runId); result.setSymbol(symbol); result.setCandleCount(candles);
-        result.setDataStatus("INSUFFICIENT"); result.setSourceOutcome(eligibility.getSourceOutcome());
-        result.setInvalidRows(eligibility.getInvalidRows()); result.setFirstAvailableDate(eligibility.getFirstAvailableDate());
-        result.setLastAvailableDate(eligibility.getLastAvailableDate()); result.setRetryAfter(eligibility.getRetryAfter());
+        result.setRunId(runId);
+        result.setSymbol(symbol);
+        result.setCandleCount(candles);
+        result.setDataStatus("INSUFFICIENT");
+        result.setSourceOutcome(eligibility.getSourceOutcome());
+        result.setInvalidRows(eligibility.getInvalidRows());
+        result.setFirstAvailableDate(eligibility.getFirstAvailableDate());
+        result.setLastAvailableDate(eligibility.getLastAvailableDate());
+        result.setRetryAfter(eligibility.getRetryAfter());
         result.setReason(reason + "; retry after " + eligibility.getRetryAfter());
         resultRepository.save(result);
         return false;
@@ -596,10 +601,16 @@ public class CandidateScanService {
     private void persistEligibility(String symbol, CandidateScanResultEntity result, LocalDate retryAfter, String error) {
         if (eligibilityRepository == null) return;
         CandidateHistoryEligibilityEntity record = eligibilityRepository.findById(symbol).orElseGet(CandidateHistoryEligibilityEntity::new);
-        record.setSymbol(symbol); record.setCandleCount(result.getCandleCount()); record.setFirstAvailableDate(result.getFirstAvailableDate());
-        record.setLastAvailableDate(result.getLastAvailableDate()); record.setSourceOutcome(result.getSourceOutcome());
-        record.setInvalidRows(result.getInvalidRows()); record.setRetryAfter(retryAfter); record.setErrorMessage(error);
-        record.setUpdatedAt(LocalDateTime.now(MARKET_ZONE)); eligibilityRepository.save(record);
+        record.setSymbol(symbol);
+        record.setCandleCount(result.getCandleCount());
+        record.setFirstAvailableDate(result.getFirstAvailableDate());
+        record.setLastAvailableDate(result.getLastAvailableDate());
+        record.setSourceOutcome(result.getSourceOutcome());
+        record.setInvalidRows(result.getInvalidRows());
+        record.setRetryAfter(retryAfter);
+        record.setErrorMessage(error);
+        record.setUpdatedAt(LocalDateTime.now(MARKET_ZONE));
+        eligibilityRepository.save(record);
     }
 
     private String qualificationReason(SignalResult signal, BacktestResult backtest, BacktestResult oosBacktest, int minTrades,
