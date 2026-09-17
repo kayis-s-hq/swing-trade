@@ -18,7 +18,8 @@ public class SynthesisService {
 
     private static final Logger logger = LoggerFactory.getLogger(SynthesisService.class);
     private static final int MAX_TOKENS = 1024;
-    private static final double TEMPERATURE = 0.2;
+    /** Synthesis is persisted as an evaluation input; deterministic output keeps reruns comparable. */
+    private static final double TEMPERATURE = 0.0;
     // Must stay comfortably above LlmConfig's LOCAL_LLAMA_TIMEOUT (2850s) for the
     // CPU-bound local backends, or this outer deadline cuts the call off before
     // the client's own timeout ever gets a chance to fire. Widened alongside

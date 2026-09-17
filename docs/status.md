@@ -167,6 +167,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   request setting and mark failed LLM attempts that lead to keyword fallback as `fallback_used`.
   LLM/data tests and `./bin/verify-changes` passed.
 
+- [x] Synthesis determinism strengthened 2026-09-17: synthesis now runs at `temperature=0.0`,
+  and its prompt requires source-section labels for drivers/factors and prohibits invented data.
+  LLM tests and `./bin/verify-changes` passed; runtime grounding enforcement remains a follow-up.
+
 - [x] Strategy/risk follow-up verified 2026-09-16: bounded synthesis evaluation, two additional
   opt-in strategy families, portfolio sector/correlation rejection policies, and walk-forward
   parameter stability evaluation are implemented with focused coverage. Full affected backend tests
