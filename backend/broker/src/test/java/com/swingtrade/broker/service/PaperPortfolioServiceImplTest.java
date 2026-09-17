@@ -9,7 +9,6 @@ import com.swingtrade.broker.repository.PaperTradingPortfolioRepository;
 import com.swingtrade.broker.repository.PaperTradingSnapshotRepository;
 import com.swingtrade.broker.repository.ShadowPositionRepository;
 import com.swingtrade.domain.ShadowClosedTrade;
-import com.swingtrade.domain.ShadowPositionSnapshot;
 import com.swingtrade.domain.Signal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
