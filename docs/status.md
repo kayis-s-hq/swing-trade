@@ -17,6 +17,11 @@ Last checked: 2026-09-17 (strategy provenance verification)
   an earlier trading date now persists the keyword result under that requested date instead of
   silently using the runtime date. LLM tests and `./bin/verify-changes` passed.
 
+- [x] Contextual plain-text sentiment fallback improved 2026-09-17: bullish/bearish, outlook,
+  guidance, earnings, and growth phrases are recognized with negation safeguards; ambiguous
+  mixed language remains neutral/unknown rather than forcing a polarity. LLM tests and
+  `./bin/verify-changes` passed.
+
 - [x] Local runtime revalidation 2026-09-17: the API migrated the PostgreSQL-backed schema to
   v55, reported healthy database/readiness status, and served
   `GET /api/signals/gate-effectiveness` successfully (empty result set in the current data window).
