@@ -143,7 +143,7 @@ Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow
 - [~] 36 Market-regime filter
 - [~] 37 Relative strength vs Nifty/sector
 - [~] 38 Liquidity / surveillance / event filters
-- [~] 39 Exit management (trailing, partial, breakeven)
+- [x] 39 Exit management (trailing, partial, breakeven)
 - [~] 40 Sector / correlation exposure limits
 - [~] 41 Parameter optimization with overfit control
 - [~] 42 Entry strictness produces almost no BUYs
@@ -218,8 +218,9 @@ The marked-to-market value is recorded before each daily observation, so Sharpe 
 available-cash limits, maximum concurrent positions, deterministic symbol ordering, and
 portfolio-level return/drawdown/risk metrics. The existing independent `/run-all` path is unchanged.
 The portfolio engine now accepts evaluated candle series, marks open positions at each observed candle close,
-and uses the next available trading session for settlement when market dates are supplied. Sector limits,
-intraday execution ordering, missing-candle interpolation, and richer API/report integration remain open.
+and uses the next available trading session for settlement when market dates are supplied. The portfolio API
+also emits persisted NIFTY price-series benchmark/excess-return data when available. Sector taxonomy,
+intraday execution ordering, missing-candle interpolation, and portfolio-level strategy attribution remain open.
 
 ### 18. PARTIALLY FIXED — Candidate scan qualifies on in-sample backtest
 `CandidateScanService` now runs a configurable 60–1000-day out-of-sample window (252 days by default), persists its date range and metrics separately,
@@ -289,10 +290,12 @@ market order at the next session open with adverse slippage, matching the backte
 quantity, eliminating the fixed-100 pre-check. Quantity clamping remains a separate risk-policy decision.
 
 ### 24. PARTIALLY FIXED — No gate-effectiveness or strategy attribution
-Sentiment-gate verdicts are persisted once per symbol/date and summarized through
-`GET /api/signals/gate-effectiveness`, including 1/5/20-session forward-return means by verdict.
-General gate attribution, strategy/regime dimensions, and realized paper-trade P&L attribution remain open.
-**Fix:** Nightly job: 5/10/20-day forward returns for each BUY tagged by verdict, strategy and regime. Show it on the dashboard.
+Sentiment-gate verdicts are persisted and summarized through
+`GET /api/signals/gate-effectiveness`, including 1/5/20-session forward-return means by verdict,
+strategy, and regime. Strategy attribution now comes from the producing signal variant, and the
+audit uniqueness key permits multiple variants for one symbol/date. Realized paper-trade P&L
+attribution across gates remains open.
+**Remaining:** Add realized trade-outcome joins and dashboard presentation for gate-attributed P&L.
 
 ---
 
@@ -336,8 +339,9 @@ nondeterminism, multi-sample disagreement scoring, and grounding for every synth
 
 ### 31. PARTIALLY FIXED — Synthesis LLM adds little decision value
 Synthesis output now carries bounded conflict and event-risk flags, and an evaluation service can
-record 1–20-session outcomes and recommendation accuracy for later measurement. Persistent storage,
-scheduled outcome collection, and production reporting remain open.
+record 1–20-session outcomes and recommendation accuracy for later measurement. Records persist in V51,
+the bounded persisted-candle evaluator runs on schedule, and `/api/synthesis/evaluations/summary` reports
+aggregate accuracy. Model-value attribution against a non-LLM baseline remains open.
 
 ### 33. PARTIALLY FIXED — LLM failures hidden
 Top-level exceptions return a default NEUTRAL; LLM outages fall back to keyword sentiment stored as if it were an LLM result.
@@ -402,11 +406,12 @@ results/board-meeting windows without inferring unavailable external facts. The 
 invokes this policy before queuing BUYs; missing surveillance/event/band data fails closed. Data
 population and richer API reporting remain open.
 
-### 39. PARTIALLY FIXED — Exit management
-Exits use a fixed 2×ATR stop, 2.5R target, EMA trend-break and time stop. Partial exit exists in `PaperTradingEngine` but the strategy never uses it.
-An opt-in trailing/breakeven policy now evaluates completed bars in portfolio simulation and records
-explicit exit reasons. Partial exits, paper-engine wiring, and a default policy decision remain open.
-**Remaining:** Take 50% off at 1.5–2R and trail the rest with a chandelier (3×ATR) stop across paper and backtest paths.
+### 39. FIXED — Exit management
+Exits use a fixed 2×ATR initial stop, 2.5R target, EMA trend-break and time stop. The shared,
+opt-in trailing/breakeven policy now takes a bounded 50% leg at a configurable 1.5–2R trigger,
+persists the partial state for paper positions, and trails the remainder with a 3×ATR chandelier
+using prior-bar ATR (with a percentage fallback when ATR is unavailable) across paper and backtest paths.
+Locked lower-circuit exits and adverse gap-through fills remain enforced.
 
 ### 40. PARTIALLY FIXED — Sector and correlation limits
 Portfolio simulation now accepts sector and correlation exposure policies, rejects entries with

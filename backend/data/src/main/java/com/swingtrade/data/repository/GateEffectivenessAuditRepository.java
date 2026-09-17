@@ -11,6 +11,9 @@ public interface GateEffectivenessAuditRepository extends JpaRepository<GateEffe
     Optional<GateEffectivenessAuditEntity> findBySymbolAndSignalDateAndGateName(
         String symbol, LocalDate signalDate, String gateName);
 
+    Optional<GateEffectivenessAuditEntity> findBySymbolAndSignalDateAndGateNameAndStrategy(
+        String symbol, LocalDate signalDate, String gateName, String strategy);
+
     List<GateEffectivenessAuditEntity> findByGateNameAndSignalDateBetweenOrderBySignalDateAsc(
         String gateName, LocalDate from, LocalDate to);
 

@@ -44,6 +44,12 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
         @Param("date") LocalDate date
     );
 
+    @Query("SELECT DISTINCT s.strategy FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date")
+    List<String> findStrategiesBySymbolAndDate(
+        @Param("symbol") String symbol,
+        @Param("date") LocalDate date
+    );
+
     /**
      * Finds all BUY signals generated on or after a date.
      *

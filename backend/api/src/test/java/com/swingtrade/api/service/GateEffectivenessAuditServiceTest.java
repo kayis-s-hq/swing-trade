@@ -25,7 +25,8 @@ class GateEffectivenessAuditServiceTest {
 
     @Test
     void reportSeparatesVerdictsAndComputesOnlyAvailableForwardReturns() {
-        var allowed = new GateEffectivenessAuditEntity("TCS", date, "SENTIMENT", "ALLOW", null, null);
+        var allowed = new GateEffectivenessAuditEntity("TCS", date, "SENTIMENT", "ALLOW", null, null,
+            "PRICE_ACTION");
         var blocked = new GateEffectivenessAuditEntity("TCS", date.plusDays(1), "SENTIMENT", "SUPPRESS", "negative", null);
         when(repository.findByGateNameAndSignalDateBetweenOrderBySignalDateAsc(any(), any(), any()))
             .thenReturn(List.of(allowed, blocked));
@@ -54,7 +55,21 @@ class GateEffectivenessAuditServiceTest {
         assertThat(report.verdicts().get("ALLOW").meanForwardReturnPct()).doesNotContainKey(5);
         assertThat(report.verdicts().get("ALLOW").returnObservationCounts()).containsEntry(1, 1);
         assertThat(report.byStrategy()).containsKey("DEFAULT");
+        assertThat(report.byStrategy()).containsKey("PRICE_ACTION");
         assertThat(report.byRegime()).containsKey("UNKNOWN");
+    }
+
+    @Test
+    void recordsVerdictUnderTheRequestedStrategy() {
+        when(repository.findBySymbolAndSignalDateAndGateNameAndStrategy(
+            "TCS", date, "SENTIMENT", "PRICE_ACTION")).thenReturn(Optional.empty());
+
+        service.recordSentimentVerdict("TCS", date,
+            SentimentGate.SentimentVerdict.allow(), "PRICE_ACTION");
+
+        var captor = org.mockito.ArgumentCaptor.forClass(GateEffectivenessAuditEntity.class);
+        org.mockito.Mockito.verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getStrategy()).isEqualTo("PRICE_ACTION");
     }
 
     @Test

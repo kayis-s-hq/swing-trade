@@ -1,7 +1,11 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-17 (documentation/lint pass)
 Last checked: 2026-09-17 (documentation/lint and analytics remediation verification)
+
+- [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
+  producing signal variant, support multiple strategies per symbol/date, and report/filter by the
+  stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade
+  P&L attribution remains a documented follow-up.
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
@@ -91,7 +95,8 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 - [x] Partial-target exit management verified 2026-09-17: the shared risk policy
   takes a bounded 50% leg at 2R, keeps the remainder under trailing/breakeven
-  management, and applies the behavior in both backtest and paper monitoring.
+  management, including a configurable 3×ATR chandelier when prior-bar ATR is
+  available, and applies the behavior in both backtest and paper monitoring.
   Paper state persists `partial_exit_taken` via migration V52, preventing duplicate
   exits after restart. Strategy/broker tests, full verifier, AOT, and local API boot
   against PostgreSQL passed.
