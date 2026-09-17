@@ -8,6 +8,7 @@ import com.swingtrade.domain.PriceBandPolicy;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PriceBandStore;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -29,6 +30,7 @@ public class LiveEligibilityService {
     private final PriceBandStore priceBandStore;
     private final EligibilityPolicy policy;
 
+    @Autowired
     public LiveEligibilityService(CandleStore candleStore, PriceBandStore priceBandStore) {
         this(candleStore, priceBandStore, new EligibilityPolicy());
     }
