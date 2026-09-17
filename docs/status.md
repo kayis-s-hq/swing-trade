@@ -1,6 +1,6 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-17 (broker and GPUHub coverage verification)
+Last checked: 2026-09-17 (data coverage verification)
 
 - [x] GPUHub client/service coverage completed 2026-09-17: deployment, image, container,
   status, stop, delete, DTO, and API-error paths now have behavior-focused tests. Successful
@@ -10,10 +10,10 @@ Last checked: 2026-09-17 (broker and GPUHub coverage verification)
 - [x] Broker coverage remediation completed 2026-09-17: risk-control orchestration,
   notification, configuration, and paper-engine behavior now have focused tests; broker
   JaCoCo verification passed. The full Gradle build then reached the data module, where its
-  existing aggregate coverage is 46% (1,794/3,885 lines) against the 80% gate; focused
-  WatchlistService, DataIngestionService, TradeLabelService, SignalEntity, PositionEntity, and
-  TradeEntity coverage was added, but this remains the next full-build blocker. The data PMD
-  test violation was also removed and the scoped verifier passed.
+  aggregate coverage is 48% (1,849/3,885 lines) against the 80% gate; focused
+  WatchlistService, DataIngestionService, TradeLabelService, SignalEntity, PositionEntity,
+  TradeEntity, and CandidateScanResultEntity coverage was added, but this remains the next
+  full-build blocker. The data PMD test violation was also removed and the scoped verifier passed.
 
 - [x] Exchange price-band ingestion wired 2026-09-17: Fyers `lower_ckt`/`upper_ckt`
   quote fields now flow through the rate-limited market-data client and are persisted by
