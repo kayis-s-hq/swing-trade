@@ -91,11 +91,6 @@ public class CandidateScanService {
     private final ConcurrentHashMap<UUID, Deque<ScanLogEvent>> logHistory = new ConcurrentHashMap<>();
     private static final int MAX_LOG_HISTORY = 500;
 
-    /** Returns whether a candidate scan currently owns the service's active-run slot. */
-    public boolean hasActiveRun() {
-        return activeRun.get() != null;
-    }
-
     @Autowired
     public CandidateScanService(FyersSymbolRepository symbolRepository,
                                 CandidateScanRunRepository runRepository,
