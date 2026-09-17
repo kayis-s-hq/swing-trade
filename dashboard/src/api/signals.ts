@@ -17,6 +17,7 @@ interface BackendSignal {
   indicators?: string[] | null
   generatedAt: string | null
   strategy?: string | null
+  strategyVersion?: number | null
   sentimentScore?: string | null
   sentimentReasoning?: string | null
 }
@@ -50,6 +51,7 @@ const mapSignal = (s: BackendSignal): Signal => ({
   timestamp: s.generatedAt ?? s.date,
   status: 'ACTIVE',
   strategy: s.strategy ?? undefined,
+  strategyVersion: s.strategyVersion ?? undefined,
   indicators: s.indicators ?? undefined,
   sentimentScore: s.sentimentScore ?? undefined,
   sentimentReasoning: s.sentimentReasoning ?? undefined,

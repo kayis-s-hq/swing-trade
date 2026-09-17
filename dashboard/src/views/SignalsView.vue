@@ -241,6 +241,17 @@
                 {{ st }}
               </button>
             </div>
+            <label class="flex items-center gap-2 text-xs text-text-muted">
+              Strategy
+              <select
+                v-model="strategyFilter"
+                aria-label="Strategy filter"
+                class="rounded-md border border-border-subtle bg-bg-primary px-2 py-1.5 text-xs text-text-primary"
+              >
+                <option value="ALL">All strategies</option>
+                <option v-for="s in strategyOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
+            </label>
           </div>
           <span v-if="selectedCount > 0" class="text-xs font-medium text-brand"
             >{{ selectedCount }} selected</span
@@ -358,6 +369,7 @@ const executing = ref(false)
 const signals = ref<Signal[]>([])
 const directionFilter = ref('ALL')
 const statusFilter = ref('ALL')
+const strategyFilter = ref('ALL')
 const selectedSignalIds = ref(new Set<string>())
 const execResult = ref<{
   success: number
@@ -374,11 +386,20 @@ const generationSummary = ref<{ generated: number; skipped: number; reasons: str
 )
 const showSkipReasons = ref(false)
 
+const strategyOptions = computed(() => {
+  const values = new Set<string>()
+  signals.value.forEach((s) => {
+    if (s.strategy) values.add(s.strategy)
+  })
+  return Array.from(values).sort()
+})
+
 const filteredSignals = computed(() => {
   return signals.value.filter((s) => {
     const matchesDir = directionFilter.value === 'ALL' || s.direction === directionFilter.value
     const matchesStatus = statusFilter.value === 'ALL' || s.status === statusFilter.value
-    return matchesDir && matchesStatus
+    const matchesStrategy = strategyFilter.value === 'ALL' || s.strategy === strategyFilter.value
+    return matchesDir && matchesStatus && matchesStrategy
   })
 })
 
