@@ -25,7 +25,7 @@ services:
     container_name: swing-trade-stage-api
     restart: always
     env_file:
-      - .env.stage
+      - env/.env.stage
     build:
       context: .
       dockerfile: Dockerfile
@@ -40,6 +40,8 @@ services:
       - DB_USER=swingtrade_user
       - DB_PASSWORD=swingtrade_password
       - LANGCHAIN4J_OPEN_AI_API_KEY=${LANGCHAIN4J_OPEN_AI_API_KEY:-}
+      - API_KEY_AUTH_ENABLED=true
+      - API_KEY=${API_KEY:?API_KEY must be set for the stage API}
       - LOG_FILE=/var/log/swing-trade/stage.log
       - TZ=Asia/Kolkata
     volumes:

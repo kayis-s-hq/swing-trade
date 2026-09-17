@@ -95,8 +95,8 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   authentication with fail-closed behavior when enabled, public API requests have a configurable
   per-client 100-request/minute budget with `429`/`Retry-After` responses, and rate-limit hits are
   exported as `api.rate.limit.hits`. Stage enables enforcement through `API_KEY_AUTH_ENABLED=true`
-  and `API_KEY`; local paper mode remains explicitly opt-in. Focused API security tests and the
-  change-aware verifier passed.
+  and a required `API_KEY` Compose variable; local paper mode remains explicitly opt-in. Focused
+  API security tests and the change-aware verifier passed.
 
 - [x] Strategy coverage gate restored 2026-09-17: focused tests now cover the previously
   uncovered advanced indicator validation and calculations. Strategy tests, JaCoCo verification,
