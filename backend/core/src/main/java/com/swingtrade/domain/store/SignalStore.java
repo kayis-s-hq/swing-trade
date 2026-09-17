@@ -16,6 +16,13 @@ public interface SignalStore {
 
     List<Signal> findBySymbolAndDate(String symbol, LocalDate date);
 
+    /**
+     * Returns the strategy identifiers represented by a symbol/date's signals.
+     * This is used when attributing downstream gate decisions to the signal
+     * variant that produced them.
+     */
+    List<String> findStrategiesBySymbolAndDate(String symbol, LocalDate date);
+
     List<Signal> findByType(Signal.SignalType type);
 
     List<Signal> findUnprocessed();

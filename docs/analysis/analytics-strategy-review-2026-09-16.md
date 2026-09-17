@@ -290,10 +290,12 @@ market order at the next session open with adverse slippage, matching the backte
 quantity, eliminating the fixed-100 pre-check. Quantity clamping remains a separate risk-policy decision.
 
 ### 24. PARTIALLY FIXED — No gate-effectiveness or strategy attribution
-Sentiment-gate verdicts are persisted once per symbol/date and summarized through
-`GET /api/signals/gate-effectiveness`, including 1/5/20-session forward-return means by verdict.
-General gate attribution, strategy/regime dimensions, and realized paper-trade P&L attribution remain open.
-**Fix:** Nightly job: 5/10/20-day forward returns for each BUY tagged by verdict, strategy and regime. Show it on the dashboard.
+Sentiment-gate verdicts are persisted and summarized through
+`GET /api/signals/gate-effectiveness`, including 1/5/20-session forward-return means by verdict,
+strategy, and regime. Strategy attribution now comes from the producing signal variant, and the
+audit uniqueness key permits multiple variants for one symbol/date. Realized paper-trade P&L
+attribution across gates remains open.
+**Remaining:** Add realized trade-outcome joins and dashboard presentation for gate-attributed P&L.
 
 ---
 

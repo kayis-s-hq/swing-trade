@@ -31,11 +31,18 @@ public class GateEffectivenessAuditService {
     @Transactional
     public void recordSentimentVerdict(String symbol, LocalDate signalDate,
                                        SentimentGate.SentimentVerdict verdict) {
+        recordSentimentVerdict(symbol, signalDate, verdict, DEFAULT_STRATEGY);
+    }
+
+    @Transactional
+    public void recordSentimentVerdict(String symbol, LocalDate signalDate,
+                                       SentimentGate.SentimentVerdict verdict, String strategy) {
         if (verdict.action() == SentimentGate.SentimentVerdict.Action.PENDING) return;
         GateEffectivenessAuditEntity entity = repository
-            .findBySymbolAndSignalDateAndGateName(symbol, signalDate, SENTIMENT_GATE)
+            .findBySymbolAndSignalDateAndGateNameAndStrategy(symbol, signalDate, SENTIMENT_GATE,
+                normalizeStrategy(strategy))
             .orElseGet(() -> new GateEffectivenessAuditEntity(symbol, signalDate, SENTIMENT_GATE,
-                verdict.action().name(), verdict.reason(), OffsetDateTime.now()));
+                verdict.action().name(), verdict.reason(), OffsetDateTime.now(), normalizeStrategy(strategy)));
         // Keep the first decision: overwriting it on a retry would bias the audit.
         repository.save(entity);
     }
@@ -57,7 +64,7 @@ public class GateEffectivenessAuditService {
         Map<String, MutableBucket> strategyBuckets = new LinkedHashMap<>();
         Map<String, MutableBucket> regimeBuckets = new LinkedHashMap<>();
         for (GateEffectivenessAuditEntity audit : audits) {
-            String auditStrategy = DEFAULT_STRATEGY;
+            String auditStrategy = normalizeStrategy(audit.getStrategy());
             String auditRegime = marketRegime(audit.getSymbol(), audit.getSignalDate());
             if (strategy != null && !strategy.equalsIgnoreCase(auditStrategy)) continue;
             if (regime != null && !regime.equalsIgnoreCase(auditRegime)) continue;
@@ -101,6 +108,10 @@ public class GateEffectivenessAuditService {
 
     private static int totalCount(Map<String, MutableBucket> buckets) {
         return buckets.values().stream().mapToInt(bucket -> bucket.count).sum();
+    }
+
+    private static String normalizeStrategy(String strategy) {
+        return strategy == null || strategy.isBlank() ? DEFAULT_STRATEGY : strategy;
     }
 
     private static Map<String, VerdictSummary> summarize(Map<String, MutableBucket> buckets) {

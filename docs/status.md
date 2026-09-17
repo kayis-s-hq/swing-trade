@@ -2,6 +2,11 @@
 
 Last checked: 2026-09-17 (documentation/lint and analytics remediation verification)
 
+- [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
+  producing signal variant, support multiple strategies per symbol/date, and report/filter by the
+  stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade
+  P&L attribution remains a documented follow-up.
+
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
 ## Current development state
