@@ -344,6 +344,10 @@ public class CandidateScanService {
         return activeRun.get() != null || runRepository.existsByStatus("RUNNING") || runRepository.existsByStatus("PAUSED");
     }
 
+    public boolean hasPendingHandoff() {
+        return runRepository.existsByStatusAndOrchestrationStatus("COMPLETED", "PENDING");
+    }
+
     public List<CandidateScanResultEntity> getResults(UUID runId, int offset, int limit) {
         return getResultsPage(runId, offset, limit, "", "").items();
     }

@@ -46,8 +46,9 @@ public class JobRunScheduler {
             return;
         }
 
-        if (candidateScanService != null && candidateScanService.hasActiveRun()) {
-            logger.info("Skipping scheduled run: candidate scan is still in progress");
+        if (candidateScanService != null
+                && (candidateScanService.hasActiveRun() || candidateScanService.hasPendingHandoff())) {
+            logger.info("Skipping scheduled run: candidate scan is still in progress or pending handoff");
             return;
         }
 
