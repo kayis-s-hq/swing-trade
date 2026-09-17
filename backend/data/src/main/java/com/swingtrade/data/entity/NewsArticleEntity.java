@@ -48,6 +48,12 @@ public class NewsArticleEntity {
     @Column(name = "created_at")
     private java.time.OffsetDateTime createdAt;
 
+    @Column(name = "article_key", length = 64)
+    private String articleKey;
+
+    @Column(name = "first_seen_at")
+    private java.time.OffsetDateTime firstSeenAt;
+
     public NewsArticleEntity() {
     }
 
@@ -122,4 +128,10 @@ public class NewsArticleEntity {
     public void setCreatedAt(java.time.OffsetDateTime createdAt) {
         this.createdAt = createdAt;
     }
+
+    public String getArticleKey() { return articleKey; }
+    public void setArticleKey(String articleKey) { this.articleKey = articleKey; }
+
+    public java.time.OffsetDateTime getFirstSeenAt() { return firstSeenAt; }
+    public void setFirstSeenAt(java.time.OffsetDateTime firstSeenAt) { this.firstSeenAt = firstSeenAt; }
 }

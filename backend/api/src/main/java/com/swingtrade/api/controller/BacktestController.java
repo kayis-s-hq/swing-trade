@@ -2,6 +2,9 @@ package com.swingtrade.api.controller;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import com.swingtrade.api.dto.PortfolioBacktestRequest;
+import com.swingtrade.api.dto.PortfolioBacktestResponse;
+import com.swingtrade.api.service.PortfolioBacktestService;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestReportSummary;
@@ -38,6 +41,7 @@ public class BacktestController {
     private static final Pattern REPORT_FILENAME_PATTERN = Pattern.compile("^backtest_\\d{8}_\\d{6}\\.json$");
 
     private final BacktestEngine backtestEngine;
+    private final PortfolioBacktestService portfolioBacktestService;
     private final StrategyRegistry strategyRegistry;
     private final ObjectMapper objectMapper;
     private final String reportsDir;
@@ -45,11 +49,26 @@ public class BacktestController {
     public BacktestController(BacktestEngine backtestEngine,
                                StrategyRegistry strategyRegistry,
                                ObjectMapper objectMapper,
-                               @Value("${backtest.reports.dir:reports}") String reportsDir) {
+                               @Value("${backtest.reports.dir:reports}") String reportsDir,
+                               PortfolioBacktestService portfolioBacktestService) {
         this.backtestEngine = backtestEngine;
         this.strategyRegistry = strategyRegistry;
         this.objectMapper = objectMapper;
         this.reportsDir = reportsDir;
+        this.portfolioBacktestService = portfolioBacktestService;
+    }
+
+    /** Runs a shared-capital portfolio backtest without changing the independent /run-all flow. */
+    @PostMapping("/portfolio")
+    public ResponseEntity<PortfolioBacktestResponse> runPortfolioBacktest(
+            @org.springframework.web.bind.annotation.RequestBody PortfolioBacktestRequest request) {
+        try {
+            return ResponseEntity.ok(portfolioBacktestService.run(request));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     /**

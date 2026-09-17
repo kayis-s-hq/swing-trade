@@ -154,16 +154,22 @@ public record Position(
     }
 
     public Position withQuantityAndRealizedPnL(Integer quantity, BigDecimal realizedPnL) {
+        return withQuantityAndRealizedPnL(quantity, realizedPnL, partialExitTaken());
+    }
+
+    public Position withQuantityAndRealizedPnL(Integer quantity, BigDecimal realizedPnL,
+                                               boolean partialExitTaken) {
         PositionEntry updatedEntry = PositionEntry.of(symbol(), entryPrice(), entryDate(), quantity,
             entryTime(), entryReason(), positionId(), brokerPositionId(), exchange(), direction(), averagePrice());
-        return new Position(id, brokerType, updatedEntry, risk,
+        PositionRisk updatedRisk = new PositionRisk(stopLoss(), target(), marginUtilized(), partialExitTaken);
+        return new Position(id, brokerType, updatedEntry, updatedRisk,
             new PositionValuation(currentPrice(), unrealizedPnL(), realizedPnL), status, exit, orders);
     }
 
     public Position close(PositionStatus newStatus, BigDecimal realizedPnL, LocalDateTime exitTime,
                           String exitReason, BigDecimal target) {
         return new Position(id, brokerType, entry,
-            new PositionRisk(stopLoss(), target, marginUtilized()),
+            new PositionRisk(stopLoss(), target, marginUtilized(), partialExitTaken()),
             new PositionValuation(currentPrice(), unrealizedPnL(), realizedPnL), newStatus,
             new PositionExit(exitTime, exitReason), orders);
     }
@@ -185,6 +191,7 @@ public record Position(
     public BigDecimal unrealizedPnL() { return valuation.unrealizedPnL(); }
     public BigDecimal realizedPnL() { return valuation.realizedPnL(); }
     public BigDecimal marginUtilized() { return risk.marginUtilized(); }
+    public boolean partialExitTaken() { return risk.partialExitTaken(); }
     public LocalDateTime entryTime() { return entry.entryTime(); }
     public LocalDateTime exitTime() { return exit != null ? exit.exitTime() : null; }
     public String exitReason() { return exit != null ? exit.exitReason() : null; }

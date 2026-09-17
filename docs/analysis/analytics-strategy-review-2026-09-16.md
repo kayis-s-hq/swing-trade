@@ -32,9 +32,22 @@ Completed and verified in this pass:
   `TradingService`, `PaperTradingEngine`).
 - Candidate qualification now requires a configurable minimum of 15 completed trades before the
   win-rate/return gates can pass (`CandidateScanService`).
+- Backtest results now expose CAGR, Sortino, and Calmar computed from the evaluated period and
+  marked-to-market daily equity curve (`BacktestEngine`, `BacktestResult`). Benchmark and excess
+  return metrics remain open because the current multi-symbol runner does not yet share capital or
+  define a benchmark data contract.
 - Sentiment response parsing recognizes the legacy `sentiment` JSON alias instead of accepting a
   converter-created neutral default. Plain-text responses remain neutral when sentiment is
   ambiguous; UNKNOWN is preserved and sentiment provenance is now persisted.
+- Historical sentiment analysis now reads the persisted, inclusive symbol/date news window and
+  does not fall back to live feeds; current-day analysis continues to use live ingestion
+  (`NewsArticleStore`, `NewsIngestionService`, `SentimentService`). New articles persist a
+  symbol-scoped identity, first-seen timestamp, and sentiment-to-article evidence IDs; legacy
+  rows without first-seen provenance remain excluded from historical reconstruction.
+- Analytical TA paths now scale historical OHLC by `adjClose / close` when valid, preventing
+  split/bonus discontinuities from becoming artificial signals while retaining raw persisted
+  candles for execution and audit (`OhlcvCandle`, `PriceActionSignalEngine`,
+  `TechnicalAnalysisService`). Historical universe snapshots and action provenance remain open.
 
 Additional verified slice — 2026-09-16:
 
@@ -56,9 +69,22 @@ Additional verified slice — 2026-09-16:
 - Candidate scans now run a configurable 60–1000-day OOS window (252 days by default), persist its
   dates and metrics separately, and require both full-history and OOS gates before a result qualifies.
   Candidate discovery remains read-only; watchlist activation is handled separately by the API/UI.
+  The scan can now require every fold in a bounded 1–8-fold chronological walk-forward evaluation
+  to pass the configured gates.
 - Sentiment point-in-time filtering now rejects articles without publication timestamps, since their
   position relative to the decision cutoff cannot be proven. This favors a safe UNKNOWN/neutral result
   over admitting potentially future information.
+- Backtests now expose same-window buy-and-hold/excess-return comparisons, a bounded shared-capital
+  portfolio result, and adjusted-price gap quarantine without modifying raw candles. Sentiment gate
+  verdicts can be audited through `/api/signals/gate-effectiveness`, and bounded earnings/exchange
+  filing context is included in prompts when available.
+- Historical universe snapshots, corporate actions, NIFTY benchmark data contracts, and immutable
+  strategy-configuration persistence are now available as explicit data-layer contracts/migrations;
+  live strategy fan-out and provider population remain separate follow-ups.
+- The current platform now exposes opt-in pullback and volatility-squeeze strategy beans, bounded
+  regime/relative-strength and liquidity/event eligibility policies, strategy-config CRUD/version/mode
+  endpoints, a Strategies dashboard view, and a portfolio-backtest endpoint. The existing default live
+  strategy remains unchanged.
 
 Verification: `./bin/verify-changes` passed on 2026-09-16. It ran the backend test task selected
 from changed paths; the explicit affected-module suite also passed:
@@ -69,6 +95,8 @@ review items are broader than the landed fixes.
 ---
 
 ## Status checklist (by priority)
+
+Legend: `[x]` fixed and verified · `[~]` partially fixed with documented follow-ups · `[ ]` open.
 
 ### P1 — Fix wrong numbers (days)
 - [x] 1  Composite weights displayed ≠ weights used
@@ -84,41 +112,41 @@ review items are broader than the landed fixes.
 - [x] 11 Indian transaction costs missing from backtest
 - [x] 12 Exit slippage missing
 - [x] 13 Gap-through stops fill at the stop price
-- [ ] 14 Sentiment not point-in-time (look-ahead)
-- [ ] 15 Plain-text LLM fallback misclassifies
+- [~] 14 Sentiment not point-in-time (look-ahead)
+- [~] 15 Plain-text LLM fallback misclassifies
 
 ### P2 — Trustworthy evaluation
 - [x] 16 No mark-to-market equity curve (Sharpe/DD wrong)
-- [ ] 17 No portfolio-level backtest
-- [ ] 18 Candidate scan qualifies on in-sample backtest
+- [~] 17 No portfolio-level backtest
+- [~] 18 Candidate scan qualifies on in-sample backtest
 - [x] 19 No minimum trade count
-- [ ] 20 Survivorship bias and corporate-action checks
-- [ ] 21 No benchmark / risk-adjusted metrics
-- [ ] 22 Circuit limits not modelled
-- [ ] 23 Accuracy metrics not fed back; IC ignores ties; raw vs excess return
-- [ ] 24 No gate-effectiveness or strategy attribution
+- [~] 20 Survivorship bias and corporate-action checks
+- [~] 21 No benchmark / risk-adjusted metrics
+- [~] 22 Circuit limits not modelled
+- [~] 23 Accuracy metrics not fed back; IC ignores ties; raw vs excess return
+- [~] 24 No gate-effectiveness or strategy attribution
 
 ### P3 — Better LLM inputs and calibration
 - [x] 25 Sentiment mapped to fixed ±75, confidence ignored
-- [ ] 26 "Fundamentals" is price-only and duplicates Tech
+- [~] 26 "Fundamentals" is price-only and duplicates Tech
 - [x] 27 Headlines lack date/source; `{symbol}` placeholder unfilled
-- [ ] 28 No structured Indian-market data in prompt
-- [ ] 29 Article truncation before ranking/dedupe
-- [ ] 30 No determinism or grounding checks
-- [ ] 31 Synthesis LLM adds little decision value
-- [ ] 32 Hard-coded signal confidence (1.0 / 0.5)
-- [ ] 33 LLM failure silently becomes NEUTRAL / keyword result
+- [~] 28 No structured Indian-market data in prompt
+- [~] 29 Article truncation before ranking/dedupe
+- [~] 30 No determinism or grounding checks
+- [~] 31 Synthesis LLM adds little decision value
+- [~] 32 Hard-coded signal confidence (1.0 / 0.5)
+- [~] 33 LLM failure silently becomes NEUTRAL / keyword result
 
 ### P4 — Multi-strategy, regime, risk
-- [ ] 34 Live fixed to one strategy
-- [ ] 35 Add standard NSE swing setups
-- [ ] 36 Market-regime filter
-- [ ] 37 Relative strength vs Nifty/sector
-- [ ] 38 Liquidity / surveillance / event filters
-- [ ] 39 Exit management (trailing, partial, breakeven)
-- [ ] 40 Sector / correlation exposure limits
-- [ ] 41 Parameter optimization with overfit control
-- [ ] 42 Entry strictness produces almost no BUYs
+- [~] 34 Live fixed to one strategy
+- [~] 35 Add standard NSE swing setups
+- [~] 36 Market-regime filter
+- [~] 37 Relative strength vs Nifty/sector
+- [~] 38 Liquidity / surveillance / event filters
+- [~] 39 Exit management (trailing, partial, breakeven)
+- [~] 40 Sector / correlation exposure limits
+- [~] 41 Parameter optimization with overfit control
+- [~] 42 Entry strictness produces almost no BUYs
 
 ---
 
@@ -154,9 +182,11 @@ snapshot for efficiency, but it is no longer a correctness discrepancy.
 `buildNewsScore` now maps direction to `±100 × confidence`; article-count shrinkage remains a
 follow-up calibration choice.
 
-### 26. IMP — "Fundamentals" is price-only
-`FundamentalScorer` = ATR%, 30-day momentum, volume trend and SMA50. This overlaps Tech, so price momentum is about 70% of the composite.
-**Fix:** Rename it "Price Quality" for now. Add a real fundamentals score (EPS/revenue growth, ROE, D/E, promoter pledge) from filings or a data vendor.
+### 26. PARTIALLY FIXED — "Fundamentals" is price-only
+`FundamentalScorer` now consumes a separate `FundamentalDataSource` and scores persisted market-cap
+and valuation inputs with fail-closed handling, rather than duplicating technical candle indicators.
+Authoritative EPS/revenue growth, ROE, D/E, promoter pledge, filing freshness, and historical
+point-in-time population remain open.
 
 ### 32. PARTIALLY FIXED — Hard-coded signal confidence
 `SignalPipeline` now derives bounded confidence from RSI location and EMA separation, so BUY/SELL/HOLD
@@ -181,38 +211,62 @@ otherwise they use the trigger price. Regression tests cover both long stop and 
 
 ### 16. FIXED — No mark-to-market equity curve
 `capitalCurve` now includes unrealized P&L at each bar close, so daily returns include open-position risk.
-**Fix:** Add `quantity × (close − entry)` for open positions each bar before recording the curve.
+The marked-to-market value is recorded before each daily observation, so Sharpe and drawdown include open-position risk.
 
-### 17. GAP — No portfolio-level backtest
-Each symbol is simulated in isolation with full capital. `maxConcurrentPositions` is unused, and there is no capital competition,
-sector overlap or combined equity curve.
-**Fix:** Add `PortfolioBacktestEngine`: one date-driven loop across symbols, shared cash, position cap, ranking for competing entries.
+### 17. PARTIALLY FIXED — No portfolio-level backtest
+`BacktestEngine.runPortfolioBacktest` now aggregates dated symbol trades through shared capital,
+available-cash limits, maximum concurrent positions, deterministic symbol ordering, and
+portfolio-level return/drawdown/risk metrics. The existing independent `/run-all` path is unchanged.
+The portfolio engine now accepts evaluated candle series, marks open positions at each observed candle close,
+and uses the next available trading session for settlement when market dates are supplied. Sector limits,
+intraday execution ordering, missing-candle interpolation, and richer API/report integration remain open.
 
 ### 18. PARTIALLY FIXED — Candidate scan qualifies on in-sample backtest
 `CandidateScanService` now runs a configurable 60–1000-day out-of-sample window (252 days by default), persists its date range and metrics separately,
 and requires both the full-history and OOS trade-count, win-rate and return gates before a result qualifies. Candidate discovery records raw signals and separate gates;
 qualified results are automatically activated on the pilot wishlist by the API/UI. The windowed backtest retains prior warm-up candles and prevents entries outside the
 evaluation boundary. Full multi-fold walk-forward validation and portfolio-level OOS evaluation remain open, and the current OOS window overlaps
+and requires both the full-history and OOS trade-count, win-rate and return gates before a result qualifies. Candidate discovery records raw signals and separate gates;
+qualified results are automatically activated on the pilot wishlist by the API/UI. The windowed backtest retains prior warm-up candles and prevents entries outside the
+evaluation boundary. Multi-fold walk-forward validation now runs bounded chronological folds, while portfolio-level OOS evaluation remains open; the current OOS window overlaps
 the descriptive full-history backtest rather than representing a fitted-model holdout.
-**Remaining:** qualify across multiple rolling folds (years 1–2 train, year 3 validate) and report stability across folds.
+**Remaining:** add fitted-parameter train/validate separation and portfolio-level OOS stability reporting.
 
 ### 19. FIXED — No minimum trade count
 Candidate scans now require at least 15 trades by default, configurable through
 `candidate-scan.min-trades`, before applying the win-rate and return gates. The no-loss profit-factor
 cap remains separately documented as a reporting limitation.
 
-### 20. GAP — Survivorship bias and corporate actions
-The universe is the current symbol master or watchlist, so delisted and merged names are absent. Only `adjclose` is read, and OHLC may not
-be split/bonus-adjusted, which creates false breakouts and stops (Indian bonuses and splits are frequent).
-**Fix:** Adjust OHLC by the `adjclose/close` ratio, add a candle-gap sanity check (>40% overnight moves with no news), and keep delisted symbols.
+### 20. PARTIALLY FIXED — Survivorship bias and corporate actions
+Technical-analysis and backtest TA4J inputs now use an analytical candle view that scales OHLC by
+`adjClose / close` when valid, while raw OHLC remains persisted and is not rewritten for execution.
+This removes a major split/bonus discontinuity from indicators, ATR, breakouts and analytical exits.
+The universe is still the current symbol master/watchlist, delisted and merged names have no
+date-effective eligibility snapshot, and Yahoo adjusted close is total-return adjusted rather than
+an event-specific corporate-action feed. An adjusted-price quality check now quarantines invalid or
+unexplained >75% analytical jumps from backtest/live inputs without rewriting raw candles.
+Historical universe snapshots and explicit corporate actions now have persistence contracts and V50
+schema support. Backtest selection now fails closed when the production universe store has no eligible
+as-of membership or the exchange does not match; valid corporate actions adjust analytical OHLCV immutably.
+Population from authoritative historical sources and event-specific semantics remain open.
 
-### 21. GAP — No benchmark or risk-adjusted metrics
-Reports show win rate, return, Sharpe and DD only. There is no comparison with buy-and-hold Nifty.
-**Fix:** Add CAGR, Sortino, Calmar, exposure %, avg R multiple, and alpha/beta vs NIFTY 50 / NIFTY 500 TRI.
+### 21. PARTIALLY FIXED — No benchmark or risk-adjusted metrics
+Single-symbol backtest results now expose CAGR, Sortino and Calmar plus same-window buy-and-hold and
+excess-return metrics. CAGR uses the evaluated
+calendar dates; Sortino uses the daily marked-to-market equity curve and downside deviation; Calmar
+uses CAGR divided by maximum drawdown. Benchmark/buy-and-hold comparison, exposure, average R,
+and alpha/beta remain open until a benchmark data contract and shared-capital portfolio semantics
+are defined.
+An explicit benchmark candle-series contract and fail-closed adapter now exist: malformed, duplicate,
+out-of-window, or insufficient persisted observations produce an unavailable benchmark rather than a
+misleading comparison. Authoritative NIFTY 50 / NIFTY 500 TRI ingestion and portfolio-level benchmark
+metrics remain open.
 
-### 22. GAP — Circuit limits not modelled
-A stock closing at the upper circuit can't be bought at next open; at the lower circuit it can't be exited.
-**Fix:** Store the price band per symbol. Skip entry when the next open is at the upper limit and defer exit while locked at the lower limit.
+### 22. PARTIALLY FIXED — Circuit limits not modelled
+A persisted `PriceBand` now provides explicit exchange limits. Paper and backtest BUY entries at the
+upper band are skipped, and long exits are deferred while the candle is locked at the lower band.
+Missing bands are not inferred from OHLC data. Ingestion/API coverage for populating exchange-provided
+bands and short-side policy remain open.
 
 ---
 
@@ -234,8 +288,10 @@ market order at the next session open with adverse slippage, matching the backte
 `PaperTradingEngine.executeSignal` now calculates size first and validates capacity with the actual
 quantity, eliminating the fixed-100 pre-check. Quantity clamping remains a separate risk-policy decision.
 
-### 24. GAP — No gate-effectiveness or strategy attribution
-Every BUY is stored and the SUPPRESS verdict is recorded, but nobody measures forward returns of blocked vs allowed BUYs, or P&L by strategy/regime.
+### 24. PARTIALLY FIXED — No gate-effectiveness or strategy attribution
+Sentiment-gate verdicts are persisted once per symbol/date and summarized through
+`GET /api/signals/gate-effectiveness`, including 1/5/20-session forward-return means by verdict.
+General gate attribution, strategy/regime dimensions, and realized paper-trade P&L attribution remain open.
 **Fix:** Nightly job: 5/10/20-day forward returns for each BUY tagged by verdict, strategy and regime. Show it on the dashboard.
 
 ---
@@ -243,39 +299,45 @@ Every BUY is stored and the SUPPRESS verdict is recorded, but nobody measures fo
 ## D. LLM and sentiment
 
 ### 14. PARTIALLY FIXED — Sentiment not point-in-time
-`SentimentService.analyzeStockSentiment(symbol, date)` calls `fetchStockNews(symbol)` and ignores `date`. Backfills and accuracy
-evaluation can use news published after the decision date (look-ahead).
-`SentimentService` now filters fetched articles to `publishedAt ≤ date 15:30 IST` and ≥ date − 7d
-before cleaning, truncation, and prompting. Articles without timestamps are rejected because their
-point-in-time position cannot be proven. Persisted article IDs and historical reconstruction remain open.
+The previous implementation fetched live news without a date-bounded source, so backfills and accuracy
+evaluation could use news published after the decision date (look-ahead). `SentimentService` now
+filters fetched articles to `publishedAt ≤ date 15:30 IST` and ≥ date − 7d
+before cleaning, truncation, and prompting. For past dates, `NewsIngestionService` reads the
+persisted inclusive symbol/date window, requires `first_seen_at ≤` the decision cutoff, and does not
+call live feeds. Articles without timestamps or first-seen provenance are rejected because their
+point-in-time position cannot be proven. Evidence IDs are persisted for newly analyzed results;
+legacy rows remain unreconstructable.
 
 ### 15. PARTIALLY FIXED — Plain-text fallback misclassifies
-`SentimentAnalyzer.parsePlainText`: contains "positive" and not "negative" → POSITIVE (0.4). "Not positive", "positive for peers" and similar also become POSITIVE.
 Malformed/empty responses now return `UNKNOWN` with zero confidence, and the gate flags UNKNOWN.
-Keyword fallback remains explicitly marked `KEYWORD`; contextual language disambiguation and an
-optional JSON-repair retry remain open.
+The keyword fallback remains explicitly marked `KEYWORD` and now ignores locally negated terms and
+peer/competitor-scoped phrases such as “not positive” and “positive for peers”. Broader contextual
+language, sarcasm, and domain-specific polarity remain open.
 
 ### 27. FIXED — Headlines lack date/source; `{symbol}` never substituted
 Sentiment prompts now format each item with an index, publication date and source, substitute `{symbol}`
 in the system prompt, and filter against the actual seven-day decision window. Historical article IDs and
 persisted-news reconstruction remain part of item 14.
 
-### 28. GAP — No structured Indian-market data in prompt
-The prompt names FII/DII activity and promoter actions but provides no data for them.
-**Fix:** Add a structured block: last-quarter results YoY, promoter holding and pledge change, FII/DII holding change, bulk/block deals,
-delivery %, ASM/GSM flag and next results date. `EarningsData` and `StructuredFiling` already exist.
+### 28. PARTIALLY FIXED — No structured Indian-market data in prompt
+Prompts now include bounded, decision-date-filtered earnings fields and NSE/BSE filing context when
+available, while retaining news-only behavior when structured sources are unavailable. FII/DII holdings,
+promoter pledge, bulk/block deals, delivery, surveillance flags, and next-results data remain open.
 
-### 29. IMP — Truncation before ranking and dedupe
-`MAX_ARTICLES_FOR_LLM = 10` keeps the first 10 in fetch order. The same story from 5 outlets can use up the budget.
-**Fix:** Run `NewsFilterService` ranking, dedupe by normalized-title similarity, prioritize NSE/BSE filings, then take the top N.
+### 29. PARTIALLY FIXED — Truncation before ranking and dedupe
+News ingestion now applies deterministic source/date ranking, prioritizes NSE/BSE filings, removes
+near-duplicate normalized headlines, and only then applies the bounded article budget. Cross-source
+semantic deduplication and richer relevance scoring remain open.
 
-### 30. IMP — No determinism or grounding
-A single sample at non-zero temperature. Red flags and catalysts can be invented.
-**Fix:** Temperature 0; optional 3-sample majority vote (disagreement lowers confidence). Require each flag or catalyst to cite a headline index and drop uncited items.
+### 30. PARTIALLY FIXED — No determinism or grounding
+LLM defaults and sentiment calls now request temperature 0, prompts require article-index citations,
+and uncited or out-of-range flags/catalysts are removed before persistence. Provider-level
+nondeterminism, multi-sample disagreement scoring, and grounding for every synthesized statement remain open.
 
-### 31. IMP — Synthesis LLM adds little decision value
-`SynthesisService` restates numbers already computed. Its recommendation isn't measured.
-**Fix:** Narrow the job to conflict detection and event risk (results or ex-date within holding window). Track its recommendation accuracy like sentiment.
+### 31. PARTIALLY FIXED — Synthesis LLM adds little decision value
+Synthesis output now carries bounded conflict and event-risk flags, and an evaluation service can
+record 1–20-session outcomes and recommendation accuracy for later measurement. Persistent storage,
+scheduled outcome collection, and production reporting remain open.
 
 ### 33. PARTIALLY FIXED — LLM failures hidden
 Top-level exceptions return a default NEUTRAL; LLM outages fall back to keyword sentiment stored as if it were an LLM result.
@@ -294,10 +356,15 @@ gate/composite weight consumes trailing IC.
 
 ## E. Strategy, regime and risk
 
-### 34. GAP — Live fixed to one strategy
-`StrategyRegistry` supports many strategies but live signals and the orchestrator use only `defaultStrategy()`. The signal
-strategy label is the string `"DEFAULT"`.
-**Fix:** Add `strategy_config` (enabled, capital %, params). Loop enabled strategies in SIGNAL stage and persist `strategy` on signals and positions.
+### 34. PARTIALLY FIXED — Live fixed to one strategy
+Immutable, versioned `StrategyConfig` persistence now supports OFF, BACKTEST_ONLY, SHADOW, and CHAMPION
+modes with one current row per variant and one champion constraint. Live signal fan-out, champion
+gating, and per-variant portfolios remain open.
+
+The configuration API and dashboard management surface are now available, and two additional strategy
+families can run through the existing strategy registry. Live orchestration now treats CHAMPION configs
+as trade-authoritative, fans out SHADOW signals without trading, and excludes OFF/BACKTEST_ONLY configs;
+per-variant portfolio isolation and production data population remain open.
 
 ### 35. GAP — Add standard NSE swing setups
 **Fix:** Add `TradingStrategy` beans, backtest each, and enable only those passing out-of-sample:
@@ -307,33 +374,57 @@ strategy label is the string `"DEFAULT"`.
 - RSI(2) < 10 mean reversion above the 200-day moving average, exit on close > SMA5
 - Sector rotation: buy RS leaders in top-3 sectors by 3-month return
 
+Pullback-in-uptrend, volatility-squeeze, 52-week-high breakout, and RSI(2) mean-reversion strategy
+beans are now available through an explicit opt-in registry. The current indicator contract lacks
+the exact prior-252 high/RSI(2)/SMA5/SMA200 inputs, so these remain backtest-only until the pipeline
+supports those semantics; sector rotation remains open.
+
 ### 36. GAP — Market-regime filter
 No index-trend or volatility gate exists; momentum breakouts lose heavily in falling markets.
 **Fix:** `RegimeService`: Nifty vs 200-day average, India VIX band, and breadth (% of NIFTY 500 above 50-day average). Each strategy declares allowed regimes.
 
-### 37. GAP — Relative strength
+Bounded fail-closed market-regime and relative-strength policy contracts now exist. The signal engine
+can apply both gates for explicitly opted-in strategies and supplies as-of stock/index candles to the
+relative-strength policy; Nifty history, VIX/breadth ingestion, strategy opt-in defaults, and sector
+data remain open.
+
+### 37. PARTIALLY FIXED — Relative strength
 Entry rules ignore performance vs the index and sector.
-**Fix:** Add an RS line (stock/Nifty) with a rising 63-day RS rank filter (for example, top 30% of universe).
+The signal engine now supports an opt-in 63-session adjusted-close excess-return gate against NIFTY50,
+with missing index history failing closed. Cross-sectional rank/sector-relative data and production
+strategy opt-in remain open.
 
 ### 38. GAP — Liquidity, surveillance and event filters
 **Fix:** Reject if 20-day average traded value < ₹5 Cr, the stock is in ASM/GSM or F&O ban, it has a 5%/10% price band, or results or a board meeting falls within 5 trading days.
 
-### 39. GAP — Exit management
+An explicit eligibility policy now evaluates liquidity, surveillance flags, price-band input, and
+results/board-meeting windows without inferring unavailable external facts. The live orchestrator now
+invokes this policy before queuing BUYs; missing surveillance/event/band data fails closed. Data
+population and richer API reporting remain open.
+
+### 39. PARTIALLY FIXED — Exit management
 Exits use a fixed 2×ATR stop, 2.5R target, EMA trend-break and time stop. Partial exit exists in `PaperTradingEngine` but the strategy never uses it.
-**Fix:** Take 50% off at 1.5–2R, move the stop to breakeven, and trail the rest with a chandelier (3×ATR) stop. Backtest against the current exits.
+An opt-in trailing/breakeven policy now evaluates completed bars in portfolio simulation and records
+explicit exit reasons. Partial exits, paper-engine wiring, and a default policy decision remain open.
+**Remaining:** Take 50% off at 1.5–2R and trail the rest with a chandelier (3×ATR) stop across paper and backtest paths.
 
-### 40. GAP — Sector and correlation limits
-Nothing stops all positions landing in one sector (already noted in `docs/plans/2026-09-03-strategy-and-platform-roadmap.md`).
-**Fix:** Max N positions / X% capital per sector in `CapitalTracker`. Optionally reject entries with > 0.7 60-day correlation to an existing holding.
+### 40. PARTIALLY FIXED — Sector and correlation limits
+Portfolio simulation now accepts sector and correlation exposure policies, rejects entries with
+deterministic reasons when limits are exceeded, and exposes those rejections in the result. Production
+sector taxonomy, rolling correlation population, and live `CapitalTracker` wiring remain open.
 
-### 41. IMP — Parameter optimization with overfit control
-Thresholds are compile-time constants in `StrategyParams`.
-**Fix:** Move params into `strategy_config`. Add a grid or walk-forward optimizer reporting a stability heatmap and deflated Sharpe; reject spiky optima.
+### 41. PARTIALLY FIXED — Parameter optimization with overfit control
+Bounded Cartesian parameter grids and chronological train/validation folds now produce stability
+statistics, drawdown-spike checks, approximate deflated-Sharpe decisions, and explicit overfit flags.
+The evaluator is not yet wired to a production optimization job, heatmap report, or automatic
+strategy-config promotion.
 
-### 42. BUG (behavioral) — Entry confluence produces almost no BUYs
+### 42. PARTIALLY FIXED — Entry confluence produces almost no BUYs
 4-of-4 entry vs 1-of-3 exit. The 2026-09-03 roadmap records zero BUYs across 14 stocks. RSI 50–65 plus "within 3% of 52w high"
 plus a 1.5× volume surge rarely line up on the same bar, because a strong stock near its highs usually has RSI > 65.
-**Fix:** Backtest 3-of-4 and RSI 55–75 variants on the portfolio engine (#17) with costs (#11) before changing live rules.
+An opt-in `PRICE_ACTION_3_OF_4` strategy now supports configurable RSI bounds and requires three of
+four rules, so it can be evaluated through the existing backtest path without changing live defaults.
+Actual portfolio outcome comparison and a data-backed choice of RSI 55–75 remain open.
 
 ---
 

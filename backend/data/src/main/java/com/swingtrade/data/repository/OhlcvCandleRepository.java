@@ -140,6 +140,16 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
         Pageable pageable
     );
 
+    /** Finds a bounded page of candles for a selected set of symbols. */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol IN :symbols "
+        + "AND c.date BETWEEN :startDate AND :endDate ORDER BY c.date ASC, c.symbol ASC")
+    List<OhlcvCandleEntity> findBySymbolsAndDateRange(
+        @Param("symbols") List<String> symbols,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate,
+        Pageable pageable
+    );
+
     /**
      * Finds the latest candle for a symbol before a given date/time.
      *

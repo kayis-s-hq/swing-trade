@@ -6,6 +6,7 @@ import com.swingtrade.data.entity.JobRunEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.repository.JobRunRepository;
 import com.swingtrade.data.repository.JobRunStageRepository;
+import com.swingtrade.data.repository.StrategyConfigRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.domain.JobRun;
 import com.swingtrade.domain.JobRunStage;
@@ -24,6 +25,8 @@ import com.swingtrade.llm.service.SentimentService;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
+import com.swingtrade.strategy.StrategyRegistry;
+import com.swingtrade.domain.StrategyConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -139,6 +142,9 @@ public class JobOrchestratorService {
     private final SentimentStore sentimentStore;
     private final boolean llmAnalysisEnabled;
     private final boolean llmAnalysisAdvisoryOnly;
+    private final StrategyConfigRepository strategyConfigRepository;
+    private final StrategyRegistry strategyRegistry;
+    private final LiveEligibilityService liveEligibilityService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public JobOrchestratorService(
@@ -163,6 +169,9 @@ public class JobOrchestratorService {
             LlmAnalysisResultStore llmAnalysisResultStore,
             LlmAnalysisGate llmAnalysisGate,
             SentimentStore sentimentStore,
+            StrategyConfigRepository strategyConfigRepository,
+            StrategyRegistry strategyRegistry,
+            LiveEligibilityService liveEligibilityService,
             @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
             @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs,
             @Value("${job.orchestrator.reaper.enabled:true}") boolean reaperEnabled,
@@ -197,6 +206,23 @@ public class JobOrchestratorService {
         this.sentimentStore = sentimentStore;
         this.llmAnalysisEnabled = llmAnalysisEnabled;
         this.llmAnalysisAdvisoryOnly = llmAnalysisAdvisoryOnly;
+        this.strategyConfigRepository = strategyConfigRepository;
+        this.strategyRegistry = strategyRegistry;
+        this.liveEligibilityService = liveEligibilityService;
+    }
+
+    /** Compatibility fixture constructor for pre-LLM pipeline tests. */
+    public JobOrchestratorService(
+            DataIngestionService d, NewsIngestionService n, SentimentService s, SignalPipeline p,
+            SentimentGate sg, BacktestEngine b, TradingService t, JobRunRepository jr,
+            JobRunStageRepository js, SignalStore ss, WatchlistStore w, CandleStore c,
+            JobOrchestratorMetrics m, TechnicalAnalysisService ta, FundamentalScorer fs,
+            CompositeAnalysisService ca, com.swingtrade.llm.service.SynthesisService sy,
+            BacktestResultStore br, LlmAnalysisResultStore lr, LlmAnalysisGate lg,
+            SentimentStore st, int max, long poll, boolean reaper, boolean llmEnabled,
+            boolean llmAdvisory) {
+        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,ta,fs,ca,sy,br,lr,lg,st,null,null,
+            null, max,poll,reaper,llmEnabled,llmAdvisory);
     }
 
     /** Compatibility fixture constructor for pre-LLM pipeline tests. */
@@ -204,7 +230,7 @@ public class JobOrchestratorService {
             SignalPipeline p, SentimentGate sg, BacktestEngine b, TradingService t,
             JobRunRepository jr, JobRunStageRepository js, SignalStore ss, WatchlistStore w,
             CandleStore c, JobOrchestratorMetrics m, int max, long poll, boolean reaper) {
-        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
+        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
     }
 
     /**
@@ -335,19 +361,21 @@ public class JobOrchestratorService {
                 // PAPER_TRADE stage. NEWS and SENTIMENT intentionally run for every symbol;
                 // their output is useful for monitoring SELL/HOLD names as well as BUYs.
                 Signal.SignalType[] signalType = {null};
+                Set<Long> tradeableSignalIds = ConcurrentHashMap.newKeySet();
+                boolean[] configuredLiveRun = {false};
 
                 List<StageDef> stageDefs = new java.util.ArrayList<>(List.of(
                     new StageDef(JobRunStage.StageName.DATA_FETCH,
                         () -> StageExecutionResult.completed(stageDataFetch(symbol)), TIMEOUT_DATA_FETCH),
                     new StageDef(JobRunStage.StageName.SIGNAL,
-                        () -> stageSignal(symbol, signalType), TIMEOUT_SIGNAL),
+                        () -> stageSignal(symbol, signalType, tradeableSignalIds, configuredLiveRun), TIMEOUT_SIGNAL),
                     new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol), TIMEOUT_BACKTEST),
                     new StageDef(JobRunStage.StageName.NEWS,
                         () -> StageExecutionResult.completed(stageNews(symbol)), TIMEOUT_NEWS),
                     new StageDef(JobRunStage.StageName.SENTIMENT,
                         () -> StageExecutionResult.completed(stageSentiment(symbol, today)), TIMEOUT_SENTIMENT),
                     new StageDef(JobRunStage.StageName.PAPER_TRADE,
-                        () -> StageExecutionResult.completed(stagePaperTrade(symbol)), TIMEOUT_PAPER_TRADE)
+                        () -> StageExecutionResult.completed(stagePaperTrade(symbol, tradeableSignalIds, configuredLiveRun[0])), TIMEOUT_PAPER_TRADE)
                 ));
                 if (llmAnalysisEnabled) {
                     stageDefs.add(stageDefs.size() - 1, new StageDef(JobRunStage.StageName.LLM_ANALYSIS,
@@ -516,7 +544,37 @@ public class JobOrchestratorService {
         return result.score() + ", confidence " + result.confidence();
     }
 
-    private StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut) {
+    private StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
+                                             Set<Long> tradeableSignalIds,
+                                             boolean[] configuredLiveRun) {
+        List<StrategyConfig> configs = liveConfigs();
+        if (!configs.isEmpty()) {
+            configuredLiveRun[0] = true;
+            boolean championSeen = configs.stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count() == 1;
+            int generated = 0;
+            for (StrategyConfig config : configs) {
+                var selected = strategyRegistry.find(config.strategyType());
+                if (selected.isEmpty()) {
+                    logger.warn("Skipping configured strategy {}: unsupported strategy type {} (fail-closed)",
+                        config.variantId(), config.strategyType());
+                    continue;
+                }
+                boolean champion = championSeen && config.mode() == StrategyConfig.Mode.CHAMPION;
+                try {
+                    var signal = signalPipeline.generateConfiguredSignal(symbol, config, selected.get(), champion);
+                    if (signal.isPresent()) {
+                        generated++;
+                        signalTypeOut[0] = signal.get().type();
+                        if (champion && signal.get().id() != null) tradeableSignalIds.add(signal.get().id());
+                    }
+                } catch (RuntimeException e) {
+                    logger.warn("Configured strategy {} failed for {} (fail-closed): {}",
+                        config.variantId(), symbol, e.getMessage());
+                }
+            }
+            return StageExecutionResult.completed(generated + " configured signal(s) generated");
+        }
+
         var signal = signalPipeline.generatePrimarySignal(symbol);
         signalTypeOut[0] = signal.map(Signal::type).orElse(null);
         String summary = signal.map(s -> "%s signal generated, confidence %.0f%%"
@@ -578,15 +636,21 @@ public class JobOrchestratorService {
     }
 
     private String stagePaperTrade(String symbol) {
+        return stagePaperTrade(symbol, Set.of(), false);
+    }
+
+    private String stagePaperTrade(String symbol, Set<Long> tradeableSignalIds, boolean configuredLiveRun) {
         List<Signal> unprocessed = signalStore.findUnprocessed()
             .stream()
             .filter(s -> s.symbol().equals(symbol))
+            .filter(s -> !configuredLiveRun || tradeableSignalIds.contains(s.id()))
             .toList();
 
         int executed = 0;
         int failedToQueue = 0;
         int blockedBySentiment = 0;
         int blockedByLlm = 0;
+        int blockedByEligibility = 0;
         for (Signal signal : unprocessed) {
             OhlcvCandle latest = candleStore.findLatestBySymbol(symbol)
                 .orElse(null);
@@ -628,6 +692,15 @@ public class JobOrchestratorService {
                     logger.info("Blocked BUY signal {} for {} by LLM analysis: {}", signal.id(), symbol, llmVerdict.reason());
                     continue;
                 }
+                if (liveEligibilityService != null) {
+                    var eligibility = liveEligibilityService.assess(symbol, signal.date(), latest.close());
+                    if (!eligibility.eligible()) {
+                        blockedByEligibility++;
+                        logger.info("Blocked BUY signal {} for {} by live eligibility: unavailable={}, rejected={}",
+                            signal.id(), symbol, eligibility.unavailableInputs(), eligibility.rejectionReasons());
+                        continue;
+                    }
+                }
             }
 
             // Queue before marking processed. A capacity rejection returns null and must leave
@@ -656,10 +729,23 @@ public class JobOrchestratorService {
             summary.append(", ").append(blockedBySentiment).append(" blocked by sentiment");
         }
         if (blockedByLlm > 0) summary.append(", ").append(blockedByLlm).append(" blocked by LLM analysis");
+        if (blockedByEligibility > 0) summary.append(", ").append(blockedByEligibility)
+            .append(" blocked by live eligibility");
         if (failedToQueue > 0) {
             summary.append(", ").append(failedToQueue).append(" failed to queue (see logs)");
         }
         return summary.toString();
+    }
+
+    private List<StrategyConfig> liveConfigs() {
+        if (strategyConfigRepository == null || strategyRegistry == null) return List.of();
+        return strategyConfigRepository.findAll().stream()
+            .map(com.swingtrade.data.entity.StrategyConfigEntity::toDomain)
+            .filter(StrategyConfig::current)
+            .filter(config -> config.mode() == StrategyConfig.Mode.CHAMPION
+                || config.mode() == StrategyConfig.Mode.SHADOW)
+            .sorted(java.util.Comparator.comparing(StrategyConfig::variantId))
+            .toList();
     }
 
     private void updateStageStatus(UUID runId, String symbol, JobRunStage.StageName stage,

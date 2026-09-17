@@ -1,6 +1,7 @@
 package com.swingtrade.domain;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.LocalDate;
 
 /**
@@ -27,6 +28,20 @@ public record OhlcvCandle(
     Long volume,
     BigDecimal adjClose
 ) {
+    /**
+     * Returns an analytical candle on the adjusted-close price basis. Raw OHLC values are kept
+     * unchanged in storage and for execution; this view prevents historical splits/bonuses from
+     * creating artificial technical gaps or breakouts.
+     */
+    public OhlcvCandle adjustedForAnalysis() {
+        if (close == null || close.signum() <= 0 || adjClose == null || adjClose.signum() <= 0
+                || open == null || high == null || low == null) {
+            return this;
+        }
+        BigDecimal factor = adjClose.divide(close, MathContext.DECIMAL128);
+        return new OhlcvCandle(symbol, date,
+                open.multiply(factor), high.multiply(factor), low.multiply(factor), adjClose, volume, adjClose);
+    }
     /**
      * Creates a new OhlcvCandle with calculated values for analysis.
      *

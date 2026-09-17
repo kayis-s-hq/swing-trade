@@ -6,8 +6,13 @@ import java.math.BigDecimal;
 public record PositionRisk(
     BigDecimal stopLoss,
     BigDecimal target,
-    BigDecimal marginUtilized
+    BigDecimal marginUtilized,
+    boolean partialExitTaken
 ) {
+    public PositionRisk(BigDecimal stopLoss, BigDecimal target, BigDecimal marginUtilized) {
+        this(stopLoss, target, marginUtilized, false);
+    }
+
     public PositionRisk {
         marginUtilized = marginUtilized != null ? marginUtilized : BigDecimal.ZERO;
     }

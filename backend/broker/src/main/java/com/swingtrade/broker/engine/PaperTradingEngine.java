@@ -9,6 +9,7 @@ import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.broker.service.PaperTradingStateService;
 import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.Signal;
@@ -448,8 +449,20 @@ public class PaperTradingEngine implements TradingService {
     public Position partialExitPosition(String positionId, BigDecimal exitRatio, BigDecimal exitPrice) {
         synchronized (portfolioLock) {
             // Capture quantity before partial exit (this is the original at call time)
-            BigDecimal currentQty = BigDecimal.valueOf(positionManager.getPosition(positionId).quantity());
-            BigDecimal exitedQuantity = currentQty.multiply(exitRatio);
+            Position currentPosition = positionManager.getPosition(positionId);
+            if (currentPosition == null) {
+                throw new IllegalArgumentException("Position not found: " + positionId);
+            }
+            if (exitRatio == null || exitRatio.compareTo(BigDecimal.ZERO) <= 0
+                    || exitRatio.compareTo(BigDecimal.ONE) > 0) {
+                throw new IllegalArgumentException("Exit ratio must be between 0 and 1: " + exitRatio);
+            }
+            BigDecimal currentQty = BigDecimal.valueOf(currentPosition.quantity());
+            BigDecimal exitedQuantity = currentQty.multiply(exitRatio)
+                .setScale(0, RoundingMode.DOWN);
+            if (exitedQuantity.signum() <= 0) {
+                throw new IllegalArgumentException("Exit ratio must sell at least one share: " + exitRatio);
+            }
 
             Position position = positionManager.partialExitPosition(positionId, exitRatio, exitPrice);
 
@@ -806,7 +819,18 @@ public class PaperTradingEngine implements TradingService {
      */
     public void updatePositionsFromDomain(OhlcvCandle candle) {
         List<Position> updated = positionManager.updatePositionsWithCandleData(candle.symbol(), candle);
+        handleUpdatedPositions(updated);
+    }
 
+    /** Updates positions using optional explicit exchange price-band data. */
+    public void updatePositionsFromDomain(OhlcvCandle candle, PriceBand priceBand) {
+        List<Position> updated = positionManager.updatePositionsWithCandleData(
+            candle.symbol(), candle, priceBand);
+
+        handleUpdatedPositions(updated);
+    }
+
+    private void handleUpdatedPositions(List<Position> updated) {
         // Check triggers for each updated position
         for (Position position : updated) {
             if (position.status() == PositionStatus.OPEN) {

@@ -1,6 +1,7 @@
 # Pre-Pilot Status
 
 Last checked: 2026-09-17 (documentation/lint pass)
+Last checked: 2026-09-17 (documentation/lint and analytics remediation verification)
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
@@ -21,6 +22,124 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 - [x] Verified 2026-09-01: `:api:test`, `:data:test`, all 277 dashboard tests, dashboard typecheck, lint, formatting, and production build passed. Dev-stack health, `/api/candidate-scans/settings`, `/api/candidate-scans`, and the dashboard returned HTTP 200. The latest persisted full-universe run completed 2,635 symbols with 5 qualifiers; settings at that verification were 50% minimum win rate, >0% total return, 8 workers, and 3 backfill years.
 
 ## Data-integrity remediation
+
+- [x] Partial-exit accounting corrected 2026-09-17: broker exits now sell whole shares,
+  retain the actual remainder, reject ratios above 100%, and calculate realized P&L/cash
+  from executed quantity. The targeted broker suite and `./bin/verify-changes` passed.
+
+- [x] Data-quality validation endpoint added 2026-09-17: `POST /api/admin/data/validate`
+  accepts a normalized symbol and inclusive date window, rejects invalid/reversed ranges,
+  and returns the existing gap/anomaly report. Controller tests and `./bin/verify-changes`
+  passed.
+
+- [x] Historical OHLCV export added 2026-09-17: `GET /api/data/export` supports paged
+  CSV/JSON output for selected symbols or the full candle store, bounded date ranges, and
+  attachment download headers without building the complete export in memory. Controller
+  coverage and `./bin/verify-changes` passed.
+
+- [x] Yahoo single-candle observability improved 2026-09-17: empty, null, zero, and
+  non-finite close responses now emit an explicit symbol/date warning before being rejected.
+  The Yahoo client suite and `./bin/verify-changes` passed.
+
+- [x] Runtime API verification extended 2026-09-17: against the existing PostgreSQL
+  development database (schema V50), `/api/health` returned 200, data validation returned
+  200 with persisted TCS gap results, and CSV export returned 200 with attachment headers
+  and candle rows. No data was reset.
+
+- [x] Single-symbol backtest risk-policy wiring added 2026-09-17: configured risk-management
+  policies are now evaluated before fixed exits in the ordinary backtest path, matching the
+  existing portfolio path. Strategy tests and `./bin/verify-changes` passed; paper-monitor
+  policy scheduling and partial-exit execution remain separate follow-ups.
+
+- [x] NIFTY50 Yahoo symbol mapping corrected 2026-09-17: persisted `NIFTY50` requests now
+  resolve to Yahoo's `^NSEI` index ticker, allowing the existing ingestion path to populate
+  the stored index series used by opted-in regime/relative-strength checks. Client tests and
+  `./bin/verify-changes` passed; authoritative TRI and breadth/VIX feeds remain open.
+
+- [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
+  affected backend suite passed; the foreground local API stayed healthy through
+  startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL
+  health, `/api/strategy-configs`, `/api/signals/gate-effectiveness`, and the
+  dashboard root each returned successfully. No database data was reset. The
+  remaining analytics limitations are still listed in the review as partial,
+  including authoritative benchmark/universe ingestion, persistent evaluation,
+  and full portfolio/live wiring.
+
+- [x] Synthesis evaluation persistence verified 2026-09-17: evaluation records and
+  measured outcomes now persist in the V51 `synthesis_evaluations` table and reload
+  after cache misses/API restarts. AOT processing, local schema migration, API boot,
+  affected backend tests, and `./bin/verify-changes` passed. Scheduled outcome
+  collection is now automated by the bounded persisted-candle evaluator; aggregate
+  reporting remains a separate follow-up.
+
+- [x] Portfolio benchmark wiring verified 2026-09-17: shared-capital backtests now
+  attach the persisted NIFTY50 price-series return and excess return when the bounded
+  benchmark adapter has a usable window; missing or malformed benchmark data remains
+  explicitly unavailable. Strategy/API tests and `./bin/verify-changes` passed.
+  Authoritative NIFTY TRI and benchmark attribution remain open.
+
+- [x] Paper-monitor risk management verified 2026-09-17: the optional configured
+  breakeven/trailing policy now runs before fixed stop/target checks, derives the
+  highest completed persisted close, honors locked lower circuits, and uses adverse
+  gap-through fills. Broker tests and `./bin/verify-changes` passed; the feature
+  remains opt-in by default (`paper.trading.risk-management-enabled=false`).
+
+- [x] Synthesis evaluation reporting verified 2026-09-17: durable measured decisions
+  now have a summary API at `GET /api/synthesis/evaluations/summary`, including total,
+  measured, correct, accuracy, and recommendation counts. LLM/API tests and
+  `./bin/verify-changes` passed.
+
+- [x] Partial-target exit management verified 2026-09-17: the shared risk policy
+  takes a bounded 50% leg at 2R, keeps the remainder under trailing/breakeven
+  management, and applies the behavior in both backtest and paper monitoring.
+  Paper state persists `partial_exit_taken` via migration V52, preventing duplicate
+  exits after restart. Strategy/broker tests, full verifier, AOT, and local API boot
+  against PostgreSQL passed.
+
+- [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
+  as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API
+  tests passed; cross-sectional rank and authoritative index ingestion remain open.
+
+- [x] Strategy-policy wiring follow-up verified 2026-09-17: opted-in strategies can apply the
+  fail-closed market-regime gate, live BUY queueing invokes explicit eligibility checks, and an
+  opt-in 3-of-4 price-action strategy supports configurable RSI bounds. Full affected backend tests
+  and `./bin/verify-changes` passed after restoring legacy fixture compatibility. Relative-strength
+  live wiring and data-backed entry variant comparison remain open.
+
+- [x] Strategy/risk follow-up verified 2026-09-16: bounded synthesis evaluation, two additional
+  opt-in strategy families, portfolio sector/correlation rejection policies, and walk-forward
+  parameter stability evaluation are implemented with focused coverage. Full affected backend tests
+  and `./bin/verify-changes` passed; production persistence, exact indicator semantics, and live data
+  wiring remain documented follow-ups.
+
+- [x] Strategy/LLM remediation batch verified 2026-09-16: fundamentals are separated behind a
+  fail-closed data source, sentiment prompts request deterministic temperature and enforce article
+  citations, live strategy configs honor CHAMPION/SHADOW/OFF/BACKTEST_ONLY modes, and portfolio
+  simulation supports opt-in trailing/breakeven exits. Full affected backend tests and
+  `./bin/verify-changes` passed; remaining limitations are recorded in the analytics review.
+
+- [x] Analytics follow-up batch verified 2026-09-16: portfolio backtests support candle-close
+  mark-to-market and next-session settlement, production backtests enforce as-of universe membership
+  and immutable corporate-action adjustment, benchmark adapters fail closed on malformed persisted data,
+  and LLM article selection ranks and deduplicates before truncation. Full backend verification and
+  `./bin/verify-changes` passed. Remaining limitations are recorded in the analytics review.
+
+- [x] Analytics remediation slice verified 2026-09-16: historical sentiment uses persisted
+  first-seen-bounded evidence, analytical OHLC normalization is in place, and explicit price-band
+  persistence/policies cover paper and backtest circuit-limit behavior. `./bin/verify-changes` and
+  affected backend module tests passed; portfolio-level backtesting, historical universe snapshots,
+  and exchange-band ingestion/API population remain follow-ups.
+- [x] Extended analytics validation verified 2026-09-16: bounded shared-capital portfolio results,
+  chronological walk-forward folds, adjusted-price gap quarantine, same-window benchmark/excess
+  returns, sentiment gate-effectiveness summaries, and bounded earnings/NSE/BSE filing prompt context.
+  `./bin/verify-changes` passed across the affected backend modules.
+- [x] Local DevStack verification verified 2026-09-16: PostgreSQL migrations applied cleanly through
+  V50, the API health endpoint returned `UP`, and `/api/signals/gate-effectiveness` returned HTTP 200.
+  The local API was run in the foreground for this check because the background launcher terminated
+  during startup under concurrent worker resource pressure; no database data was reset.
+- [x] Strategy expansion verification: pullback and volatility-squeeze beans, market-policy contracts,
+  strategy configuration API/dashboard, and portfolio-backtest endpoint passed focused tests plus the
+  sequential affected-module backend suite. Current default live behavior remains unchanged.
 
 - Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
 - Candle uniqueness, market-session validation, reconciliation, and audit logging are implemented.

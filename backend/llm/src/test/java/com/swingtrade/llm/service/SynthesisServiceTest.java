@@ -37,6 +37,8 @@ class SynthesisServiceTest {
     private SynthesisPromptLoader promptLoader;
     @Mock
     private LlmServerManagerProvider serverManagerProvider;
+    @Mock
+    private SynthesisEvaluationService evaluationService;
 
     private SynthesisService service;
     private CompositeAnalysis composite;
@@ -45,7 +47,7 @@ class SynthesisServiceTest {
     void setUp() {
         when(promptLoader.getSystemPrompt()).thenReturn("You are a financial analyst.");
 
-        service = new SynthesisService(llmClientProvider, promptLoader, serverManagerProvider);
+        service = new SynthesisService(llmClientProvider, promptLoader, serverManagerProvider, evaluationService);
 
         composite = new CompositeAnalysis(
                 "RELIANCE",

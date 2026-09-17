@@ -14,5 +14,7 @@ public enum ExitReason {
     SIGNAL_EXIT,
     TIME_STOP,
     TREND_BREAK,
+    BREAKEVEN_STOP,
+    TRAILING_STOP,
     MANUAL
 }

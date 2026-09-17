@@ -462,6 +462,27 @@ export interface TodayHolidayStatus {
 }
 
 // ---------------------------------------------------------------------------
+// Strategy configuration
+// ---------------------------------------------------------------------------
+
+export type StrategyMode = 'OFF' | 'BACKTEST_ONLY' | 'SHADOW' | 'CHAMPION'
+
+export interface StrategyConfig {
+  id: number | null
+  variantId: string
+  version: number
+  strategyType: string
+  params: Record<string, unknown>
+  overlays: Record<string, unknown>
+  paramsHash: string
+  mode: StrategyMode
+  paperCapital: number
+  current: boolean
+  notes: string | null
+  createdAt: string
+}
+
+// ---------------------------------------------------------------------------
 // Job Orchestrator
 // ---------------------------------------------------------------------------
 

@@ -1,0 +1,2 @@
+ALTER TABLE positions
+    ADD COLUMN IF NOT EXISTS partial_exit_taken BOOLEAN NOT NULL DEFAULT FALSE;

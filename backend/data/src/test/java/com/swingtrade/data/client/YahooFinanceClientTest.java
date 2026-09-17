@@ -366,6 +366,18 @@ class YahooFinanceClientTest {
     }
 
     @Test
+    void mapsPersistedNifty50SymbolToYahooIndexTicker() throws Exception {
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(yahooResponse(LocalDate.of(2024, 1, 15), 100.0, 105.0, 99.0, 104.0, 5000000))
+                .addHeader("Content-Type", "application/json"));
+
+        client.fetchCandle("NIFTY50", LocalDate.of(2024, 1, 15));
+
+        var request = mockWebServer.takeRequest();
+        assertThat(request.getPath()).contains("%5ENSEI");
+    }
+
+    @Test
     void preservesExistingExchangeSuffix() throws Exception {
         mockWebServer.enqueue(new MockResponse()
                 .setBody(yahooResponse(LocalDate.of(2024, 1, 15), 100.0, 105.0, 99.0, 104.0, 5000000))

@@ -67,6 +67,10 @@ class LlmConfigDefaultsTest {
             assertThat(openai.getModel()).isEqualTo("openai-model");
             assertThat(ollama.getBaseUrl()).isEqualTo("http://ollama.test/v1");
             assertThat(ollama.getModel()).isEqualTo("ollama-model");
+            assertThat(local.getTemperature()).isZero();
+            assertThat(pi.getTemperature()).isZero();
+            assertThat(openai.getTemperature()).isZero();
+            assertThat(ollama.getTemperature()).isZero();
         }
     }
 

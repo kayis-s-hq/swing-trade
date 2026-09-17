@@ -44,15 +44,17 @@ public class TechnicalAnalysisService {
         java.util.Collections.reverse(chrono);
 
         int lastIndex = chrono.size() - 1;
-        OhlcvCandle latest = chrono.get(lastIndex);
+        OhlcvCandle latest = chrono.get(lastIndex).adjustedForAnalysis();
         BigDecimal price = latest.close();
 
         // Extract price lists for TechnicalIndicators
         List<BigDecimal> closes = new ArrayList<>(chrono.size());
         List<CandleWithPrices> candleObjs = new ArrayList<>(chrono.size());
         for (OhlcvCandle c : chrono) {
-            closes.add(c.close());
-            candleObjs.add(new CandleWithPrices(c.open(), c.high(), c.low(), c.close(), BigDecimal.valueOf(c.volume())));
+            OhlcvCandle analyticalCandle = c.adjustedForAnalysis();
+            closes.add(analyticalCandle.close());
+            candleObjs.add(new CandleWithPrices(analyticalCandle.open(), analyticalCandle.high(),
+                    analyticalCandle.low(), analyticalCandle.close(), BigDecimal.valueOf(analyticalCandle.volume())));
         }
 
         // Calculate indicators
@@ -70,6 +72,7 @@ public class TechnicalAnalysisService {
         // 52-week high
         int highWindowStart = Math.max(0, chrono.size() - StrategyParams.FIFTY_TWO_WEEK_TRADING_DAYS);
         double maxHigh = chrono.subList(highWindowStart, chrono.size()).stream()
+            .map(c -> c.adjustedForAnalysis())
             .mapToDouble(c -> c.high().doubleValue())
             .max()
             .orElse(price.doubleValue());

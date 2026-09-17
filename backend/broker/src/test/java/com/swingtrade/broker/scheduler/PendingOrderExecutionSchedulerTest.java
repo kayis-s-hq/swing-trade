@@ -6,12 +6,15 @@ import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderType;
 import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.store.PriceBandStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.scheduling.annotation.Scheduled;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -46,6 +49,27 @@ class PendingOrderExecutionSchedulerTest {
         when(candle.getOpenPrice()).thenReturn(BigDecimal.valueOf(105));
 
         new PendingOrderExecutionScheduler(engine, candles).executePendingOrders();
+
+        verify(engine, never()).executePendingOrder(anyString(), any());
+    }
+
+    @Test
+    void skipsMarketBuyAtExplicitUpperBand() {
+        PaperTradingEngine engine = mock(PaperTradingEngine.class);
+        OhlcvCandleRepository candles = mock(OhlcvCandleRepository.class);
+        PriceBandStore bands = mock(PriceBandStore.class);
+        Order order = new Order("ORD-1", "TCS", OrderType.MARKET, TradeDirection.LONG,
+            BigDecimal.ONE, null, BigDecimal.valueOf(100), null);
+        OhlcvCandleEntity candle = mock(OhlcvCandleEntity.class);
+        when(engine.getPendingOrders()).thenReturn(List.of(order));
+        when(candles.findLatestBySymbol("TCS")).thenReturn(Optional.of(candle));
+        when(candle.getOpenPrice()).thenReturn(BigDecimal.valueOf(110));
+        when(candle.getDate()).thenReturn(LocalDate.of(2026, 1, 2));
+        when(bands.findBySymbolAndDate("TCS", LocalDate.of(2026, 1, 2)))
+            .thenReturn(Optional.of(new PriceBand("TCS", LocalDate.of(2026, 1, 2),
+                BigDecimal.valueOf(90), BigDecimal.valueOf(110))));
+
+        new PendingOrderExecutionScheduler(engine, candles, bands).executePendingOrders();
 
         verify(engine, never()).executePendingOrder(anyString(), any());
     }

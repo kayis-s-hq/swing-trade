@@ -210,6 +210,7 @@ class CandidateScanServiceTest {
                 "candidate-scan.min-total-return", "1.25",
                 "candidate-scan.min-trades", "20",
                 "candidate-scan.out-of-sample-days", "180",
+                "candidate-scan.out-of-sample-folds", "4",
                 "candidate-scan.max-concurrent", "6",
                 "candidate-scan.backfill-years", "5"));
 
@@ -217,9 +218,20 @@ class CandidateScanServiceTest {
             verify(settingsService).set("candidate-scan.min-total-return", "1.25");
             verify(settingsService).set("candidate-scan.min-trades", "20");
             verify(settingsService).set("candidate-scan.out-of-sample-days", "180");
+            verify(settingsService).set("candidate-scan.out-of-sample-folds", "4");
             verify(settingsService).set("candidate-scan.max-concurrent", "6");
             verify(settingsService).set("candidate-scan.backfill-years", "5");
             assertThat(updated).containsEntry("candidate-scan.max-concurrent", "6");
+        }
+
+        @Test
+        void rejectsOutOfRangeWalkForwardFolds() {
+            assertThatThrownBy(() -> service.updateScanSettings(Map.of(
+                "candidate-scan.out-of-sample-folds", "9")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("between 1 and 8");
+
+            verify(settingsService, never()).set(any(), any());
         }
 
         @Test
@@ -237,6 +249,7 @@ class CandidateScanServiceTest {
             when(settingsService.get("candidate-scan.min-total-return", "0.0")).thenReturn("1.25");
             when(settingsService.get("candidate-scan.min-trades", "15")).thenReturn("20");
             when(settingsService.get("candidate-scan.out-of-sample-days", "252")).thenReturn("180");
+            when(settingsService.get("candidate-scan.out-of-sample-folds", "3")).thenReturn("4");
             when(settingsService.get("candidate-scan.max-concurrent", "3")).thenReturn("6");
             when(settingsService.get("candidate-scan.backfill-years", "3")).thenReturn("5");
         }

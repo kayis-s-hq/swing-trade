@@ -2,7 +2,11 @@ package com.swingtrade.strategy;
 
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.store.CorporateActionStore;
 import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.PriceBandStore;
+import com.swingtrade.domain.store.UniverseSnapshotStore;
 import com.swingtrade.domain.store.WatchlistStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.ArgumentMatchers.any;
 
 @DisplayName("BacktestEngine")
 @ExtendWith(MockitoExtension.class)
@@ -36,6 +43,15 @@ class BacktestEngineTest {
     @Mock
     private WatchlistStore watchlistStore;
 
+    @Mock
+    private PriceBandStore priceBandStore;
+
+    @Mock
+    private UniverseSnapshotStore universeSnapshotStore;
+
+    @Mock
+    private CorporateActionStore corporateActionStore;
+
     private BacktestEngine engine;
 
     @BeforeEach
@@ -44,7 +60,26 @@ class BacktestEngineTest {
             PriceActionSignalEngine priceActionSignalEngine = new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class), priceActionStrategy);
             StrategyRegistry strategyRegistry = new StrategyRegistry(java.util.List.of(priceActionStrategy), priceActionStrategy);
         engine = new BacktestEngine(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry,
-            new ObjectMapper(), "target/test-reports");
+            new ObjectMapper(), "target/test-reports", priceBandStore);
+    }
+
+    @Test
+    void productionBacktestFailsClosedWhenMembershipIsUnavailable() {
+        List<OhlcvCandle> candles = buildTrendingCandles(60, 100.0, 0.0, 1_000_000L);
+        stub(candles);
+        when(corporateActionStore.findBySymbolAndEffectiveDateBetween(eq(SYMBOL), any(LocalDate.class),
+            any(LocalDate.class))).thenReturn(List.of());
+        when(universeSnapshotStore.findLatestBySymbolAndDateOnOrBefore(eq(SYMBOL), any(LocalDate.class)))
+            .thenReturn(java.util.Optional.empty());
+        BacktestEngine enforcedEngine = new BacktestEngine(candleStore, watchlistStore,
+            new PriceActionSignalEngine(candleStore, org.mockito.Mockito.mock(com.swingtrade.core.metrics.SignalMetrics.class),
+                new PriceActionStrategy()),
+            new StrategyRegistry(java.util.List.of(new PriceActionStrategy()), new PriceActionStrategy()),
+            new ObjectMapper(), "target/test-reports", priceBandStore, universeSnapshotStore, corporateActionStore);
+
+        assertThatThrownBy(() -> enforcedEngine.runBacktest(SYMBOL, EXCHANGE, BacktestConfig.defaults()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("No included historical universe membership");
     }
 
     // -----------------------------------------------------------------------
@@ -205,10 +240,60 @@ class BacktestEngineTest {
             assertThat(result.trades()).isNotEmpty();
             assertThat(result.trades()).allMatch(trade -> !trade.entryDate().isBefore(evaluationStart));
         }
+
+        @Test
+        @DisplayName("walk-forward evaluation creates bounded chronological non-overlapping folds")
+        void runWalkForward_createsChronologicalFolds() {
+            List<OhlcvCandle> candles = buildTrendingCandles(760, 100.0, 0.05, 1_000_000L);
+            List<OhlcvCandle> descending = new ArrayList<>(candles);
+            Collections.reverse(descending);
+            when(candleStore.findAllBySymbolOrderByDateDesc(SYMBOL)).thenReturn(descending);
+            when(candleStore.findBySymbolAndDateRange(eq(SYMBOL), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(descending);
+
+            WalkForwardEvaluation evaluation = engine.runWalkForward(
+                SYMBOL, EXCHANGE, BacktestConfig.defaults(), 60, 3);
+
+            assertThat(evaluation.folds()).hasSize(3);
+            assertThat(evaluation.folds().get(0).startDate())
+                .isBefore(evaluation.folds().get(1).startDate());
+            assertThat(evaluation.folds().get(1).endDate())
+                .isBefore(evaluation.folds().get(2).startDate());
+            assertThat(evaluation.folds()).allSatisfy(fold ->
+                assertThat(fold.endDate()).isAfterOrEqualTo(fold.startDate()));
+            assertThat(evaluation.totalTrades()).isEqualTo(
+                evaluation.folds().stream().mapToInt(fold -> fold.result().totalTrades()).sum());
+        }
+
+        @Test
+        void runWalkForward_rejectsUnboundedParameters() {
+            assertThatThrownBy(() -> engine.runWalkForward(SYMBOL, EXCHANGE,
+                BacktestConfig.defaults(), 59, 3))
+                .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> engine.runWalkForward(SYMBOL, EXCHANGE,
+                BacktestConfig.defaults(), 60, 9))
+                .isInstanceOf(IllegalArgumentException.class);
+        }
     }
 
     @Nested
     class EntryAndExit {
+
+        @Test
+        @DisplayName("upper circuit on next open prevents long entry")
+        void upperCircuitOnEntryDay_skipsTrade() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            stub(candles);
+            OhlcvCandle entryCandle = candles.get(300);
+            lenient().when(priceBandStore.findBySymbolAndDate(eq(SYMBOL), eq(entryCandle.date())))
+                .thenReturn(java.util.Optional.of(new PriceBand(SYMBOL, entryCandle.date(),
+                    entryCandle.open().multiply(BigDecimal.valueOf(0.9)), entryCandle.open())));
+
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE,
+                new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 5, false, 2));
+
+            assertThat(result.trades()).isEmpty();
+        }
 
         @Test
         @DisplayName("all entry rules satisfied -> a trade opens on the next day's open")
@@ -227,6 +312,60 @@ class BacktestEngineTest {
         }
 
         @Test
+        @DisplayName("single-symbol backtest applies configured risk-management policy")
+        void managedExitPolicyIsAppliedToSingleSymbolBacktest() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
+            stub(candles);
+
+            var policy = (com.swingtrade.domain.RiskManagementPolicy) context ->
+                    context.holdingDays() >= 1
+                            ? com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision.exit(
+                                    context.entryPrice().add(BigDecimal.ONE), "BREAKEVEN_STOP")
+                            : com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision.hold();
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5,
+                    20, false, 21, policy);
+
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
+
+            assertThat(result.trades()).singleElement().satisfies(trade -> {
+                assertThat(trade.exitReason()).isEqualTo(ExitReason.BREAKEVEN_STOP);
+                assertThat(trade.exitPrice()).isEqualByComparingTo(trade.entryPrice().add(BigDecimal.ONE));
+            });
+        }
+
+        @Test
+        @DisplayName("risk policy records a partial target leg and continues the remainder")
+        void managedPartialExitKeepsRemainderInBacktest() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
+            stub(candles);
+
+            var policy = (com.swingtrade.domain.RiskManagementPolicy) context -> {
+                if (!context.partialExitTaken() && context.holdingDays() >= 1) {
+                    return com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision
+                            .partialExit(context.entryPrice(), new BigDecimal("0.5"));
+                }
+                return context.partialExitTaken() && context.holdingDays() >= 2
+                        ? com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision
+                            .exit(context.currentClose(), "BREAKEVEN_STOP")
+                        : com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision.hold();
+            };
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5,
+                    20, false, 21, policy);
+
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
+
+            assertThat(result.trades()).hasSize(2);
+            assertThat(result.trades()).extracting(BacktestTrade::quantity)
+                    .satisfiesExactlyInAnyOrder(
+                            quantity -> assertThat(quantity).isGreaterThan(0),
+                            quantity -> assertThat(quantity).isGreaterThan(0));
+            assertThat(result.trades().get(1).quantity()).isGreaterThanOrEqualTo(result.trades().get(0).quantity());
+            assertThat(result.trades().get(0).exitReason()).isEqualTo(ExitReason.TARGET_HIT);
+        }
+
+        @Test
         @DisplayName("price crashes through the ATR stop -> STOP_LOSS exit at the stop price")
         void stopLossExit() {
             List<OhlcvCandle> candles = buildEntrySetupCandles();
@@ -242,6 +381,25 @@ class BacktestEngineTest {
             assertThat(trade.exitReason()).isEqualTo(ExitReason.STOP_LOSS);
             assertThat(trade.exitPrice()).isEqualByComparingTo(trade.stopLoss());
             assertThat(trade.pnl()).isNegative();
+        }
+
+        @Test
+        @DisplayName("lower circuit on exit day defers stop and does not force a fill")
+        void lowerCircuitOnFinalBar_defersExit() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            BigDecimal entry = entryPrice(candles);
+            appendCandle(candles, entry, entry, entry.multiply(BigDecimal.valueOf(0.75)),
+                entry.multiply(BigDecimal.valueOf(0.80)), 1_000_000L);
+            stub(candles);
+            OhlcvCandle finalCandle = candles.get(candles.size() - 1);
+            lenient().when(priceBandStore.findBySymbolAndDate(eq(SYMBOL), eq(finalCandle.date())))
+                .thenReturn(java.util.Optional.of(new PriceBand(SYMBOL, finalCandle.date(),
+                    finalCandle.close(), finalCandle.close().multiply(BigDecimal.valueOf(1.2)))));
+
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE,
+                new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5, 20, false, 2));
+
+            assertThat(result.trades()).isEmpty();
         }
 
         @Test

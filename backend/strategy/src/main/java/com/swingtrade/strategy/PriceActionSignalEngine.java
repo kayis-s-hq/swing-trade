@@ -18,6 +18,11 @@ package com.swingtrade.strategy;
 
 import com.swingtrade.core.metrics.SignalMetrics;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.OhlcvDataQuality;
+import com.swingtrade.domain.MarketRegimeAssessment;
+import com.swingtrade.domain.RelativeStrengthAssessment;
+import com.swingtrade.domain.policy.MarketRegimePolicy;
+import com.swingtrade.domain.policy.RelativeStrengthPolicy;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.Signal.SignalType;
 import com.swingtrade.domain.StrategyParams;
@@ -58,6 +63,7 @@ public class PriceActionSignalEngine {
     private static final Logger logger = LoggerFactory.getLogger(PriceActionSignalEngine.class);
 
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
+    private static final String MARKET_INDEX_SYMBOL = "NIFTY50";
 
     // Package-private (not private): reused directly by BacktestEngine so the backtest's
     // entry rules can never drift from the live signal engine's thresholds.
@@ -74,15 +80,32 @@ public class PriceActionSignalEngine {
     static final BigDecimal HIGH_PROXIMITY_THRESHOLD = StrategyParams.HIGH_PROXIMITY;
 
     static final int MIN_REQUIRED_CANDLES = StrategyParams.MIN_CANDLES;
+    static final BigDecimal MAX_ANALYTICAL_GAP_RATIO = new BigDecimal("0.75");
 
     private final CandleStore candleStore;
     private final SignalMetrics signalMetrics;
     private final TradingStrategy strategy;
+    private final MarketRegimePolicy marketRegimePolicy;
+    private final RelativeStrengthPolicy relativeStrengthPolicy;
 
     public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics, PriceActionStrategy strategy) {
+        this(candleStore, signalMetrics, strategy, new BoundedMarketRegimePolicy(), new BoundedRelativeStrengthPolicy());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics, PriceActionStrategy strategy,
+                                   MarketRegimePolicy marketRegimePolicy) {
+        this(candleStore, signalMetrics, strategy, marketRegimePolicy, new BoundedRelativeStrengthPolicy());
+    }
+
+    public PriceActionSignalEngine(CandleStore candleStore, SignalMetrics signalMetrics, PriceActionStrategy strategy,
+                                   MarketRegimePolicy marketRegimePolicy,
+                                   RelativeStrengthPolicy relativeStrengthPolicy) {
         this.candleStore = candleStore;
         this.signalMetrics = signalMetrics;
         this.strategy = strategy;
+        this.marketRegimePolicy = marketRegimePolicy;
+        this.relativeStrengthPolicy = relativeStrengthPolicy;
     }
 
     /**
@@ -94,13 +117,25 @@ public class PriceActionSignalEngine {
      * @throws IllegalStateException    if there isn't enough candle history to compute EMA50
      */
     public SignalResult generateSignal(String symbol) {
+        return generateSignal(symbol, strategy);
+    }
+
+    /**
+     * Generates a signal using an explicitly selected strategy. The indicator
+     * calculation remains shared with the default live path; only rule
+     * evaluation is selected per call.
+     */
+    public SignalResult generateSignal(String symbol, TradingStrategy selectedStrategy) {
         if (symbol == null || symbol.isBlank()) {
             throw new IllegalArgumentException("Symbol cannot be null or blank");
+        }
+        if (selectedStrategy == null) {
+            throw new IllegalArgumentException("Strategy cannot be null");
         }
 
         var candles = BacktestEngine.getDescendingCandles(symbol, candleStore, MIN_REQUIRED_CANDLES);
 
-        return analyze(symbol, candles);
+        return analyze(symbol, candles, selectedStrategy);
     }
 
     /**
@@ -111,6 +146,15 @@ public class PriceActionSignalEngine {
      * @return the resulting signal with the indicator readings that produced it
      */
     public SignalResult analyze(String symbol, List<OhlcvCandle> chronologicalCandles) {
+        return analyze(symbol, chronologicalCandles, strategy);
+    }
+
+    /** Analyzes candles with an explicitly selected strategy. */
+    public SignalResult analyze(String symbol, List<OhlcvCandle> chronologicalCandles,
+                                TradingStrategy selectedStrategy) {
+        if (selectedStrategy == null) {
+            throw new IllegalArgumentException("Strategy cannot be null");
+        }
         BarSeries series = buildBarSeries(symbol, chronologicalCandles);
         int lastIndex = series.getBarCount() - 1;
 
@@ -137,35 +181,54 @@ public class PriceActionSignalEngine {
 
         Indicators indicators = new Indicators(price, ema20, ema50, rsi, volume, volumeMa, weeklyHigh);
 
+        MarketRegimeAssessment regime = selectedStrategy.regimeFilterEnabled()
+            ? assessMarketRegime()
+            : null;
+        RelativeStrengthAssessment relativeStrength = selectedStrategy.relativeStrengthFilterEnabled()
+            ? assessRelativeStrength(chronologicalCandles, date)
+            : null;
+
         List<String> passed = new ArrayList<>();
         List<String> failed = new ArrayList<>();
 
-        boolean trendAligned = strategy.trendAligned(indicators);
+        boolean trendAligned = selectedStrategy.trendAligned(indicators);
         recordRule(trendAligned, passed, failed,
             "Price > EMA20 > EMA50 (price=" + fmt(price) + ", ema20=" + fmt(ema20) + ", ema50=" + fmt(ema50) + ")");
 
-        boolean rsiInRange = strategy.rsiInEntryRange(indicators);
-        recordRule(rsiInRange, passed, failed, "RSI between 50-65 (rsi=" + fmt(rsi) + ")");
+        boolean rsiInRange = selectedStrategy.rsiInEntryRange(indicators);
+        recordRule(rsiInRange, passed, failed, selectedStrategy.entryRsiDescription() + " (rsi=" + fmt(rsi) + ")");
 
-        boolean volumeSurge = strategy.volumeSurge(indicators);
+        boolean volumeSurge = selectedStrategy.volumeSurge(indicators);
         recordRule(volumeSurge, passed, failed,
             "Volume > 1.5x VolumeMA20 (volume=" + fmt(volume) + ", threshold=" + fmt(volumeMa.multiply(VOLUME_MULTIPLIER)) + ")");
 
-        boolean nearWeeklyHigh = strategy.nearWeeklyHigh(indicators);
+        boolean nearWeeklyHigh = selectedStrategy.nearWeeklyHigh(indicators);
         recordRule(nearWeeklyHigh, passed, failed,
             "Price within 3% of 52-week high (price=" + fmt(price) + ", 52wHigh=" + fmt(weeklyHigh) + ")");
 
         int rulesPassed = (trendAligned ? 1 : 0) + (rsiInRange ? 1 : 0) + (volumeSurge ? 1 : 0) + (nearWeeklyHigh ? 1 : 0);
-        // All 4 entry rules must hold — see docs/backtesting.md "Entry rules (same as the live
-        // signal engine)". BacktestEngine.tryEnter evaluates entry through the same
-        // TradingStrategy instance so the backtest can never drift from these thresholds.
-        boolean enoughRulesPassed = strategy.isEntrySignal(indicators);
+        // BacktestEngine.tryEnter evaluates entry through the same TradingStrategy instance so
+        // the backtest can never drift from this strategy's confluence or thresholds.
+        boolean technicalEntry = selectedStrategy.isEntrySignal(indicators);
+        boolean enoughRulesPassed = selectedStrategy.isEntryEligible(indicators, regime, relativeStrength);
+        if (technicalEntry && !enoughRulesPassed) {
+            String regimeReason = regime == null ? "REGIME_ASSESSMENT_UNAVAILABLE" : regime.reason();
+            if (selectedStrategy.regimeFilterEnabled() && (regime == null || !regime.eligible())) {
+                failed.add("Market regime gate failed (" + regimeReason + ")");
+            }
+            if (selectedStrategy.relativeStrengthFilterEnabled()
+                && (relativeStrength == null || !relativeStrength.eligible())) {
+                String reason = relativeStrength == null ? "INDEX_DATA_UNAVAILABLE" : relativeStrength.reason();
+                failed.add("Relative-strength gate failed (" + reason + ")");
+            }
+        }
 
         SignalType type;
         String reasoning;
         if (enoughRulesPassed) {
             type = SignalType.BUY;
-            reasoning = "All entry rules passed: %s".formatted(String.join("; ", passed));
+            reasoning = "%s passed: %s".formatted(selectedStrategy.entryConfluenceDescription(),
+                String.join("; ", passed));
         } else {
             // Exit confluence: ANY 1 of 3 trend/RSI conditions fires a SELL — deliberately looser
             // than the strict "all 4 of 4" entry confluence ("enter carefully, exit quickly").
@@ -174,24 +237,25 @@ public class PriceActionSignalEngine {
             List<String> exitPassed = new ArrayList<>();
             List<String> exitFailed = new ArrayList<>();
 
-            boolean closeBelowEma20 = strategy.closeBelowEma20(indicators);
+            boolean closeBelowEma20 = selectedStrategy.closeBelowEma20(indicators);
             recordRule(closeBelowEma20, exitPassed, exitFailed,
                 "Close < EMA20 (close=%s, ema20=%s)".formatted(fmt(price), fmt(ema20)));
 
-            boolean ema20BelowEma50 = strategy.ema20BelowEma50(indicators);
+            boolean ema20BelowEma50 = selectedStrategy.ema20BelowEma50(indicators);
             recordRule(ema20BelowEma50, exitPassed, exitFailed,
                 "EMA20 < EMA50 (ema20=%s, ema50=%s)".formatted(fmt(ema20), fmt(ema50)));
 
-            boolean rsiBelowLowerBound = strategy.rsiBelowLowerBound(indicators);
+            boolean rsiBelowLowerBound = selectedStrategy.rsiBelowLowerBound(indicators);
             recordRule(rsiBelowLowerBound, exitPassed, exitFailed,
                 "RSI < 50 (rsi=%s)".formatted(fmt(rsi)));
 
-            if (strategy.isSignalExit(indicators)) {
+            if (selectedStrategy.isSignalExit(indicators)) {
                 type = SignalType.SELL;
                 reasoning = "Exit rule triggered (%d of 3): %s".formatted(exitPassed.size(), String.join("; ", exitPassed));
             } else {
                 type = SignalType.HOLD;
-                reasoning = "Entry rules failed (%d of 4 passed): %s".formatted(rulesPassed, String.join("; ", failed));
+                reasoning = "Entry rules failed (%d of 4 passed; required %d): %s".formatted(
+                    rulesPassed, selectedStrategy.requiredEntryRules(), String.join("; ", failed));
             }
         }
 
@@ -204,6 +268,37 @@ public class PriceActionSignalEngine {
             ema50.doubleValue(), atr.doubleValue(), reasoning);
     }
 
+    private MarketRegimeAssessment assessMarketRegime() {
+        try {
+            MarketRegimeAssessment assessment = marketRegimePolicy.assess(
+                candleStore.findTopBySymbolOrderByDateDesc(MARKET_INDEX_SYMBOL,
+                    BoundedMarketRegimePolicy.LOOKBACK_DAYS));
+            return assessment != null
+                ? assessment
+                : MarketRegimeAssessment.unavailable("REGIME_ASSESSMENT_UNAVAILABLE");
+        } catch (RuntimeException e) {
+            logger.warn("Market regime assessment failed; configured entry will be blocked", e);
+            return MarketRegimeAssessment.unavailable("REGIME_ASSESSMENT_UNAVAILABLE");
+        }
+    }
+
+    private RelativeStrengthAssessment assessRelativeStrength(List<OhlcvCandle> stockCandles, LocalDate asOf) {
+        try {
+            List<OhlcvCandle> indexCandles = candleStore
+                .findTopBySymbolOrderByDateDesc(MARKET_INDEX_SYMBOL, BoundedRelativeStrengthPolicy.LOOKBACK_DAYS * 2)
+                .stream()
+                .filter(candle -> candle.date() != null && !candle.date().isAfter(asOf))
+                .toList();
+            RelativeStrengthAssessment assessment = relativeStrengthPolicy.assess(stockCandles, indexCandles);
+            return assessment != null
+                ? assessment
+                : RelativeStrengthAssessment.unavailable("INDEX_DATA_UNAVAILABLE");
+        } catch (RuntimeException e) {
+            logger.warn("Relative-strength assessment failed; configured entry will be blocked", e);
+            return RelativeStrengthAssessment.unavailable("INDEX_DATA_UNAVAILABLE");
+        }
+    }
+
     private void recordRule(boolean conditionMet, List<String> passed, List<String> failed, String description) {
         if (conditionMet) {
             passed.add(description);
@@ -214,16 +309,23 @@ public class PriceActionSignalEngine {
 
     BarSeries buildBarSeries(String symbol, List<OhlcvCandle> chronologicalCandles) {
         BarSeries series = new BaseBarSeries(symbol, DecimalNum.valueOf(0));
-        for (OhlcvCandle candle : chronologicalCandles) {
-            ZonedDateTime endTime = candle.date().atStartOfDay(MARKET_ZONE);
-            Long volume = candle.volume();
+        OhlcvDataQuality.Assessment quality = OhlcvDataQuality.quarantineUnexplainedGaps(
+            chronologicalCandles, MAX_ANALYTICAL_GAP_RATIO);
+        if (!quality.quarantined().isEmpty()) {
+            logger.warn("Quarantined {} candle(s) from analytical series for {}: {}",
+                quality.quarantined().size(), symbol, quality.quarantined().get(0).reason());
+        }
+        for (OhlcvCandle candle : quality.accepted()) {
+            OhlcvCandle analyticalCandle = candle.adjustedForAnalysis();
+            ZonedDateTime endTime = analyticalCandle.date().atStartOfDay(MARKET_ZONE);
+            Long volume = analyticalCandle.volume();
             Bar bar = new BaseBar(
                 Duration.ofDays(1),
                 endTime,
-                candle.open(),
-                candle.high(),
-                candle.low(),
-                candle.close(),
+                analyticalCandle.open(),
+                analyticalCandle.high(),
+                analyticalCandle.low(),
+                analyticalCandle.close(),
                 BigDecimal.valueOf(volume != null ? volume : 0L)
             );
             series.addBar(bar);

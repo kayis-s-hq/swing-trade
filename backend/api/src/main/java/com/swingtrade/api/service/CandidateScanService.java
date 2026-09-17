@@ -16,6 +16,7 @@ import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
+import com.swingtrade.strategy.WalkForwardEvaluation;
 import jakarta.annotation.PreDestroy;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -60,10 +61,12 @@ public class CandidateScanService {
     private static final String KEY_BACKFILL_YEARS = "candidate-scan.backfill-years";
     private static final String KEY_MIN_TRADES = "candidate-scan.min-trades";
     private static final String KEY_OOS_DAYS = "candidate-scan.out-of-sample-days";
+    private static final String KEY_OOS_FOLDS = "candidate-scan.out-of-sample-folds";
     private static final double DEFAULT_MIN_WIN_RATE = 45.0;
     private static final double DEFAULT_MIN_TOTAL_RETURN = 0.0;
     private static final int DEFAULT_MIN_TRADES = 15;
     private static final int DEFAULT_OOS_DAYS = 252;
+    private static final int DEFAULT_OOS_FOLDS = 3;
 
     private final FyersSymbolRepository symbolRepository;
     private final CandidateScanRunRepository runRepository;
@@ -87,6 +90,11 @@ public class CandidateScanService {
     private final ConcurrentHashMap<UUID, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Deque<ScanLogEvent>> logHistory = new ConcurrentHashMap<>();
     private static final int MAX_LOG_HISTORY = 500;
+
+    /** Returns whether a candidate scan currently owns the service's active-run slot. */
+    public boolean hasActiveRun() {
+        return activeRun.get() != null;
+    }
 
     @Autowired
     public CandidateScanService(FyersSymbolRepository symbolRepository,
@@ -271,6 +279,15 @@ public class CandidateScanService {
         }
     }
 
+    private int configuredOosFolds() {
+        try {
+            return Math.max(1, Math.min(8, Integer.parseInt(
+                appSettingsService.get(KEY_OOS_FOLDS, String.valueOf(DEFAULT_OOS_FOLDS)))));
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_OOS_FOLDS;
+        }
+    }
+
     public Map<String, String> getScanSettings() {
         Map<String, String> settings = new LinkedHashMap<>();
         settings.put(KEY_MIN_WIN_RATE, String.valueOf(configuredMinWinRate()));
@@ -279,6 +296,7 @@ public class CandidateScanService {
         settings.put(KEY_BACKFILL_YEARS, String.valueOf(configuredBackfillYears()));
         settings.put(KEY_MIN_TRADES, String.valueOf(configuredMinTrades()));
         settings.put(KEY_OOS_DAYS, String.valueOf(configuredOosDays()));
+        settings.put(KEY_OOS_FOLDS, String.valueOf(configuredOosFolds()));
         return settings;
     }
 
@@ -310,6 +328,11 @@ public class CandidateScanService {
             int value = Integer.parseInt(updates.get(KEY_OOS_DAYS));
             if (value < 60 || value > 1000) throw new IllegalArgumentException("out-of-sample-days must be between 60 and 1000");
             appSettingsService.set(KEY_OOS_DAYS, String.valueOf(value));
+        }
+        if (updates.containsKey(KEY_OOS_FOLDS)) {
+            int value = Integer.parseInt(updates.get(KEY_OOS_FOLDS));
+            if (value < 1 || value > 8) throw new IllegalArgumentException("out-of-sample-folds must be between 1 and 8");
+            appSettingsService.set(KEY_OOS_FOLDS, String.valueOf(value));
         }
         return getScanSettings();
     }
@@ -535,19 +558,20 @@ public class CandidateScanService {
                 + String.format(java.util.Locale.ROOT, "%.1f%% win rate, %.2f%% return.",
                     backtest.winRate(), backtest.totalReturn()));
         int oosDays = configuredOosDays();
-        List<com.swingtrade.domain.OhlcvCandle> candlesForOos = new ArrayList<>(
-            candleStore.findAllBySymbolOrderByDateDesc(symbol));
-        candlesForOos.sort(java.util.Comparator.comparing(com.swingtrade.domain.OhlcvCandle::date));
-        if (candlesForOos.size() < oosDays) {
+        int oosFolds = configuredOosFolds();
+        WalkForwardEvaluation walkForward;
+        try {
+            walkForward = backtestEngine.runWalkForward(symbol, "NSE", BacktestConfig.defaults(), oosDays, oosFolds);
+        } catch (IllegalStateException e) {
             result.setQualified(false);
-            result.setReason("BUY rejected: fewer than " + oosDays + " out-of-sample candles");
+            result.setReason("BUY rejected: " + e.getMessage());
             resultRepository.save(result);
             return false;
         }
-        LocalDate oosStart = candlesForOos.get(candlesForOos.size() - oosDays).date();
-        LocalDate oosEnd = candlesForOos.get(candlesForOos.size() - 1).date();
-        BacktestResult oosBacktest = backtestEngine.runBacktestWindow(
-            symbol, "NSE", BacktestConfig.defaults(), oosStart, oosEnd);
+        WalkForwardEvaluation.Fold latestFold = walkForward.folds().get(walkForward.folds().size() - 1);
+        LocalDate oosStart = latestFold.startDate();
+        LocalDate oosEnd = latestFold.endDate();
+        BacktestResult oosBacktest = latestFold.result();
         result.setOosStartDate(oosStart);
         result.setOosEndDate(oosEnd);
         result.setOosTotalTrades(oosBacktest.totalTrades());
@@ -555,9 +579,9 @@ public class CandidateScanService {
         result.setOosTotalReturn(oosBacktest.totalReturn());
         result.setOosMaxDrawdownPct(oosBacktest.maxDrawdownPct());
         publish(runId, "STAGE_COMPLETED", symbol, "INFO",
-            "Out-of-sample backtest: " + oosBacktest.totalTrades() + " trades, "
-                + String.format(java.util.Locale.ROOT, "%.1f%% win rate, %.2f%% return.",
-                    oosBacktest.winRate(), oosBacktest.totalReturn()));
+            "Walk-forward OOS: " + oosFolds + " folds, " + walkForward.totalTrades() + " trades, "
+                + String.format(java.util.Locale.ROOT, "%.1f%% average win rate, %.2f%% average return.",
+                    walkForward.averageWinRate(), walkForward.averageTotalReturn()));
         double minWinRate = configuredMinWinRate();
         double minTotalReturn = configuredMinTotalReturn();
         int minTrades = configuredMinTrades();
@@ -565,12 +589,13 @@ public class CandidateScanService {
             && backtest.totalTrades() >= minTrades
             && backtest.winRate() >= minWinRate
             && backtest.totalReturn() > minTotalReturn
-            && oosBacktest.totalTrades() >= minTrades
-            && oosBacktest.winRate() >= minWinRate
-            && oosBacktest.totalReturn() > minTotalReturn;
+            && walkForward.isComplete(oosFolds)
+            && walkForward.folds().stream().allMatch(f -> f.result().totalTrades() >= minTrades
+                && f.result().winRate() >= minWinRate
+                && f.result().totalReturn() > minTotalReturn);
         result.setQualified(qualified);
         result.setReason(qualified ? "BUY and in-sample/out-of-sample backtest gates passed"
-            : qualificationReason(signal, backtest, oosBacktest, minTrades, minWinRate, minTotalReturn));
+            : qualificationReason(signal, backtest, oosBacktest, walkForward, minTrades, minWinRate, minTotalReturn));
         if (qualified && watchlistService != null) {
             watchlistService.addToWatchlist(symbol, symbol, "NSE");
             result.setActivated(true);
@@ -613,15 +638,22 @@ public class CandidateScanService {
         eligibilityRepository.save(record);
     }
 
-    private String qualificationReason(SignalResult signal, BacktestResult backtest, BacktestResult oosBacktest, int minTrades,
+    private String qualificationReason(SignalResult signal, BacktestResult backtest, BacktestResult oosBacktest,
+                                       WalkForwardEvaluation walkForward, int minTrades,
                                        double minWinRate, double minTotalReturn) {
         if (signal.type() != com.swingtrade.domain.Signal.SignalType.BUY) return "Current signal is " + signal.type();
         if (backtest.totalTrades() < minTrades) return "BUY rejected: fewer than " + minTrades + " trades";
         if (backtest.winRate() < minWinRate) return "BUY rejected: win rate below " + minWinRate + "%";
         if (backtest.totalReturn() <= minTotalReturn) return "BUY rejected: backtest return not above " + minTotalReturn + "%";
-        if (oosBacktest.totalTrades() < minTrades) return "BUY rejected: out-of-sample trades below " + minTrades;
-        if (oosBacktest.winRate() < minWinRate) return "BUY rejected: out-of-sample win rate below " + minWinRate + "%";
-        return "BUY rejected: out-of-sample return not above " + minTotalReturn + "%";
+        return walkForward.folds().stream()
+            .filter(f -> f.result().totalTrades() < minTrades)
+            .findFirst()
+            .map(f -> "BUY rejected: OOS fold " + f.startDate() + " trades below " + minTrades)
+            .orElseGet(() -> walkForward.folds().stream()
+                .filter(f -> f.result().winRate() < minWinRate)
+                .findFirst()
+                .map(f -> "BUY rejected: OOS fold " + f.startDate() + " win rate below " + minWinRate + "%")
+                .orElse("BUY rejected: an OOS fold return is not above " + minTotalReturn + "%"));
     }
 
     private void saveFailure(UUID runId, String symbol, Exception error) {

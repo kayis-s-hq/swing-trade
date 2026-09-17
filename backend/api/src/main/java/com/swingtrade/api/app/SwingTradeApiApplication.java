@@ -34,11 +34,13 @@ import java.util.Locale;
 )
 @EnableJpaRepositories(basePackages = {
         "com.swingtrade.data.repository",
-        "com.swingtrade.broker.repository"
+        "com.swingtrade.broker.repository",
+        "com.swingtrade.llm"
     })
 @EntityScan(basePackages = {
         "com.swingtrade.data.entity",
-        "com.swingtrade.broker.entity"
+        "com.swingtrade.broker.entity",
+        "com.swingtrade.llm"
     })
 @EnableScheduling
 @SpringBootApplication

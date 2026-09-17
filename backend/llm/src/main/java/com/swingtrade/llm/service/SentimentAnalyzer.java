@@ -170,6 +170,14 @@ public class SentimentAnalyzer {
     }
 
     /**
+     * Parses and grounds model-generated flags and catalysts against the
+     * numbered articles supplied in the prompt.
+     */
+    public SentimentOutput parseResponse(String jsonResponse, int articleCount) {
+        return SentimentOutputValidator.validate(parseResponse(jsonResponse), articleCount);
+    }
+
+    /**
      * Falls back to Jackson-based JSON parsing when BeanOutputConverter fails.
      */
     private SentimentOutput parseWithJackson(String jsonResponse) {
@@ -225,8 +233,8 @@ public class SentimentAnalyzer {
         double confidence;
         String summary;
 
-        boolean positive = lower.matches(".*\\bpositive\\b.*") && !lower.matches(".*\\b(?:not|no|never)\\s+positive\\b.*");
-        boolean negative = lower.matches(".*\\bnegative\\b.*") && !lower.matches(".*\\b(?:not|no|never)\\s+negative\\b.*");
+        boolean positive = containsUnqualifiedKeyword(lower, "positive");
+        boolean negative = containsUnqualifiedKeyword(lower, "negative");
         if (positive ^ negative) {
             sentiment = positive ? SentimentType.POSITIVE : SentimentType.NEGATIVE;
             confidence = 0.4;
@@ -240,6 +248,36 @@ public class SentimentAnalyzer {
 
         logger.warn("Parsed plain text response: {} (confidence: {})", sentiment, confidence);
         return new SentimentOutput(sentiment, summary, confidence, List.of(), List.of(), "KEYWORD");
+    }
+
+    /**
+     * Returns true only when a sentiment keyword is used as a statement about the subject,
+     * rather than negated or explicitly scoped to peers/competitors.
+     */
+    private boolean containsUnqualifiedKeyword(String lowerText, String keyword) {
+        int from = 0;
+        while (from < lowerText.length()) {
+            int index = lowerText.indexOf(keyword, from);
+            if (index < 0) {
+                return false;
+            }
+            boolean wholeWord = (index == 0 || !Character.isLetterOrDigit(lowerText.charAt(index - 1)))
+                    && (index + keyword.length() == lowerText.length()
+                    || !Character.isLetterOrDigit(lowerText.charAt(index + keyword.length())));
+            if (!wholeWord) {
+                from = index + keyword.length();
+                continue;
+            }
+            String before = lowerText.substring(Math.max(0, index - 40), index);
+            String after = lowerText.substring(index + keyword.length(),
+                    Math.min(lowerText.length(), index + keyword.length() + 45));
+            if (!before.matches(".*\\b(?:not|no|never|without|lack(?:s|ed)?(?:\\s+of)?)\\s*$")
+                    && !after.matches("^\\s+(?:only\\s+)?(?:for|among)\\s+(?:peers|competitors|rivals)\\b.*")) {
+                return true;
+            }
+            from = index + keyword.length();
+        }
+        return false;
     }
 
     /**
@@ -391,11 +429,11 @@ public class SentimentAnalyzer {
 
         // Fallback: look for keywords in reasoning
         String lowerResponse = jsonResponse.toLowerCase();
-        if (lowerResponse.contains("positive") &&
-            !lowerResponse.contains("negative")) {
+        boolean positive = containsUnqualifiedKeyword(lowerResponse, "positive");
+        boolean negative = containsUnqualifiedKeyword(lowerResponse, "negative");
+        if (positive && !negative) {
             return SentimentType.POSITIVE;
-        } else if (lowerResponse.contains("negative") &&
-                  !lowerResponse.contains("positive")) {
+        } else if (negative && !positive) {
             return SentimentType.NEGATIVE;
         }
 

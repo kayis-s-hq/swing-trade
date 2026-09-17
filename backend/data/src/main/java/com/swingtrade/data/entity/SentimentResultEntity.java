@@ -74,6 +74,9 @@ public class SentimentResultEntity {
     @Column(name = "source", nullable = false, length = 16)
     private String source = "DEFAULT";
 
+    @Column(name = "article_ids", columnDefinition = "BIGINT[]")
+    private Long[] articleIds;
+
     /**
      * Default constructor for JPA.
      */
@@ -102,6 +105,7 @@ public class SentimentResultEntity {
         entity.setModelVersion(result.modelVersion());
         entity.setArticleCount(result.articleCount());
         entity.setSource(result.source());
+        entity.setArticleIds(result.articleIds() == null ? null : result.articleIds().toArray(new Long[0]));
         return entity;
     }
 
@@ -125,7 +129,8 @@ public class SentimentResultEntity {
             promptHash,
             modelVersion,
             articleCount,
-            source
+            source,
+            articleIds != null ? List.of(articleIds) : List.of()
         );
     }
 
@@ -254,4 +259,7 @@ public class SentimentResultEntity {
     public String getSource() { return source; }
 
     public void setSource(String source) { this.source = source; }
+
+    public Long[] getArticleIds() { return articleIds; }
+    public void setArticleIds(Long[] articleIds) { this.articleIds = articleIds; }
 }

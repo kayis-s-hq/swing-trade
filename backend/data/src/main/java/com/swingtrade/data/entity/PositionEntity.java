@@ -104,6 +104,9 @@ public class PositionEntity {
     @Column(name = "margin_utilized", precision = 15, scale = 2)
     private BigDecimal marginUtilized;
 
+    @Column(name = "partial_exit_taken", nullable = false)
+    private boolean partialExitTaken;
+
     @Column(name = "entry_time")
     private LocalDateTime entryTime;
 
@@ -135,6 +138,7 @@ public class PositionEntity {
         this.unrealizedPnL = position.unrealizedPnL();
         this.realizedPnL = position.realizedPnL();
         this.marginUtilized = position.marginUtilized();
+        this.partialExitTaken = position.partialExitTaken();
         this.entryTime = position.entryTime();
         this.exitTime = position.exitTime();
         this.exitReason = position.exitReason();
@@ -161,6 +165,7 @@ public class PositionEntity {
         entity.setUnrealizedPnL(position.unrealizedPnL());
         entity.setRealizedPnL(position.realizedPnL());
         entity.setMarginUtilized(position.marginUtilized());
+        entity.setPartialExitTaken(position.partialExitTaken());
         entity.setEntryTime(position.entryTime());
         entity.setExitTime(position.exitTime());
         entity.setExitReason(position.exitReason());
@@ -184,7 +189,7 @@ public class PositionEntity {
                 direction != null ? TradeDirection.valueOf(direction) : TradeDirection.LONG,
                 averagePrice
             ),
-            new PositionRisk(stopLoss, target, marginUtilized),
+            new PositionRisk(stopLoss, target, marginUtilized, partialExitTaken),
             new PositionValuation(currentPrice, unrealizedPnL, realizedPnL),
             status != null ? PositionStatus.valueOf(status) : PositionStatus.OPEN,
             exitTime == null && exitReason == null ? null : new PositionExit(exitTime, exitReason),
@@ -235,6 +240,8 @@ public class PositionEntity {
     public void setRealizedPnL(BigDecimal realizedPnL) { this.realizedPnL = realizedPnL; }
     public BigDecimal getMarginUtilized() { return marginUtilized; }
     public void setMarginUtilized(BigDecimal marginUtilized) { this.marginUtilized = marginUtilized; }
+    public boolean isPartialExitTaken() { return partialExitTaken; }
+    public void setPartialExitTaken(boolean partialExitTaken) { this.partialExitTaken = partialExitTaken; }
     public LocalDateTime getEntryTime() { return entryTime; }
     public void setEntryTime(LocalDateTime entryTime) { this.entryTime = entryTime; }
     public LocalDateTime getExitTime() { return exitTime; }
