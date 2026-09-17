@@ -1,6 +1,7 @@
 package com.swingtrade.api.scheduler;
 
 import com.swingtrade.api.service.CandidateScanService;
+import com.swingtrade.api.service.JobOrchestratorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,11 +27,18 @@ public class CandidateScanScheduler {
 
     @Autowired
     public CandidateScanScheduler(CandidateScanService candidateScanService,
+                                  JobOrchestratorService orchestratorService,
                                   @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled,
                                   @Value("${app.features.candidate-scan.scheduler.enabled:true}") boolean candidateScanSchedulerEnabled) {
         this.candidateScanService = candidateScanService;
         this.schedulerEnabled = schedulerEnabled;
         this.candidateScanSchedulerEnabled = candidateScanSchedulerEnabled;
+    }
+
+    public CandidateScanScheduler(CandidateScanService candidateScanService,
+                                  boolean schedulerEnabled,
+                                  boolean candidateScanSchedulerEnabled) {
+        this(candidateScanService, null, schedulerEnabled, candidateScanSchedulerEnabled);
     }
 
     @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Kolkata")

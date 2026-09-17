@@ -115,6 +115,7 @@ public class PiLlamaServerManager implements LlmServerManager {
                     sshHost, port);
             running = true;
             lifecycleState = "READY";
+            lastFailureReason = null;
             startIdleMonitor();
             return;
         }
