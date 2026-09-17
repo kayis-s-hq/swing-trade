@@ -30,6 +30,11 @@ Last checked: 2026-09-17 (documentation/lint and analytics remediation verificat
   benchmark only when exact dates are available and legacy rows remain compatible. Schema v57,
   affected data/API tests, local PostgreSQL migration, health, and data-quality API checks passed.
 
+- [x] Yahoo single-candle lookup hardened 2026-09-17: the client now selects the response row
+  matching the requested exchange date, rejects incomplete OHLCV rows with warnings, and retains
+  the bounded one-day request. Yahoo remains development/backfill-only; focused client tests and
+  the full change-aware backend verifier passed.
+
 - [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
   producing signal variant, support multiple strategies per symbol/date, and report/filter by the
   stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade
