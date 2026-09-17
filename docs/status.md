@@ -182,6 +182,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   Yahoo is limited to local development, paper experiments, and backfills, and documents the
   single-day `period1`/exclusive-`period2` request and unusable-close warning behavior.
 
+- [x] Portfolio metrics wiring verified 2026-09-17: active positions, total P&L, portfolio value,
+  and return gauges now read from the core `TradingService` instead of a hardcoded zero or an
+  API-to-broker concrete dependency. Metric registration coverage and `./bin/verify-changes` passed.
+
 - [x] Incremental backfill verified 2026-09-17: `POST /api/data/pull/incremental` now exposes
   bounded single-symbol pulls, `getExistingDataWindow` reports stored bounds, routine backfills skip
   an already populated tail, long ranges are split into configurable 30-day provider requests, and
