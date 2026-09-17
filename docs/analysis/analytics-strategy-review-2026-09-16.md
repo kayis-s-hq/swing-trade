@@ -298,8 +298,9 @@ originating `signal_id`, and closed-position realized P&L is included in the cor
 bucket when provenance exists. Historical/manual positions without provenance are intentionally not
 guessed. LLM-analysis and live-eligibility outcomes are now recorded as strategy-aware gate audits;
 the endpoint accepts `gate=LLM_ANALYSIS` or `gate=LIVE_ELIGIBILITY` as well as its sentiment default.
-Dashboard presentation and attribution for future gate types remain open.
-**Remaining:** Add dashboard presentation and any newly introduced gate types.
+The dashboard now exposes the report at `/gate-effectiveness`, with selectable gates, verdict
+tables, forward-return horizons, and realized P&L. Attribution for future gate types remains open.
+**Remaining:** Add support for any newly introduced gate types and complete historical provenance.
 
 ---
 
