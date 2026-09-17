@@ -25,6 +25,11 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   retain the actual remainder, reject ratios above 100%, and calculate realized P&L/cash
   from executed quantity. The targeted broker suite and `./bin/verify-changes` passed.
 
+- [x] Data-quality validation endpoint added 2026-09-17: `POST /api/admin/data/validate`
+  accepts a normalized symbol and inclusive date window, rejects invalid/reversed ranges,
+  and returns the existing gap/anomaly report. Controller tests and `./bin/verify-changes`
+  passed.
+
 - [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
   affected backend suite passed; the foreground local API stayed healthy through
   startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL
