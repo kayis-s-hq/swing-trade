@@ -147,6 +147,9 @@ subprojects {
             "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED"
         )
         System.getenv("DOCKER_HOST")?.let { environment("DOCKER_HOST", it) }
+        System.getenv("TESTCONTAINERS_RYUK_DISABLED")?.let {
+            environment("TESTCONTAINERS_RYUK_DISABLED", it)
+        }
         systemProperty("api.version", System.getProperty("api.version") ?: "1.41")
     }
 

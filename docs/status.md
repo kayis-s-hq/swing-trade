@@ -85,10 +85,11 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   aggregate coverage is now 80.0% (2,499/3,123 lines), clearing its JaCoCo gate after adding
   deterministic source, ingestion, server-manager, PDF, sentiment, and utility coverage.
 
-- [x] Full backend build audit verified 2026-09-17: `./gradlew build -x :api:integrationTest
-  -x :api:jacocoTestCoverageVerification` passed all compilation, unit tests, PMD, module coverage,
-  and packaging checks. The API integration test and its aggregate coverage gate remain environment
-  dependent on the remote Docker/Testcontainers setup.
+- [x] Full backend build and integration verification completed 2026-09-17: `./gradlew
+  :api:integrationTest` passed all API integration tests against PostgreSQL in local Colima with
+  `TESTCONTAINERS_RYUK_DISABLED=true`, and `./bin/verify-changes` passed all change-aware checks.
+  The custom integration task now propagates that Testcontainers setting; the duplicate V41 audit
+  migration is idempotent, and test-only scheduler JPA wiring is excluded from production scans.
 
 - [x] Strategy coverage gate restored 2026-09-17: focused tests now cover the previously
   uncovered advanced indicator validation and calculations. Strategy tests, JaCoCo verification,
