@@ -403,12 +403,11 @@ public class SentimentService {
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), true);
             llmMetrics.recordSentimentAnalyzed();
             if (llmResponse == null || llmResponse.isBlank()) {
-                SentimentOutput empty = new SentimentOutput(SentimentType.UNKNOWN,
-                        "No valid response from LLM", 0.0, List.of(), List.of(), "DEFAULT");
-                persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
-                        promptHash, messages, llmResponse, empty, "SUCCESS", null, maxResponseTokens,
-                        false, startedAt, latencyMs);
-                return empty;
+                // Treat an empty response as provider failure so the caller uses the
+                // auditable keyword fallback. Returning UNKNOWN here bypassed that path,
+                // mislabeled the audit as SUCCESS, and made an LLM outage look like a
+                // successful neutral/default analysis.
+                throw new IllegalStateException("LLM returned an empty response");
             }
             SentimentOutput parsed = sentimentAnalyzer.parseResponse(llmResponse, newsContent.size());
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,

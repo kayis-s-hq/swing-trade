@@ -358,8 +358,9 @@ the bounded persisted-candle evaluator runs on schedule, and `/api/synthesis/eva
 aggregate accuracy. Model-value attribution against a non-LLM baseline remains open.
 
 ### 33. PARTIALLY FIXED — LLM failures hidden
-Top-level exceptions return a default NEUTRAL; LLM outages fall back to keyword sentiment, but
-sentiment rows persist `source = LLM | KEYWORD | DEFAULT`, and UNKNOWN is preserved. Accuracy
+Top-level exceptions return a default NEUTRAL; LLM outages, including empty provider responses,
+fall back to keyword sentiment and persist a failed LLM audit, while sentiment rows persist
+`source = LLM | KEYWORD | DEFAULT`, and UNKNOWN is preserved. Accuracy
 records now retain that source, and predictive aggregates/IC exclude KEYWORD and DEFAULT rows while
 retaining legacy null-source rows. New sentiment results now retain the UUID of their corresponding
 LLM audit attempt, including failed-attempt fallback results; legacy rows remain nullable.

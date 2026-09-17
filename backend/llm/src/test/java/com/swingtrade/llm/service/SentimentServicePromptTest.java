@@ -237,6 +237,26 @@ class SentimentServicePromptTest {
                 decisionDate.equals(result.date()) && "KEYWORD".equals(result.source())));
     }
 
+    @Test
+    @DisplayName("Empty LLM responses use the auditable keyword fallback")
+    void emptyLlmResponseUsesKeywordFallback() {
+        when(promptLoader.getSystemPrompt()).thenReturn("System prompt");
+        when(promptLoader.getUserPrompt()).thenReturn("News: {newsContent}");
+        when(llmClient.generateChatCompletion(anyList(), eq(512), eq(0.0)))
+                .thenReturn(Mono.empty());
+
+        LocalDate decisionDate = LocalDate.of(2026, 9, 15);
+        NewsArticle article = new NewsArticle("TCS", "Shares surge after strong results", "url",
+                null, decisionDate.atTime(12, 0).atZone(ZoneId.of("Asia/Kolkata")), "source", null);
+        when(newsIngestionService.fetchPersistedStockNewsForDecisionDate("TCS", decisionDate))
+                .thenReturn(List.of(new PersistedNewsArticle(1L, article, null)));
+        when(newsIngestionService.cleanNewsText(article)).thenReturn("Shares surge after strong results");
+
+        service.analyzeStockSentiment("TCS", decisionDate);
+
+        verify(sentimentStore).saveOrUpdate(argThat(result -> "KEYWORD".equals(result.source())));
+    }
+
     private static ZonedDateTime todayNoon() {
         ZoneId zone = ZoneId.of("Asia/Kolkata");
         return LocalDate.now(zone).atTime(LocalTime.NOON).atZone(zone);
