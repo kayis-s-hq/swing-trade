@@ -7,7 +7,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,10 +28,6 @@ class EodIngestionSchedulerTest {
 
         EodIngestionScheduler scheduler = new EodIngestionScheduler(
                 dataIngestionService, watchlistRepository, holidayService);
-        Field rateLimit = EodIngestionScheduler.class.getDeclaredField("rateLimitMs");
-        rateLimit.setAccessible(true);
-        rateLimit.setLong(scheduler, 0L);
-
         scheduler.ingestLatestForAll();
 
         verify(dataIngestionService).processSingleStock(eq("TCS"), org.mockito.ArgumentMatchers.any());
