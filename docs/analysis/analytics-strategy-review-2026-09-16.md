@@ -271,7 +271,9 @@ metrics remain open.
 A persisted `PriceBand` now provides explicit exchange limits. Paper and backtest BUY entries at the
 upper band are skipped, and long exits are deferred while the candle is locked at the lower band.
 Missing bands are not inferred from OHLC data. Ingestion/API coverage for populating exchange-provided
-bands and short-side policy remain open.
+bands now persists Fyers `lower_ckt`/`upper_ckt` values during daily ingestion, including when the
+candle itself is already present. Providers without authoritative circuit fields remain fail-closed.
+Historical band backfill and short-side policy remain open.
 
 ---
 
