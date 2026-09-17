@@ -6,6 +6,8 @@ import com.tts.in.model.FyersClass;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.ArrayList;
+import java.util.function.Supplier;
 
 /**
  * Fyers v3 market depth service.
@@ -14,13 +16,19 @@ public class FyersMarketDepthService {
 
     private static final Logger logger = LoggerFactory.getLogger(FyersMarketDepthService.class);
     private final FyersAuthService authService;
+    private final Supplier<FyersClass> sdkProvider;
 
     public FyersMarketDepthService(FyersAuthService authService) {
+        this(authService, FyersClass::getInstance);
+    }
+
+    FyersMarketDepthService(FyersAuthService authService, Supplier<FyersClass> sdkProvider) {
         this.authService = authService;
+        this.sdkProvider = sdkProvider;
     }
 
     private FyersClass getSdk() {
-        FyersClass sdk = FyersClass.getInstance();
+        FyersClass sdk = sdkProvider.get();
         sdk.clientId = authService.getClientId();
         String token = authService.getAccessToken();
         if (token != null) sdk.accessToken = token;
@@ -41,6 +49,10 @@ public class FyersMarketDepthService {
 
     private MarketDepthModel parseMarketDepth(JSONObject data) {
         MarketDepthModel model = new MarketDepthModel();
+        // The SDK constructor does not initialize these public collections on every version.
+        // Initialize them before parsing so a valid response cannot fail with an NPE.
+        model.Bids = new ArrayList<>();
+        model.Asks = new ArrayList<>();
         if (data == null) return model;
         JSONObject first = (data.length() > 0) ? data.optJSONObject(data.keySet().iterator().next()) : null;
         if (first == null) return model;
