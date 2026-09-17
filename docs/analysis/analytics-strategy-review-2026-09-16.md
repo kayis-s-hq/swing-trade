@@ -55,7 +55,8 @@ Additional verified slice — 2026-09-16:
   formats prompt articles with publication date/source/index metadata, substitutes `{symbol}` in
   the system prompt, and persists `LLM`/`KEYWORD`/`DEFAULT` provenance. Unparseable responses are
   represented as `UNKNOWN` and the gate flags them rather than allowing them. Historical article
-  IDs and a complete persisted-news reconstruction path remain follow-ups.
+  IDs and a complete persisted-news reconstruction path remain follow-ups; legacy article
+  eligibility is now recoverable from `created_at` through migration V61.
 - Pending paper orders are persisted before their source signal is marked processed and pending
   orders are reloaded on startup. Paper stop/target triggers now use the candle open when a bar
   gaps through a trigger, matching the backtest policy.
@@ -81,6 +82,9 @@ Additional verified slice — 2026-09-16:
 - Historical universe snapshots, corporate actions, NIFTY benchmark data contracts, and immutable
   strategy-configuration persistence are now available as explicit data-layer contracts/migrations;
   live strategy fan-out and provider population remain separate follow-ups.
+- Legacy news rows with a persistence timestamp now recover `first_seen_at` during migration V61,
+  allowing historical reconstruction to include only rows demonstrably persisted before the
+  decision cutoff; rows lacking both timestamps remain excluded.
 - The current platform now exposes opt-in pullback and volatility-squeeze strategy beans, bounded
   regime/relative-strength and liquidity/event eligibility policies, strategy-config CRUD/version/mode
   endpoints, a Strategies dashboard view, and a portfolio-backtest endpoint. The existing default live
@@ -313,8 +317,9 @@ filters fetched articles to `publishedAt ≤ date 15:30 IST` and ≥ date − 7d
 before cleaning, truncation, and prompting. For past dates, `NewsIngestionService` reads the
 persisted inclusive symbol/date window, requires `first_seen_at ≤` the decision cutoff, and does not
 call live feeds. Articles without timestamps or first-seen provenance are rejected because their
-point-in-time position cannot be proven. Evidence IDs are persisted for newly analyzed results;
-legacy rows remain unreconstructable.
+  point-in-time position cannot be proven. Evidence IDs are persisted for newly analyzed results;
+legacy sentiment-result evidence arrays remain unreconstructable, while legacy news articles with
+an original `created_at` can now be admitted through the V61 provenance backfill.
 
 ### 15. PARTIALLY FIXED — Plain-text fallback misclassifies
 Malformed/empty responses now return `UNKNOWN` with zero confidence, and the gate flags UNKNOWN.

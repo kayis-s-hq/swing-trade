@@ -8,6 +8,11 @@ Last checked: 2026-09-17 (strategy provenance verification)
   focused data/API tests, `./bin/verify-changes`, local Flyway migration, API health, positions,
   and request/portfolio metrics checks passed.
 
+- [x] Legacy news provenance recovered 2026-09-17: historical sentiment reconstruction now
+  backfills missing `first_seen_at` from the original article `created_at` when available,
+  preserving fail-closed behavior for rows without either timestamp. Schema v61 and the
+  change-aware backend verification passed.
+
 - [x] Local runtime revalidation 2026-09-17: the API migrated the PostgreSQL-backed schema to
   v55, reported healthy database/readiness status, and served
   `GET /api/signals/gate-effectiveness` successfully (empty result set in the current data window).
