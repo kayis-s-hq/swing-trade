@@ -28,6 +28,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
     // developmentOnly (not implementation): Boot's Gradle plugin excludes this from the
     // packaged fat jar automatically. It was previously `implementation`, which shipped
     // devtools' classpath-watching Restarter inside api.jar itself - its restart trigger

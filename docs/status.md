@@ -98,6 +98,10 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   and a required `API_KEY` Compose variable; local paper mode remains explicitly opt-in. Focused
   API security tests and the change-aware verifier passed.
 
+- [x] OpenAPI documentation added 2026-09-17: the API now includes the SpringDoc WebMVC UI,
+  generated schema metadata, an `X-API-Key` security scheme, and Trading/Signals/Positions/
+  Portfolio/Admin groups. `/swagger-ui.html` and `/api-docs` are configured for local use.
+
 - [x] Strategy coverage gate restored 2026-09-17: focused tests now cover the previously
   uncovered advanced indicator validation and calculations. Strategy tests, JaCoCo verification,
   and `./bin/verify-changes` passed; aggregate line coverage is now 83.8% (1,452/1,732 lines).
