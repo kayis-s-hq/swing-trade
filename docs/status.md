@@ -12,7 +12,8 @@ Last checked: 2026-09-17 (documentation/lint and analytics remediation verificat
 
 - [x] Non-sentiment gate audits extended 2026-09-17: LLM-analysis and live-eligibility outcomes
   are persisted with strategy attribution and selectable through the gate-effectiveness endpoint;
-  focused API/controller tests passed.
+  focused API/controller tests passed, and the live `gate=LIVE_ELIGIBILITY` request returned 200
+  against the PostgreSQL-backed API.
 
 - [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
   producing signal variant, support multiple strategies per symbol/date, and report/filter by the
