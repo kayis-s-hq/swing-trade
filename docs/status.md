@@ -1,6 +1,5 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-17 (documentation/lint pass)
 Last checked: 2026-09-17 (documentation/lint and analytics remediation verification)
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
