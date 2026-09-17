@@ -23,6 +23,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DataIngestionServiceTest {
 
@@ -33,6 +34,7 @@ class DataIngestionServiceTest {
     private MarketDataClientProvider marketDataClientProvider;
     private MarketDataClient mockClient;
     private PriceBandStore priceBandStore;
+    private TransactionTemplate txTemplate;
 
     @BeforeEach
     void setUp() {
@@ -45,8 +47,9 @@ class DataIngestionServiceTest {
         when(marketDataClientProvider.getClient()).thenReturn(mockClient);
         priceBandStore = Mockito.mock(PriceBandStore.class);
 
+        txTemplate = Mockito.mock(TransactionTemplate.class);
         dataIngestionService = new DataIngestionService(candleRepository, stockRepository, watchlistRepository,
-            marketDataClientProvider, Mockito.mock(TransactionTemplate.class),
+            marketDataClientProvider, txTemplate,
             Mockito.mock(com.swingtrade.core.metrics.DataIngestionMetrics.class), null,
             null, 30, priceBandStore);
     }
@@ -223,6 +226,44 @@ class DataIngestionServiceTest {
         verify(mockClient).fetchCandles("RELIANCE", from.plusDays(30), from.plusDays(59));
         verify(mockClient).fetchCandles("RELIANCE", from.plusDays(60), to);
         assert outcome.sourceOutcome().equals("NO_USABLE_DATA");
+    }
+
+    @Test
+    void processStockDataClassifiesValidInvalidAndProviderFailure() {
+        LocalDate monday = LocalDate.of(2026, 1, 5);
+        CandleData valid = CandleData.of("RELIANCE", monday, bd("10"), bd("12"), bd("9"), bd("11"), 100);
+        CandleData invalid = CandleData.of("RELIANCE", monday.plusDays(1), bd("12"), bd("10"), bd("9"), bd("11"), 100);
+        when(mockClient.fetchCandles("RELIANCE", monday, monday.plusDays(1)))
+            .thenReturn(List.of(valid, invalid));
+        when(candleRepository.insertIfAbsent(eq("RELIANCE"), eq(monday), any(), any(), any(), any(), eq(100L), any()))
+            .thenReturn(1);
+        when(txTemplate.execute(any())).thenAnswer(invocation ->
+            ((org.springframework.transaction.support.TransactionCallback<Integer>) invocation.getArgument(0))
+                .doInTransaction(null));
+
+        DataIngestionService.BackfillOutcome outcome = dataIngestionService.processStockDataWithOutcome(
+            "RELIANCE", monday, monday.plusDays(1));
+        assert outcome.fetchedRows() == 2;
+        assert outcome.savedRows() == 1;
+        assert outcome.invalidRows() == 1;
+        assert outcome.sourceOutcome().equals("DATA_RECEIVED");
+        verify(candleRepository).insertIfAbsent(eq("RELIANCE"), eq(monday), any(), any(), any(), any(), eq(100L), any());
+
+        when(mockClient.fetchCandles("RELIANCE", monday, monday)).thenThrow(new IllegalStateException("down"));
+        assert dataIngestionService.processStockDataWithOutcome("RELIANCE", monday, monday)
+            .sourceOutcome().equals("TRANSIENT_SOURCE_FAILURE");
+    }
+
+    @Test
+    void invalidInputsAndExistingWindowAreHandled() {
+        assertThatThrownBy(() -> dataIngestionService.getExistingDataWindow(" "))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> dataIngestionService.processIncrementalStockData("", LocalDate.now(), LocalDate.now()))
+            .isInstanceOf(IllegalArgumentException.class);
+        when(candleRepository.findEarliestBySymbol("X")).thenReturn(Optional.empty());
+        when(candleRepository.findLatestBySymbol("X")).thenReturn(Optional.empty());
+        assert dataIngestionService.getExistingDataWindow("X").earliestDate() == null;
+        assert dataIngestionService.getExistingDataWindow("X").latestDate() == null;
     }
 
     private OhlcvCandleEntity candle(String symbol, LocalDate date) {
