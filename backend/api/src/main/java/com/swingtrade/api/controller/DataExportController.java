@@ -33,17 +33,17 @@ public class DataExportController {
     }
 
     @GetMapping("/export")
-    public ResponseEntity<?> export(
+    public ResponseEntity<StreamingResponseBody> export(
             @RequestParam(required = false, name = "symbol") List<String> requestedSymbols,
             @RequestParam LocalDate fromDate,
             @RequestParam LocalDate toDate,
-            @RequestParam(defaultValue = "CSV") String format) {
+        @RequestParam(defaultValue = "CSV") String format) {
         if (fromDate.isAfter(toDate)) {
-            return ResponseEntity.badRequest().body("fromDate must not be after toDate");
+            return ResponseEntity.badRequest().build();
         }
         String normalizedFormat = format.toUpperCase(Locale.ROOT);
         if (!normalizedFormat.equals("CSV") && !normalizedFormat.equals("JSON")) {
-            return ResponseEntity.badRequest().body("format must be CSV or JSON");
+            return ResponseEntity.badRequest().build();
         }
         List<String> symbols = requestedSymbols == null ? List.of() : requestedSymbols.stream()
                 .flatMap(value -> java.util.Arrays.stream(value.split(",")))

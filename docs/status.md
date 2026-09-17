@@ -39,6 +39,11 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   non-finite close responses now emit an explicit symbol/date warning before being rejected.
   The Yahoo client suite and `./bin/verify-changes` passed.
 
+- [x] Runtime API verification extended 2026-09-17: against the existing PostgreSQL
+  development database (schema V50), `/api/health` returned 200, data validation returned
+  200 with persisted TCS gap results, and CSV export returned 200 with attachment headers
+  and candle rows. No data was reset.
+
 - [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
   affected backend suite passed; the foreground local API stayed healthy through
   startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL
