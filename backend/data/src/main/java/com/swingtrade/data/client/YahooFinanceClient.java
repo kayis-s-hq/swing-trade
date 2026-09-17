@@ -627,6 +627,9 @@ public class YahooFinanceClient implements MarketDataClient {
     }
 
     private String formatSymbolForYahoo(String symbol) {
+        if ("NIFTY50".equalsIgnoreCase(symbol) || "NIFTY 50".equalsIgnoreCase(symbol)) {
+            return "^NSEI";
+        }
         if (symbol.endsWith(".NS") || symbol.endsWith(".BO")) return symbol;
         return symbol + ".NS";
     }

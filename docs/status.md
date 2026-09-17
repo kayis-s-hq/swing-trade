@@ -49,6 +49,11 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   existing portfolio path. Strategy tests and `./bin/verify-changes` passed; paper-monitor
   policy scheduling and partial-exit execution remain separate follow-ups.
 
+- [x] NIFTY50 Yahoo symbol mapping corrected 2026-09-17: persisted `NIFTY50` requests now
+  resolve to Yahoo's `^NSEI` index ticker, allowing the existing ingestion path to populate
+  the stored index series used by opted-in regime/relative-strength checks. Client tests and
+  `./bin/verify-changes` passed; authoritative TRI and breadth/VIX feeds remain open.
+
 - [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
   affected backend suite passed; the foreground local API stayed healthy through
   startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL
