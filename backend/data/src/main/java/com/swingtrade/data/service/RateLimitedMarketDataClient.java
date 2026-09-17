@@ -1,31 +1,45 @@
 package com.swingtrade.data.service;
 
+import com.swingtrade.core.metrics.DataIngestionMetrics;
 import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Applies a provider-wide minimum interval between market-data requests.
- * The wrapper is deliberately synchronous: ingestion callers already serialize the
- * provider request path, and a single limiter prevents concurrent backfill workers
- * from bypassing the provider's quota.
+ * Applies a provider-wide token bucket between market-data requests. The wrapper is
+ * deliberately synchronous: callers already use blocking provider APIs, and one
+ * shared limiter prevents concurrent backfill workers from bypassing a quota.
  */
 final class RateLimitedMarketDataClient implements MarketDataClient {
 
     private final MarketDataClient delegate;
-    private final long minimumIntervalMillis;
-    private long nextAllowedAtNanos;
+    private final long refillIntervalNanos;
+    private final DataIngestionMetrics metrics;
+    private final String source;
+    private final boolean unlimited;
+    private long availableAtNanos;
 
     RateLimitedMarketDataClient(MarketDataClient delegate, long minimumIntervalMillis) {
+        this(delegate, minimumIntervalMillis <= 0 ? 0
+                : Math.max(1L, 60_000L / minimumIntervalMillis), null, "unknown");
+    }
+
+    RateLimitedMarketDataClient(MarketDataClient delegate, long requestsPerMinute,
+                                DataIngestionMetrics metrics, String source) {
         this.delegate = delegate;
-        this.minimumIntervalMillis = Math.max(0L, minimumIntervalMillis);
+        long permits = Math.max(1L, requestsPerMinute);
+        this.refillIntervalNanos = Math.max(1L, 60_000_000_000L / permits);
+        this.metrics = metrics;
+        this.source = source == null || source.isBlank() ? "unknown" : source;
+        this.unlimited = requestsPerMinute <= 0;
     }
 
     private void acquire() {
-        if (minimumIntervalMillis == 0L) return;
+        if (unlimited) return;
         synchronized (this) {
             long now = System.nanoTime();
-            long waitNanos = nextAllowedAtNanos - now;
+            long waitNanos = availableAtNanos - now;
             if (waitNanos > 0L) {
+                if (metrics != null) metrics.recordRateLimitWait(source);
                 try {
                     long millis = waitNanos / 1_000_000L;
                     int nanos = (int) (waitNanos % 1_000_000L);
@@ -35,7 +49,7 @@ final class RateLimitedMarketDataClient implements MarketDataClient {
                     throw new IllegalStateException("Interrupted while rate limiting market-data request", e);
                 }
             }
-            nextAllowedAtNanos = System.nanoTime() + minimumIntervalMillis * 1_000_000L;
+            availableAtNanos = System.nanoTime() + refillIntervalNanos;
         }
     }
 

@@ -172,9 +172,11 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   LLM tests and `./bin/verify-changes` passed; runtime grounding enforcement remains a follow-up.
 
 - [x] Market-data request throttling verified 2026-09-17: production client resolution now applies
-  a configurable minimum interval (`MARKET_DATA_RATE_LIMIT_MS`, default 250 ms) across Yahoo/Fyers
-  calls, including bulk and metadata methods, while lightweight test construction remains compatible.
-  Data/API tests and `./bin/verify-changes` passed.
+  a shared provider-aware token bucket (Yahoo retains its configured interval; Fyers/Upstox/default
+  use 60/100/30 requests per minute by default), including bulk and metadata methods. Fyers retries
+  HTTP 429 responses with bounded 1/2/4/8-second backoff, aliased beans share one limiter, and
+  limiter waits are exported as `data_rate_limit_hits{source=...}`. Data/API tests and
+  `./bin/verify-changes` passed.
 
 - [x] Incremental backfill verified 2026-09-17: `POST /api/data/pull/incremental` now exposes
   bounded single-symbol pulls, `getExistingDataWindow` reports stored bounds, routine backfills skip
