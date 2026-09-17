@@ -312,6 +312,29 @@ class BacktestEngineTest {
         }
 
         @Test
+        @DisplayName("single-symbol backtest applies configured risk-management policy")
+        void managedExitPolicyIsAppliedToSingleSymbolBacktest() {
+            List<OhlcvCandle> candles = buildEntrySetupCandles();
+            appendFlatCandles(candles, 6, entryPrice(candles), 1_000_000L);
+            stub(candles);
+
+            var policy = (com.swingtrade.domain.RiskManagementPolicy) context ->
+                    context.holdingDays() >= 1
+                            ? com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision.exit(
+                                    context.entryPrice().add(BigDecimal.ONE), "BREAKEVEN_STOP")
+                            : com.swingtrade.domain.RiskManagementPolicy.RiskManagementDecision.hold();
+            BacktestConfig config = new BacktestConfig(0.0, 0.0, 0.01, 500_000.0, 5, 2.0, 2.5,
+                    20, false, 21, policy);
+
+            BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, config);
+
+            assertThat(result.trades()).singleElement().satisfies(trade -> {
+                assertThat(trade.exitReason()).isEqualTo(ExitReason.BREAKEVEN_STOP);
+                assertThat(trade.exitPrice()).isEqualByComparingTo(trade.entryPrice().add(BigDecimal.ONE));
+            });
+        }
+
+        @Test
         @DisplayName("price crashes through the ATR stop -> STOP_LOSS exit at the stop price")
         void stopLossExit() {
             List<OhlcvCandle> candles = buildEntrySetupCandles();

@@ -44,6 +44,11 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   200 with persisted TCS gap results, and CSV export returned 200 with attachment headers
   and candle rows. No data was reset.
 
+- [x] Single-symbol backtest risk-policy wiring added 2026-09-17: configured risk-management
+  policies are now evaluated before fixed exits in the ordinary backtest path, matching the
+  existing portfolio path. Strategy tests and `./bin/verify-changes` passed; paper-monitor
+  policy scheduling and partial-exit execution remain separate follow-ups.
+
 - [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
   affected backend suite passed; the foreground local API stayed healthy through
   startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL

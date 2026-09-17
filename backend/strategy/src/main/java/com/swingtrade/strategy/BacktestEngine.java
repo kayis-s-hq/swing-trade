@@ -8,6 +8,7 @@ import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.OhlcvDataQuality;
 import com.swingtrade.domain.PriceBand;
 import com.swingtrade.domain.PriceBandPolicy;
+import com.swingtrade.domain.RiskManagementPolicy;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PriceBandStore;
@@ -474,26 +475,35 @@ public class BacktestEngine {
                 BigDecimal exitPrice = null;
                 ExitReason reason = null;
 
+                RiskManagementPolicy.RiskManagementDecision managedDecision = config.riskManagementPolicy()
+                        .evaluate(new RiskManagementPolicy.RiskManagementContext(
+                                open.entryPrice(), open.stopLoss(), open.target(), close, low,
+                                open.highestCloseBeforeBar(), i - open.entryIndex()));
+                if (managedDecision.exit()) {
+                    reason = managedExitReason(managedDecision.reason());
+                    exitPrice = managedDecision.stopPrice();
+                }
+
                 // Evaluated through the same TradingStrategy instance used for entry so the
                 // backtest can never drift from its rules.
                 boolean signalExitTriggered = strategy.isSignalExit(exitIndicators);
 
-                if (low.compareTo(open.stopLoss()) <= 0) {
+                if (reason == null && low.compareTo(open.stopLoss()) <= 0) {
                     reason = ExitReason.STOP_LOSS;
                     BigDecimal barOpen = openPriceForBar(openPrice, i);
                     exitPrice = barOpen.compareTo(open.stopLoss()) <= 0
                             ? barOpen : open.stopLoss();
-                } else if (high.compareTo(open.target()) >= 0) {
+                } else if (reason == null && high.compareTo(open.target()) >= 0) {
                     reason = ExitReason.TARGET_HIT;
                     BigDecimal barOpen = openPriceForBar(openPrice, i);
                     exitPrice = barOpen.compareTo(open.target()) >= 0 ? barOpen : open.target();
-                } else if (config.signalExitEnabled() && signalExitTriggered) {
+                } else if (reason == null && config.signalExitEnabled() && signalExitTriggered) {
                     reason = ExitReason.SIGNAL_EXIT;
                     exitPrice = close;
-                } else if (streak >= config.trendBreakStreakDays()) {
+                } else if (reason == null && streak >= config.trendBreakStreakDays()) {
                     reason = ExitReason.TREND_BREAK;
                     exitPrice = close;
-                } else if ((i - open.entryIndex()) >= config.maxHoldingDays()) {
+                } else if (reason == null && (i - open.entryIndex()) >= config.maxHoldingDays()) {
                     reason = ExitReason.TIME_STOP;
                     exitPrice = close;
                 }
@@ -508,7 +518,8 @@ public class BacktestEngine {
                     open = null;
                 } else {
                     open = new OpenPosition(open.entryIndex(), open.entryDate(), open.entryPrice(),
-                            open.stopLoss(), open.target(), open.quantity(), streak);
+                            open.stopLoss(), open.target(), open.quantity(), streak,
+                            open.highestCloseBeforeBar().max(close));
                 }
             }
 
@@ -587,7 +598,8 @@ public class BacktestEngine {
         }
 
         LocalDate entryDate = chronologicalCandles.get(entryIndex).date();
-        return new OpenPosition(entryIndex, entryDate, entryPrice, stopLoss, target, quantity);
+        return new OpenPosition(entryIndex, entryDate, entryPrice, stopLoss, target, quantity,
+                0, entryPrice);
     }
 
     private BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
@@ -603,6 +615,14 @@ public class BacktestEngine {
 
         return new BacktestTrade(symbol, open.entryDate, exitDate, open.entryPrice, exitPrice,
                 open.stopLoss, open.target, open.quantity, reason, netPnl, pnlPct, holdingDays);
+    }
+
+    private static ExitReason managedExitReason(String reason) {
+        return switch (reason) {
+            case "TRAILING_STOP" -> ExitReason.TRAILING_STOP;
+            case "BREAKEVEN_STOP" -> ExitReason.BREAKEVEN_STOP;
+            default -> throw new IllegalArgumentException("Unsupported risk-management exit: " + reason);
+        };
     }
 
     private static BigDecimal openPriceForBar(OpenPriceIndicator openPrice, int index) {
@@ -762,14 +782,16 @@ public class BacktestEngine {
                                 BigDecimal stopLoss,
                                 BigDecimal target,
                                 int quantity,
-                                int belowEma20Streak) {
+                                int belowEma20Streak,
+                                BigDecimal highestCloseBeforeBar) {
         OpenPosition {
             belowEma20Streak = Math.max(0, belowEma20Streak);
+            highestCloseBeforeBar = highestCloseBeforeBar == null ? entryPrice : highestCloseBeforeBar;
         }
 
         OpenPosition(int entryIndex, LocalDate entryDate, BigDecimal entryPrice, BigDecimal stopLoss,
                      BigDecimal target, int quantity) {
-            this(entryIndex, entryDate, entryPrice, stopLoss, target, quantity, 0);
+            this(entryIndex, entryDate, entryPrice, stopLoss, target, quantity, 0, entryPrice);
         }
     }
 }
