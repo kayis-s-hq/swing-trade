@@ -91,6 +91,13 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   The custom integration task now propagates that Testcontainers setting; the duplicate V41 audit
   migration is idempotent, and test-only scheduler JPA wiring is excluded from production scans.
 
+- [x] API boundary protection added 2026-09-17: admin routes support constant-time `X-API-Key`
+  authentication with fail-closed behavior when enabled, public API requests have a configurable
+  per-client 100-request/minute budget with `429`/`Retry-After` responses, and rate-limit hits are
+  exported as `api.rate.limit.hits`. Stage enables enforcement through `API_KEY_AUTH_ENABLED=true`
+  and `API_KEY`; local paper mode remains explicitly opt-in. Focused API security tests and the
+  change-aware verifier passed.
+
 - [x] Strategy coverage gate restored 2026-09-17: focused tests now cover the previously
   uncovered advanced indicator validation and calculations. Strategy tests, JaCoCo verification,
   and `./bin/verify-changes` passed; aggregate line coverage is now 83.8% (1,452/1,732 lines).
