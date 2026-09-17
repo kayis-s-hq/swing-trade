@@ -44,6 +44,7 @@ public record SentimentAccuracy(
     String marketRegime,
     String promptHash,
     String modelVersion,
+    String sentimentSource,
     LocalDateTime evaluatedAt
 ) {
 }

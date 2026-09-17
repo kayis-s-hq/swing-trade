@@ -82,6 +82,9 @@ public class SentimentAccuracyEntity {
     @Column(name = "model_version", length = 255)
     private String modelVersion;
 
+    @Column(name = "sentiment_source", length = 20)
+    private String sentimentSource;
+
     @Column(name = "composite_score")
     private Integer compositeScore;
 
@@ -120,6 +123,7 @@ public class SentimentAccuracyEntity {
         this.marketRegime = accuracy.marketRegime();
         this.promptHash = accuracy.promptHash();
         this.modelVersion = accuracy.modelVersion();
+        this.sentimentSource = accuracy.sentimentSource();
         this.createdAt = java.time.LocalDateTime.now();
         this.evaluatedAt = accuracy.evaluatedAt();
     }
@@ -149,6 +153,7 @@ public class SentimentAccuracyEntity {
             marketRegime,
             promptHash,
             modelVersion,
+            sentimentSource,
             evaluatedAt
         );
     }
@@ -281,6 +286,9 @@ public class SentimentAccuracyEntity {
     public void setModelVersion(String modelVersion) {
         this.modelVersion = modelVersion;
     }
+
+    public String getSentimentSource() { return sentimentSource; }
+    public void setSentimentSource(String sentimentSource) { this.sentimentSource = sentimentSource; }
 
     public Integer getCompositeScore() {
         return compositeScore;

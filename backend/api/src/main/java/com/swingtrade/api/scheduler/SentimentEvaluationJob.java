@@ -178,6 +178,7 @@ public class SentimentEvaluationJob {
             regime,
             sentiment.promptHash(),
             sentiment.modelVersion(),
+            sentiment.source(),
             java.time.LocalDateTime.now()
         );
 

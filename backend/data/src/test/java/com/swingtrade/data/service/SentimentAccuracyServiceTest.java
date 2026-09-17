@@ -41,6 +41,22 @@ class SentimentAccuracyServiceTest {
         assertThat(result.get(2).avgReturn()).isCloseTo(-0.05, within(0.000001));
     }
 
+    @Test
+    void fallbackSentimentIsExcludedFromPredictiveWindows() {
+        SentimentAccuracyEntity llm = accuracy("POSITIVE", "0.010", "0.100", "0.300");
+        llm.setSentimentSource("LLM");
+        SentimentAccuracyEntity keyword = accuracy("NEGATIVE", "-0.020", "-0.200", "-0.400");
+        keyword.setSentimentSource("KEYWORD");
+        SentimentAccuracyRepository repository = mock(SentimentAccuracyRepository.class);
+        when(repository.findAll()).thenReturn(List.of(llm, keyword));
+
+        List<SentimentAccuracyService.AccuracyByWindow> result =
+            new SentimentAccuracyService(repository).getAccuracyByWindow();
+
+        assertThat(result).allSatisfy(window -> assertThat(window.total()).isEqualTo(1));
+        assertThat(result.get(0).avgReturn()).isCloseTo(0.010, within(0.000001));
+    }
+
     private static SentimentAccuracyEntity accuracy(String score, String oneDay, String fiveDay,
                                                      String twentyOneDay) {
         SentimentAccuracyEntity entity = new SentimentAccuracyEntity();

@@ -35,6 +35,11 @@ Last checked: 2026-09-17 (documentation/lint and analytics remediation verificat
   the bounded one-day request. Yahoo remains development/backfill-only; focused client tests and
   the full change-aware backend verifier passed.
 
+- [x] Sentiment provenance carried into accuracy 2026-09-17: accuracy rows now retain the
+  originating `LLM`/`KEYWORD`/`DEFAULT` source, and predictive aggregates exclude fallback rows
+  while preserving legacy null-source data. Schema v58, affected data/API tests, local migration,
+  health, `/api/sentiment/accuracy/by-window`, and evaluation-status checks passed.
+
 - [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
   producing signal variant, support multiple strategies per symbol/date, and report/filter by the
   stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade

@@ -21,15 +21,16 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
 
     Optional<SentimentAccuracyEntity> findBySymbolAndAnalysisDate(String symbol, LocalDate analysisDate);
 
-    @Query("SELECT COUNT(s) FROM SentimentAccuracyEntity s")
+    @Query("SELECT COUNT(s) FROM SentimentAccuracyEntity s WHERE s.sentimentSource IS NULL OR s.sentimentSource = 'LLM'")
     long countAll();
 
-    @Query("SELECT COUNT(s) FROM SentimentAccuracyEntity s WHERE s.wasCorrect = true")
+    @Query("SELECT COUNT(s) FROM SentimentAccuracyEntity s WHERE s.wasCorrect = true AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')")
     long countCorrect();
 
     @Query("""
         SELECT COUNT(s) FROM SentimentAccuracyEntity s
         WHERE s.wasCorrect = true AND s.groundTruthLabel IN ('UP', 'DOWN')
+          AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')
           AND s.evaluatedAt IS NOT NULL
           AND s.evaluatedAt >= :since
         """)
@@ -38,6 +39,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
     @Query("""
         SELECT COUNT(s) FROM SentimentAccuracyEntity s
         WHERE s.groundTruthLabel IN ('UP', 'DOWN')
+          AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')
           AND s.evaluatedAt IS NOT NULL
           AND s.evaluatedAt >= :since
         """)
@@ -46,6 +48,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
     @Query("SELECT s FROM SentimentAccuracyEntity s " +
            "WHERE s.evaluatedAt IS NOT NULL " +
            "AND s.groundTruthLabel IN ('UP', 'DOWN') " +
+           "AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM') " +
            "AND s.evaluatedAt >= :since " +
            "ORDER BY s.evaluatedAt DESC")
     List<SentimentAccuracyEntity> findDirectionalSince(@Param("since") LocalDateTime since);
@@ -56,6 +59,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
                AVG(s.llmConfidence), AVG(s.actualReturn5d)
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
+          AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')
         GROUP BY s.analysisDate, s.llmScore
         ORDER BY s.analysisDate DESC
         """)
@@ -68,6 +72,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
                AVG(s.llmConfidence) AS avgConfidence
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
+          AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')
         GROUP BY s.marketRegime
         ORDER BY accuracy DESC
         """)
@@ -80,6 +85,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
                AVG(s.llmConfidence) AS avgConfidence
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
+          AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')
         GROUP BY s.symbol
         ORDER BY total DESC
         """)
@@ -94,6 +100,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
           AND s.llmConfidence IS NOT NULL
+          AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')
         GROUP BY confidenceBin
         ORDER BY confidenceBin
         """)
@@ -104,6 +111,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
           AND s.actualReturn5d IS NOT NULL
+          AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')
           AND s.evaluatedAt >= :since
         ORDER BY s.evaluatedAt DESC
         """)
@@ -113,6 +121,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
         SELECT s.groundTruthLabel, COUNT(s)
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
+          AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')
         GROUP BY s.groundTruthLabel
         ORDER BY s.groundTruthLabel
         """)
@@ -129,6 +138,7 @@ public interface SentimentAccuracyRepository extends JpaRepository<SentimentAccu
         FROM SentimentAccuracyEntity s
         WHERE s.evaluatedAt IS NOT NULL
           AND s.evaluatedAt >= :since
+          AND (s.sentimentSource IS NULL OR s.sentimentSource = 'LLM')
         """)
     Double overallAccuracySince(@Param("since") LocalDateTime since);
 
