@@ -160,13 +160,6 @@ public class CandidateScanService {
         return run;
     }
 
-    /** Marks a just-created scan as eligible for the durable scheduled handoff. */
-    @Transactional
-    public void scheduleHandoff(UUID runId) {
-        CandidateScanRunEntity run = getRun(runId);
-        if (run != null) { run.setOrchestrationStatus("PENDING"); runRepository.save(run); }
-    }
-
     private CandidateScanRunEntity start(boolean scheduled) {
         UUID existing = activeRun.get();
         if (existing != null || runRepository.existsByStatus("RUNNING")) {

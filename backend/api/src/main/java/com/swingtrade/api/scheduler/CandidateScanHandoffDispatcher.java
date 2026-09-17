@@ -31,7 +31,8 @@ public class CandidateScanHandoffDispatcher {
                 var existingJob = jobRuns.findFirstByCandidateScanRunIdOrderByStartedAtDesc(scan.getRunId());
                 if (existingJob.isPresent()) {
                     scan.setOrchestrationJobRunId(existingJob.get().getRunId());
-                    if ("RUNNING".equals(existingJob.get().getStatus())) {
+                    if ("RUNNING".equals(existingJob.get().getStatus())
+                            || "COMPLETED".equals(existingJob.get().getStatus())) {
                         scan.setOrchestrationStatus("STARTED");
                         scan.setOrchestrationError(null);
                     } else {
