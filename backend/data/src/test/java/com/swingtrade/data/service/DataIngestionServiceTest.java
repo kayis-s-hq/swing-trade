@@ -182,6 +182,24 @@ class DataIngestionServiceTest {
         assert outcome.sourceOutcome().equals("ALREADY_CURRENT");
     }
 
+    @Test
+    void incrementalBackfillSplitsLongRangeIntoConfiguredChunks() {
+        LocalDate from = LocalDate.of(2026, 1, 1);
+        LocalDate to = from.plusDays(64);
+        when(candleRepository.findEarliestBySymbol("RELIANCE")).thenReturn(Optional.empty());
+        when(candleRepository.findLatestBySymbol("RELIANCE")).thenReturn(Optional.empty());
+        when(mockClient.fetchCandles(anyString(), any(LocalDate.class), any(LocalDate.class)))
+            .thenReturn(List.of());
+
+        DataIngestionService.BackfillOutcome outcome = dataIngestionService.processIncrementalStockData(
+            "RELIANCE", from, to);
+
+        verify(mockClient).fetchCandles("RELIANCE", from, from.plusDays(29));
+        verify(mockClient).fetchCandles("RELIANCE", from.plusDays(30), from.plusDays(59));
+        verify(mockClient).fetchCandles("RELIANCE", from.plusDays(60), to);
+        assert outcome.sourceOutcome().equals("NO_USABLE_DATA");
+    }
+
     private OhlcvCandleEntity candle(String symbol, LocalDate date) {
         OhlcvCandleEntity candle = new OhlcvCandleEntity();
         candle.setSymbol(symbol);

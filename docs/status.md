@@ -180,8 +180,9 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 - [x] Incremental backfill verified 2026-09-17: `POST /api/data/pull/incremental` now exposes
   bounded single-symbol pulls, `getExistingDataWindow` reports stored bounds, routine backfills skip
-  an already populated tail, and watchlist bulk pulls use the incremental path. Data/API tests and
-  `./bin/verify-changes` passed; bounded interior-gap repair remains handled separately.
+  an already populated tail, long ranges are split into configurable 30-day provider requests, and
+  watchlist bulk pulls use the incremental path. Data/API tests and `./bin/verify-changes` passed;
+  bounded interior-gap repair remains handled separately.
 
 - [x] Watchlist backfill parallelism verified 2026-09-17: bulk pulls now use a bounded worker pool
   (configurable with `DATA_BACKFILL_PARALLELISM`, default 5), isolate failures per symbol, and report

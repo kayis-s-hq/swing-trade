@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -41,6 +42,7 @@ public class DataIngestionService {
     private final DataIngestionMetrics ingestionMetrics;
     private final MarketCalendar marketCalendar;
     private final ReconciliationAuditRepository reconciliationAuditRepository;
+    private final int backfillChunkDays;
 
     @Autowired
     public DataIngestionService(
@@ -51,7 +53,8 @@ public class DataIngestionService {
         TransactionTemplate txTemplate,
         DataIngestionMetrics ingestionMetrics,
         MarketCalendar marketCalendar,
-        ReconciliationAuditRepository reconciliationAuditRepository
+        ReconciliationAuditRepository reconciliationAuditRepository,
+        @Value("${data.backfill.chunk-days:30}") int backfillChunkDays
     ) {
         this.candleRepository = candleRepository;
         this.stockRepository = stockRepository;
@@ -61,6 +64,7 @@ public class DataIngestionService {
         this.ingestionMetrics = ingestionMetrics;
         this.marketCalendar = marketCalendar;
         this.reconciliationAuditRepository = reconciliationAuditRepository;
+        this.backfillChunkDays = Math.max(1, backfillChunkDays);
     }
 
     /** Compatibility constructor for lightweight unit tests. */
@@ -69,7 +73,7 @@ public class DataIngestionService {
         MarketDataClientProvider marketDataClientProvider, TransactionTemplate txTemplate,
         DataIngestionMetrics ingestionMetrics, MarketCalendar marketCalendar) {
         this(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider,
-            txTemplate, ingestionMetrics, marketCalendar, null);
+            txTemplate, ingestionMetrics, marketCalendar, null, 30);
     }
 
     /** Compatibility constructor for lightweight unit tests. */
@@ -78,7 +82,7 @@ public class DataIngestionService {
         MarketDataClientProvider marketDataClientProvider, TransactionTemplate txTemplate,
         DataIngestionMetrics ingestionMetrics) {
         this(candleRepository, stockRepository, watchlistRepository, marketDataClientProvider,
-            txTemplate, ingestionMetrics, null, null);
+            txTemplate, ingestionMetrics, null, null, 30);
     }
 
     /**
@@ -126,9 +130,35 @@ public class DataIngestionService {
                 existing.latestDate());
             return new BackfillOutcome("ALREADY_CURRENT", 0, 0, 0, null);
         }
-        logger.info("Incremental backfill for {}: requested {} to {}, fetching {} to {}",
-            symbol, requestedFrom, toDate, effectiveFrom, toDate);
-        return processStockDataWithOutcome(symbol, effectiveFrom, toDate);
+        logger.info("Incremental backfill for {}: requested {} to {}, fetching {} to {} in {}-day chunks",
+            symbol, requestedFrom, toDate, effectiveFrom, toDate, backfillChunkDays);
+        return processStockDataInChunks(symbol, effectiveFrom, toDate);
+    }
+
+    private BackfillOutcome processStockDataInChunks(String symbol, LocalDate fromDate, LocalDate toDate) {
+        int fetched = 0;
+        int saved = 0;
+        int invalid = 0;
+        String firstError = null;
+        boolean receivedData = false;
+        LocalDate chunkStart = fromDate;
+        while (!chunkStart.isAfter(toDate)) {
+            LocalDate chunkEnd = chunkStart.plusDays(backfillChunkDays - 1L);
+            if (chunkEnd.isAfter(toDate)) chunkEnd = toDate;
+            BackfillOutcome outcome = processStockDataWithOutcome(symbol, chunkStart, chunkEnd);
+            fetched += outcome.fetchedRows();
+            saved += outcome.savedRows();
+            invalid += outcome.invalidRows();
+            receivedData |= !"NO_USABLE_DATA".equals(outcome.sourceOutcome())
+                && !"TRANSIENT_SOURCE_FAILURE".equals(outcome.sourceOutcome());
+            if (firstError == null) firstError = outcome.errorMessage();
+            chunkStart = chunkEnd.plusDays(1);
+        }
+        String sourceOutcome = firstError != null && fetched == 0 ? "TRANSIENT_SOURCE_FAILURE"
+            : fetched == 0 ? "NO_USABLE_DATA"
+            : invalid > 0 && saved == 0 ? "INVALID_ROWS_REJECTED"
+            : receivedData ? "DATA_RECEIVED" : "NO_USABLE_DATA";
+        return new BackfillOutcome(sourceOutcome, fetched, saved, invalid, firstError);
     }
 
     /** Returns the earliest and latest stored candle dates for a symbol. */
