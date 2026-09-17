@@ -18,6 +18,7 @@ import java.util.List;
  * @param analyzedAt  the timestamp when the sentiment was analyzed
  * @param source      provenance: LLM, KEYWORD, or DEFAULT
  * @param articleIds  persisted news evidence used for this result
+ * @param auditRequestId request ID linking this result to the LLM audit attempt
  */
 public record SentimentResult(
     Long id,
@@ -34,8 +35,18 @@ public record SentimentResult(
     String modelVersion,
     int articleCount,
     String source,
-    List<Long> articleIds
+    List<Long> articleIds,
+    String auditRequestId
 ) {
+    /** Compatibility constructor for callers predating LLM audit correlation. */
+    public SentimentResult(Long id, String symbol, LocalDate date, SentimentScore score,
+                           String summary, String rawContent, Double confidence,
+                           LocalDate analyzedAt, List<String> redFlags, List<String> catalysts,
+                           String promptHash, String modelVersion, int articleCount,
+                           String source, List<Long> articleIds) {
+        this(id, symbol, date, score, summary, rawContent, confidence, analyzedAt,
+            redFlags, catalysts, promptHash, modelVersion, articleCount, source, articleIds, null);
+    }
     /** Compatibility constructor for callers that already provide provenance. */
     public SentimentResult(Long id, String symbol, LocalDate date, SentimentScore score,
                            String summary, String rawContent, Double confidence,
@@ -43,7 +54,7 @@ public record SentimentResult(
                            String promptHash, String modelVersion, int articleCount,
                            String source) {
         this(id, symbol, date, score, summary, rawContent, confidence, analyzedAt,
-            redFlags, catalysts, promptHash, modelVersion, articleCount, source, List.of());
+            redFlags, catalysts, promptHash, modelVersion, articleCount, source, List.of(), null);
     }
     /** Compatibility constructor for callers predating provenance tracking. */
     public SentimentResult(Long id, String symbol, LocalDate date, SentimentScore score,
@@ -51,7 +62,7 @@ public record SentimentResult(
                            LocalDate analyzedAt, List<String> redFlags, List<String> catalysts,
                            String promptHash, String modelVersion, int articleCount) {
         this(id, symbol, date, score, summary, rawContent, confidence, analyzedAt,
-            redFlags, catalysts, promptHash, modelVersion, articleCount, "DEFAULT", List.of());
+            redFlags, catalysts, promptHash, modelVersion, articleCount, "DEFAULT", List.of(), null);
     }
     /**
      * Enum representing the different sentiment scores.
@@ -123,7 +134,8 @@ public record SentimentResult(
             null,
             0,
             "DEFAULT",
-            List.of()
+            List.of(),
+            null
         );
     }
 

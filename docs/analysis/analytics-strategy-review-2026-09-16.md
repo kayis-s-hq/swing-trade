@@ -352,7 +352,8 @@ aggregate accuracy. Model-value attribution against a non-LLM baseline remains o
 Top-level exceptions return a default NEUTRAL; LLM outages fall back to keyword sentiment, but
 sentiment rows persist `source = LLM | KEYWORD | DEFAULT`, and UNKNOWN is preserved. Accuracy
 records now retain that source, and predictive aggregates/IC exclude KEYWORD and DEFAULT rows while
-retaining legacy null-source rows. Correlating rows to audit request IDs remains open.
+retaining legacy null-source rows. New sentiment results now retain the UUID of their corresponding
+LLM audit attempt, including failed-attempt fallback results; legacy rows remain nullable.
 
 ### 23. PARTIALLY FIXED — Accuracy metrics not fed back; IC formula
 `SentimentAccuracyService` computes IC, ECE and regime accuracy, but nothing uses them. Scores are

@@ -158,6 +158,11 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   parameter maps are rejected fail-closed. Strategy/API tests passed; per-variant portfolio
   isolation and production data population remain open.
 
+- [x] LLM audit correlation verified 2026-09-17: persisted sentiment results now retain the UUID
+  of the corresponding LLM audit attempt across successful responses and keyword fallbacks, while
+  pre-existing rows remain compatible with a nullable value. Core/data/LLM tests, full verifier,
+  local PostgreSQL migration to v59, API health, and the sentiment-window endpoint checks passed.
+
 - [x] Strategy/risk follow-up verified 2026-09-16: bounded synthesis evaluation, two additional
   opt-in strategy families, portfolio sector/correlation rejection policies, and walk-forward
   parameter stability evaluation are implemented with focused coverage. Full affected backend tests
