@@ -428,7 +428,8 @@ public class SettingsController {
             logger.info("Stopping Pi llama-server via SSH...");
             piServerManager.stop();
             boolean running = piServerManager.isRunning();
-            Object lifecycleState = piServerManager.lifecycleStatus().get("state");
+            Map<String, Object> lifecycle = piServerManager.lifecycleStatus();
+            Object lifecycleState = lifecycle == null ? null : lifecycle.get("state");
             boolean stopped = !running && (lifecycleState == null || "STOPPED".equals(lifecycleState));
             result.put("success", stopped);
             result.put("running", running);
