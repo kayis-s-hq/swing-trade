@@ -22,6 +22,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -66,6 +67,28 @@ class DataIngestionServiceTest {
 
         verify(priceBandStore).save(band);
         verify(mockClient, Mockito.never()).fetchCandle("RELIANCE", date);
+    }
+
+    @Test
+    @DisplayName("processSingleStock ignores non-trading sessions")
+    void processSingleStockIgnoresWeekend() {
+        dataIngestionService.processSingleStock("RELIANCE", LocalDate.of(2026, 1, 4));
+
+        verifyNoInteractions(mockClient, candleRepository, priceBandStore);
+    }
+
+    @Test
+    @DisplayName("processSingleStock rejects invalid provider candle")
+    void processSingleStockRejectsInvalidCandle() {
+        LocalDate date = LocalDate.of(2026, 1, 5);
+        CandleData invalid = CandleData.of("RELIANCE", date, bd("10"), bd("9"), bd("8"), bd("9"), 100);
+        when(candleRepository.existsBySymbolAndDate("RELIANCE", date)).thenReturn(false);
+        when(mockClient.fetchCandle("RELIANCE", date)).thenReturn(invalid);
+
+        dataIngestionService.processSingleStock("RELIANCE", date);
+
+        verify(mockClient).fetchCandle("RELIANCE", date);
+        verify(candleRepository, Mockito.never()).insertIfAbsent(anyString(), eq(date), any(), any(), any(), any(), eq(100L), any());
     }
 
     @Test
@@ -252,6 +275,73 @@ class DataIngestionServiceTest {
         when(mockClient.fetchCandles("RELIANCE", monday, monday)).thenThrow(new IllegalStateException("down"));
         assert dataIngestionService.processStockDataWithOutcome("RELIANCE", monday, monday)
             .sourceOutcome().equals("TRANSIENT_SOURCE_FAILURE");
+    }
+
+    @Test
+    void processStockDataClassifiesEmptyAndAllInvalidResponses() {
+        LocalDate date = LocalDate.of(2026, 1, 5);
+        when(mockClient.fetchCandles("RELIANCE", date, date)).thenReturn(List.of());
+        DataIngestionService.BackfillOutcome empty = dataIngestionService.processStockDataWithOutcome(
+            "RELIANCE", date, date);
+        assert empty.sourceOutcome().equals("NO_USABLE_DATA");
+
+        CandleData invalid = CandleData.of("RELIANCE", date, bd("10"), bd("9"), bd("8"), bd("9"), 100);
+        when(mockClient.fetchCandles("RELIANCE", date, date)).thenReturn(List.of(invalid));
+        DataIngestionService.BackfillOutcome rejected = dataIngestionService.processStockDataWithOutcome(
+            "RELIANCE", date, date);
+        assert rejected.sourceOutcome().equals("INVALID_ROWS_REJECTED");
+        assert rejected.invalidRows() == 1;
+    }
+
+    @Test
+    void processStockDataReportsDuplicateInsertAsSkipped() {
+        LocalDate date = LocalDate.of(2026, 1, 5);
+        CandleData valid = CandleData.of("RELIANCE", date, bd("10"), bd("12"), bd("9"), bd("11"), 100);
+        when(mockClient.fetchCandles("RELIANCE", date, date)).thenReturn(List.of(valid));
+        when(candleRepository.insertIfAbsent(eq("RELIANCE"), eq(date), any(), any(), any(), any(), eq(100L), any()))
+            .thenReturn(0);
+        when(txTemplate.execute(any())).thenAnswer(invocation ->
+            ((org.springframework.transaction.support.TransactionCallback<Integer>) invocation.getArgument(0))
+                .doInTransaction(null));
+
+        DataIngestionService.BackfillOutcome outcome = dataIngestionService.processStockDataWithOutcome(
+            "RELIANCE", date, date);
+
+        assert outcome.fetchedRows() == 1;
+        assert outcome.savedRows() == 0;
+        assert outcome.invalidRows() == 0;
+        assert outcome.sourceOutcome().equals("DATA_RECEIVED");
+    }
+
+    @Test
+    void dataQualityReportsPriceAnomaliesAndTrailingGap() {
+        LocalDate monday = LocalDate.of(2026, 1, 5);
+        OhlcvCandleEntity invalidHigh = candle("RELIANCE", monday);
+        invalidHigh.setHighPrice(bd("90"));
+        when(candleRepository.findBySymbolAndDateRange(eq("RELIANCE"), eq(monday),
+            eq(monday.plusDays(2)), any())).thenReturn(List.of(invalidHigh));
+
+        DataIngestionService.DataQualityReport report = dataIngestionService.validateDataQuality(
+            "RELIANCE", monday, monday.plusDays(2));
+
+        assert report.getAnomalies().size() == 1;
+        assert report.getAnomalies().get(0).getType().equals("High price invalid");
+        assert report.getGaps().size() == 1;
+        assert report.getGaps().get(0).getStartDate().equals(monday.plusDays(1));
+        assert report.hasIssues();
+        assert report.isCritical();
+    }
+
+    @Test
+    void fetchLatestAndRepairGapsStopsWhenHistoryIsUnavailable() {
+        LocalDate latest = LocalDate.of(2026, 1, 5);
+        when(candleRepository.existsBySymbolAndDate("RELIANCE", latest)).thenReturn(true);
+        when(candleRepository.findEarliestBySymbol("RELIANCE")).thenReturn(Optional.empty());
+
+        String summary = dataIngestionService.fetchLatestAndRepairGaps("RELIANCE", latest);
+
+        assert summary.contains("no historical range available");
+        verify(mockClient, Mockito.never()).fetchCandles(anyString(), any(LocalDate.class), any(LocalDate.class));
     }
 
     @Test
