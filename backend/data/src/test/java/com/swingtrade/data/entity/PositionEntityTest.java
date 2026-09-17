@@ -22,7 +22,7 @@ class PositionEntityTest {
         entity.setAveragePrice(BigDecimal.TEN); entity.setUnrealizedPnL(BigDecimal.ONE);
         entity.setRealizedPnL(BigDecimal.ZERO); entity.setMarginUtilized(BigDecimal.valueOf(100));
         entity.setPartialExitTaken(true); entity.setEntryTime(now); entity.setExitTime(null);
-        entity.setExitReason(null);
+        entity.setExitReason(null); entity.setPortfolioId("variant-rsi-1");
         assertThat(entity.getId()).isEqualTo(4L); assertThat(entity.getSymbol()).isEqualTo("ABC");
         assertThat(entity.getBrokerType()).isEqualTo("PAPER"); assertThat(entity.getEntryPrice()).isEqualByComparingTo("10");
         assertThat(entity.getEntryDate()).isEqualTo(date); assertThat(entity.getQuantity()).isEqualTo(10);
@@ -34,6 +34,7 @@ class PositionEntityTest {
         assertThat(entity.getAveragePrice()).isEqualByComparingTo("10"); assertThat(entity.getUnrealizedPnL()).isEqualByComparingTo("1");
         assertThat(entity.getRealizedPnL()).isEqualByComparingTo("0"); assertThat(entity.getMarginUtilized()).isEqualByComparingTo("100");
         assertThat(entity.isPartialExitTaken()).isTrue(); assertThat(entity.getEntryTime()).isEqualTo(now);
+        assertThat(entity.getPortfolioId()).isEqualTo("variant-rsi-1");
 
         var domain = entity.toDomain();
         assertThat(domain.symbol()).isEqualTo("ABC");
