@@ -32,7 +32,11 @@ public class PaperTradingPortfolioEntity {
     @Version
     private Integer version;
 
-    @Column(name = "portfolio_id", length = 32)
+    // Widened from 32 to 40 by V47__strategy_provenance.sql to match strategy_config's
+    // variant_id length. Must stay in sync with that migration - a mismatched length here
+    // makes Hibernate's ddl-auto=update (dev/local profile) silently narrow the real DB
+    // column back to varchar(32) on every startup, undoing the migration.
+    @Column(name = "portfolio_id", length = 40)
     private String portfolioId;
 
     @Column(name = "initial_capital", precision = 15, scale = 2)

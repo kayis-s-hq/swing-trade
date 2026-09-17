@@ -65,10 +65,12 @@ public class PaperTradingOrderEntity {
     private String signalId;
 
     // Maps the previously-unmapped paper_trading_orders.portfolio_id column (added by
-    // V47__strategy_provenance.sql, DB default 'default'). Lets every order raised for a
-    // strategy variant's own execution be tagged with that variant's portfolio id, so
-    // per-portfolio order/trade history can be queried independently (plan §7 Phase 5).
-    @Column(name = "portfolio_id", length = 32)
+    // V47__strategy_provenance.sql as VARCHAR(40), DB default 'default'). Lets every order
+    // raised for a strategy variant's own execution be tagged with that variant's portfolio
+    // id, so per-portfolio order/trade history can be queried independently (plan §7 Phase
+    // 5). length must stay 40, matching the migration - a mismatch here makes Hibernate's
+    // ddl-auto=update (dev/local profile) silently narrow the real DB column on startup.
+    @Column(name = "portfolio_id", length = 40)
     private String portfolioId;
 
     public PaperTradingOrderEntity() {}
