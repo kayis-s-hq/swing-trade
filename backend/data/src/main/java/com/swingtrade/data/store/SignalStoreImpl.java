@@ -11,6 +11,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import com.swingtrade.domain.SignalStrategyMetadata;
 
 @Service
 public class SignalStoreImpl implements SignalStore {
@@ -57,6 +61,16 @@ public class SignalStoreImpl implements SignalStore {
     @Override
     public Optional<String> findStrategyById(Long signalId) {
         return signalId == null ? Optional.empty() : repository.findStrategyById(signalId);
+    }
+
+    @Override
+    public Map<Long, SignalStrategyMetadata> findStrategyMetadataByIds(List<Long> signalIds) {
+        if (signalIds == null || signalIds.isEmpty()) return Map.of();
+        return repository.findAllById(signalIds.stream().filter(Objects::nonNull).distinct().toList()).stream()
+                .filter(entity -> entity.getId() != null)
+                .collect(Collectors.toMap(SignalEntity::getId,
+                        entity -> new SignalStrategyMetadata(entity.getStrategy(), entity.getStrategyVersion()),
+                        (left, right) -> left));
     }
 
     @Override
