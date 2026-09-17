@@ -244,8 +244,15 @@ public class YahooFinanceClient implements MarketDataClient {
             JsonNode adjArr = result.get(0).path("indicators").path("adjclose")
                 .isArray() && result.get(0).path("indicators").path("adjclose").size() > 0
                     ? result.get(0).path("indicators").path("adjclose").get(0).path("adjclose") : null;
-            double closeVal = closeArr.isNull() ? 0 : closeArr.get(0).asDouble(0);
-            if (closeVal == 0) return null;
+            if (!closeArr.isArray() || closeArr.size() == 0 || closeArr.get(0).isNull()) {
+                logger.warn("Yahoo returned no close values for {} on {}", symbol, date);
+                return null;
+            }
+            double closeVal = closeArr.get(0).asDouble(0);
+            if (!Double.isFinite(closeVal) || closeVal == 0) {
+                logger.warn("Yahoo returned an unusable close value for {} on {}: {}", symbol, date, closeVal);
+                return null;
+            }
             long volume = volumeArr.isNull() ? 0 : volumeArr.get(0).asLong(0);
             if (volume == 0) return null;
             return CandleData.of(symbol, date,

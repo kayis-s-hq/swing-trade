@@ -35,6 +35,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   attachment download headers without building the complete export in memory. Controller
   coverage and `./bin/verify-changes` passed.
 
+- [x] Yahoo single-candle observability improved 2026-09-17: empty, null, zero, and
+  non-finite close responses now emit an explicit symbol/date warning before being rejected.
+  The Yahoo client suite and `./bin/verify-changes` passed.
+
 - [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
   affected backend suite passed; the foreground local API stayed healthy through
   startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL
