@@ -163,6 +163,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   pre-existing rows remain compatible with a nullable value. Core/data/LLM tests, full verifier,
   local PostgreSQL migration to v59, API health, and the sentiment-window endpoint checks passed.
 
+- [x] LLM audit telemetry corrected 2026-09-17: audit rows now record the actual `temperature=0.0`
+  request setting and mark failed LLM attempts that lead to keyword fallback as `fallback_used`.
+  LLM/data tests and `./bin/verify-changes` passed.
+
 - [x] Strategy/risk follow-up verified 2026-09-16: bounded synthesis evaluation, two additional
   opt-in strategy families, portfolio sector/correlation rejection policies, and walk-forward
   parameter stability evaluation are implemented with focused coverage. Full affected backend tests

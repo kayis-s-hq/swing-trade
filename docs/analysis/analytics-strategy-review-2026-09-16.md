@@ -338,7 +338,8 @@ near-duplicate normalized headlines, and only then applies the bounded article b
 semantic deduplication and richer relevance scoring remain open.
 
 ### 30. PARTIALLY FIXED — No determinism or grounding
-LLM defaults and sentiment calls now request temperature 0, prompts require article-index citations,
+LLM defaults and sentiment calls now request temperature 0, and audit rows now record the actual
+zero temperature plus whether a failed attempt triggered fallback. Prompts require article-index citations,
 and uncited or out-of-range flags/catalysts are removed before persistence. Provider-level
 nondeterminism, multi-sample disagreement scoring, and grounding for every synthesized statement remain open.
 

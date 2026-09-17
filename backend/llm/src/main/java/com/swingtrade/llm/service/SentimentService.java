@@ -407,18 +407,18 @@ public class SentimentService {
                         "No valid response from LLM", 0.0, List.of(), List.of(), "DEFAULT");
                 persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
                         promptHash, messages, llmResponse, empty, "SUCCESS", null, maxResponseTokens,
-                        startedAt, latencyMs);
+                        false, startedAt, latencyMs);
                 return empty;
             }
             SentimentOutput parsed = sentimentAnalyzer.parseResponse(llmResponse, newsContent.size());
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
                     promptHash, messages, llmResponse, parsed, "SUCCESS", null, maxResponseTokens,
-                    startedAt, latencyMs);
+                    false, startedAt, latencyMs);
             return parsed;
         } catch (Exception e) {
             String errorDetail = LlmErrorUtils.describeError(e);
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion, promptHash,
-                    messages, null, null, "FAILED", errorDetail, maxResponseTokens, startedAt,
+                    messages, null, null, "FAILED", errorDetail, maxResponseTokens, true, startedAt,
                     System.currentTimeMillis() - llmStart);
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), false);
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
@@ -500,14 +500,15 @@ public class SentimentService {
                               String provider, String model,
                               String promptHash, List<Map<String, String>> messages,
                               String rawResponse, SentimentOutput parsed, String status,
-                              String error, int maxResponseTokens, OffsetDateTime startedAt, long latencyMs) {
+                              String error, int maxResponseTokens, boolean fallbackUsed,
+                              OffsetDateTime startedAt, long latencyMs) {
         if (auditRepository == null) return;
         String score = parsed == null ? null : parsed.getSentiment().name();
         Double confidence = parsed == null ? null : parsed.getConfidence();
         auditRepository.save(new LlmAnalysisAuditEntity(requestId, symbol, analysisDate,
                 provider, model, promptHash, messages.get(0).get("content"),
                 messages.get(1).get("content"), rawResponse, score, confidence, status,
-                    error, false, maxResponseTokens, 0.3, startedAt,
+                    error, fallbackUsed, maxResponseTokens, 0.0, startedAt,
                 OffsetDateTime.now(ZoneOffset.UTC), latencyMs));
     }
 
