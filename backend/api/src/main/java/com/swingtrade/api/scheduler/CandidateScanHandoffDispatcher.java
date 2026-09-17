@@ -33,6 +33,12 @@ public class CandidateScanHandoffDispatcher {
                     var job = existingJob.get();
                     scan.setOrchestrationJobRunId(job.getRunId());
                     if ("RUNNING".equals(job.getStatus())) {
+                        if (orchestrator.findActiveRun()
+                                .map(active -> active.runId().equals(job.getRunId()))
+                                .orElse(false)) {
+                            continue;
+                        }
+                        orchestrator.cancelRun(job.getRunId());
                         continue;
                     } else if ("COMPLETED".equals(job.getStatus())) {
                         scan.setOrchestrationStatus("STARTED");
@@ -55,6 +61,9 @@ public class CandidateScanHandoffDispatcher {
                 } catch (JobOrchestratorService.ConcurrentRunException ignored) {
                     return;
                 } catch (Exception e) {
+                    jobRuns.findFirstByCandidateScanRunIdOrderByStartedAtDesc(scan.getRunId())
+                        .filter(job -> "RUNNING".equals(job.getStatus()))
+                        .ifPresent(job -> orchestrator.cancelRun(job.getRunId()));
                     scan.setOrchestrationStatus("PENDING"); scan.setOrchestrationError(e.getMessage()); runs.save(scan);
                     logger.warn("Candidate scan handoff {} failed: {}", scan.getRunId(), e.getMessage());
                 }
