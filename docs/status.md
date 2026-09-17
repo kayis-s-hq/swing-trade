@@ -30,6 +30,11 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
   and returns the existing gap/anomaly report. Controller tests and `./bin/verify-changes`
   passed.
 
+- [x] Historical OHLCV export added 2026-09-17: `GET /api/data/export` supports paged
+  CSV/JSON output for selected symbols or the full candle store, bounded date ranges, and
+  attachment download headers without building the complete export in memory. Controller
+  coverage and `./bin/verify-changes` passed.
+
 - [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
   affected backend suite passed; the foreground local API stayed healthy through
   startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL
