@@ -103,6 +103,18 @@ public interface SignalStore {
     List<Signal> findByDateRange(LocalDate startDate, LocalDate endDate);
 
     /**
+     * Finds every signal recorded for a specific date and variant, regardless of symbol - used
+     * by the nightly live-vs-backtest parity check (plan §7.3) to read what the live SIGNAL
+     * stage actually persisted for a variant on a given day. Read-only: the parity check never
+     * writes to the {@code signals} table.
+     *
+     * @param date     the date
+     * @param strategy the variant id (the {@code strategy} column)
+     * @return signals recorded for that date/variant
+     */
+    List<Signal> findByDateAndStrategy(LocalDate date, String strategy);
+
+    /**
      * Finds signals within a date range filtered by type (DB-level filtering).
      *
      * @param startDate start date (inclusive)
