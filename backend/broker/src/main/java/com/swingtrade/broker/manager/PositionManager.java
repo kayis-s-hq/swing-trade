@@ -262,13 +262,19 @@ public class PositionManager {
             throw new IllegalStateException("Position is not open: " + positionId);
         }
 
-        if (exitRatio.compareTo(BigDecimal.ZERO) <= 0 || exitRatio.compareTo(BigDecimal.ONE) > 1) {
+        if (exitRatio == null || exitRatio.compareTo(BigDecimal.ZERO) <= 0
+                || exitRatio.compareTo(BigDecimal.ONE) > 0) {
             throw new IllegalArgumentException("Exit ratio must be between 0 and 1: " + exitRatio);
         }
 
         Integer originalQuantity = position.quantity();
-        BigDecimal exitQuantity = BigDecimal.valueOf(originalQuantity).multiply(exitRatio);
-        Integer remainingQuantity = exitQuantity.setScale(0, BigDecimal.ROUND_DOWN).intValue();
+        int exitedShares = BigDecimal.valueOf(originalQuantity).multiply(exitRatio)
+                .setScale(0, java.math.RoundingMode.DOWN).intValue();
+        if (exitedShares <= 0) {
+            throw new IllegalArgumentException("Exit ratio must sell at least one share: " + exitRatio);
+        }
+        int remainingShares = originalQuantity - exitedShares;
+        BigDecimal exitQuantity = BigDecimal.valueOf(exitedShares);
 
         // Calculate realized P&L from partial exit
         BigDecimal realizedPnL = calculatePartialExitPnL(position, exitQuantity, exitPrice);
@@ -276,11 +282,11 @@ public class PositionManager {
 
         // Update quantity and track realized P&L
         Position updated = position.withQuantityAndRealizedPnL(
-            remainingQuantity,
+            remainingShares,
             position.realizedPnL().add(realizedPnL)
         ).withValuation(position.currentPrice(), currentUnrealized);
 
-        if (remainingQuantity == 0) {
+        if (remainingShares == 0) {
             // Full exit
             updated = updated.close(
                 PositionStatus.CLOSED,
@@ -295,7 +301,7 @@ public class PositionManager {
         } else {
             positions.put(positionId, updated);
             logger.info("Partial exit of position {}: sold {} at {}, remaining {} (Exit P&L: {})",
-                positionId, exitQuantity, exitPrice, remainingQuantity, realizedPnL);
+                positionId, exitQuantity, exitPrice, remainingShares, realizedPnL);
         }
 
         return updated;

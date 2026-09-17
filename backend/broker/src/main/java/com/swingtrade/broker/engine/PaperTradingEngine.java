@@ -449,8 +449,20 @@ public class PaperTradingEngine implements TradingService {
     public Position partialExitPosition(String positionId, BigDecimal exitRatio, BigDecimal exitPrice) {
         synchronized (portfolioLock) {
             // Capture quantity before partial exit (this is the original at call time)
-            BigDecimal currentQty = BigDecimal.valueOf(positionManager.getPosition(positionId).quantity());
-            BigDecimal exitedQuantity = currentQty.multiply(exitRatio);
+            Position currentPosition = positionManager.getPosition(positionId);
+            if (currentPosition == null) {
+                throw new IllegalArgumentException("Position not found: " + positionId);
+            }
+            if (exitRatio == null || exitRatio.compareTo(BigDecimal.ZERO) <= 0
+                    || exitRatio.compareTo(BigDecimal.ONE) > 0) {
+                throw new IllegalArgumentException("Exit ratio must be between 0 and 1: " + exitRatio);
+            }
+            BigDecimal currentQty = BigDecimal.valueOf(currentPosition.quantity());
+            BigDecimal exitedQuantity = currentQty.multiply(exitRatio)
+                .setScale(0, RoundingMode.DOWN);
+            if (exitedQuantity.signum() <= 0) {
+                throw new IllegalArgumentException("Exit ratio must sell at least one share: " + exitRatio);
+            }
 
             Position position = positionManager.partialExitPosition(positionId, exitRatio, exitPrice);
 

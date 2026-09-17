@@ -21,6 +21,10 @@ The development database was intentionally reset on 2026-08-29 for a clean verif
 
 ## Data-integrity remediation
 
+- [x] Partial-exit accounting corrected 2026-09-17: broker exits now sell whole shares,
+  retain the actual remainder, reject ratios above 100%, and calculate realized P&L/cash
+  from executed quantity. The targeted broker suite and `./bin/verify-changes` passed.
+
 - [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
   affected backend suite passed; the foreground local API stayed healthy through
   startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL
