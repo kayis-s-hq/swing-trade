@@ -455,7 +455,7 @@ Dismissed (not bugs): C1 (param order safe), C3 (.env not in git), C5 (backtest 
 | Finding | Priority | Status | Notes |
 |---------|----------|--------|-------|
 | M1: DailyLossCircuitBreaker timezone | P3 | ✅ Done | `MARKET_ZONE = ZoneId.of("Asia/Kolkata")` added, all 8 unqualified `LocalDate/LocalDateTime.now()` calls fixed, test added |
-| M9: Position god object (23 fields) | P3 | OPEN | Mis-scoped — the 23-field type is `backend/core/domain/Position.java` (not the API DTO, which is already lean `PositionResponse`). A split there is a cross-module refactor touching broker/core/data, not a boundary-layer change — needs its own scoped task. Also found: unused dead-code `api/dto/Position.java`, safe to delete separately. |
+| M9: Position god object (23 fields) | P3 | ✅ Done | `backend/core/domain/Position.java` is grouped into `PositionEntry`, `PositionRisk`, `PositionValuation`, and `PositionExit`, with compatibility accessors for existing callers; the obsolete API DTO is absent. Core position tests pass. |
 | M10: VARCHAR(10) symbols | P3 | ✅ Done | New migration `V36__widen_symbol_column.sql` widens `symbol` to VARCHAR(20) across all 9 tables; V1 untouched |
 | M13: No rate limiting | P3 | ✅ Done | `@RateLimiter` on CandidateScan/Analysis/AnalysisOrchestration/SentimentApi trigger endpoints, 5 req/min fail-fast config, 429 handler added |
 | M28: No pagination on performance | P3 | Dismissed (false positive) | `PerformanceResponse` is scalar-only (returns, Sharpe/Sortino, win rate, streaks) — no unbounded list to paginate |
