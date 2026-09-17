@@ -22,11 +22,17 @@ import com.swingtrade.domain.store.WatchlistStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.BacktestResultStore;
 import com.swingtrade.domain.store.LlmAnalysisResultStore;
+import com.swingtrade.domain.ShadowPositionSnapshot;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
+import com.swingtrade.strategy.ExitDecision;
+import com.swingtrade.strategy.MarketContext;
+import com.swingtrade.strategy.OpenPosition;
+import com.swingtrade.strategy.StrategyParamsView;
+import com.swingtrade.strategy.UniformExitEvaluator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +45,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -646,10 +654,10 @@ public class JobOrchestratorService {
         String championVariantId = strategyConfigStore.findCurrentChampion()
             .map(StrategyConfig::variantId)
             .orElse(null);
-        List<String> activeVariantIds = strategyConfigStore.findAllCurrent().stream()
+        List<StrategyConfig> activeConfigs = strategyConfigStore.findAllCurrent().stream()
             .filter(StrategyConfig::isActive)
-            .map(StrategyConfig::variantId)
             .toList();
+        List<String> activeVariantIds = activeConfigs.stream().map(StrategyConfig::variantId).toList();
 
         if (activeVariantIds.isEmpty()) {
             // No active variants configured at all - preserve pre-multi-strategy behaviour.
@@ -664,8 +672,23 @@ public class JobOrchestratorService {
         }
 
         StringBuilder summary = new StringBuilder();
-        for (String variantId : activeVariantIds) {
+        for (StrategyConfig config : activeConfigs) {
+            String variantId = config.variantId();
             boolean isChampion = variantId.equals(championVariantId);
+
+            // Exit evaluation for this variant's own open shadow position on this symbol, if
+            // any (plan §7.4 gap-fill) - runs regardless of whether there are new BUY signals to
+            // execute this run, and is isolated per variant exactly like BUY execution below: one
+            // variant's exit failure must never block another's or this stage as a whole.
+            if (!isChampion) {
+                try {
+                    evaluateShadowExit(symbol, config);
+                } catch (Exception e) {
+                    logger.error("Shadow exit evaluation failed for variant {} on {}: {}",
+                        variantId, symbol, e.getMessage(), e);
+                }
+            }
+
             List<Signal> unprocessed;
             try {
                 unprocessed = signalStore.findUnprocessedByStrategy(variantId).stream()
@@ -692,6 +715,82 @@ public class JobOrchestratorService {
             summary.append(variantId).append(": ").append(variantSummary);
         }
         return summary.length() == 0 ? "no active variant signals to execute" : summary.toString();
+    }
+
+    /**
+     * Evaluates and, if triggered, simulates an exit for {@code config}'s variant's own open
+     * shadow position on {@code symbol} (plan §7.4 gap-fill: SHADOW variants only ever BUY,
+     * never exit, so the promotion-eligibility checker had no closed trades to score). Reuses
+     * the same {@link MarketContext}/{@link UniformExitEvaluator} exit-precedence logic already
+     * used by the {@code SignalStrategy} SPI (Phase 1) rather than duplicating it. A no-op if
+     * this variant has no open position on this symbol, or if there isn't enough candle history
+     * to build a context.
+     */
+    private void evaluateShadowExit(String symbol, StrategyConfig config) {
+        if (paperPortfolioService == null) {
+            return;
+        }
+        String portfolioId = config.variantId();
+        Optional<ShadowPositionSnapshot> openPosition =
+            paperPortfolioService.findOpenShadowPosition(portfolioId, symbol);
+        if (openPosition.isEmpty()) {
+            return;
+        }
+        ShadowPositionSnapshot snapshot = openPosition.get();
+
+        List<OhlcvCandle> candles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 100);
+        if (candles.isEmpty()) {
+            logger.debug("No candles for {} to evaluate shadow exit for variant {}", symbol, portfolioId);
+            return;
+        }
+        List<OhlcvCandle> chronological = new ArrayList<>(candles);
+        Collections.reverse(chronological);
+
+        MarketContext ctx;
+        try {
+            ctx = MarketContext.of(symbol, chronological);
+        } catch (RuntimeException e) {
+            logger.warn("Could not build MarketContext for {} shadow exit ({}): {}",
+                symbol, portfolioId, e.getMessage());
+            return;
+        }
+        int barIndex = ctx.barCount() - 1;
+
+        int entryIndex = 0;
+        for (int i = 0; i < chronological.size(); i++) {
+            if (chronological.get(i).date().equals(snapshot.entryDate())) {
+                entryIndex = i;
+                break;
+            }
+        }
+
+        OpenPosition position = OpenPosition.open(entryIndex, snapshot.entryDate(), snapshot.entryPrice(),
+            snapshot.stopLoss(), snapshot.target(), snapshot.quantity())
+            .advanceHighWaterMark(snapshot.highWaterMark());
+        StrategyParamsView params = StrategyParamsView.of(config.params());
+        MarketContext.View view = ctx.view(barIndex);
+
+        ExitDecision decision;
+        try {
+            // No per-strategy signal-exit hook is wired here (SIGNAL_EXIT is skipped) - this
+            // mirrors the SIGNAL stage's own documented simplification for the paper-trading
+            // phase; STOP_LOSS/TARGET_HIT/TRAILING/TIME_STOP are still fully evaluated.
+            decision = UniformExitEvaluator.evaluate(view, position, params, false);
+        } catch (RuntimeException e) {
+            logger.warn("Exit evaluation failed for variant {} on {}: {}", portfolioId, symbol, e.getMessage(), e);
+            return;
+        }
+
+        if (decision.exit()) {
+            boolean closed = paperPortfolioService.executeVariantExit(
+                portfolioId, symbol, decision.exitPrice(), decision.reason().name());
+            if (closed) {
+                logger.info("Shadow exit for variant {} on {}: {} at {}",
+                    portfolioId, symbol, decision.reason(), decision.exitPrice());
+            }
+        } else {
+            paperPortfolioService.advanceShadowPositionHighWaterMark(portfolioId, symbol, view.close());
+        }
     }
 
     /**

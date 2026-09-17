@@ -1054,6 +1054,89 @@ class JobOrchestratorServiceTest {
         }
 
         @Test
+        @DisplayName("A SHADOW variant's open position hitting its stop is exited (plan §7.4 gap-fill)")
+        void shadowVariantOpenPositionHitsStopLossAndIsExited() throws InterruptedException {
+            String shadowVariant = "PULLBACK_B";
+            com.swingtrade.domain.StrategyConfig shadow = new com.swingtrade.domain.StrategyConfig(
+                2L, shadowVariant, 1, "PULLBACK",
+                java.util.Map.of("trailAtrMult", java.math.BigDecimal.ZERO, "atrPeriod", 14, "maxHoldDays", 10),
+                java.util.Map.of(), "hash2", com.swingtrade.domain.StrategyMode.SHADOW,
+                new java.math.BigDecimal("500000"), true, null, null, LocalDateTime.now());
+            com.swingtrade.domain.StrategyConfig champion = new com.swingtrade.domain.StrategyConfig(
+                1L, CHAMPION_VARIANT, 1, "BREAKOUT", java.util.Map.of(), java.util.Map.of(), "hash",
+                com.swingtrade.domain.StrategyMode.CHAMPION, new java.math.BigDecimal("500000"),
+                true, null, null, LocalDateTime.now());
+            when(strategyConfigStore.findAllCurrent()).thenReturn(List.of(champion, shadow));
+
+            when(signalStore.findUnprocessedByStrategy(CHAMPION_VARIANT)).thenReturn(List.of(championSignal));
+            when(signalStore.findUnprocessedByStrategy(shadowVariant)).thenReturn(List.of());
+            when(signalStore.markProcessedExcludingStrategies(SYMBOL, List.of(CHAMPION_VARIANT, shadowVariant)))
+                .thenReturn(0);
+            when(tradingService.queueSignal(eq(championSignal), eq(latestCandle.close())))
+                .thenReturn(new com.swingtrade.domain.Order());
+
+            // latestCandle's low (98) breaches the position's stop (99) - candle used both for
+            // MarketContext construction (via candleStore.findTopBySymbolOrderByDateDesc, already
+            // stubbed to return this single candle) and for the day evaluated.
+            com.swingtrade.domain.ShadowPositionSnapshot openPosition = new com.swingtrade.domain.ShadowPositionSnapshot(
+                shadowVariant, SYMBOL, latestCandle.date(), new java.math.BigDecimal("100"),
+                new java.math.BigDecimal("99"), new java.math.BigDecimal("120"), 10,
+                new java.math.BigDecimal("100"));
+            when(paperPortfolioService.findOpenShadowPosition(shadowVariant, SYMBOL))
+                .thenReturn(Optional.of(openPosition));
+            when(paperPortfolioService.executeVariantExit(eq(shadowVariant), eq(SYMBOL), any(), eq("STOP_LOSS")))
+                .thenReturn(true);
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            verify(paperPortfolioService).executeVariantExit(eq(shadowVariant), eq(SYMBOL), any(), eq("STOP_LOSS"));
+            verify(paperPortfolioService, never())
+                .executeVariantExit(eq(CHAMPION_VARIANT), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("A SHADOW variant's open position past maxHoldDays is time-exited (plan §7.4 gap-fill)")
+        void shadowVariantOpenPositionHitsMaxHoldDaysAndIsExited() throws InterruptedException {
+            String shadowVariant = "PULLBACK_B";
+            com.swingtrade.domain.StrategyConfig shadow = new com.swingtrade.domain.StrategyConfig(
+                2L, shadowVariant, 1, "PULLBACK",
+                java.util.Map.of("trailAtrMult", java.math.BigDecimal.ZERO, "atrPeriod", 14, "maxHoldDays", 0),
+                java.util.Map.of(), "hash2", com.swingtrade.domain.StrategyMode.SHADOW,
+                new java.math.BigDecimal("500000"), true, null, null, LocalDateTime.now());
+            com.swingtrade.domain.StrategyConfig champion = new com.swingtrade.domain.StrategyConfig(
+                1L, CHAMPION_VARIANT, 1, "BREAKOUT", java.util.Map.of(), java.util.Map.of(), "hash",
+                com.swingtrade.domain.StrategyMode.CHAMPION, new java.math.BigDecimal("500000"),
+                true, null, null, LocalDateTime.now());
+            when(strategyConfigStore.findAllCurrent()).thenReturn(List.of(champion, shadow));
+
+            when(signalStore.findUnprocessedByStrategy(CHAMPION_VARIANT)).thenReturn(List.of(championSignal));
+            when(signalStore.findUnprocessedByStrategy(shadowVariant)).thenReturn(List.of());
+            when(signalStore.markProcessedExcludingStrategies(SYMBOL, List.of(CHAMPION_VARIANT, shadowVariant)))
+                .thenReturn(0);
+            when(tradingService.queueSignal(eq(championSignal), eq(latestCandle.close())))
+                .thenReturn(new com.swingtrade.domain.Order());
+
+            // Stop/target far from the candle's range so only the time-stop (maxHoldDays=0,
+            // entryIndex == barIndex, so bars held == 0 >= 0) can fire.
+            com.swingtrade.domain.ShadowPositionSnapshot openPosition = new com.swingtrade.domain.ShadowPositionSnapshot(
+                shadowVariant, SYMBOL, latestCandle.date(), new java.math.BigDecimal("100"),
+                new java.math.BigDecimal("1"), new java.math.BigDecimal("1000"), 10,
+                new java.math.BigDecimal("100"));
+            when(paperPortfolioService.findOpenShadowPosition(shadowVariant, SYMBOL))
+                .thenReturn(Optional.of(openPosition));
+            when(paperPortfolioService.executeVariantExit(eq(shadowVariant), eq(SYMBOL), any(), eq("TIME_STOP")))
+                .thenReturn(true);
+
+            service.startRun(JobRun.TriggerType.SCHEDULED);
+
+            assertThat(runCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            verify(paperPortfolioService).executeVariantExit(eq(shadowVariant), eq(SYMBOL), any(), eq("TIME_STOP"));
+        }
+
+        @Test
         @DisplayName("A SHADOW variant's execution failure does not block the CHAMPION's own execution")
         void oneVariantFailureDoesNotBlockAnother() throws InterruptedException {
             String shadowVariant = "PULLBACK_B";

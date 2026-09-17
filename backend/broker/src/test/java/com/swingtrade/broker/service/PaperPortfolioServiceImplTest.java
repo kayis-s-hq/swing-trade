@@ -3,9 +3,13 @@ package com.swingtrade.broker.service;
 import com.swingtrade.broker.entity.PaperTradingOrderEntity;
 import com.swingtrade.broker.entity.PaperTradingPortfolioEntity;
 import com.swingtrade.broker.entity.PaperTradingSnapshotEntity;
+import com.swingtrade.broker.entity.ShadowPositionEntity;
 import com.swingtrade.broker.repository.PaperTradingOrderRepository;
 import com.swingtrade.broker.repository.PaperTradingPortfolioRepository;
 import com.swingtrade.broker.repository.PaperTradingSnapshotRepository;
+import com.swingtrade.broker.repository.ShadowPositionRepository;
+import com.swingtrade.domain.ShadowClosedTrade;
+import com.swingtrade.domain.ShadowPositionSnapshot;
 import com.swingtrade.domain.Signal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -38,12 +42,161 @@ class PaperPortfolioServiceImplTest {
     private PaperTradingStateService defaultPortfolioStateService;
     @Mock
     private PaperTradingOrderRepository orderRepo;
+    @Mock
+    private ShadowPositionRepository shadowPositionRepo;
 
     private PaperPortfolioServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new PaperPortfolioServiceImpl(portfolioRepo, snapshotRepo, defaultPortfolioStateService, orderRepo);
+        service = new PaperPortfolioServiceImpl(portfolioRepo, snapshotRepo, defaultPortfolioStateService, orderRepo,
+            shadowPositionRepo);
+    }
+
+    private ShadowPositionEntity openPosition(String portfolioId, String symbol, BigDecimal entryPrice,
+                                               BigDecimal stopLoss, BigDecimal target, int quantity) {
+        ShadowPositionEntity entity = new ShadowPositionEntity();
+        entity.setId(1L);
+        entity.setPortfolioId(portfolioId);
+        entity.setSymbol(symbol);
+        entity.setEntryDate(java.time.LocalDate.of(2026, 1, 1));
+        entity.setEntryPrice(entryPrice);
+        entity.setStopLoss(stopLoss);
+        entity.setTarget(target);
+        entity.setQuantity(quantity);
+        entity.setHighWaterMark(entryPrice);
+        entity.setStatus(ShadowPositionEntity.STATUS_OPEN);
+        return entity;
+    }
+
+    @Nested
+    class ExecuteVariantExit {
+
+        @Test
+        void closesOpenPositionAndCreditsCapital() {
+            ShadowPositionEntity position = openPosition("PULLBACK_B", "TCS",
+                new BigDecimal("100.00"), new BigDecimal("95.00"), new BigDecimal("110.00"), 100);
+            when(shadowPositionRepo.findByPortfolioIdAndSymbolAndStatus("PULLBACK_B", "TCS",
+                ShadowPositionEntity.STATUS_OPEN)).thenReturn(Optional.of(position));
+
+            PaperTradingPortfolioEntity portfolio = new PaperTradingPortfolioEntity();
+            portfolio.setPortfolioId("PULLBACK_B");
+            portfolio.setCurrentCapital(new BigDecimal("240000.00"));
+            portfolio.setTotalRealizedPnl(BigDecimal.ZERO);
+            portfolio.setOpenPositionCount(1);
+            when(portfolioRepo.findByPortfolioId("PULLBACK_B")).thenReturn(Optional.of(portfolio));
+
+            boolean closed = service.executeVariantExit("PULLBACK_B", "TCS", new BigDecimal("94.00"), "STOP_LOSS");
+
+            assertThat(closed).isTrue();
+            assertThat(position.getStatus()).isEqualTo(ShadowPositionEntity.STATUS_CLOSED);
+            assertThat(position.getExitReason()).isEqualTo("STOP_LOSS");
+
+            ArgumentCaptor<PaperTradingPortfolioEntity> portfolioCaptor =
+                ArgumentCaptor.forClass(PaperTradingPortfolioEntity.class);
+            verify(portfolioRepo).save(portfolioCaptor.capture());
+            // proceeds = 94*100=9400, commission=100*0.05=5, net=9395; capital 240000+9395=249395
+            assertThat(portfolioCaptor.getValue().getCurrentCapital()).isEqualByComparingTo("249395.00");
+            assertThat(portfolioCaptor.getValue().getOpenPositionCount()).isEqualTo(0);
+            // pnl = net(9395) - entryValue(100*100=10000) = -605
+            assertThat(position.getPnl()).isEqualByComparingTo("-605.00");
+
+            verify(orderRepo).save(any(PaperTradingOrderEntity.class));
+        }
+
+        @Test
+        void isIdempotentWhenPositionAlreadyClosed() {
+            when(shadowPositionRepo.findByPortfolioIdAndSymbolAndStatus("PULLBACK_B", "TCS",
+                ShadowPositionEntity.STATUS_OPEN)).thenReturn(Optional.empty());
+
+            boolean closed = service.executeVariantExit("PULLBACK_B", "TCS", new BigDecimal("94.00"), "STOP_LOSS");
+
+            assertThat(closed).isFalse();
+            verify(portfolioRepo, never()).save(any());
+            verify(orderRepo, never()).save(any());
+        }
+
+        @Test
+        void twoVariantsExitIndependentlyWithoutCrossContamination() {
+            ShadowPositionEntity positionA = openPosition("VARIANT_A", "TCS",
+                new BigDecimal("100.00"), new BigDecimal("95.00"), new BigDecimal("110.00"), 100);
+            ShadowPositionEntity positionB = openPosition("VARIANT_B", "TCS",
+                new BigDecimal("200.00"), new BigDecimal("190.00"), new BigDecimal("220.00"), 50);
+            when(shadowPositionRepo.findByPortfolioIdAndSymbolAndStatus("VARIANT_A", "TCS",
+                ShadowPositionEntity.STATUS_OPEN)).thenReturn(Optional.of(positionA));
+
+            PaperTradingPortfolioEntity portfolioA = new PaperTradingPortfolioEntity();
+            portfolioA.setPortfolioId("VARIANT_A");
+            portfolioA.setCurrentCapital(new BigDecimal("240000.00"));
+            portfolioA.setTotalRealizedPnl(BigDecimal.ZERO);
+            portfolioA.setOpenPositionCount(1);
+            when(portfolioRepo.findByPortfolioId("VARIANT_A")).thenReturn(Optional.of(portfolioA));
+
+            boolean closedA = service.executeVariantExit("VARIANT_A", "TCS", new BigDecimal("120.00"), "TARGET_HIT");
+
+            assertThat(closedA).isTrue();
+            assertThat(positionA.getStatus()).isEqualTo(ShadowPositionEntity.STATUS_CLOSED);
+            // VARIANT_B's position must remain untouched by VARIANT_A's exit.
+            assertThat(positionB.getStatus()).isEqualTo(ShadowPositionEntity.STATUS_OPEN);
+        }
+    }
+
+    @Nested
+    class FindClosedTrades {
+
+        @Test
+        void returnsClosedRoundTripsForPortfolio() {
+            ShadowPositionEntity closed = openPosition("PULLBACK_B", "TCS",
+                new BigDecimal("100.00"), new BigDecimal("95.00"), new BigDecimal("110.00"), 100);
+            closed.setStatus(ShadowPositionEntity.STATUS_CLOSED);
+            closed.setExitDate(java.time.LocalDate.of(2026, 1, 10));
+            closed.setExitPrice(new BigDecimal("112.00"));
+            closed.setExitReason("TARGET_HIT");
+            closed.setPnl(new BigDecimal("1195.00"));
+            when(shadowPositionRepo.findByPortfolioIdAndStatusOrderByExitDateDesc(
+                "PULLBACK_B", ShadowPositionEntity.STATUS_CLOSED)).thenReturn(List.of(closed));
+
+            List<ShadowClosedTrade> trades = service.findClosedTrades("PULLBACK_B");
+
+            assertThat(trades).hasSize(1);
+            ShadowClosedTrade trade = trades.get(0);
+            assertThat(trade.symbol()).isEqualTo("TCS");
+            assertThat(trade.exitReason()).isEqualTo("TARGET_HIT");
+            assertThat(trade.pnl()).isEqualByComparingTo("1195.00");
+            assertThat(trade.isWin()).isTrue();
+        }
+    }
+
+    @Nested
+    class ExecuteVariantBuyPersistsShadowPosition {
+
+        @Test
+        void persistsOpenShadowPositionOnSuccessfulBuy() {
+            PaperTradingPortfolioEntity portfolio = new PaperTradingPortfolioEntity();
+            portfolio.setPortfolioId("PULLBACK_B");
+            portfolio.setCurrentCapital(new BigDecimal("500000.00"));
+            portfolio.setOpenPositionCount(0);
+            when(portfolioRepo.findByPortfolioId("PULLBACK_B")).thenReturn(Optional.of(portfolio));
+            when(orderRepo.findByPortfolioIdOrderByCreatedAtDesc("PULLBACK_B")).thenReturn(List.of());
+
+            Signal signal = Signal.createWithLevels("TCS", java.time.LocalDate.of(2026, 1, 1),
+                Signal.SignalType.BUY, new BigDecimal("0.8"), "test",
+                new BigDecimal("100.00"), new BigDecimal("95.00"), new BigDecimal("110.00"));
+            Signal signalWithId = new Signal(42L, signal.symbol(), signal.date(), signal.type(), signal.confidence(),
+                signal.reasoning(), signal.entryPrice(), signal.stopLoss(), signal.target(), signal.riskReward(),
+                signal.indicators(), signal.generatedAt(), signal.sentimentScore(), signal.sentimentReasoning());
+
+            boolean success = service.executeVariantBuy("PULLBACK_B", signalWithId, new BigDecimal("100.00"));
+
+            assertThat(success).isTrue();
+            ArgumentCaptor<ShadowPositionEntity> captor = ArgumentCaptor.forClass(ShadowPositionEntity.class);
+            verify(shadowPositionRepo).save(captor.capture());
+            ShadowPositionEntity saved = captor.getValue();
+            assertThat(saved.getSymbol()).isEqualTo("TCS");
+            assertThat(saved.getStopLoss()).isEqualByComparingTo("95.00");
+            assertThat(saved.getTarget()).isEqualByComparingTo("110.00");
+            assertThat(saved.getStatus()).isEqualTo(ShadowPositionEntity.STATUS_OPEN);
+        }
     }
 
     @Nested
