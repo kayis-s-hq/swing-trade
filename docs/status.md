@@ -1,6 +1,11 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-17 (price-band ingestion verification)
+Last checked: 2026-09-17 (GPUHub client coverage verification)
+
+- [x] GPUHub client/service coverage completed 2026-09-17: deployment, image, container,
+  status, stop, delete, DTO, and API-error paths now have behavior-focused tests. Successful
+  void operations complete without emitting an invalid null Reactor value. GPUHub tests,
+  JaCoCo coverage verification, and `./bin/verify-changes` passed.
 
 - [x] Exchange price-band ingestion wired 2026-09-17: Fyers `lower_ckt`/`upper_ckt`
   quote fields now flow through the rate-limited market-data client and are persisted by
@@ -92,7 +97,7 @@ Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infr
 The development database was intentionally reset on 2026-08-29 for a clean verification run, then repopulated the same day: 10 active watchlist symbols, each backfilled with 3yr/738 candles, and one full `/api/backtest/run-all` pass (see Strategy section). The current database is no longer empty: runtime verification on 2026-09-02 loaded 2 open and 8 closed paper positions/trades. The API runs in local paper-trading mode with Yahoo Finance as the active market-data client. Historical verification claims below the Strategy section still describe the earlier reset dataset and are not claims about current state.
 
 **Post-stage follow-ups verification (2026-09-15, commit `e947f7f9`)** — full backend/dashboard check from `docs/plans/2026-09-14-post-stage-follow-ups.md`:
-- Backend: `./gradlew :data:test :api:test --no-daemon` green. `./gradlew :api:integrationTest --tests '*SignalPipelineSellExitIntegrationTest' --no-daemon` green against a local colima Docker daemon (`DOCKER_HOST` pointed at colima's socket for this run only; the shared `pi-node` docker context was left untouched). The current `./gradlew build` run stops at the pre-existing core JaCoCo threshold (`:core:jacocoTestCoverageVerification`, 0.48 actual vs 0.80 required); downstream full-build tasks are not evidence-backed until that gate is addressed.
+- Backend: `./gradlew :data:test :api:test --no-daemon` green. `./gradlew :api:integrationTest --tests '*SignalPipelineSellExitIntegrationTest' --no-daemon` green against a local colima Docker daemon (`DOCKER_HOST` pointed at colima's socket for this run only; the shared `pi-node` docker context was left untouched). The core and GPUHub JaCoCo gates are now green; a fresh full-build result is still pending.
 - Dashboard: `yarn typecheck` and `yarn test:run` (281 tests) green. `yarn build` fails at the `format:check` step on pre-existing Prettier drift in `DashboardView.vue` and `OrchestratorView.vue`, confirmed present on `main` with no dashboard files modified this session.
 - All three follow-up plan items (equity-curve status, Position decomposition, Docker-capable SELL integration test) are implementation-complete; this entry closes the plan's final "full verification recorded" checklist item.
 
