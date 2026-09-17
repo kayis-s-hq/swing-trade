@@ -109,6 +109,8 @@ class EntityPersistenceContractTest {
         assertThat(holiday.getId()).isEqualTo(4L); assertThat(holiday.getHolidayDate()).isEqualTo(DATE);
         assertThat(holiday.getOccasion()).isEqualTo("Festival"); assertThat(holiday.getHolidayType()).isEqualTo("FULL");
         assertThat(holiday.getCreatedAt()).isEqualTo(TIME);
+
+        new ReconciliationAuditEntity("TCS", DATE, DATE.plusDays(1), "COMPLETED", 1, 2, 0);
     }
 
     @Test
