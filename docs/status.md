@@ -146,6 +146,14 @@ Last checked: 2026-09-17 (holiday-calendar verification)
   benchmark and excess-return metrics to accumulate without backtest-time network calls. Data
   scheduler tests and `./bin/verify-changes` passed.
 
+- [x] NIFTY50 historical benchmark backfill wired 2026-09-18: forward-daily ingestion alone could
+  not benchmark backtests over past date ranges. `EodIngestionScheduler.ensureNiftyBenchmarkHistory`
+  now runs at startup and backfills up to `benchmark.backfill.years` (default 10) of NIFTY50 history
+  via the existing `DataIngestionService` incremental backfill path, a no-op once the stored window
+  is already covered. Portfolio-level NIFTY50 benchmark/excess-return metrics were already wired via
+  `PortfolioBacktestEngine`/`BenchmarkDataAdapter`. NIFTY 500 TRI ingestion remains open — no current
+  provider integration exposes a total-return index series.
+
 - [x] Signal provenance exposed 2026-09-17: signal API responses now include the persisted
   strategy variant and configuration version through a bulk metadata lookup; `/api/signals/latest`
   now uses the service's database-level latest-per-symbol path. API/data tests and

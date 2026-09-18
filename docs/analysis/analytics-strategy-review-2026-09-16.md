@@ -264,8 +264,16 @@ and alpha/beta remain open until a benchmark data contract and shared-capital po
 are defined.
 An explicit benchmark candle-series contract and fail-closed adapter now exist: malformed, duplicate,
 out-of-window, or insufficient persisted observations produce an unavailable benchmark rather than a
-misleading comparison. Authoritative NIFTY 50 / NIFTY 500 TRI ingestion and portfolio-level benchmark
-metrics remain open.
+misleading comparison. Portfolio-level backtests now also report a NIFTY50 price-return benchmark
+comparison and excess return via `PortfolioBacktestEngine`, sourced from the same fail-closed adapter.
+NIFTY50 ingestion previously only accumulated forward-daily from the EOD scheduler, which could not
+benchmark backtests over past date ranges; a startup backfill (`EodIngestionScheduler.
+ensureNiftyBenchmarkHistory`, default 10 years, configurable via `benchmark.backfill.years`) now covers
+this using the existing incremental backfill path. NIFTY 500 TRI (total-return index) ingestion remains
+open: no current data source/provider integration in this codebase exposes a NIFTY 500 TRI series: adding
+it would require a new provider integration (e.g. NSE indices API or a TRI-specific data vendor), since
+the existing `YahooFinanceClient`/ingestion pipeline only pulls price-return index/stock candles. Alpha/
+beta relative to the benchmark also remain open.
 
 ### 22. PARTIALLY FIXED — Circuit limits not modelled
 A persisted `PriceBand` now provides explicit exchange limits. Paper and backtest BUY entries at the
