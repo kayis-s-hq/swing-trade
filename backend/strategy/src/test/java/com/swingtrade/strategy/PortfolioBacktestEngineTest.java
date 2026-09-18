@@ -189,6 +189,29 @@ class PortfolioBacktestEngineTest {
         assertThat(result.rejectionReasons()).containsExactly("CORRELATION_LIMIT");
     }
 
+    @Test
+    void attributesResultToTheSuppliedStrategyVariantId() {
+        BacktestTrade held = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), 100, 1, 10);
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", held)), config(100),
+                LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 4),
+                Map.of(), Map.of(), Optional.empty(), "rsi2-mean-reversion-v3");
+
+        assertThat(result.strategyVariantId()).isEqualTo("rsi2-mean-reversion-v3");
+    }
+
+    @Test
+    void strategyVariantIdDefaultsToNullWhenNotSupplied() {
+        BacktestTrade held = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), 100, 1, 10);
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", held)), config(100),
+                LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 4));
+
+        assertThat(result.strategyVariantId()).isNull();
+    }
+
     private static BacktestConfig config(double capital) {
         return new BacktestConfig(0, 0, .01, capital, 2, 2, 2, 20, false, 21);
     }

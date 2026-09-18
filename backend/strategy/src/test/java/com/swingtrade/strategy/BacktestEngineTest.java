@@ -82,6 +82,61 @@ class BacktestEngineTest {
             .hasMessageContaining("No included historical universe membership");
     }
 
+    @Test
+    @DisplayName("sectorsBySymbol maps the watchlist's production Sector taxonomy, omitting unclassified symbols")
+    void sectorsBySymbol_mapsWatchlistSectorsAndOmitsUnclassifiedSymbols() {
+        when(watchlistStore.getWatchlist()).thenReturn(List.of(
+            new com.swingtrade.domain.Stock("TCS", com.swingtrade.domain.Stock.Exchange.NSE, "TCS",
+                com.swingtrade.domain.Stock.Sector.IT, null, null, null, null, null, null),
+            new com.swingtrade.domain.Stock("HDFCBANK", com.swingtrade.domain.Stock.Exchange.NSE, "HDFC Bank",
+                com.swingtrade.domain.Stock.Sector.BANK, null, null, null, null, null, null),
+            new com.swingtrade.domain.Stock("UNCLASSIFIED", com.swingtrade.domain.Stock.Exchange.NSE, "Unclassified",
+                null, null, null, null, null, null, null)));
+
+        java.util.Map<String, String> sectors = engine.sectorsBySymbol();
+
+        assertThat(sectors).containsEntry("TCS", "IT").containsEntry("HDFCBANK", "BANK");
+        assertThat(sectors).doesNotContainKey("UNCLASSIFIED");
+    }
+
+    @Test
+    @DisplayName("runPortfolioBacktest attributes the result to the supplied strategy variant id")
+    void runPortfolioBacktest_attributesResultToStrategyVariantId() {
+        List<OhlcvCandle> candles = buildEntrySetupCandles();
+        LocalDate evaluationStart = candles.get(240).date();
+        LocalDate evaluationEnd = candles.get(candles.size() - 1).date();
+        List<OhlcvCandle> descending = new ArrayList<>(candles);
+        Collections.reverse(descending);
+        when(candleStore.findBySymbolAndDateRange(SYMBOL, evaluationStart.minusDays(400), evaluationEnd))
+            .thenReturn(descending);
+        when(watchlistStore.getWatchlist()).thenReturn(List.of());
+
+        PortfolioBacktestResult result = engine.runPortfolioBacktest(List.of(SYMBOL), EXCHANGE,
+            BacktestConfig.defaults(), new PriceActionStrategy(), "price-action-v1",
+            evaluationStart, evaluationEnd);
+
+        assertThat(result.strategyVariantId()).isEqualTo("price-action-v1");
+    }
+
+    @Test
+    @DisplayName("runPortfolioBacktest without an explicit variant id defaults attribution to the strategy name")
+    void runPortfolioBacktest_defaultOverloadAttributesToStrategyName() {
+        List<OhlcvCandle> candles = buildEntrySetupCandles();
+        LocalDate evaluationStart = candles.get(240).date();
+        LocalDate evaluationEnd = candles.get(candles.size() - 1).date();
+        List<OhlcvCandle> descending = new ArrayList<>(candles);
+        Collections.reverse(descending);
+        when(candleStore.findBySymbolAndDateRange(SYMBOL, evaluationStart.minusDays(400), evaluationEnd))
+            .thenReturn(descending);
+        when(watchlistStore.getWatchlist()).thenReturn(List.of());
+        PriceActionStrategy strategy = new PriceActionStrategy();
+
+        PortfolioBacktestResult result = engine.runPortfolioBacktest(List.of(SYMBOL), EXCHANGE,
+            BacktestConfig.defaults(), strategy, evaluationStart, evaluationEnd);
+
+        assertThat(result.strategyVariantId()).isEqualTo(strategy.name());
+    }
+
     // -----------------------------------------------------------------------
     // Test fixtures
     // -----------------------------------------------------------------------

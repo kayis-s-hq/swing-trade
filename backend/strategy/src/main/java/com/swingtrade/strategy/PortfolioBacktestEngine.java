@@ -46,6 +46,15 @@ final class PortfolioBacktestEngine {
                                      Map<String, List<OhlcvCandle>> marketData,
                                      Map<String, String> sectors,
                                      Optional<BenchmarkCandleSeries> benchmark) {
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, marketData, sectors, benchmark, null);
+    }
+
+    PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
+                                     LocalDate evaluationStart, LocalDate evaluationEnd,
+                                     Map<String, List<OhlcvCandle>> marketData,
+                                     Map<String, String> sectors,
+                                     Optional<BenchmarkCandleSeries> benchmark,
+                                     String strategyVariantId) {
         if (symbolResults == null || config == null || evaluationStart == null || evaluationEnd == null
                 || evaluationStart.isAfter(evaluationEnd)) {
             throw new IllegalArgumentException("Portfolio inputs must be non-null and the window must be ordered");
@@ -173,7 +182,7 @@ final class PortfolioBacktestEngine {
                         .map(PortfolioEquityPoint::equity).toList()), cagr, BacktestMetrics.sortinoRatio(equityCurve.stream()
                         .map(PortfolioEquityPoint::equity).toList()),
                 BacktestMetrics.calmarRatio(cagr, maxDrawdown), accepted.size(), winners, rejected,
-                accepted, equityCurve, rejectionReasons, benchmarkComparison);
+                accepted, equityCurve, rejectionReasons, benchmarkComparison, strategyVariantId);
     }
 
     private static Optional<BenchmarkComparison> benchmarkComparison(BenchmarkCandleSeries series) {
