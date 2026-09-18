@@ -2,6 +2,7 @@ package com.swingtrade.data.service;
 
 import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.data.repository.WatchlistRepository;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,10 +32,42 @@ public class EodIngestionScheduler {
     @Value("${yahoo.finance.rate-limit-ms:500}")
     private long rateLimitMs;
 
+    /**
+     * Years of NIFTY50 history required before backtests over past windows can find an
+     * authoritative benchmark. Daily forward ingestion alone only accumulates from the day the
+     * scheduler first ran, which is insufficient for backtests over historical date ranges.
+     */
+    @Value("${benchmark.backfill.years:10}")
+    private int benchmarkBackfillYears = 10;
+
     public EodIngestionScheduler(DataIngestionService dataIngestionService, WatchlistRepository watchlistRepository, NseHolidayService holidayService) {
         this.dataIngestionService = dataIngestionService;
         this.watchlistRepository = watchlistRepository;
         this.holidayService = holidayService;
+    }
+
+    /**
+     * Ensures the NIFTY50 benchmark has enough historical depth for backtests run over past
+     * date ranges, not just the forward-daily ticks the scheduled job appends. Runs once at
+     * startup; the underlying incremental backfill is a no-op once the window is already covered,
+     * so repeated application restarts do not re-download history.
+     */
+    @PostConstruct
+    void ensureNiftyBenchmarkHistory() {
+        try {
+            LocalDate cutoff = LocalDate.now(IST).minusYears(benchmarkBackfillYears);
+            DataIngestionService.DataWindow window = dataIngestionService.getExistingDataWindow(NIFTY_50_SYMBOL);
+            if (window.earliestDate() == null || window.earliestDate().isAfter(cutoff)) {
+                logger.info("Backfilling NIFTY50 benchmark history: {} years (earliest stored date: {})",
+                        benchmarkBackfillYears, window.earliestDate());
+                dataIngestionService.backfillStockData(NIFTY_50_SYMBOL, benchmarkBackfillYears);
+            } else {
+                logger.debug("NIFTY50 benchmark history already covers {} years (earliest stored date: {})",
+                        benchmarkBackfillYears, window.earliestDate());
+            }
+        } catch (Exception e) {
+            logger.warn("NIFTY50 benchmark historical backfill failed at startup: {}", e.getMessage());
+        }
     }
 
     @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Kolkata")
