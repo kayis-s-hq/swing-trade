@@ -381,15 +381,23 @@ rows falling back to raw returns. No gate/composite weight consumes trailing IC 
 
 ### 34. PARTIALLY FIXED — Live fixed to one strategy
 Immutable, versioned `StrategyConfig` persistence now supports OFF, BACKTEST_ONLY, SHADOW, and CHAMPION
-modes with one current row per variant and one champion constraint. Live signal fan-out, champion
-gating, and per-variant portfolios remain open.
+modes with one current row per variant and one champion constraint.
 
-The configuration API and dashboard management surface are now available, and two additional strategy
-families can run through the existing strategy registry. Live orchestration now treats CHAMPION configs
-as trade-authoritative, fans out SHADOW signals without trading, and excludes OFF/BACKTEST_ONLY configs.
-Persisted `PRICE_ACTION_3_OF_4` RSI bounds are now resolved per configured variant through a
-request-scoped strategy instance, so invalid parameter maps fail closed and one variant cannot leak
-its bounds into another. Per-variant portfolio isolation and production data population remain open.
+The configuration API and dashboard management surface are now available, and additional strategy
+families (pullback, volatility-squeeze, relative-strength-vs-Nifty momentum) can run through the
+existing strategy registry. Live orchestration treats CHAMPION configs as trade-authoritative, fans
+out SHADOW signals without trading, and excludes OFF/BACKTEST_ONLY configs. Persisted
+`PRICE_ACTION_3_OF_4` RSI bounds are now resolved per configured variant through a request-scoped
+strategy instance, so invalid parameter maps fail closed and one variant cannot leak its bounds into
+another. **Per-variant paper-trading portfolios are now implemented**: each active SHADOW/CHAMPION
+variant gets its own `paper_trading_portfolio` row (auto-created on activation), independently sizes
+and executes its own BUY/SELL fills, and tracks its own closed-trade history (`VariantTradingService`/
+`VariantPaperTradingService`, migration V63) — isolated from other variants' capital. A champion/
+challenger `PromotionEligibilityChecker` and `GET /api/strategy-configs/{variantId}/promotion-eligibility`
+endpoint now score a challenger against the current champion on tenure, expectancy, drawdown, and
+walk-forward significance, surfaced on the Strategies dashboard; today this always reports
+`INSUFFICIENT_SAMPLE` since per-variant closed-trade history has just started accumulating. Production
+data population (real trade history reaching promotion thresholds) remains open.
 
 ### 35. GAP — Add standard NSE swing setups
 **Fix:** Add `TradingStrategy` beans, backtest each, and enable only those passing out-of-sample:
@@ -415,9 +423,15 @@ data remain open.
 
 ### 37. PARTIALLY FIXED — Relative strength
 Entry rules ignore performance vs the index and sector.
-The signal engine now supports an opt-in 63-session adjusted-close excess-return gate against NIFTY50,
-with missing index history failing closed. Cross-sectional rank/sector-relative data and production
-strategy opt-in remain open.
+The signal engine supports an opt-in 63-session adjusted-close excess-return gate against NIFTY50,
+with missing index history failing closed. A dedicated `RelativeStrengthMomentumStrategy` type now
+also exists, using RS-vs-Nifty as its PRIMARY entry signal (not just an eligibility gate) plus an
+EMA50 trend filter — registered in `StrategyRegistry`, configurable via `StrategyConfig.params()`.
+This is a deliberately scoped-down version: it uses an RS-vs-Nifty ratio threshold, not full
+cross-sectional percentile ranking within the scan universe (the plan's fuller design), since that
+would need a new subsystem beyond what `UniverseSnapshot`/`UniverseSnapshotStore` currently persist.
+Full cross-sectional rank/sector-relative data and production opt-in (moving this variant from
+BACKTEST_ONLY/SHADOW to CHAMPION) remain open.
 
 ### 38. GAP — Liquidity, surveillance and event filters
 **Fix:** Reject if 20-day average traded value < ₹5 Cr, the stock is in ASM/GSM or F&O ban, it has a 5%/10% price band, or results or a board meeting falls within 5 trading days.
