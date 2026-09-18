@@ -223,8 +223,19 @@ available-cash limits, maximum concurrent positions, deterministic symbol orderi
 portfolio-level return/drawdown/risk metrics. The existing independent `/run-all` path is unchanged.
 The portfolio engine now accepts evaluated candle series, marks open positions at each observed candle close,
 and uses the next available trading session for settlement when market dates are supplied. The portfolio API
-also emits persisted NIFTY price-series benchmark/excess-return data when available. Sector taxonomy,
-intraday execution ordering, missing-candle interpolation, and portfolio-level strategy attribution remain open.
+also emits persisted NIFTY price-series benchmark/excess-return data when available. Sector exposure limits
+are now wired to real data: `BacktestEngine.sectorsBySymbol()` builds the sector map from the production
+watchlist's `Stock.sector()` (populated by fundamental-data ingestion, not fabricated), replacing the prior
+hardcoded empty map. `PortfolioBacktestResult` and `PortfolioBacktestEngine.simulate` now carry a
+`strategyVariantId` so a portfolio backtest run can be attributed to the `TradingStrategy`/`StrategyConfig`
+variant that generated it (`BacktestEngine.runPortfolioBacktest(..., String strategyVariantId, ...)`);
+the existing overloads default to `strategy.name()`. This is run-level, not trade-level, attribution: the
+portfolio backtest evaluates exactly one strategy across every symbol in a run today, so comparing variants
+means running this method once per variant and comparing the tagged results — there is no per-trade
+multi-strategy blending yet, and nothing downstream (e.g. a portfolio-level `PromotionEligibilityChecker`)
+consumes this attribution yet. Intraday execution ordering and missing-candle interpolation remain open —
+both are separate, non-trivial simulation features (arrival-time-ordered same-day fills; explicit
+gap-filling/interpolation of missing OHLCV bars) that were intentionally left untouched here.
 
 ### 18. PARTIALLY FIXED — Candidate scan qualifies on in-sample backtest
 `CandidateScanService` now runs a configurable 60–1000-day out-of-sample window (252 days by default), persists its date range and metrics separately,
@@ -490,7 +501,13 @@ Locked lower-circuit exits and adverse gap-through fills remain enforced.
 ### 40. PARTIALLY FIXED — Sector and correlation limits
 Portfolio simulation now accepts sector and correlation exposure policies, rejects entries with
 deterministic reasons when limits are exceeded, and exposes those rejections in the result. Production
-sector taxonomy, rolling correlation population, and live `CapitalTracker` wiring remain open.
+sector taxonomy already existed end-to-end (the `stocks.sector` column and `Stock.Sector` enum are
+populated in production via fundamental-data ingestion, not just an empty schema column) but was not
+wired into `BacktestEngine.runPortfolioBacktest`, which passed a hardcoded empty sector map — the
+`SectorExposureLimit` path was consequently unreachable from the production portfolio backtest entry
+point. `BacktestEngine.sectorsBySymbol()` now sources the sector map from the watchlist for that call,
+closing this gap; symbols with no recorded sector are omitted (never fabricated) so they are simply not
+sector-limited. Rolling correlation population and live `CapitalTracker` wiring remain open.
 
 ### 41. PARTIALLY FIXED — Parameter optimization with overfit control
 Bounded Cartesian parameter grids and chronological train/validation folds now produce stability

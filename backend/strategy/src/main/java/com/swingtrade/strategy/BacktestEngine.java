@@ -393,8 +393,33 @@ public class BacktestEngine {
                 evaluationStart, evaluationEnd);
     }
 
+    /**
+     * Runs the portfolio backtest against an explicitly chosen {@link TradingStrategy}, with the
+     * result attributed to {@link TradingStrategy#name()}. The portfolio backtest evaluates a
+     * single strategy across every symbol in one run; use
+     * {@link #runPortfolioBacktest(List, String, BacktestConfig, TradingStrategy, String, LocalDate, LocalDate)}
+     * to attribute the run to a persisted {@code StrategyConfig} variant id instead (e.g. when
+     * comparing shadow/champion variants).
+     */
     public PortfolioBacktestResult runPortfolioBacktest(List<String> symbols, String exchange,
                                                         BacktestConfig config, TradingStrategy strategy,
+                                                        LocalDate evaluationStart, LocalDate evaluationEnd) {
+        return runPortfolioBacktest(symbols, exchange, config, strategy,
+                strategy == null ? null : strategy.name(), evaluationStart, evaluationEnd);
+    }
+
+    /**
+     * Runs the portfolio backtest against an explicitly chosen {@link TradingStrategy}, tagging
+     * the resulting {@link PortfolioBacktestResult#strategyVariantId()} with the given id so
+     * portfolio-level runs across multiple configured strategy variants can be told apart and
+     * compared downstream (e.g. by a future portfolio-level analogue of
+     * {@code PromotionEligibilityChecker}). Sector exposure limits (see
+     * {@link com.swingtrade.domain.PortfolioExposurePolicy}) are evaluated against each symbol's
+     * production {@link com.swingtrade.domain.Stock.Sector} taxonomy, sourced from the watchlist.
+     */
+    public PortfolioBacktestResult runPortfolioBacktest(List<String> symbols, String exchange,
+                                                        BacktestConfig config, TradingStrategy strategy,
+                                                        String strategyVariantId,
                                                         LocalDate evaluationStart, LocalDate evaluationEnd) {
         if (symbols == null || symbols.isEmpty()) {
             throw new IllegalArgumentException("Symbols cannot be null or empty");
@@ -426,7 +451,23 @@ public class BacktestEngine {
             benchmark = Optional.empty();
         }
         return portfolioBacktestEngine.simulate(results, config, evaluationStart, evaluationEnd, marketData,
-                Map.of(), benchmark);
+                sectorsBySymbol(), benchmark, strategyVariantId);
+    }
+
+    /**
+     * Sector taxonomy for {@link com.swingtrade.domain.PortfolioExposurePolicy} sector-exposure
+     * limits, sourced from the production watchlist ({@link Stock#sector()}, populated via
+     * fundamental-data ingestion). Stocks with no recorded sector are omitted rather than
+     * fabricated, so an unclassified symbol is simply never sector-limited.
+     */
+    Map<String, String> sectorsBySymbol() {
+        Map<String, String> sectors = new HashMap<>();
+        for (Stock stock : watchlistStore.getWatchlist()) {
+            if (stock.sector() != null) {
+                sectors.put(stock.symbol(), stock.sector().name());
+            }
+        }
+        return sectors;
     }
 
     /**
