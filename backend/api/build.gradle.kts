@@ -16,7 +16,7 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
-    implementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     // Spring Boot's ImperativeHttpClientAutoConfiguration probes for a blocking HTTP client
     // implementation via ClientHttpRequestFactoryBuilder.detect() (tries Jetty, then
     // HttpComponents, then JDK). Without a real client on the classpath it still attempts the
@@ -105,6 +105,7 @@ graalvmNative {
             buildArgs.add("-H:+ReportExceptionStackTraces")
             buildArgs.add("-J-Xmx4g")
             buildArgs.add("--parallelism=4")
+            buildArgs.add("--initialize-at-run-time=org.apache.commons.logging,org.apache.log4j,org.springframework.core.SpringProperties")
         }
     }
 }
