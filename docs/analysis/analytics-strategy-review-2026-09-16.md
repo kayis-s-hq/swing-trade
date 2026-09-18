@@ -281,7 +281,38 @@ upper band are skipped, and long exits are deferred while the candle is locked a
 Missing bands are not inferred from OHLC data. Ingestion/API coverage for populating exchange-provided
 bands now persists Fyers `lower_ckt`/`upper_ckt` values during daily ingestion, including when the
 candle itself is already present. Providers without authoritative circuit fields remain fail-closed.
-Historical band backfill and short-side policy remain open.
+
+**Historical band backfill — genuine data-availability gap, not built.** Investigated Fyers'
+two relevant endpoints directly: `/data/history` (used by `FyersServiceClient.fetchCandlesList`,
+backing `DataIngestionService.processStockDataWithOutcome`/`backfillStockData`) returns only
+`[epoch, open, high, low, close, volume]` per candle — no circuit-limit fields exist in that
+payload at any date. `lower_ckt`/`upper_ckt` are only present in the `/data/quotes` response
+(`FyersServiceClient.fetchPriceBand`, called from `DataIngestionService.persistPriceBand`), which
+is a live snapshot with no historical date parameter — it reflects today's band regardless of the
+`date` argument passed in. There is no Fyers API that returns a circuit band for an arbitrary past
+date, so a backfill mirroring the OHLC candle backfill pattern (chunked `/data/history` calls over
+a date range) has no equivalent circuit-band source to call. Upstox integration is present in the
+codebase but commented out/unconfigured (`UpstoxServiceClient`), so it was not evaluated further.
+The one plausible alternate source is NSE's daily "Security-wise Price Range" bhavcopy-adjacent
+file (distinct from the standard bhavcopy referenced elsewhere in this doc for delivery %/bulk
+deals), which historically has published per-symbol circuit limits per trading day as a downloadable
+file per date. This codebase has no bhavcopy/NSE-archive ingestion of any kind today — building it
+would mean: a new archive-file fetch+parse path (format has changed across NSE's history and is
+undocumented/unstable), a new historical-date-keyed ingestion job mirroring `EodIngestionScheduler`,
+and validation against the existing OHLC candle date to avoid mismatched sessions. That is a
+multi-day feature, not a fix inside this task's scope, and was not implemented. Historical backtests
+over date ranges before this feature landed will continue to have no `PriceBand` for those dates,
+and `PriceBandPolicy` intentionally passes such candles through unblocked (see
+`PriceBandPolicyTest.missingBandDoesNotBlockExecution`) rather than fabricating a band from OHLC.
+
+**Short-side policy — resolved as an explicit long-only design decision, not a missing feature.**
+Searched the codebase for any short-selling execution path (`TradingStrategy`, `PaperTradingEngine`,
+`BacktestEngine`, `PositionManager`, order-side handling) and found none — there is no short entry,
+short exit, or short-position representation anywhere in `backend/broker` or `backend/strategy`.
+`docs/plans/2026-09-16-configurable-multi-strategy.md` assumption A2 ("Long-only; no short signals")
+still holds and nothing in this pass changes it. `PriceBandPolicy` is documented as long-only by
+design with no short-side counterpart to build; see the class-level Javadoc added in
+`backend/core/src/main/java/com/swingtrade/domain/PriceBandPolicy.java`.
 
 ---
 
