@@ -16,11 +16,13 @@ vi.mock('../api/client', () => apiMocks)
 vi.mock('../api/watchlist', () => apiMocks)
 vi.mock('../api/signals', () => apiMocks)
 vi.mock('../api/strategies', () => ({
-  getStrategies: vi.fn().mockResolvedValue([
-    { variantId: 'breakout-v1' },
-    { variantId: 'pullback-v1' },
-    { variantId: 'squeeze-v1' },
-  ]),
+  getStrategies: vi
+    .fn()
+    .mockResolvedValue([
+      { variantId: 'breakout-v1' },
+      { variantId: 'pullback-v1' },
+      { variantId: 'squeeze-v1' },
+    ]),
 }))
 
 const entry: WatchlistEntry = {
@@ -173,8 +175,15 @@ describe('WatchlistView — signal monitoring', () => {
   })
   it('shows a variant consensus badge only when strategy-tagged signals exist', async () => {
     const base = {
-      symbol: 'RELIANCE', confidence: 0.8, reason: '', entryPrice: 100, stopLoss: 95, target: 115,
-      riskReward: 3, timestamp: '2026-08-30', status: 'ACTIVE',
+      symbol: 'RELIANCE',
+      confidence: 0.8,
+      reason: '',
+      entryPrice: 100,
+      stopLoss: 95,
+      target: 115,
+      riskReward: 3,
+      timestamp: '2026-08-30',
+      status: 'ACTIVE',
     }
     apiMocks.getSignals.mockResolvedValue([
       { ...base, id: 's1', direction: 'BUY', strategy: 'breakout-v1' },

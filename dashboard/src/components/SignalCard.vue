@@ -34,7 +34,8 @@
         <span
           v-if="strategyLabel"
           class="inline-flex items-center rounded-full bg-brand-subtle px-2 py-0.5 text-xs font-medium text-brand"
-          >{{ strategyLabel }}<template v-if="signal.strategyVersion"> v{{ signal.strategyVersion }}</template></span
+          >{{ strategyLabel
+          }}<template v-if="signal.strategyVersion"> v{{ signal.strategyVersion }}</template></span
         >
       </div>
       <div class="flex shrink-0 items-center gap-3">

@@ -33,7 +33,11 @@ describe('selections api', () => {
   })
 
   it('keeps only the latest tournament date, sorted by symbol', () => {
-    const rows = [selection('SBIN', '2026-09-17'), selection('INFY', '2026-09-18'), selection('BSE', '2026-09-18')]
+    const rows = [
+      selection('SBIN', '2026-09-17'),
+      selection('INFY', '2026-09-18'),
+      selection('BSE', '2026-09-18'),
+    ]
     expect(latestTournament(rows).map((s) => s.symbol)).toEqual(['BSE', 'INFY'])
     expect(latestTournament([])).toEqual([])
   })
