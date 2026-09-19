@@ -422,6 +422,38 @@ public class PaperPortfolioServiceImpl implements PaperPortfolioService {
             .toList();
     }
 
+    @Override
+    public List<com.swingtrade.domain.PaperPortfolioSummary> listPortfolios() {
+        return portfolioRepo.findAllByOrderByPortfolioIdAsc().stream()
+            .map(p -> new com.swingtrade.domain.PaperPortfolioSummary(p.getPortfolioId(), p.getInitialCapital(),
+                p.getCurrentCapital(), p.getTotalRealizedPnl(), p.getOpenPositionCount()))
+            .toList();
+    }
+
+    @Override
+    public List<com.swingtrade.domain.ShadowPositionView> listShadowPositions(String portfolioId) {
+        if (portfolioId == null) {
+            return List.of();
+        }
+        return shadowPositionRepo.findByPortfolioIdOrderByEntryDateDescIdDesc(portfolioId).stream()
+            .map(PaperPortfolioServiceImpl::toView).toList();
+    }
+
+    @Override
+    public List<com.swingtrade.domain.ShadowPositionView> listShadowPositionsForSymbol(String symbol) {
+        if (symbol == null) {
+            return List.of();
+        }
+        return shadowPositionRepo.findBySymbolOrderByEntryDateDescIdDesc(symbol).stream()
+            .map(PaperPortfolioServiceImpl::toView).toList();
+    }
+
+    private static com.swingtrade.domain.ShadowPositionView toView(ShadowPositionEntity e) {
+        return new com.swingtrade.domain.ShadowPositionView(e.getPortfolioId(), e.getSymbol(), e.getEntryDate(),
+            e.getEntryPrice(), e.getStopLoss(), e.getTarget(), e.getQuantity(), e.getStatus(), e.getExitDate(),
+            e.getExitPrice(), e.getExitReason(), e.getPnl());
+    }
+
     private static BigDecimal nz(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }

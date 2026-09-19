@@ -13,4 +13,8 @@ public interface ShadowPositionRepository extends JpaRepository<ShadowPositionEn
 
     List<ShadowPositionEntity> findByPortfolioIdAndStatusOrderByExitDateDesc(
         String portfolioId, String status);
+
+    List<ShadowPositionEntity> findByPortfolioIdOrderByEntryDateDescIdDesc(String portfolioId);
+
+    List<ShadowPositionEntity> findBySymbolOrderByEntryDateDescIdDesc(String symbol);
 }

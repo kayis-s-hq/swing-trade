@@ -19,4 +19,6 @@ public interface SignalSelectionRepository extends JpaRepository<SignalSelection
 
     List<SignalSelectionEntity> findBySelectionDateBetweenOrderBySelectionDateDescSymbolAsc(
         LocalDate from, LocalDate to);
+
+    List<SignalSelectionEntity> findBySymbolOrderBySelectionDateDesc(String symbol);
 }

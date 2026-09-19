@@ -115,4 +115,19 @@ public interface PaperPortfolioService {
      * @param portfolioId the variant id (portfolio_id column)
      */
     List<ShadowClosedTrade> findClosedTrades(String portfolioId);
+
+    /** Every known paper portfolio with its capital and realized P&L, ordered by portfolio id. */
+    default List<com.swingtrade.domain.PaperPortfolioSummary> listPortfolios() {
+        return List.of();
+    }
+
+    /** All positions (open and closed) in {@code portfolioId}, most recently entered first. */
+    default List<com.swingtrade.domain.ShadowPositionView> listShadowPositions(String portfolioId) {
+        return List.of();
+    }
+
+    /** All positions (open and closed) on {@code symbol} across every portfolio, most recent first. */
+    default List<com.swingtrade.domain.ShadowPositionView> listShadowPositionsForSymbol(String symbol) {
+        return List.of();
+    }
 }

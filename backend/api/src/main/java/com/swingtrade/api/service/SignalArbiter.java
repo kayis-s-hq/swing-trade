@@ -110,4 +110,8 @@ public class SignalArbiter {
     public List<SignalSelectionEntity> findBetween(LocalDate from, LocalDate to) {
         return repository.findBySelectionDateBetweenOrderBySelectionDateDescSymbolAsc(from, to);
     }
+
+    public List<SignalSelectionEntity> findForSymbol(String symbol) {
+        return repository.findBySymbolOrderBySelectionDateDesc(symbol);
+    }
 }
