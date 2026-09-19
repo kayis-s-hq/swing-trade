@@ -160,10 +160,10 @@ class JobOrchestratorLlmAnalysisTest {
         Method executeStage = JobOrchestratorService.class.getDeclaredMethod("executeStage",
             UUID.class, String.class, com.swingtrade.domain.JobRunStage.StageName.class, executorIfc, long.class);
         executeStage.setAccessible(true);
-        boolean succeeded = (boolean) executeStage.invoke(service, UUID.randomUUID(), "TCS",
+        var status = (com.swingtrade.domain.JobRunStage.Status) executeStage.invoke(service, UUID.randomUUID(), "TCS",
             com.swingtrade.domain.JobRunStage.StageName.LLM_ANALYSIS, sleepyExecutor, 1L);
 
-        assertThat(succeeded).isFalse();
+        assertThat(status).isEqualTo(com.swingtrade.domain.JobRunStage.Status.ERROR);
         verify(jobRunStageRepository, atLeastOnce()).save(argThat(entity ->
             "ERROR".equals(entity.getStatus())));
     }

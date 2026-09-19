@@ -360,7 +360,7 @@ public class SignalPipeline {
         }
 
         return new VariantSignalOutcome(config.variantId(), config.version(), afterGates.type(),
-            sentimentGateEnabled, shouldPersist);
+            sentimentGateEnabled, shouldPersist, afterGates.score());
     }
 
     private List<Map<String, Object>> toOutcomeMaps(List<RuleOutcome> rules) {
@@ -457,9 +457,11 @@ public class SignalPipeline {
      * @param sentimentGateEnabled   true if this variant's overlays enable {@code sentimentGate}
      * @param persisted              true if a signals row was actually written (false when a
      *                               SHADOW variant's HOLD was suppressed for table-growth control)
+     * @param confidence             the decision score in [0,1], used for signal arbitration
      */
     public record VariantSignalOutcome(String variantId, int strategyVersion, Signal.SignalType type,
-                                        boolean sentimentGateEnabled, boolean persisted) {
+                                        boolean sentimentGateEnabled, boolean persisted,
+                                        java.math.BigDecimal confidence) {
     }
 
 }
