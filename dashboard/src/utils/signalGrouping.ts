@@ -27,23 +27,32 @@ export function consensusLabel(buyCount: number, totalVariants: number): string 
 /**
  * Groups signals into one row per symbol. Only each variant's most recent signal counts, so
  * `totalVariants` is the number of variants that emitted a persisted signal for the symbol
- * (SHADOW HOLDs are not persisted by the backend). `selections` marks the tournament winner.
+ * (SHADOW HOLDs are not persisted by the backend). `selections` marks the tournament winner;
+ * the legacy chip never counts toward consensus.
  */
 export function groupSignalsBySymbol(
   signals: Signal[],
-  selections: SignalSelection[] = []
+  selections: SignalSelection[] = [],
+  variantIds?: ReadonlySet<string>
 ): SymbolSignalGroup[] {
+  // When the registered variant ids are known, any other strategy name (legacy engines such
+  // as PRICE_ACTION or DEFAULT) folds into the single "legacy" chip instead of posing as a variant.
+  const idFor = (signal: Signal): string =>
+    signal.strategy && (!variantIds || variantIds.has(signal.strategy))
+      ? signal.strategy
+      : LEGACY_VARIANT_ID
+
   const winners = new Map(selections.map((s) => [s.symbol, s.winnerVariantId]))
   const latest = new Map<string, Signal>()
   for (const signal of signals) {
-    const key = `${signal.symbol}|${signal.strategy ?? LEGACY_VARIANT_ID}`
+    const key = `${signal.symbol}|${idFor(signal)}`
     const current = latest.get(key)
     if (!current || signal.timestamp > current.timestamp) latest.set(key, signal)
   }
 
   const bySymbol = new Map<string, VariantChip[]>()
   for (const signal of latest.values()) {
-    const variantId = signal.strategy ?? LEGACY_VARIANT_ID
+    const variantId = idFor(signal)
     const chips = bySymbol.get(signal.symbol) ?? []
     chips.push({
       variantId,
@@ -57,13 +66,15 @@ export function groupSignalsBySymbol(
   return [...bySymbol.entries()]
     .map(([symbol, chips]) => {
       const sorted = [...chips].sort((a, b) => a.variantId.localeCompare(b.variantId))
-      const buyCount = sorted.filter((c) => c.direction === 'BUY').length
+      // The legacy chip is shown for context but is not a variant vote.
+      const voters = sorted.filter((c) => c.variantId !== LEGACY_VARIANT_ID)
+      const buyCount = voters.filter((c) => c.direction === 'BUY').length
       return {
         symbol,
         chips: sorted,
         buyCount,
-        totalVariants: sorted.length,
-        consensusLabel: consensusLabel(buyCount, sorted.length),
+        totalVariants: voters.length,
+        consensusLabel: consensusLabel(buyCount, voters.length),
         winnerVariantId: winners.get(symbol) ?? null,
       }
     })

@@ -56,7 +56,13 @@
               </td>
               <td
                 class="py-2"
-                :class="Number(row.realizedPnl) >= 0 ? 'text-success' : 'text-danger'"
+                :class="
+                  Number(row.realizedPnl) > 0
+                    ? 'text-success'
+                    : Number(row.realizedPnl) < 0
+                      ? 'text-danger'
+                      : 'text-text-muted'
+                "
               >
                 {{ formatSignedCurrency(Number(row.realizedPnl)) }}
               </td>

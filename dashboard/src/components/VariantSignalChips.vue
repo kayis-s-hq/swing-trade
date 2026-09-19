@@ -9,7 +9,7 @@
       data-testid="variant-chip"
     >
       <span v-if="chip.selected" aria-label="tournament winner">★</span>
-      {{ chip.variantId }} {{ chip.direction }} {{ Math.round(chip.confidence * 100) }}%
+      {{ chip.variantId }} {{ chip.direction }} {{ Math.round(chip.confidence) }}%
     </span>
   </div>
 </template>

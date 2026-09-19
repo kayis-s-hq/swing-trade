@@ -339,7 +339,12 @@
               </template>
 
               <template v-else>
-                <div v-if="store.promotionEligibilityLoading[variant.variantId]" class="py-4">
+                <p v-if="!hasChampion" class="text-xs text-text-muted">
+                  No champion is set yet, so there is nothing to compare this variant against.
+                  Promote a variant to champion to enable the promotion checklist.
+                </p>
+
+                <div v-else-if="store.promotionEligibilityLoading[variant.variantId]" class="py-4">
                   <LoadingSpinner message="Checking promotion eligibility..." />
                 </div>
 
@@ -577,6 +582,8 @@ const activeVariants = computed(() =>
   store.variants.filter((v) => v.mode === 'SHADOW' || v.mode === 'CHAMPION')
 )
 
+const hasChampion = computed(() => activeVariants.value.some((variant) => variant.mode === 'CHAMPION'))
+
 function eligibilityFor(variantId: string): PromotionEligibilityResult | undefined {
   return store.promotionEligibility[variantId]
 }
@@ -609,6 +616,8 @@ function conditionRows(
 watch(
   activeVariants,
   (next) => {
+    // Eligibility is measured against the champion; without one the endpoint always 404s.
+    if (!next.some((variant) => variant.mode === 'CHAMPION')) return
     for (const variant of next) {
       if (
         variant.mode === 'SHADOW' &&

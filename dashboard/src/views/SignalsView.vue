@@ -277,7 +277,11 @@
         </div>
 
         <!-- Grouped by symbol: one row per symbol, a chip per variant -->
-        <div v-if="effectiveViewMode === 'GROUPED'" class="space-y-2" aria-label="Signals by symbol">
+        <div
+          v-if="effectiveViewMode === 'GROUPED'"
+          class="space-y-2"
+          aria-label="Signals by symbol"
+        >
           <div
             v-for="group in groupedSignals"
             :key="group.symbol"
@@ -287,7 +291,10 @@
               <span class="w-28 font-semibold text-text-primary">{{ group.symbol }}</span>
               <span
                 v-if="group.consensusLabel"
-                class="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand"
+                class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                :class="
+                  group.buyCount > 0 ? 'bg-brand/10 text-brand' : 'bg-bg-primary text-text-muted'
+                "
                 data-testid="consensus-badge"
                 >{{ group.consensusLabel }}</span
               >
@@ -402,6 +409,7 @@ import SignalCard from '../components/SignalCard.vue'
 import VariantSignalChips from '../components/VariantSignalChips.vue'
 import { listSignalSelections, latestTournament, type SignalSelection } from '../api/selections'
 import { groupSignalsBySymbol } from '../utils/signalGrouping'
+import { listCurrentStrategies } from '../api/strategies'
 import { getSettings } from '../stores/settings'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
@@ -456,11 +464,25 @@ const filteredSignals = computed(() => {
 
 // Grouping only carries information once variants emit signals; before that (legacy
 // strategy-less signals) the selectable card list stays the default.
-const hasVariantSignals = computed(() => signals.value.some((s) => s.strategy))
+const variantIds = ref<ReadonlySet<string>>(new Set())
+const hasVariantSignals = computed(() =>
+  signals.value.some((s) => s.strategy && variantIds.value.has(s.strategy))
+)
 const effectiveViewMode = computed(
   () => viewPreference.value ?? (hasVariantSignals.value ? 'GROUPED' : 'FLAT')
 )
-const groupedSignals = computed(() => groupSignalsBySymbol(filteredSignals.value, selections.value))
+const groupedSignals = computed(() =>
+  groupSignalsBySymbol(filteredSignals.value, selections.value, variantIds.value)
+)
+
+// Registered variant ids decide which strategy names count as variants (vs legacy engines).
+async function loadVariantIds() {
+  try {
+    variantIds.value = new Set((await listCurrentStrategies()).map((v) => v.variantId))
+  } catch {
+    variantIds.value = new Set()
+  }
+}
 
 // The tournament winner star is supplementary; a failure must never break the signal list.
 async function loadSelections() {
@@ -587,6 +609,7 @@ const doRefresh = async () => {
   await execute(async () => {
     signals.value = await getSignals()
   })
+  void loadVariantIds()
   void loadSelections()
 }
 

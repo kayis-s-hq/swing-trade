@@ -81,4 +81,23 @@ describe('groupSignalsBySymbol', () => {
     expect(consensusLabel(0, 0)).toBe('')
     expect(groupSignalsBySymbol([])).toEqual([])
   })
+
+  it('folds non-variant strategies into one legacy chip that never counts as a vote', () => {
+    const variants = new Set(['pullback-v1', 'breakout-v1'])
+    const groups = groupSignalsBySymbol(
+      [
+        signal('SBIN', 'PRICE_ACTION', 'SELL', '2026-09-18T10:00'),
+        signal('SBIN', 'DEFAULT', 'BUY', '2026-09-18T11:00'),
+        signal('SBIN', 'pullback-v1', 'BUY', '2026-09-18T12:00'),
+        signal('INFY', 'PRICE_ACTION', 'BUY', '2026-09-18T10:00'),
+      ],
+      [],
+      variants
+    )
+    const sbin = groups.find((g) => g.symbol === 'SBIN')!
+    expect(sbin.chips.map((c) => c.variantId).sort()).toEqual(['legacy', 'pullback-v1'])
+    expect(sbin.consensusLabel).toBe('1/1 BUY')
+    const infy = groups.find((g) => g.symbol === 'INFY')!
+    expect(infy.consensusLabel).toBe('')
+  })
 })
