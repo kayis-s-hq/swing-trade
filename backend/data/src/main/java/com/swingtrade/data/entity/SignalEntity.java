@@ -44,22 +44,22 @@ public class SignalEntity {
     @Column(name = "signal_type", nullable = false, length = 10)
     private String signalType;
 
-    @Column(name = "confidence_score", precision = 5)
+    @Column(name = "confidence_score", precision = 5, scale = 2)
     private BigDecimal confidenceScore;
 
     @Column(columnDefinition = "TEXT")
     private String reasoning;
 
-    @Column(name = "entry_price", precision = 15)
+    @Column(name = "entry_price", precision = 15, scale = 4)
     private BigDecimal entryPrice;
 
-    @Column(name = "stop_loss", precision = 15)
+    @Column(name = "stop_loss", precision = 15, scale = 4)
     private BigDecimal stopLoss;
 
-    @Column(name = "target", precision = 15)
+    @Column(name = "target", precision = 15, scale = 4)
     private BigDecimal target;
 
-    @Column(name = "risk_reward", precision = 5)
+    @Column(name = "risk_reward", precision = 5, scale = 2)
     private BigDecimal riskReward;
 
     @Column(name = "indicators")
@@ -86,7 +86,7 @@ public class SignalEntity {
     // Multi-strategy provenance (V47, plan §4.2/§7.1): populated only for signals produced by
     // the configurable SignalStrategy SPI fan-out (JobOrchestratorService's SIGNAL stage calling
     // SignalPipeline#generateVariantSignals); rows written by the legacy engine leave these null.
-    @Column(name = "strategy_score", precision = 5)
+    @Column(name = "strategy_score", precision = 5, scale = 4)
     private BigDecimal strategyScore;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -205,7 +205,9 @@ public class SignalEntity {
             indicators,
             generatedAt,
             sentimentScore,
-            sentimentReasoning
+            sentimentReasoning,
+            strategy,
+            strategyVersion
         );
     }
 

@@ -73,7 +73,7 @@ public class TradeEntity {
     @Column(name = "exit_reason", length = 50)
     private String exitReason;
 
-    @Column(precision = 15)
+    @Column(precision = 15, scale = 4)
     private BigDecimal fees;
 
     @Column(name = "direction", length = 10)

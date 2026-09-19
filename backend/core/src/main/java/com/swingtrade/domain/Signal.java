@@ -35,8 +35,19 @@ public record Signal(
     String indicators,
     LocalDate generatedAt,
     String sentimentScore,
-    String sentimentReasoning
+    String sentimentReasoning,
+    String strategy,
+    Integer strategyVersion
 ) {
+    /** Legacy 14-argument form for callers that carry no strategy provenance (strategy is null). */
+    public Signal(Long id, String symbol, LocalDate date, SignalType type, BigDecimal confidence,
+                  String reasoning, BigDecimal entryPrice, BigDecimal stopLoss, BigDecimal target,
+                  BigDecimal riskReward, String indicators, LocalDate generatedAt, String sentimentScore,
+                  String sentimentReasoning) {
+        this(id, symbol, date, type, confidence, reasoning, entryPrice, stopLoss, target, riskReward,
+            indicators, generatedAt, sentimentScore, sentimentReasoning, null, null);
+    }
+
     /**
      * Enum representing the different types of trading signals.
      */
