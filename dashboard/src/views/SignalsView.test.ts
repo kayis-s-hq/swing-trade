@@ -27,11 +27,13 @@ vi.mock('../api/selections', () => ({
   latestTournament: (rows: unknown[]) => rows,
 }))
 vi.mock('../api/strategies', () => ({
-  getStrategies: vi.fn().mockResolvedValue([
-    { variantId: 'breakout-v1' },
-    { variantId: 'pullback-v1' },
-    { variantId: 'squeeze-v1' },
-  ]),
+  getStrategies: vi
+    .fn()
+    .mockResolvedValue([
+      { variantId: 'breakout-v1' },
+      { variantId: 'pullback-v1' },
+      { variantId: 'squeeze-v1' },
+    ]),
 }))
 vi.mock('../api/positions', () => positionApiMocks)
 vi.mock('../stores/settings', () => settingsMocks)

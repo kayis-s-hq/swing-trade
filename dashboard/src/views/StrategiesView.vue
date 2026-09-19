@@ -101,12 +101,10 @@
       </div>
 
       <section v-if="shadowVariantIds.length > 0" class="mt-8">
-        <h2 class="font-display text-lg font-semibold text-text-primary">
-          Promotion eligibility
-        </h2>
+        <h2 class="font-display text-lg font-semibold text-text-primary">Promotion eligibility</h2>
         <p class="mt-1 max-w-2xl text-sm leading-6 text-text-muted">
-          Compares each shadow variant against the current champion. This is informational only
-          — promotion still requires a separate manual action.
+          Compares each shadow variant against the current champion. This is informational only —
+          promotion still requires a separate manual action.
         </p>
         <div class="mt-4 grid gap-4 lg:grid-cols-2">
           <article
@@ -183,7 +181,11 @@
                   Data limitations
                 </p>
                 <ul class="mt-2 space-y-1 text-sm text-text-muted">
-                  <li v-for="(limitation, index) in promotionState(variantId)!.result!.dataLimitations" :key="index">
+                  <li
+                    v-for="(limitation, index) in promotionState(variantId)!.result!
+                      .dataLimitations"
+                    :key="index"
+                  >
                     {{ limitation }}
                   </li>
                 </ul>

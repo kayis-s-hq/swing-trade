@@ -63,11 +63,14 @@ describe('fetchPromotionEligibility', () => {
     await expect(fetchPromotionEligibility('RS_NIFTY', signal)).resolves.toEqual(
       promotionEligibilityResponse
     )
-    expect(apiRequestMock).toHaveBeenCalledWith('/strategy-configs/RS_NIFTY/promotion-eligibility', {
-      method: 'GET',
-      responseContract: 'envelope',
-      signal,
-      validate: expect.any(Function),
-    })
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      '/strategy-configs/RS_NIFTY/promotion-eligibility',
+      {
+        method: 'GET',
+        responseContract: 'envelope',
+        signal,
+        validate: expect.any(Function),
+      }
+    )
   })
 })

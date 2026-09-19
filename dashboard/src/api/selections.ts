@@ -36,5 +36,7 @@ export async function listSignalSelections(from?: string, to?: string): Promise<
 export function latestTournament(selections: SignalSelection[]): SignalSelection[] {
   if (selections.length === 0) return []
   const latest = selections.reduce((max, s) => (s.selectionDate > max ? s.selectionDate : max), '')
-  return selections.filter((s) => s.selectionDate === latest).sort((a, b) => a.symbol.localeCompare(b.symbol))
+  return selections
+    .filter((s) => s.selectionDate === latest)
+    .sort((a, b) => a.symbol.localeCompare(b.symbol))
 }

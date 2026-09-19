@@ -15,9 +15,24 @@ const variant = (variantId: string, mode: string) => ({
   current: true,
 })
 
-const signal = (id: string, strategy: string, direction: Signal['direction'], timestamp: string): Signal => ({
-  id, symbol: 'SBIN', direction, confidence: 0.7, reason: '', entryPrice: 1, stopLoss: 1, target: 1,
-  riskReward: 1, timestamp, status: 'ACTIVE', strategy,
+const signal = (
+  id: string,
+  strategy: string,
+  direction: Signal['direction'],
+  timestamp: string
+): Signal => ({
+  id,
+  symbol: 'SBIN',
+  direction,
+  confidence: 0.7,
+  reason: '',
+  entryPrice: 1,
+  stopLoss: 1,
+  target: 1,
+  riskReward: 1,
+  timestamp,
+  status: 'ACTIVE',
+  strategy,
 })
 
 const stubs = { 'router-link': { template: '<a><slot /></a>' } }
