@@ -356,6 +356,8 @@ case "${1:-help}" in
 
     echo "📋 Transferring .env.stage to pi-node..."
     scp "$WORKTREE_DIR/infra/env/.env.stage" dietpi@piworm.local:"$STAGE_PATH/.env.stage"
+    # The stage compose file reads env/.env.stage relative to itself.
+    ssh dietpi@piworm.local "mkdir -p $STAGE_PATH/env && cp $STAGE_PATH/.env.stage $STAGE_PATH/env/.env.stage"
     echo "✓ Env file transferred"
     echo ""
 
