@@ -25,7 +25,11 @@
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
-            <span class="font-semibold text-text-primary">{{ row.symbol }}</span>
+            <router-link
+              :to="`/symbols/${row.symbol}`"
+              class="font-semibold text-text-primary hover:underline"
+              >{{ row.symbol }}</router-link
+            >
             <span class="text-xs text-text-muted">
               winner
               <span class="font-medium text-success">{{ row.winnerVariantId }}</span>
@@ -45,7 +49,9 @@
           >
             <span v-if="candidate.selected" aria-label="selected">★</span>
             {{ candidate.variantId }} {{ candidate.signal }}
-            <span v-if="candidate.confidence != null">{{ formatConfidence(candidate.confidence) }}</span>
+            <span v-if="candidate.confidence != null">{{
+              formatConfidence(candidate.confidence)
+            }}</span>
           </span>
         </div>
 

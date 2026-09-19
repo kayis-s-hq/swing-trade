@@ -50,161 +50,168 @@
       {{ staleWarning }}
     </div>
 
-    <ErrorMessage
-      v-if="error"
-      title="Couldn’t load positions"
-      :message="
-        formatAppError(error, { title: 'Couldn’t load positions', operation: 'read' }).message
-      "
-      action-label="Retry"
-      :busy="loading"
-      @action="refreshPositions"
-    />
-    <div v-else-if="loading" class="flex items-center justify-center py-20">
-      <LoadingSpinner message="Loading positions..." />
-    </div>
+    <PortfolioSwitcher v-model="activePortfolio" />
 
-    <template v-else>
-      <!-- Filters -->
-      <div class="mb-4 flex flex-wrap items-center gap-3">
-        <input
-          v-model="searchQuery"
-          placeholder="Search symbol..."
-          class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 transition-colors focus:border-brand/50 focus:outline-none sm:w-56"
-        />
-        <div class="flex rounded-md border border-border-subtle">
-          <button
-            v-for="filter in ['ALL', 'OPEN', 'CLOSED']"
-            :key="filter"
-            class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
-            :class="
-              statusFilter === filter
-                ? 'bg-brand-subtle text-brand'
-                : 'text-text-muted hover:bg-bg-hover'
-            "
-            @click="statusFilter = filter"
-          >
-            {{ filter }}
-          </button>
-        </div>
+    <template v-if="activePortfolio === 'REAL'">
+      <ErrorMessage
+        v-if="error"
+        title="Couldn’t load positions"
+        :message="
+          formatAppError(error, { title: 'Couldn’t load positions', operation: 'read' }).message
+        "
+        action-label="Retry"
+        :busy="loading"
+        @action="refreshPositions"
+      />
+      <div v-else-if="loading" class="flex items-center justify-center py-20">
+        <LoadingSpinner message="Loading positions..." />
       </div>
 
-      <!-- Table -->
-      <div class="card-panel">
-        <div class="w-full overflow-x-auto">
-          <table class="min-w-full">
-            <thead>
-              <tr class="border-b border-border-subtle bg-bg-primary/50">
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+      <template v-else>
+        <!-- Filters -->
+        <div class="mb-4 flex flex-wrap items-center gap-3">
+          <input
+            v-model="searchQuery"
+            placeholder="Search symbol..."
+            class="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 transition-colors focus:border-brand/50 focus:outline-none sm:w-56"
+          />
+          <div class="flex rounded-md border border-border-subtle">
+            <button
+              v-for="filter in ['ALL', 'OPEN', 'CLOSED']"
+              :key="filter"
+              class="px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md"
+              :class="
+                statusFilter === filter
+                  ? 'bg-brand-subtle text-brand'
+                  : 'text-text-muted hover:bg-bg-hover'
+              "
+              @click="statusFilter = filter"
+            >
+              {{ filter }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="card-panel">
+          <div class="w-full overflow-x-auto">
+            <table class="min-w-full">
+              <thead>
+                <tr class="border-b border-border-subtle bg-bg-primary/50">
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Symbol
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Entry
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Qty
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Current
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Stop Loss
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Target
+                  </th>
+                  <th
+                    class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Status
+                  </th>
+                  <th
+                    class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    P&L
+                  </th>
+                  <th
+                    class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
+                  >
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border-subtle/50">
+                <tr
+                  v-for="pos in filteredPositions"
+                  :key="pos.id"
+                  class="transition-colors hover:bg-bg-hover"
                 >
-                  Symbol
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Entry
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Qty
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Current
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Stop Loss
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Target
-                </th>
-                <th
-                  class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Status
-                </th>
-                <th
-                  class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  P&L
-                </th>
-                <th
-                  class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-muted"
-                >
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border-subtle/50">
-              <tr
-                v-for="pos in filteredPositions"
-                :key="pos.id"
-                class="transition-colors hover:bg-bg-hover"
-              >
-                <td class="px-5 py-4 text-sm font-semibold text-text-primary">
-                  {{ pos.symbol }}
-                </td>
-                <td class="px-5 py-4 text-sm text-text-secondary">₹{{ pos.entryPrice }}</td>
-                <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                  {{ pos.quantity }}
-                </td>
-                <td class="px-5 py-4 text-right text-sm text-text-secondary">
-                  ₹{{ pos.currentPrice }}
-                </td>
-                <td class="px-5 py-4 text-right text-sm text-danger">
-                  {{ pos.stopLoss ?? '—' }}
-                </td>
-                <td class="px-5 py-4 text-right text-sm text-success">
-                  {{ pos.target ?? '—' }}
-                </td>
-                <td class="px-5 py-4">
-                  <span
-                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                  <td class="px-5 py-4 text-sm font-semibold text-text-primary">
+                    {{ pos.symbol }}
+                  </td>
+                  <td class="px-5 py-4 text-sm text-text-secondary">₹{{ pos.entryPrice }}</td>
+                  <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                    {{ pos.quantity }}
+                  </td>
+                  <td class="px-5 py-4 text-right text-sm text-text-secondary">
+                    ₹{{ pos.currentPrice }}
+                  </td>
+                  <td class="px-5 py-4 text-right text-sm text-danger">
+                    {{ pos.stopLoss ?? '—' }}
+                  </td>
+                  <td class="px-5 py-4 text-right text-sm text-success">
+                    {{ pos.target ?? '—' }}
+                  </td>
+                  <td class="px-5 py-4">
+                    <span
+                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      :class="
+                        pos.status === 'OPEN'
+                          ? 'bg-success-bg text-success'
+                          : 'bg-danger-bg text-danger'
+                      "
+                      >{{ pos.status }}</span
+                    >
+                  </td>
+                  <td
+                    class="px-5 py-4 text-right text-sm font-semibold"
                     :class="
-                      pos.status === 'OPEN'
-                        ? 'bg-success-bg text-success'
-                        : 'bg-danger-bg text-danger'
+                      Number.isFinite(pos.pnl) && pos.pnl >= 0 ? 'text-success' : 'text-danger'
                     "
-                    >{{ pos.status }}</span
                   >
-                </td>
-                <td
-                  class="px-5 py-4 text-right text-sm font-semibold"
-                  :class="Number.isFinite(pos.pnl) && pos.pnl >= 0 ? 'text-success' : 'text-danger'"
-                >
-                  {{ formatSignedCurrency(pos.pnl, { prefix: '₹' }) }}
-                  <span class="ml-1 text-xs font-normal opacity-70"
-                    >({{ formatSignedPercent(pos.pnlPercent) }})</span
-                  >
-                </td>
-                <td class="px-5 py-4 text-center">
-                  <button
-                    v-if="pos.status === 'OPEN'"
-                    class="rounded-md border border-danger/30 px-2.5 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
-                    @click="showCloseModal(pos)"
-                  >
-                    Close
-                  </button>
-                  <span v-else class="text-xs text-text-muted">—</span>
-                </td>
-              </tr>
-              <tr v-if="filteredPositions.length === 0">
-                <td colspan="9" class="px-5 py-12 text-center text-sm text-text-muted">
-                  No positions found
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                    {{ formatSignedCurrency(pos.pnl, { prefix: '₹' }) }}
+                    <span class="ml-1 text-xs font-normal opacity-70"
+                      >({{ formatSignedPercent(pos.pnlPercent) }})</span
+                    >
+                  </td>
+                  <td class="px-5 py-4 text-center">
+                    <button
+                      v-if="pos.status === 'OPEN'"
+                      class="rounded-md border border-danger/30 px-2.5 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+                      @click="showCloseModal(pos)"
+                    >
+                      Close
+                    </button>
+                    <span v-else class="text-xs text-text-muted">—</span>
+                  </td>
+                </tr>
+                <tr v-if="filteredPositions.length === 0">
+                  <td colspan="9" class="px-5 py-12 text-center text-sm text-text-muted">
+                    No positions found
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </template>
     </template>
+    <ShadowBookPanel v-else :portfolio-id="activePortfolio" />
   </div>
 
   <!-- New Position Modal -->
@@ -467,6 +474,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { getPositions, getClosedPositions, closePosition, executeTrade } from '../api/positions'
 import type { Position } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import PortfolioSwitcher from '../components/PortfolioSwitcher.vue'
+import ShadowBookPanel from '../components/ShadowBookPanel.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
 import { useAsyncData } from '../composables/useAsyncData'
 import { formatAppError, type FormattedErrorDetail } from '../errors/appError'
@@ -485,6 +494,7 @@ const successNotice = ref('')
 const staleWarning = ref('')
 const mutationError = ref<MutationErrorPresentation | null>(null)
 const mutationTarget = ref<'create' | 'close' | null>(null)
+const activePortfolio = ref('REAL')
 const searchQuery = ref('')
 const statusFilter = ref('ALL')
 

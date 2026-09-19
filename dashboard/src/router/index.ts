@@ -21,6 +21,11 @@ const router = createRouter({
       component: () => import('../views/PositionsView.vue'),
     },
     {
+      path: '/symbols/:symbol',
+      name: 'SymbolDetail',
+      component: () => import('../views/SymbolDetailView.vue'),
+    },
+    {
       path: '/signals',
       name: 'Signals',
       component: () => import('../views/SignalsView.vue'),
