@@ -196,6 +196,13 @@
                     {{ latestSignal(entry.symbol)!.direction }}
                   </span>
                   <span v-else class="text-xs text-text-muted">No signal</span>
+                  <span
+                    v-if="consensusFor(entry.symbol)"
+                    class="ml-1.5 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand"
+                    data-testid="consensus-badge"
+                    title="Variants signalling BUY / variants with a signal"
+                    >{{ consensusFor(entry.symbol) }}</span
+                  >
                 </td>
                 <td class="px-5 py-4 text-right text-sm text-text-secondary">
                   {{ entry.candleCount ?? 0 }}
@@ -244,6 +251,7 @@ import {
   toggleWatchlistActive,
 } from '../api/watchlist'
 import { getSignals } from '../api/signals'
+import { groupSignalsBySymbol } from '../utils/signalGrouping'
 import type { Signal, WatchlistEntry } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
@@ -283,6 +291,16 @@ const latestSignals = computed(() => {
 })
 
 const latestSignal = (symbol: string) => latestSignals.value.get(symbol)
+
+// Only shown when at least one variant (strategy-tagged) signal exists for the symbol.
+const consensusBySymbol = computed(() => {
+  const labels = new Map<string, string>()
+  for (const group of groupSignalsBySymbol(signals.value.filter((s) => s.strategy))) {
+    labels.set(group.symbol, group.consensusLabel)
+  }
+  return labels
+})
+const consensusFor = (symbol: string) => consensusBySymbol.value.get(symbol) ?? ''
 const buySignalCount = computed(
   () => watchlist.value.filter((entry) => latestSignal(entry.symbol)?.direction === 'BUY').length
 )

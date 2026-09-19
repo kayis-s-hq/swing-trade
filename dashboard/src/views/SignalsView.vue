@@ -241,6 +241,24 @@
                 {{ st }}
               </button>
             </div>
+            <div
+              class="signal-filter-group flex rounded-md border border-border-subtle bg-bg-primary/40 p-0.5"
+              aria-label="View mode"
+            >
+              <button
+                v-for="mode in VIEW_MODES"
+                :key="mode.value"
+                class="rounded px-3 py-1.5 text-xs font-medium transition-colors"
+                :class="
+                  effectiveViewMode === mode.value
+                    ? 'bg-brand-subtle text-brand'
+                    : 'text-text-muted hover:bg-bg-hover'
+                "
+                @click="viewPreference = mode.value"
+              >
+                {{ mode.label }}
+              </button>
+            </div>
             <label class="flex items-center gap-2 text-xs text-text-muted">
               Strategy
               <select
@@ -258,8 +276,32 @@
           >
         </div>
 
+        <!-- Grouped by symbol: one row per symbol, a chip per variant -->
+        <div v-if="effectiveViewMode === 'GROUPED'" class="space-y-2" aria-label="Signals by symbol">
+          <div
+            v-for="group in groupedSignals"
+            :key="group.symbol"
+            class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border-subtle bg-bg-surface p-3"
+          >
+            <div class="flex items-center gap-3">
+              <span class="w-28 font-semibold text-text-primary">{{ group.symbol }}</span>
+              <span
+                v-if="group.consensusLabel"
+                class="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand"
+                data-testid="consensus-badge"
+                >{{ group.consensusLabel }}</span
+              >
+            </div>
+            <VariantSignalChips :chips="group.chips" />
+          </div>
+          <p v-if="groupedSignals.length === 0" class="py-8 text-center text-sm text-text-muted">
+            No signals match this view.
+          </p>
+        </div>
+
         <!-- Signal Grid -->
         <TransitionGroup
+          v-if="effectiveViewMode === 'FLAT'"
           name="signal-card"
           tag="div"
           class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3"
@@ -279,7 +321,7 @@
         </TransitionGroup>
 
         <div
-          v-if="filteredSignals.length === 0"
+          v-if="effectiveViewMode === 'FLAT' && filteredSignals.length === 0"
           class="signal-empty-state flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default py-16"
         >
           <div
@@ -357,6 +399,9 @@ import {
 import { executeTrade, getPositions } from '../api/positions'
 import type { Signal } from '../api/types'
 import SignalCard from '../components/SignalCard.vue'
+import VariantSignalChips from '../components/VariantSignalChips.vue'
+import { listSignalSelections, latestTournament, type SignalSelection } from '../api/selections'
+import { groupSignalsBySymbol } from '../utils/signalGrouping'
 import { getSettings } from '../stores/settings'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
@@ -370,6 +415,12 @@ const signals = ref<Signal[]>([])
 const directionFilter = ref('ALL')
 const statusFilter = ref('ALL')
 const strategyFilter = ref('ALL')
+const VIEW_MODES = [
+  { value: 'GROUPED' as const, label: 'By symbol' },
+  { value: 'FLAT' as const, label: 'List' },
+]
+const viewPreference = ref<'GROUPED' | 'FLAT' | null>(null)
+const selections = ref<SignalSelection[]>([])
 const selectedSignalIds = ref(new Set<string>())
 const execResult = ref<{
   success: number
@@ -402,6 +453,26 @@ const filteredSignals = computed(() => {
     return matchesDir && matchesStatus && matchesStrategy
   })
 })
+
+// Grouping only carries information once variants emit signals; before that (legacy
+// strategy-less signals) the selectable card list stays the default.
+const hasVariantSignals = computed(() => signals.value.some((s) => s.strategy))
+const effectiveViewMode = computed(
+  () => viewPreference.value ?? (hasVariantSignals.value ? 'GROUPED' : 'FLAT')
+)
+const groupedSignals = computed(() => groupSignalsBySymbol(filteredSignals.value, selections.value))
+
+// The tournament winner star is supplementary; a failure must never break the signal list.
+async function loadSelections() {
+  try {
+    const to = new Date()
+    const from = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const iso = (d: Date) => d.toISOString().slice(0, 10)
+    selections.value = latestTournament(await listSignalSelections(iso(from), iso(to)))
+  } catch {
+    selections.value = []
+  }
+}
 
 const selectedCount = computed(() => selectedSignalIds.value.size)
 
@@ -516,6 +587,7 @@ const doRefresh = async () => {
   await execute(async () => {
     signals.value = await getSignals()
   })
+  void loadSelections()
 }
 
 const generateAll = async () => {
