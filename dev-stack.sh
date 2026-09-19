@@ -360,8 +360,10 @@ case "${1:-help}" in
     echo ""
 
     # --- Step 7: Stop existing stage deployment ---
+    # --env-file makes ${API_KEY:?} and other interpolated vars in the compose file resolve
+    # from the transferred .env.stage (compose only auto-reads a file named .env).
     echo "🛑 Stopping existing stage deployment on pi-node..."
-    ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml down" 2>/dev/null || true
+    ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose --env-file .env.stage -f docker-compose.infra-stage.yml down" 2>/dev/null || true
     # Belt-and-suspenders: force-remove by exact name too. `compose down` only
     # matches containers carrying this project's compose labels — a container
     # left over from a prior deploy under a different project name (e.g. a
@@ -373,7 +375,7 @@ case "${1:-help}" in
 
     # --- Step 8: Build + start stage stack on pi-node ---
     echo "🐳 Building images on pi-node (packaging only, no compilation)..."
-    ssh dietpi@piworm.local "cd $STAGE_PATH && DOCKER_BUILDKIT=1 docker compose -f docker-compose.infra-stage.yml build"
+    ssh dietpi@piworm.local "cd $STAGE_PATH && DOCKER_BUILDKIT=1 docker compose --env-file .env.stage -f docker-compose.infra-stage.yml build"
     echo "✓ Images built"
     IMAGE_SIZE=$(ssh dietpi@piworm.local "docker image inspect swing-trade-api:stage --format='{{.Size}}'" 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}')
     DASH_SIZE=$(ssh dietpi@piworm.local "docker image inspect swing-trade-dashboard:stage --format='{{.Size}}'" 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}')
@@ -381,14 +383,14 @@ case "${1:-help}" in
     echo ""
 
     echo "🚀 Starting stage stack on pi-node..."
-    ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml up -d"
+    ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose --env-file .env.stage -f docker-compose.infra-stage.yml up -d"
     echo "✓ Stage stack started"
     echo ""
 
     # --- Step 9: Wait for infra to be healthy ---
     echo "⏳ Waiting for stage infrastructure to be ready..."
     for i in $(seq 1 30); do
-      PG_HEALTH=$(ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose -f docker-compose.infra-stage.yml ps --filter health=healthy postgres 2>/dev/null | wc -l")
+      PG_HEALTH=$(ssh dietpi@piworm.local "cd $STAGE_PATH && docker compose --env-file .env.stage -f docker-compose.infra-stage.yml ps --filter health=healthy postgres 2>/dev/null | wc -l")
       if [ "$PG_HEALTH" -gt 0 ]; then
         echo "✓ PostgreSQL is healthy"
         break
@@ -453,7 +455,7 @@ case "${1:-help}" in
 
   stage-down)
     echo "🛑 Stopping stage stack..."
-    ssh dietpi@piworm.local "cd /home/dietpi/swing-trade && docker compose -f docker-compose.infra-stage.yml down"
+    ssh dietpi@piworm.local "cd /home/dietpi/swing-trade && docker compose --env-file .env.stage -f docker-compose.infra-stage.yml down"
     echo "✓ Stage stack stopped"
     ;;
 
