@@ -2,7 +2,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StrategyReport } from '../api/strategyReport'
 
-const apiMocks = vi.hoisted(() => ({ getStrategyReport: vi.fn() }))
+const apiMocks = vi.hoisted(() => ({
+  getStrategyReport: vi.fn(),
+  getArbitrationComparison: vi.fn(),
+}))
 vi.mock('../api/strategyReport', () => apiMocks)
 
 import StrategyReportView from './StrategyReportView.vue'
@@ -48,6 +51,46 @@ const report: StrategyReport = {
 describe('StrategyReportView', () => {
   beforeEach(() => {
     apiMocks.getStrategyReport.mockReset()
+    apiMocks.getArbitrationComparison.mockReset()
+    apiMocks.getArbitrationComparison.mockResolvedValue({
+      from: '2026-08-20',
+      to: '2026-09-19',
+      tournaments: 0,
+      rules: [],
+    })
+  })
+
+  it('compares arbitration rules when tournaments have been recorded', async () => {
+    apiMocks.getStrategyReport.mockResolvedValue(report)
+    apiMocks.getArbitrationComparison.mockResolvedValue({
+      from: '2026-08-20',
+      to: '2026-09-19',
+      tournaments: 4,
+      rules: [
+        {
+          rule: 'HIGHEST_CONFIDENCE',
+          decisions: 4,
+          decisionsWithOutcome: 3,
+          avgReturnPct: -1.5,
+          winRatePct: 33.3,
+          differsFromHighestConfidence: 0,
+        },
+        {
+          rule: 'EVIDENCE_RANKED',
+          decisions: 4,
+          decisionsWithOutcome: 3,
+          avgReturnPct: 2.2,
+          winRatePct: 66.7,
+          differsFromHighestConfidence: 2,
+        },
+      ],
+    })
+    const wrapper = mount(StrategyReportView)
+    await flushPromises()
+    const section = wrapper.find('[aria-label="Arbitration rules"]')
+    expect(section.text()).toContain('EVIDENCE_RANKED')
+    expect(section.text()).toContain('2.2%')
+    expect(section.text()).toContain('66.7%')
   })
 
   it('renders totals, wins-by-variant and the leaderboard row', async () => {

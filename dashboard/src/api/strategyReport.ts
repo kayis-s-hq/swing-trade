@@ -50,3 +50,36 @@ export async function getStrategyReport(from?: string, to?: string): Promise<Str
     responseContract: 'direct',
   })
 }
+
+export interface ArbitrationRuleResult {
+  rule: 'HIGHEST_CONFIDENCE' | 'EVIDENCE_RANKED'
+  decisions: number
+  decisionsWithOutcome: number
+  avgReturnPct: number | null
+  winRatePct: number | null
+  differsFromHighestConfidence: number
+}
+
+/** Mirrors backend ArbitrationComparisonService.Comparison: recorded tournaments replayed under each rule. */
+export interface ArbitrationComparison {
+  from: string
+  to: string
+  tournaments: number
+  rules: ArbitrationRuleResult[]
+}
+
+export async function getArbitrationComparison(
+  from?: string,
+  to?: string
+): Promise<ArbitrationComparison> {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  const query = params.toString()
+  return apiRequest<ArbitrationComparison>(
+    `/strategy-report/arbitration-comparison${query ? `?${query}` : ''}`,
+    {
+      responseContract: 'direct',
+    }
+  )
+}

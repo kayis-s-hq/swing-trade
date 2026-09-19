@@ -224,7 +224,7 @@ public class StrategyAttributionService {
         return Optional.of(Math.max(0.0, best - pick.get()));
     }
 
-    private static Optional<Double> returnPct(String variantId, SignalSelectionEntity sel,
+    static Optional<Double> returnPct(String variantId, SignalSelectionEntity sel,
                                               Map<String, List<ShadowClosedTrade>> shadowTrades) {
         return shadowTrades.getOrDefault(variantId, List.of()).stream()
             .filter(t -> t.symbol().equals(sel.getSymbol()) && t.entryDate() != null && t.pnl() != null

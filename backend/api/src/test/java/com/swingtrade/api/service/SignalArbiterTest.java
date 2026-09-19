@@ -47,4 +47,44 @@ class SignalArbiterTest {
         assertThat(SignalArbiter.pick(List.of(outcome("a", SignalType.HOLD, "0.5", true)))).isEmpty();
         assertThat(SignalArbiter.pick(List.of())).isEmpty();
     }
+
+    private static com.swingtrade.domain.ShadowClosedTrade trade(String pnl, java.time.LocalDate exit) {
+        return new com.swingtrade.domain.ShadowClosedTrade("v", "SBIN", exit.minusDays(3), exit,
+            new BigDecimal("100"), null, null, null, 10, "TARGET_HIT", new BigDecimal(pnl));
+    }
+
+    @Test
+    void evidenceNeedsMinimumTradesAndIgnoresFutureExits() {
+        var asOf = java.time.LocalDate.of(2026, 9, 10);
+        var enough = java.util.stream.IntStream.range(0, 5)
+            .mapToObj(i -> trade("50", java.time.LocalDate.of(2026, 9, 1).plusDays(i))).toList();
+        assertThat(SignalArbiter.evidence(enough, asOf)).hasValue(5.0);
+        assertThat(SignalArbiter.evidence(enough.subList(0, 4), asOf)).isEmpty();
+        var withFuture = new java.util.ArrayList<>(enough.subList(0, 4));
+        withFuture.add(trade("500", java.time.LocalDate.of(2026, 9, 20)));
+        assertThat(SignalArbiter.evidence(withFuture, asOf)).isEmpty();
+    }
+
+    @Test
+    void evidenceRankedPrefersProvenVariantOverHigherConfidence() {
+        var candidates = List.of(
+            new SignalArbiter.Candidate("flashy", new BigDecimal("0.90")),
+            new SignalArbiter.Candidate("proven", new BigDecimal("0.60")));
+        var evidence = java.util.Map.of("proven", 3.0, "flashy", -2.0);
+        assertThat(SignalArbiter.pickVariant(candidates, ArbitrationRule.HIGHEST_CONFIDENCE, evidence))
+            .hasValue("flashy");
+        assertThat(SignalArbiter.pickVariant(candidates, ArbitrationRule.EVIDENCE_RANKED, evidence))
+            .hasValue("proven");
+    }
+
+    @Test
+    void evidenceRankedTreatsUnknownAsNeutralAndFallsBackToConfidence() {
+        var candidates = List.of(
+            new SignalArbiter.Candidate("a", new BigDecimal("0.55")),
+            new SignalArbiter.Candidate("b", new BigDecimal("0.80")));
+        assertThat(SignalArbiter.pickVariant(candidates, ArbitrationRule.EVIDENCE_RANKED, java.util.Map.of()))
+            .hasValue("b");
+        assertThat(SignalArbiter.pickVariant(candidates, ArbitrationRule.EVIDENCE_RANKED,
+            java.util.Map.of("a", 1.0))).hasValue("a");
+    }
 }
