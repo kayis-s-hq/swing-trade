@@ -5,11 +5,38 @@
       <div>
         <h1 class="font-display text-2xl font-semibold text-text-primary">Backtest</h1>
         <p class="mt-1 text-sm text-text-muted">
-          Replay the price-action strategy against historical candles
+          Replay a strategy against historical candles, or compare strategy variants as a portfolio
         </p>
       </div>
     </div>
 
+    <div
+      class="mb-6 inline-flex rounded-md border border-border-subtle bg-bg-primary/40 p-0.5"
+      role="tablist"
+      aria-label="Backtest mode"
+    >
+      <button
+        v-for="option in TABS"
+        :key="option.value"
+        role="tab"
+        :aria-selected="tab === option.value"
+        class="rounded px-3 py-1.5 text-xs font-medium transition-colors"
+        :class="
+          tab === option.value ? 'bg-brand-subtle text-brand' : 'text-text-muted hover:bg-bg-hover'
+        "
+        @click="tab = option.value"
+      >
+        {{ option.label }}
+      </button>
+    </div>
+
+    <BacktestComparePanel
+      v-if="tab === 'compare'"
+      v-model:selected="compareSelection"
+      show-picker
+    />
+
+    <div v-show="tab === 'single'">
     <!-- Run Form -->
     <div class="mb-6 card-panel p-5">
       <h3 class="mb-3 text-sm font-semibold text-text-primary">Run Backtest</h3>
@@ -321,6 +348,7 @@
         No saved reports yet.
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -331,6 +359,16 @@ import { getWatchlist } from '../api/watchlist'
 import type { BacktestResult, BacktestReportSummary, WatchlistEntry } from '../api/types'
 import MetricCard from '../components/MetricCard.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
+import BacktestComparePanel from '../components/BacktestComparePanel.vue'
+
+const TABS = [
+  { value: 'single' as const, label: 'Single symbol' },
+  { value: 'compare' as const, label: 'Portfolio compare' },
+]
+const tab = ref<'single' | 'compare'>(
+  new URLSearchParams(window.location.search).get('tab') === 'compare' ? 'compare' : 'single'
+)
+const compareSelection = ref<string[]>([])
 
 const symbol = ref('')
 const symbolQuery = ref('')
