@@ -22,6 +22,17 @@ const settingsMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../api/signals', () => signalApiMocks)
+vi.mock('../api/selections', () => ({
+  listSignalSelections: vi.fn().mockResolvedValue([]),
+  latestTournament: (rows: unknown[]) => rows,
+}))
+vi.mock('../api/strategies', () => ({
+  getStrategies: vi.fn().mockResolvedValue([
+    { variantId: 'breakout-v1' },
+    { variantId: 'pullback-v1' },
+    { variantId: 'squeeze-v1' },
+  ]),
+}))
 vi.mock('../api/positions', () => positionApiMocks)
 vi.mock('../stores/settings', () => settingsMocks)
 
@@ -222,5 +233,34 @@ describe('SignalsView — partial batch outcomes', () => {
     expect(wrapper.text()).toContain('Signals changed on the server')
     expect(globalThis.alert).not.toHaveBeenCalled()
     wrapper.unmount()
+  })
+})
+
+describe('SignalsView — variant grouping', () => {
+  const variantSignals: Signal[] = [
+    { ...signals[0], id: 'v1', strategy: 'breakout-v1' },
+    { ...signals[0], id: 'v2', strategy: 'pullback-v1', confidence: 0.7 },
+    { ...signals[0], id: 'v3', strategy: 'squeeze-v1', direction: 'SELL' },
+  ]
+
+  it('keeps the card list as the default when no signal carries a strategy', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[aria-label="Signals by symbol"]').exists()).toBe(false)
+    expect(wrapper.find('article').exists()).toBe(true)
+  })
+
+  it('groups variant signals by symbol with a consensus badge and toggles back to the list', async () => {
+    signalApiMocks.getSignals.mockResolvedValue(variantSignals)
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="variant-chip"]')).toHaveLength(3)
+    expect(wrapper.find('[data-testid="consensus-badge"]').text()).toBe('2/3 BUY')
+    expect(wrapper.find('article').exists()).toBe(false)
+
+    await button(wrapper, 'List').trigger('click')
+    expect(wrapper.find('article').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="Signals by symbol"]').exists()).toBe(false)
   })
 })

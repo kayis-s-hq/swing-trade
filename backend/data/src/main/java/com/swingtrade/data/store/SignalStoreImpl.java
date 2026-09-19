@@ -47,6 +47,13 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
+    public List<Signal> findByDateAndStrategy(LocalDate date, String strategy) {
+        return repository.findByDateAndStrategy(date, strategy).stream()
+            .map(SignalEntity::toDomain)
+            .toList();
+    }
+
+    @Override
     public List<Signal> findBySymbolAndDate(String symbol, LocalDate date) {
         return repository.findBySymbolAndDate(symbol, date).stream()
             .map(SignalEntity::toDomain)

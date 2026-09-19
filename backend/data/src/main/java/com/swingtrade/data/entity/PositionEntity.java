@@ -53,10 +53,10 @@ public class PositionEntity {
 
     private Integer quantity;
 
-    @Column(name = "stop_loss", precision = 15)
+    @Column(name = "stop_loss", precision = 15, scale = 4)
     private BigDecimal stopLoss;
 
-    @Column(precision = 15)
+    @Column(precision = 15, scale = 4)
     private BigDecimal target;
 
     @Column(length = 20)

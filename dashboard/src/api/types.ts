@@ -60,6 +60,10 @@ export interface Signal {
   timestamp: string
   status: 'PENDING' | 'ACTIVE' | 'EXECUTED' | 'EXPIRED'
   strategy?: string
+  // Backend gap: SignalController does not currently expose strategy_version in its DTO
+  // (plan §4.2 migration adds the column, but no controller/DTO surfaces it yet), so this
+  // is always undefined until that endpoint is extended.
+  strategyVersion?: number
   indicators?: string[]
   sentimentScore?: string
   sentimentReasoning?: string

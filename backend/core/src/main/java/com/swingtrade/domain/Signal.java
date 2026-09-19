@@ -20,6 +20,8 @@ import java.time.LocalDate;
  * @param riskReward the calculated risk-reward ratio
  * @param indicators the technical indicators that triggered the signal
  * @param generatedAt the timestamp when the signal was generated
+ * @param strategy the strategy variant id that produced the signal (null when not recorded)
+ * @param strategyVersion the strategy configuration version (null when not recorded)
  */
 public record Signal(
     Long id,
@@ -35,8 +37,19 @@ public record Signal(
     String indicators,
     LocalDate generatedAt,
     String sentimentScore,
-    String sentimentReasoning
+    String sentimentReasoning,
+    String strategy,
+    Integer strategyVersion
 ) {
+    /** Form for callers that carry no strategy provenance (strategy and version are null). */
+    public Signal(Long id, String symbol, LocalDate date, SignalType type, BigDecimal confidence,
+                  String reasoning, BigDecimal entryPrice, BigDecimal stopLoss, BigDecimal target,
+                  BigDecimal riskReward, String indicators, LocalDate generatedAt, String sentimentScore,
+                  String sentimentReasoning) {
+        this(id, symbol, date, type, confidence, reasoning, entryPrice, stopLoss, target, riskReward,
+            indicators, generatedAt, sentimentScore, sentimentReasoning, null, null);
+    }
+
     /**
      * Enum representing the different types of trading signals.
      */

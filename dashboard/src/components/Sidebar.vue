@@ -214,6 +214,7 @@ const navItems = computed(() => [
   },
   { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
   { path: '/strategies', label: 'Strategies', icon: iconPaths.settings, badge: undefined },
+  { path: '/strategy-report', label: 'Strategy report', icon: iconPaths.strategies, badge: undefined },
   { path: '/news', label: 'News', icon: iconPaths.intelligence, badge: undefined },
   { path: '/sentiment', label: 'Sentiment', icon: iconPaths.intelligence, badge: undefined },
   { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },

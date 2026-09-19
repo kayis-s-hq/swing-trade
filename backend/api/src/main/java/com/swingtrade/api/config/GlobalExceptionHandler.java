@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
@@ -208,6 +209,39 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(response);
+    }
+
+    /**
+     * Handle explicit {@code ResponseStatusException}s thrown by service/controller code
+     * (e.g. {@code PromotionEligibilityService}'s 404s, {@code BacktestCompareService}'s
+     * 400s). Without this handler these fell through to {@link #handleGenericException},
+     * which always answers 500 regardless of the status the caller actually chose - found
+     * by live-testing the promotion-eligibility endpoint against a real database.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(
+            ResponseStatusException ex, WebRequest request) {
+
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+
+        if (status.is5xxServerError()) {
+            logger.error("Response status error: {}", ex.getReason(), ex);
+        } else {
+            logger.warn("Response status error: {}", ex.getReason());
+        }
+
+        ErrorResponse response = new ErrorResponse(
+                status.value(),
+                status.name(),
+                ex.getReason() != null ? ex.getReason() : status.getReasonPhrase(),
+                LocalDateTime.now(),
+                request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.status(status).body(response);
     }
 
     /**

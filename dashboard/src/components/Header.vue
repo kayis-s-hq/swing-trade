@@ -150,7 +150,9 @@ const route = useRoute()
 const currentPage = computed(() => {
   const name = route.name
   if (typeof name === 'string') {
-    return name.charAt(0).toUpperCase() + name.slice(1)
+    // Route names are PascalCase ("SymbolDetail"); show them as words ("Symbol detail").
+    const words = name.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
+    return words.charAt(0).toUpperCase() + words.slice(1)
   }
   return 'Dashboard'
 })

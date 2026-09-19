@@ -15,6 +15,13 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock('../api/client', () => apiMocks)
 vi.mock('../api/watchlist', () => apiMocks)
 vi.mock('../api/signals', () => apiMocks)
+vi.mock('../api/strategies', () => ({
+  getStrategies: vi.fn().mockResolvedValue([
+    { variantId: 'breakout-v1' },
+    { variantId: 'pullback-v1' },
+    { variantId: 'squeeze-v1' },
+  ]),
+}))
 
 const entry: WatchlistEntry = {
   id: 1,
@@ -162,6 +169,20 @@ describe('WatchlistView — signal monitoring', () => {
     await button(wrapper, 'BUY signals 1').trigger('click')
     expect(wrapper.text()).toContain('RELIANCE')
     expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    wrapper.unmount()
+  })
+  it('shows a variant consensus badge only when strategy-tagged signals exist', async () => {
+    const base = {
+      symbol: 'RELIANCE', confidence: 0.8, reason: '', entryPrice: 100, stopLoss: 95, target: 115,
+      riskReward: 3, timestamp: '2026-08-30', status: 'ACTIVE',
+    }
+    apiMocks.getSignals.mockResolvedValue([
+      { ...base, id: 's1', direction: 'BUY', strategy: 'breakout-v1' },
+      { ...base, id: 's2', direction: 'SELL', strategy: 'squeeze-v1' },
+    ])
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="consensus-badge"]').text()).toBe('1/2 BUY')
     wrapper.unmount()
   })
 })

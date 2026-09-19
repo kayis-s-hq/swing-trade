@@ -4,6 +4,7 @@ import com.swingtrade.core.metrics.JobOrchestratorMetrics;
 import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.domain.service.VariantTradingService;
 import com.swingtrade.data.entity.JobRunEntity;
+import com.swingtrade.data.entity.SignalSelectionEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.repository.JobRunRepository;
 import com.swingtrade.data.repository.JobRunStageRepository;
@@ -40,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -148,6 +150,19 @@ public class JobOrchestratorService {
     private final LiveEligibilityService liveEligibilityService;
     private final VariantTradingService variantTradingService;
     private GateEffectivenessAuditService gateEffectivenessAuditService;
+
+    private SignalArbiter signalArbiter;
+
+    /** Paper portfolio that follows each day's signal-tournament winner. */
+    static final String SELECTED_PORTFOLIO_ID = "selected";
+    private static final BigDecimal SELECTED_PORTFOLIO_CAPITAL = new BigDecimal("100000");
+    private static final int SELECTION_EXPIRY_DAYS = 5;
+
+    /** Optional: without an arbiter the pipeline behaves exactly as before (no tournament). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setSignalArbiter(SignalArbiter signalArbiter) {
+        this.signalArbiter = signalArbiter;
+    }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setGateEffectivenessAuditService(GateEffectivenessAuditService service) {
@@ -562,6 +577,7 @@ public class JobOrchestratorService {
             configuredLiveRun[0] = true;
             boolean championSeen = configs.stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count() == 1;
             int generated = 0;
+            List<VariantSignalOutcome> outcomes = new java.util.ArrayList<>();
             for (StrategyConfig config : configs) {
                 java.util.Optional<com.swingtrade.strategy.TradingStrategy> selected;
                 try {
@@ -582,6 +598,8 @@ public class JobOrchestratorService {
                     if (signal.isPresent()) {
                         generated++;
                         signalTypeOut[0] = signal.get().type();
+                        outcomes.add(new VariantSignalOutcome(config.variantId(), config.version(),
+                            signal.get().type(), false, true, signal.get().confidence()));
                         if (champion && signal.get().id() != null) tradeableSignalIds.add(signal.get().id());
                     }
                 } catch (RuntimeException e) {
@@ -589,7 +607,13 @@ public class JobOrchestratorService {
                         config.variantId(), symbol, e.getMessage());
                 }
             }
-            return StageExecutionResult.completed(generated + " configured signal(s) generated");
+            String summary = generated + " configured signal(s) generated";
+            Optional<SignalSelectionEntity> winner = arbitrate(symbol, outcomes);
+            if (winner.isPresent()) {
+                summary += "; winner " + winner.get().getWinnerVariantId()
+                    + " (" + winner.get().getWinnerConfidence().toPlainString() + ")";
+            }
+            return StageExecutionResult.completed(summary);
         }
 
         var signal = signalPipeline.generatePrimarySignal(symbol);
@@ -657,8 +681,10 @@ public class JobOrchestratorService {
     }
 
     private String stagePaperTrade(String symbol, Set<Long> tradeableSignalIds, boolean configuredLiveRun) {
+        String selectedSummary = null;
         if (configuredLiveRun) {
             stageVariantPaperTrade(symbol);
+            selectedSummary = stageSelectedTrade(symbol);
         }
         List<Signal> unprocessed = signalStore.findUnprocessed()
             .stream()
@@ -771,7 +797,104 @@ public class JobOrchestratorService {
         if (failedToQueue > 0) {
             summary.append(", ").append(failedToQueue).append(" failed to queue (see logs)");
         }
+        if (selectedSummary != null) {
+            summary.append(" | selected: ").append(selectedSummary);
+        }
         return summary.toString();
+    }
+
+    /** Records the signal tournament for {@code symbol}; a failure never fails the SIGNAL stage. */
+    private Optional<SignalSelectionEntity> arbitrate(String symbol, List<VariantSignalOutcome> outcomes) {
+        if (signalArbiter == null || outcomes.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            Optional<OhlcvCandle> latest = candleStore.findLatestBySymbol(symbol);
+            if (latest.isEmpty()) {
+                return Optional.empty();
+            }
+            return signalArbiter.arbitrate(symbol, latest.get().date(), outcomes);
+        } catch (RuntimeException e) {
+            logger.error("Signal arbitration failed for {}: {}", symbol, e.getMessage(), e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Drives the dedicated "selected" paper book: evaluates exits on its open position for
+     * {@code symbol}, then executes the tournament winner if it is still PENDING and clears the
+     * same sentiment / LLM / live-eligibility gates as the champion's BUYs. The winner's own
+     * variant book is unaffected - this only adds a follow-the-winner book.
+     *
+     * @return a short summary, or {@code null} when there is nothing selected to act on
+     */
+    private String stageSelectedTrade(String symbol) {
+        if (signalArbiter == null || variantTradingService == null) {
+            return null;
+        }
+        try {
+            variantTradingService.ensurePortfolio(SELECTED_PORTFOLIO_ID, SELECTED_PORTFOLIO_CAPITAL);
+            OhlcvCandle latest = candleStore.findLatestBySymbol(symbol).orElse(null);
+            if (latest == null || latest.close() == null) {
+                return null;
+            }
+            variantTradingService.evaluateOpenPositions(SELECTED_PORTFOLIO_ID, symbol, latest);
+
+            Optional<SignalSelectionEntity> pending =
+                signalArbiter.findLatest(symbol, SignalSelectionEntity.PENDING);
+            if (pending.isEmpty()) {
+                return null;
+            }
+            SignalSelectionEntity selection = pending.get();
+            String winner = selection.getWinnerVariantId();
+            if (selection.getSelectionDate().isBefore(LocalDate.now(IST).minusDays(SELECTION_EXPIRY_DAYS))) {
+                signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, "expired before gates cleared");
+                return "expired " + winner;
+            }
+            Optional<Signal> signal = signalStore.findLatestBySymbolAndStrategy(symbol, winner)
+                .filter(s -> selection.getWinnerSignalId() == null || selection.getWinnerSignalId().equals(s.id()));
+            if (signal.isEmpty() || signal.get().type() != Signal.SignalType.BUY) {
+                signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, "winning signal no longer available");
+                return "winning signal missing";
+            }
+
+            String block = null;
+            var sentiment = sentimentGate.evaluatePersisted(symbol, signal.get().date());
+            if (sentiment.action() == SentimentGate.SentimentVerdict.Action.PENDING) {
+                return "deferred " + winner + " (awaiting sentiment)";
+            }
+            if (sentiment.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
+                block = "SENTIMENT_BLOCK: " + sentiment.reason();
+            }
+            if (block == null && llmAnalysisEnabled && llmAnalysisGate != null) {
+                var llm = llmAnalysisGate.evaluatePersisted(symbol, signal.get().date());
+                if (llm.action() == LlmAnalysisGate.LlmVerdict.Action.PENDING) {
+                    return "deferred " + winner + " (awaiting LLM analysis)";
+                }
+                if (llm.action() == LlmAnalysisGate.LlmVerdict.Action.SUPPRESS && !llmAnalysisAdvisoryOnly) {
+                    block = "LLM_BLOCK: " + llm.reason();
+                }
+            }
+            if (block == null && liveEligibilityService != null) {
+                var eligibility = liveEligibilityService.assess(symbol, signal.get().date(), latest.close());
+                if (!eligibility.eligible()) {
+                    block = "ELIGIBILITY_BLOCK: " + eligibility.rejectionReasons();
+                }
+            }
+            if (block != null) {
+                signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, block);
+                logger.info("Selected-book BUY {} for {} blocked: {}", winner, symbol, block);
+                return "blocked " + winner;
+            }
+            if (!variantTradingService.openPosition(SELECTED_PORTFOLIO_ID, signal.get(), latest.close())) {
+                return "could not open " + winner + " (will retry)";
+            }
+            signalArbiter.markStatus(selection, SignalSelectionEntity.EXECUTED, null);
+            return "executed " + winner;
+        } catch (RuntimeException e) {
+            logger.error("Selected-book execution failed for {}: {}", symbol, e.getMessage(), e);
+            return null;
+        }
     }
 
     /**

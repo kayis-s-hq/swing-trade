@@ -132,4 +132,10 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
 
     @Query("SELECT COUNT(p) FROM PositionEntity p WHERE p.portfolioId = :portfolioId AND p.status = 'OPEN'")
     long countOpenByPortfolioId(@Param("portfolioId") String portfolioId);
+
+    /** Every position (any status) in a portfolio, most recently entered first. */
+    List<PositionEntity> findByPortfolioIdOrderByEntryDateDescIdDesc(String portfolioId);
+
+    /** Every portfolio-tagged position (i.e. not a real "default"-book position) on a symbol. */
+    List<PositionEntity> findBySymbolAndPortfolioIdIsNotNullOrderByEntryDateDescIdDesc(String symbol);
 }

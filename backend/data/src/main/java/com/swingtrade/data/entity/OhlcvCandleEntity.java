@@ -47,7 +47,7 @@ public class OhlcvCandleEntity {
 
     private Long volume;
 
-    @Column(name = "adj_close_price", precision = 15)
+    @Column(name = "adj_close_price", precision = 15, scale = 4)
     private BigDecimal adjClosePrice;
 
     @Column(name = "created_at", updatable = false)

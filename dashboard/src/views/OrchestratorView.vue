@@ -303,6 +303,9 @@
           </div>
         </div>
 
+        <!-- Signal tournament -->
+        <SignalTournamentPanel v-if="currentRun" class="mt-6" :selections="selections" />
+
         <!-- Past Runs -->
         <div class="mt-6 card-panel p-5">
           <h3 class="mb-3 text-sm font-semibold text-text-primary">Past Runs</h3>
@@ -370,6 +373,8 @@ import type { JobRunResponse, JobRunStageResponse } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import StageIcon from '../components/StageIcon.vue'
+import SignalTournamentPanel from '../components/SignalTournamentPanel.vue'
+import { listSignalSelections, latestTournament, type SignalSelection } from '../api/selections'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import { useAsyncData } from '../composables/useAsyncData'
 import { safeHumanMessage } from '../errors/appError'
@@ -405,6 +410,7 @@ const currentRunId = ref<string | null>(null)
 const currentRun = ref<JobRunResponse | null>(null)
 const pastRuns = ref<JobRunResponse[]>([])
 const stageRows = ref<JobRunStageResponse[]>([])
+const selections = ref<SignalSelection[]>([])
 const logEntries = ref<Array<{ time: string; message: string; type: 'info' | 'warn' | 'error' }>>(
   []
 )
@@ -659,6 +665,7 @@ async function refresh() {
 
     // Load history
     await loadHistory()
+    void loadSelections()
   })
 
   if (error.value) {
@@ -666,6 +673,18 @@ async function refresh() {
       errorMessage.value,
       'The orchestrator status could not be refreshed.'
     )
+  }
+}
+
+// The tournament is supplementary; a failure here must never break the run status display.
+async function loadSelections() {
+  try {
+    const to = new Date()
+    const from = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const iso = (d: Date) => d.toISOString().slice(0, 10)
+    selections.value = latestTournament(await listSignalSelections(iso(from), iso(to)))
+  } catch {
+    selections.value = []
   }
 }
 

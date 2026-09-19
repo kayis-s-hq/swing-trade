@@ -17,6 +17,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
 
     implementation("com.fasterxml.jackson.core:jackson-annotations")
+    // Required for Hibernate's @JdbcTypeCode(SqlTypes.JSON) mapping (strategy_config.params/
+    // overlays, signals.rule_outcomes/gate_outcomes - V46/V47) to find a JSON format mapper.
+    // Matches the Jackson 3 ("tools.jackson") namespace already used by core/strategy.
+    implementation("tools.jackson.core:jackson-databind")
 
     implementation("org.postgresql:postgresql")
     implementation("org.flywaydb:flyway-core:12.4.0")

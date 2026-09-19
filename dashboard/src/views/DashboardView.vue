@@ -239,6 +239,8 @@
           </aside>
         </div>
 
+        <StrategyBoard :signals="signals" class="mb-6" />
+
         <div class="grid gap-6 xl:grid-cols-2">
           <section class="card-panel overflow-hidden">
             <div class="flex items-center justify-between border-b border-border-subtle px-5 py-4">
@@ -384,6 +386,7 @@ import ErrorBoundary from '../components/ErrorBoundary.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
 import HealthStatus from '../components/HealthStatus.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import StrategyBoard from '../components/StrategyBoard.vue'
 import { asAppError, type AppError } from '../errors/appError'
 import {
   formatCurrency,

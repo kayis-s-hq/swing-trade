@@ -81,6 +81,15 @@ public interface SignalStore {
     List<Signal> findByDateRange(LocalDate startDate, LocalDate endDate);
 
     /**
+     * Finds every signal recorded for a specific date and variant, regardless of symbol - used
+     * by strategy attribution to read what the SIGNAL stage persisted for a variant on a day.
+     *
+     * @param date     the date
+     * @param strategy the variant id (the {@code strategy} column)
+     */
+    List<Signal> findByDateAndStrategy(LocalDate date, String strategy);
+
+    /**
      * Finds signals within a date range filtered by type (DB-level filtering).
      *
      * @param startDate start date (inclusive)

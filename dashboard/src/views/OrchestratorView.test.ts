@@ -11,6 +11,10 @@ const apiMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../api/job', () => apiMocks)
+vi.mock('../api/selections', () => ({
+  listSignalSelections: vi.fn().mockResolvedValue([]),
+  latestTournament: (rows: unknown[]) => rows,
+}))
 
 const activeRun: JobRunResponse = {
   runId: 'run-123',

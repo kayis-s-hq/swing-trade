@@ -21,6 +21,11 @@ const router = createRouter({
       component: () => import('../views/PositionsView.vue'),
     },
     {
+      path: '/symbols/:symbol',
+      name: 'SymbolDetail',
+      component: () => import('../views/SymbolDetailView.vue'),
+    },
+    {
       path: '/signals',
       name: 'Signals',
       component: () => import('../views/SignalsView.vue'),
@@ -54,6 +59,11 @@ const router = createRouter({
       path: '/strategies',
       name: 'Strategies',
       component: () => import('../views/StrategiesView.vue'),
+    },
+    {
+      path: '/strategy-report',
+      name: 'StrategyReport',
+      component: () => import('../views/StrategyReportView.vue'),
     },
     {
       path: '/sentiment',

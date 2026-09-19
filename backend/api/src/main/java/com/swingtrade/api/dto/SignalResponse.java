@@ -64,6 +64,8 @@ public class SignalResponse {
         this.generatedAt = signal.generatedAt();
         this.sentimentScore = signal.sentimentScore();
         this.sentimentReasoning = signal.sentimentReasoning();
+        this.strategy = signal.strategy();
+        this.strategyVersion = signal.strategyVersion();
     }
 
     // Getters and Setters
