@@ -2,10 +2,11 @@ package com.swingtrade.data.service;
 
 import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.data.repository.WatchlistRepository;
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +19,7 @@ import java.util.List;
  * Runs at 16:30 IST on weekdays (after market close).
  */
 @Service
-public class EodIngestionScheduler {
+public class EodIngestionScheduler implements ApplicationRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(EodIngestionScheduler.class);
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
@@ -48,11 +49,16 @@ public class EodIngestionScheduler {
 
     /**
      * Ensures the NIFTY50 benchmark has enough historical depth for backtests run over past
-     * date ranges, not just the forward-daily ticks the scheduled job appends. Runs once at
-     * startup; the underlying incremental backfill is a no-op once the window is already covered,
-     * so repeated application restarts do not re-download history.
+     * date ranges, not just the forward-daily ticks the scheduled job appends. Runs once the
+     * application context is fully up (not during bean construction, which would block server
+     * startup on network I/O); the underlying incremental backfill is a no-op once the window
+     * is already covered, so repeated application restarts do not re-download history.
      */
-    @PostConstruct
+    @Override
+    public void run(ApplicationArguments args) {
+        ensureNiftyBenchmarkHistory();
+    }
+
     void ensureNiftyBenchmarkHistory() {
         try {
             LocalDate cutoff = LocalDate.now(IST).minusYears(benchmarkBackfillYears);
