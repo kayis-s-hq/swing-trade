@@ -35,6 +35,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -246,7 +247,11 @@ public class BacktestCompareService {
             : requestedSymbols;
         Map<String, List<OhlcvCandle>> result = new HashMap<>();
         for (String symbol : symbols) {
-            List<OhlcvCandle> candles = candleStore.findBySymbol(symbol);
+            // findBySymbol() returns newest-first; the portfolio engine's bar series requires
+            // strictly chronological (ascending) order or ta4j's addBar() rejects the series.
+            List<OhlcvCandle> candles = candleStore.findBySymbol(symbol).stream()
+                .sorted(Comparator.comparing(OhlcvCandle::date))
+                .toList();
             if (!candles.isEmpty()) {
                 result.put(symbol, candles);
             }

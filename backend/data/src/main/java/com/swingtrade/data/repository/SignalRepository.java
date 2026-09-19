@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -217,6 +218,7 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * non-champion variant signals from the single shared paper engine).
      */
     @Modifying
+    @Transactional
     @Query("UPDATE SignalEntity s SET s.processed = true WHERE s.symbol = :symbol "
         + "AND s.signalType = 'BUY' AND s.processed = false "
         + "AND (s.strategy IS NULL OR s.strategy <> :strategy)")
@@ -230,6 +232,7 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * signals belonging to no active variant are quarantined this way.
      */
     @Modifying
+    @Transactional
     @Query("UPDATE SignalEntity s SET s.processed = true WHERE s.symbol = :symbol "
         + "AND s.signalType = 'BUY' AND s.processed = false "
         + "AND (s.strategy IS NULL OR s.strategy NOT IN :strategies)")
@@ -239,10 +242,12 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * Deletes all signals for a specific symbol and date.
      */
     @Modifying
+    @Transactional
     @Query("DELETE FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date")
     int deleteBySymbolAndDate(@Param("symbol") String symbol, @Param("date") LocalDate date);
 
     @Modifying
+    @Transactional
     @Query("DELETE FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date AND s.strategy = :strategy")
     int deleteBySymbolAndDateAndStrategy(@Param("symbol") String symbol, @Param("date") LocalDate date,
                                          @Param("strategy") String strategy);
@@ -255,6 +260,7 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * survive a regeneration.
      */
     @Modifying
+    @Transactional
     @Query("DELETE FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date "
         + "AND s.strategy = :strategy AND s.strategyVersion = :strategyVersion")
     int deleteBySymbolAndDateAndStrategyAndVersion(@Param("symbol") String symbol, @Param("date") LocalDate date,
@@ -265,6 +271,7 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * Deletes all signals for a specific date.
      */
     @Modifying
+    @Transactional
     @Query("DELETE FROM SignalEntity s WHERE s.date = :date")
     int deleteByDate(@Param("date") LocalDate date);
 
@@ -272,6 +279,7 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
      * Deletes all signals.
      */
     @Modifying
+    @Transactional
     @Query("DELETE FROM SignalEntity")
     int deleteAllSignals();
 

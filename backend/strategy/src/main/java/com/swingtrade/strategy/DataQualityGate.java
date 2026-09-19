@@ -26,8 +26,14 @@ import java.util.Optional;
  */
 public final class DataQualityGate {
 
-    /** Missing-bars threshold: symbol excluded if more than this fraction of expected bars are absent. */
-    static final double MAX_MISSING_BARS_FRACTION = 0.02;
+    /**
+     * Missing-bars threshold: symbol excluded if more than this fraction of expected bars are
+     * absent. {@code checkMissingBars}'s expected-bar count is Mon-Fri calendar days, not NSE
+     * trading days, so real NSE holidays (~45-50/year) always show up as "missing" bars - roughly
+     * 6% of weekdays over a multi-year window. 0.02 rejected every symbol in practice; 0.08 keeps
+     * a margin above that baseline holiday rate while still catching genuine ingestion gaps.
+     */
+    static final double MAX_MISSING_BARS_FRACTION = 0.08;
 
     /** Single-bar move fraction beyond which an unadjusted-split heuristic fires. */
     static final BigDecimal SPLIT_JUMP_THRESHOLD = BigDecimal.valueOf(0.40);
