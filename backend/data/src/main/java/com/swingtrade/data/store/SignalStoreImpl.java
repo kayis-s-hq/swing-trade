@@ -10,8 +10,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import com.swingtrade.domain.SignalStrategyMetadata;
 
 @Service
 public class SignalStoreImpl implements SignalStore {
@@ -44,10 +47,37 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
+    public List<Signal> findByDateAndStrategy(LocalDate date, String strategy) {
+        return repository.findByDateAndStrategy(date, strategy).stream()
+            .map(SignalEntity::toDomain)
+            .toList();
+    }
+
+    @Override
     public List<Signal> findBySymbolAndDate(String symbol, LocalDate date) {
         return repository.findBySymbolAndDate(symbol, date).stream()
             .map(SignalEntity::toDomain)
             .toList();
+    }
+
+    @Override
+    public List<String> findStrategiesBySymbolAndDate(String symbol, LocalDate date) {
+        return repository.findStrategiesBySymbolAndDate(symbol, date);
+    }
+
+    @Override
+    public Optional<String> findStrategyById(Long signalId) {
+        return signalId == null ? Optional.empty() : repository.findStrategyById(signalId);
+    }
+
+    @Override
+    public Map<Long, SignalStrategyMetadata> findStrategyMetadataByIds(List<Long> signalIds) {
+        if (signalIds == null || signalIds.isEmpty()) return Map.of();
+        return repository.findAllById(signalIds.stream().filter(Objects::nonNull).distinct().toList()).stream()
+                .filter(entity -> entity.getId() != null)
+                .collect(Collectors.toMap(SignalEntity::getId,
+                        entity -> new SignalStrategyMetadata(entity.getStrategy(), entity.getStrategyVersion()),
+                        (left, right) -> left));
     }
 
     @Override
@@ -66,24 +96,6 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
-    public List<Signal> findUnprocessedByStrategy(String strategy) {
-        return repository.findUnprocessedBuySignalsSinceAndStrategy(LocalDate.now().minusDays(30), strategy).stream()
-            .map(SignalEntity::toDomain)
-            .toList();
-    }
-
-    @Override
-    @Transactional
-    public int markProcessedExcludingStrategy(String symbol, String strategy) {
-        return repository.markProcessedExcludingStrategy(symbol, strategy);
-    }
-
-    @Override
-    public int markProcessedExcludingStrategies(String symbol, List<String> strategies) {
-        return repository.markProcessedExcludingStrategies(symbol, strategies);
-    }
-
-    @Override
     public Signal save(Signal signal) {
         return repository.save(SignalEntity.fromDomain(signal)).toDomain();
     }
@@ -95,22 +107,12 @@ public class SignalStoreImpl implements SignalStore {
 
     @Override
     public Signal save(Signal signal, String warningFlag, String strategy) {
-        SignalEntity entity = SignalEntity.fromDomain(signal, warningFlag);
-        entity.setStrategy(strategy);
-        return repository.save(entity).toDomain();
+        return save(signal, warningFlag, strategy, 1);
     }
 
     @Override
-    public Signal saveVariantSignal(Signal signal, String warningFlag, String strategy, int strategyVersion,
-                                     BigDecimal strategyScore, List<Map<String, Object>> ruleOutcomes,
-                                     List<Map<String, Object>> gateOutcomes) {
-        SignalEntity entity = SignalEntity.fromDomain(signal, warningFlag);
-        entity.setStrategy(strategy);
-        entity.setStrategyVersion(strategyVersion);
-        entity.setStrategyScore(strategyScore);
-        entity.setRuleOutcomes(ruleOutcomes);
-        entity.setGateOutcomes(gateOutcomes);
-        return repository.save(entity).toDomain();
+    public Signal save(Signal signal, String warningFlag, String strategy, Integer strategyVersion) {
+        return repository.save(SignalEntity.fromDomain(signal, warningFlag, strategy, strategyVersion)).toDomain();
     }
 
     @Override
@@ -171,13 +173,6 @@ public class SignalStoreImpl implements SignalStore {
     }
 
     @Override
-    public List<Signal> findByDateAndStrategy(LocalDate date, String strategy) {
-        return repository.findByDateAndStrategy(date, strategy).stream()
-            .map(SignalEntity::toDomain)
-            .toList();
-    }
-
-    @Override
     public List<Signal> findByDateRangeAndType(LocalDate startDate, LocalDate endDate, Signal.SignalType type) {
         return repository.findByDateRangeAndSignalType(
                 startDate, endDate, type.name(),
@@ -205,13 +200,6 @@ public class SignalStoreImpl implements SignalStore {
     @Transactional
     public int deleteBySymbolAndDateAndStrategy(String symbol, LocalDate date, String strategy) {
         return repository.deleteBySymbolAndDateAndStrategy(symbol, date, strategy);
-    }
-
-    @Override
-    @Transactional
-    public int deleteBySymbolAndDateAndStrategyAndVersion(String symbol, LocalDate date, String strategy,
-                                                            int strategyVersion) {
-        return repository.deleteBySymbolAndDateAndStrategyAndVersion(symbol, date, strategy, strategyVersion);
     }
 
     @Override

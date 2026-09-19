@@ -75,6 +75,35 @@ public class SignalController {
     @Autowired
     private SentimentService sentimentService;
 
+    @Autowired
+    private com.swingtrade.api.service.GateEffectivenessAuditService gateEffectivenessAuditService;
+
+    /**
+     * Summarizes sentiment-gate decisions and available forward returns by verdict.
+     * Returns separate ALLOW/SUPPRESS/FLAG_NEUTRAL buckets so blocked BUYs can be
+     * compared with the decisions that would have been traded.
+     */
+    @GetMapping("/gate-effectiveness")
+    public ResponseEntity<?> getGateEffectiveness(
+            @RequestParam LocalDate from,
+            @RequestParam LocalDate to,
+            @RequestParam(required = false) String symbol,
+            @RequestParam(required = false) String strategy,
+            @RequestParam(required = false) String regime,
+            @RequestParam(defaultValue = "SENTIMENT") String gate) {
+        if (from.isAfter(to)) return ResponseEntity.badRequest().body(Map.of("error", "from must not be after to"));
+        String normalizedGate = gate == null || gate.isBlank() ? "SENTIMENT" : gate.trim().toUpperCase();
+        String normalizedSymbol = symbol == null || symbol.isBlank() ? null : symbol.trim().toUpperCase();
+        String normalizedStrategy = strategy == null || strategy.isBlank() ? null : strategy.trim().toUpperCase();
+        String normalizedRegime = regime == null || regime.isBlank() ? null : regime.trim().toUpperCase();
+        if ("SENTIMENT".equals(normalizedGate)) {
+            return ResponseEntity.ok(gateEffectivenessAuditService.report(from, to, normalizedSymbol,
+                normalizedStrategy, normalizedRegime));
+        }
+        return ResponseEntity.ok(gateEffectivenessAuditService.report(from, to, normalizedSymbol,
+            normalizedStrategy, normalizedRegime, normalizedGate));
+    }
+
     /**
      * Get the latest trading signals for today.
      *
@@ -83,13 +112,7 @@ public class SignalController {
     @GetMapping("/latest")
     public ResponseEntity<List<SignalResponse>> getLatestSignals() {
         logger.debug("Fetching latest signals from DB");
-        List<Signal> all = signalStore.findAll().stream()
-            .sorted(java.util.Comparator.comparing(
-                (Signal s) -> s.date() != null ? s.date() : java.time.LocalDate.now()
-            ).reversed())
-            .toList();
-        List<SignalResponse> signals = all.stream().map(SignalResponse::new).collect(Collectors.toList());
-        return ResponseEntity.ok(signals);
+        return ResponseEntity.ok(signalService.getLatestSignals());
     }
 
     /**

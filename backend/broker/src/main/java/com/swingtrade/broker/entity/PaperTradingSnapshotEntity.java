@@ -44,12 +44,6 @@ public class PaperTradingSnapshotEntity {
     @Column(name = "open_positions")
     private int openPositions;
 
-    // Added by V47; nothing populated it until PaperPortfolioServiceImpl.snapshotAllPortfolios()
-    // (plan §7.2 / finding F8). Defaults to "default" for pre-existing rows and any snapshot
-    // taken outside the per-portfolio loop.
-    @Column(name = "portfolio_id", length = 40)
-    private String portfolioId = "default";
-
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -80,6 +74,4 @@ public class PaperTradingSnapshotEntity {
     public void setOpenPositions(int openPositions) { this.openPositions = openPositions; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-    public String getPortfolioId() { return portfolioId; }
-    public void setPortfolioId(String portfolioId) { this.portfolioId = portfolioId; }
 }

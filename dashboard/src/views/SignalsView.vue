@@ -409,7 +409,7 @@ import SignalCard from '../components/SignalCard.vue'
 import VariantSignalChips from '../components/VariantSignalChips.vue'
 import { listSignalSelections, latestTournament, type SignalSelection } from '../api/selections'
 import { groupSignalsBySymbol } from '../utils/signalGrouping'
-import { listCurrentStrategies } from '../api/strategies'
+import { getStrategies } from '../api/strategies'
 import { getSettings } from '../stores/settings'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
@@ -478,7 +478,7 @@ const groupedSignals = computed(() =>
 // Registered variant ids decide which strategy names count as variants (vs legacy engines).
 async function loadVariantIds() {
   try {
-    variantIds.value = new Set((await listCurrentStrategies()).map((v) => v.variantId))
+    variantIds.value = new Set((await getStrategies()).map((v) => v.variantId))
   } catch {
     variantIds.value = new Set()
   }

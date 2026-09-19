@@ -123,6 +123,42 @@ class YahooFinanceClientTest {
     }
 
     @Test
+    void fetchCandleRequestsAnInclusiveSingleDayRange() throws Exception {
+        LocalDate date = LocalDate.of(2024, 1, 15);
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(yahooResponse(date, 100.0, 105.0, 99.0, 104.0, 5000000))
+                .addHeader("Content-Type", "application/json"));
+
+        client.fetchCandle("RELIANCE", date);
+
+        var request = mockWebServer.takeRequest();
+        long start = date.atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond();
+        long end = date.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond();
+        assertThat(request.getPath()).contains("period1=" + start);
+        assertThat(request.getPath()).contains("period2=" + end);
+    }
+
+    @Test
+    void fetchCandleSelectsRequestedDateWhenResponseContainsMultipleRows() {
+        LocalDate requested = LocalDate.of(2024, 1, 15);
+        List<Object[]> rows = List.of(
+            new Object[]{LocalDate.of(2024, 1, 12).atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC),
+                90.0, 95.0, 89.0, 94.0, 1000L, 94.0},
+            new Object[]{requested.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC),
+                100.0, 105.0, 99.0, 104.0, 5000000L, 104.0}
+        );
+        mockWebServer.enqueue(new MockResponse()
+            .setBody(multiCandleResponse(rows))
+            .addHeader("Content-Type", "application/json"));
+
+        CandleData candle = client.fetchCandle("RELIANCE", requested);
+
+        assertThat(candle).isNotNull();
+        assertThat(candle.close()).isEqualByComparingTo("104.0");
+        assertThat(candle.volume()).isEqualTo(5000000L);
+    }
+
+    @Test
     void fetchCandleReturnsNullWhenApiReturnsEmptyResult() {
         mockWebServer.enqueue(new MockResponse()
                 .setBody("{\"chart\":{\"result\":[],\"error\":null}}")
@@ -366,6 +402,18 @@ class YahooFinanceClientTest {
     }
 
     @Test
+    void mapsPersistedNifty50SymbolToYahooIndexTicker() throws Exception {
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(yahooResponse(LocalDate.of(2024, 1, 15), 100.0, 105.0, 99.0, 104.0, 5000000))
+                .addHeader("Content-Type", "application/json"));
+
+        client.fetchCandle("NIFTY50", LocalDate.of(2024, 1, 15));
+
+        var request = mockWebServer.takeRequest();
+        assertThat(request.getPath()).contains("%5ENSEI");
+    }
+
+    @Test
     void preservesExistingExchangeSuffix() throws Exception {
         mockWebServer.enqueue(new MockResponse()
                 .setBody(yahooResponse(LocalDate.of(2024, 1, 15), 100.0, 105.0, 99.0, 104.0, 5000000))
@@ -465,5 +513,62 @@ class YahooFinanceClientTest {
 
         ChartMeta meta = client.fetchChartMeta("INVALID");
         assertThat(meta).isNull();
+    }
+
+    @Test
+    void fetchQuotesParsesNumericFieldsAndSkipsNonEquityRows() {
+        mockWebServer.enqueue(new MockResponse().setBody("""
+            {"finance":{"result":[
+              {"symbol":"TCS.NS","shortName":"TCS","longName":"TCS Limited","quoteType":"EQUITY",
+               "regularMarketPrice":100.5,"regularMarketChange":1.5,"regularMarketChangePercent":1.52,
+               "regularMarketDayHigh":102,"regularMarketDayLow":99,"regularMarketPreviousClose":99,
+               "fiftyTwoWeekHigh":120,"fiftyTwoWeekLow":80,"regularMarketVolume":1000,
+               "currency":"INR","marketState":"REGULAR","fiftyDayAverage":98,"twoHundredDayAverage":90},
+              {"symbol":"INDEX","quoteType":"NONE"},
+              {"quoteType":"EQUITY"}]}}""").addHeader("Content-Type", "application/json"));
+
+        List<com.swingtrade.data.service.QuoteData> quotes = client.fetchQuotes(List.of("TCS", "INDEX"));
+
+        assertThat(quotes).hasSize(1);
+        assertThat(quotes.getFirst().symbol()).isEqualTo("TCS.NS");
+        assertThat(quotes.getFirst().regularMarketPrice()).isEqualByComparingTo("100.5");
+        assertThat(quotes.getFirst().regularMarketVolume()).isEqualTo(1000L);
+    }
+
+    @Test
+    void quoteAndSearchRequestsReturnEmptyForInvalidInputsOrResponses() {
+        assertThat(client.fetchQuotes(null)).isEmpty();
+        assertThat(client.fetchQuotes(List.of())).isEmpty();
+        assertThat(client.fetchQuote("TCS")).isNull();
+
+        mockWebServer.enqueue(new MockResponse().setBody("{\"finance\":{\"result\":null}}"));
+        assertThat(client.fetchQuotes(List.of("TCS"))).isEmpty();
+        assertThat(client.searchSymbols(null)).isEmpty();
+        assertThat(client.searchSymbols("  ")).isEmpty();
+    }
+
+    @Test
+    void searchSymbolsKeepsYahooEquitiesAndFiltersOtherQuotes() {
+        mockWebServer.enqueue(new MockResponse().setBody("""
+            {"quotes":[
+              {"symbol":"TCS.NS","shortname":"TCS","longname":"TCS Limited","quoteType":"EQUITY",
+               "exchange":"NSI","exchangeName":"NSE","isYahooFinance":true},
+              {"symbol":"TCS.BO","quoteType":"EQUITY","isYahooFinance":false},
+              {"symbol":"TCS","quoteType":"ETF","isYahooFinance":true}]}
+            """).addHeader("Content-Type", "application/json"));
+
+        List<com.swingtrade.data.service.SearchResult> results = client.searchSymbols("  TCS  ");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.getFirst().symbol()).isEqualTo("TCS.NS");
+        assertThat(results.getFirst().exchange()).isEqualTo("NSI");
+    }
+
+    @Test
+    void quoteAndSearchHttpFailuresFailClosed() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
+        assertThat(client.fetchQuotes(List.of("TCS"))).isEmpty();
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
+        assertThat(client.searchSymbols("TCS")).isEmpty();
     }
 }

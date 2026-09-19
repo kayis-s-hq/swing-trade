@@ -1,35 +1,19 @@
 package com.swingtrade.domain;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
 
-/**
- * An immutable, versioned strategy configuration ("variant") - plan
- * docs/plans/2026-09-16-configurable-multi-strategy.md §4.1.
- *
- * <p>Rows are append-only: {@code params}/{@code overlays}/{@code strategyType} never change
- * once a version is created. Only {@code mode}, {@code isCurrent}, and {@code notes} may change
- * on a row (creating a new version, or flipping mode/is_current), which is why this record has
- * no "with params" style mutator - callers create a brand new {@link StrategyConfig} for a new
- * version via the store, they never mutate an existing one's params.
- *
- * @param id              database id (null for a not-yet-persisted config)
- * @param variantId       the variant's stable identifier, e.g. "PULLBACK_B"
- * @param version         business version number (1, 2, ...); distinct from any JPA optimistic
- *                        lock column in the persistence layer
- * @param strategyType    the {@code SignalStrategy.type()} this variant configures, e.g. "BREAKOUT"
- * @param params          resolved parameter values (unknown keys already rejected, missing keys
- *                        already filled with defaults at create time - see ParamSchemaValidator)
- * @param overlays        overlay toggles (e.g. {@code sentimentGate}, {@code regimeGate})
- * @param paramsHash       sha256 of the canonical JSON of (strategyType, params, overlays)
- * @param mode            current live-execution mode
- * @param paperCapital    starting capital for this variant's virtual paper portfolio
- * @param isCurrent       true if this is the current (latest activated) version for variantId
- * @param portfolioAction the recorded intent for this version's activation (null for v1)
- * @param notes           free-text notes
- * @param createdAt       creation timestamp
- */
+/** Immutable, versioned configuration for a strategy variant. */
 public record StrategyConfig(
     Long id,
     String variantId,
@@ -38,30 +22,68 @@ public record StrategyConfig(
     Map<String, Object> params,
     Map<String, Object> overlays,
     String paramsHash,
-    StrategyMode mode,
+    Mode mode,
     BigDecimal paperCapital,
-    boolean isCurrent,
-    PortfolioAction portfolioAction,
+    boolean current,
     String notes,
     LocalDateTime createdAt
 ) {
+    public enum Mode { OFF, BACKTEST_ONLY, SHADOW, CHAMPION }
+
     public StrategyConfig {
-        if (variantId == null || variantId.isBlank()) {
-            throw new IllegalArgumentException("variantId cannot be null or blank");
+        if (variantId == null || variantId.isBlank() || variantId.length() > 40) {
+            throw new IllegalArgumentException("Variant id must contain 1-40 characters");
         }
-        if (strategyType == null || strategyType.isBlank()) {
-            throw new IllegalArgumentException("strategyType cannot be null or blank");
+        if (version < 1) throw new IllegalArgumentException("Version must be positive");
+        if (strategyType == null || strategyType.isBlank() || strategyType.length() > 30) {
+            throw new IllegalArgumentException("Strategy type must contain 1-30 characters");
         }
-        if (version < 1) {
-            throw new IllegalArgumentException("version must be >= 1");
+        params = immutableMap(params, "Params");
+        overlays = immutableMap(overlays, "Overlays");
+        if (paramsHash == null || !paramsHash.matches("[0-9a-fA-F]{64}")) {
+            throw new IllegalArgumentException("Params hash must be a SHA-256 hex digest");
         }
-        params = params == null ? Map.of() : Map.copyOf(params);
-        overlays = overlays == null ? Map.of() : Map.copyOf(overlays);
-        mode = mode == null ? StrategyMode.OFF : mode;
+        Objects.requireNonNull(mode, "Mode is required");
+        if (paperCapital == null || paperCapital.signum() < 0) {
+            throw new IllegalArgumentException("Paper capital must be non-negative");
+        }
+        if (createdAt == null) throw new IllegalArgumentException("Created at is required");
     }
 
-    /** True for the modes that count toward the plan's <=12-active-variants shadow cap. */
-    public boolean isActive() {
-        return mode == StrategyMode.SHADOW || mode == StrategyMode.CHAMPION;
+    public static StrategyConfig create(String variantId, int version, String strategyType,
+                                        Map<String, Object> params, Map<String, Object> overlays,
+                                        Mode mode, BigDecimal paperCapital, boolean current,
+                                        String notes, LocalDateTime createdAt) {
+        return new StrategyConfig(null, variantId, version, strategyType, params, overlays,
+            hash(strategyType, params, overlays), mode, paperCapital, current, notes, createdAt);
+    }
+
+    public static String hash(String strategyType, Map<String, Object> params,
+                              Map<String, Object> overlays) {
+        String canonical = canonical(strategyType) + canonical(params) + canonical(overlays);
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
+    private static Map<String, Object> immutableMap(Map<String, Object> value, String name) {
+        if (value == null) throw new IllegalArgumentException(name + " are required");
+        return Collections.unmodifiableMap(new TreeMap<>(value));
+    }
+
+    private static String canonical(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return map.entrySet().stream()
+                .sorted((a, b) -> String.valueOf(a.getKey()).compareTo(String.valueOf(b.getKey())))
+                .map(e -> canonical(String.valueOf(e.getKey())) + canonical(e.getValue()))
+                .reduce("{}", (a, b) -> a + b);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(StrategyConfig::canonical).reduce("[]", (a, b) -> a + b);
+        }
+        return value == null ? "null" : value.getClass().getName() + ":" + value;
     }
 }

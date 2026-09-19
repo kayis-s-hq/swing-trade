@@ -32,10 +32,9 @@ public class PaperTradingPortfolioEntity {
     @Version
     private Integer version;
 
-    // Widened from 32 to 40 by V47__strategy_provenance.sql to match strategy_config's
-    // variant_id length. Must stay in sync with that migration - a mismatched length here
-    // makes Hibernate's ddl-auto=update (dev/local profile) silently narrow the real DB
-    // column back to varchar(32) on every startup, undoing the migration.
+    // Widened to 40 (V63) to match strategy_config.variant_id's length — every active
+    // strategy variant now gets its own portfolio row keyed by portfolio_id = variantId,
+    // not just the fixed "default" singleton.
     @Column(name = "portfolio_id", length = 40)
     private String portfolioId;
 
@@ -54,14 +53,6 @@ public class PaperTradingPortfolioEntity {
     @Column(name = "open_position_count")
     private int openPositionCount;
 
-    // Kill switch / daily loss breaker (plan §7.2). Applied per portfolio for SHADOW variants
-    // and, since a single process-wide "global" breaker concept doesn't cleanly exist yet given
-    // there's only one live paper engine today, applied identically to the CHAMPION's own
-    // ("default") portfolio row as its interpretation of "global" - see
-    // PaperPortfolioServiceImpl.isDailyLossBreached().
-    @Column(name = "daily_loss_threshold_pct", precision = 5, scale = 4)
-    private BigDecimal dailyLossThresholdPct;
-
     public PaperTradingPortfolioEntity() {}
 
     public Long getId() { return id; }
@@ -78,6 +69,4 @@ public class PaperTradingPortfolioEntity {
     public void setTotalUnrealizedPnL(BigDecimal totalUnrealizedPnL) { this.totalUnrealizedPnL = totalUnrealizedPnL; }
     public int getOpenPositionCount() { return openPositionCount; }
     public void setOpenPositionCount(int openPositionCount) { this.openPositionCount = openPositionCount; }
-    public BigDecimal getDailyLossThresholdPct() { return dailyLossThresholdPct; }
-    public void setDailyLossThresholdPct(BigDecimal dailyLossThresholdPct) { this.dailyLossThresholdPct = dailyLossThresholdPct; }
 }

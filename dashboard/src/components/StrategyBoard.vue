@@ -34,18 +34,19 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { listCurrentStrategies, type StrategyVariant } from '../api/strategies'
+import { getStrategies } from '../api/strategies'
+import type { StrategyConfig } from '../api/types'
 import type { Signal } from '../api/types'
 import StatusBadge from './StatusBadge.vue'
 
 const props = defineProps<{ signals: Signal[] }>()
 
-const variants = ref<StrategyVariant[]>([])
+const variants = ref<StrategyConfig[]>([])
 
 onMounted(async () => {
   // Supplementary card: a failed load shows the empty state, never breaks the dashboard.
   try {
-    variants.value = await listCurrentStrategies()
+    variants.value = (await getStrategies()).filter((v) => v.current)
   } catch {
     variants.value = []
   }
@@ -71,7 +72,7 @@ const rows = computed(() =>
     }))
 )
 
-function badgeStatus(mode: StrategyVariant['mode']): string {
+function badgeStatus(mode: StrategyConfig['mode']): string {
   return mode === 'CHAMPION' || mode === 'SHADOW' ? 'COMPLETED' : 'PENDING'
 }
 </script>

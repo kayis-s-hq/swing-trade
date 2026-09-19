@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import com.swingtrade.domain.PriceBand;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -75,6 +76,20 @@ class FyersServiceClientTest {
         assertThat(candles.get(0).low()).isEqualByComparingTo(new BigDecimal("2490.0"));
         assertThat(candles.get(0).close()).isEqualByComparingTo(new BigDecimal("2530.0"));
         assertThat(candles.get(0).volume()).isEqualTo(5000000L);
+    }
+
+    @Test
+    void retriesRateLimitedHistoricalRequestWithBackoff() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(429));
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("{\"s\":\"success\",\"candles\":[[1705272600,2500,2550,2490,2530,5000000]]}")
+            .addHeader("Content-Type", "application/json"));
+
+        List<CandleData> candles = client.fetchCandlesList("RELIANCE",
+            LocalDate.of(2024, 1, 15), LocalDate.of(2024, 1, 15));
+
+        assertThat(candles).hasSize(1);
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
     }
 
     @Test
@@ -365,6 +380,23 @@ class FyersServiceClientTest {
         assertThat(quotes.get(0).symbol()).isEqualTo("RELIANCE");
         assertThat(quotes.get(1).symbol()).isEqualTo("TCS");
         assertThat(quotes.get(2).symbol()).isEqualTo("INFY");
+    }
+
+    @Test
+    void fetchPriceBandUsesAuthoritativeFyersCircuitFields() {
+        mockWebServer.enqueue(new MockResponse()
+            .setBody("""
+                {"s":"success","d":[{"n":"NSE:RELIANCE-EQ","v":{
+                  "symbol":"NSE:RELIANCE-EQ","lp":2500,"lower_ckt":2250,"upper_ckt":2750
+                }}]}
+                """)
+            .addHeader("Content-Type", "application/json"));
+
+        PriceBand band = client.fetchPriceBand("RELIANCE", LocalDate.of(2026, 1, 5));
+
+        assertThat(band).isNotNull();
+        assertThat(band.lowerLimit()).isEqualByComparingTo("2250");
+        assertThat(band.upperLimit()).isEqualByComparingTo("2750");
     }
 
     @Test

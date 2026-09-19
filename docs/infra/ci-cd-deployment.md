@@ -10,6 +10,7 @@ Stage runs entirely in Docker containers on pi-node. Monitoring is built in — 
 | PostgreSQL | `swing_trade_stage_postgres` | 5436 | swing-trade-stage_swingtrade-network |
 | Redis | `swing_trade_stage_redis` | 6380 | swing-trade-stage_swingtrade-network |
 | Spring Boot API | `swing-trade-stage-api` | 8081 | swing-trade-stage_swingtrade-network |
+| Vue dashboard | `swing-trade-stage-dashboard` | 8082 | swing-trade-stage_swingtrade-network |
 | Prometheus | `pi-prometheus` | 9090 | pi-stack_monitoring + swing-trade-stage_swingtrade-network |
 | Grafana | `pi-grafana` | 3001 | pi-stack_monitoring |
 
@@ -25,7 +26,7 @@ Dev runs PostgreSQL on pi-node and the Spring Boot API plus Vue dashboard locall
 
 ## Stage Deployment
 
-### Local Development (`dev-stack.sh stage`)
+### Stage Deployment (`dev-stack.sh stage`)
 ```bash
 ./dev-stack.sh stage
 ```
@@ -37,19 +38,25 @@ Flow:
 4. **Health check** — curls `http://piworm.local:8081/actuator/health`
 5. **Prometheus verification** — checks that `swing-trade-stage` target appears in Prometheus
 
-### GitHub Actions (`deploy-stage.yml`)
-Triggered on push to `stage` branch (backend/** or .github/workflows/**).
+### Deployment path (manual, authoritative)
 
-Flow:
-1. **Checkout + JDK 21** (Temurin)
-2. **Install Fyers SDK** — `mvn install:install-file`
-3. **Build backend** — `mvn clean package -Dpmd.skip=true -DskipTests -Dcheckstyle.skip=true`
-4. **Build Docker image** — `runtime-jar` target from `backend/Dockerfile`
-5. **Stop existing container** — `docker stop/rm swing-trade-stage-api`
-6. **Verify infra health** — checks PostgreSQL, Redis, and network status
-7. **Start API container** — same Docker run command as local dev-stack
-8. **Health check** — retries 20 times with 6s interval
-9. **Prometheus scrape verification** — confirms target is registered
+This project does not have an available GitHub-hosted or self-hosted deployment
+runner. The authoritative replacement is the repository-root `dev-stack.sh`
+stage command, which builds from the checked-out `stage` worktree, transfers
+artifacts to pi-node, starts the stage containers, and verifies API and
+Prometheus reachability:
+
+```bash
+./dev-stack.sh stage
+curl -sf http://piworm.local:8081/actuator/health
+curl -sf http://piworm.local:9090/api/v1/targets
+# Dashboard smoke check
+curl -sfI http://piworm.local:8082/
+```
+
+The former self-hosted GitHub Actions definitions are retained for historical
+reference under `docs/infra/legacy/` and are not active workflows. Do not use
+their queued check status as a deployment signal.
 
 ### Container Configuration
 ```
@@ -133,10 +140,10 @@ Switch context: `docker context use pi-node` / `docker context use desktop-linux
 
 ## Known Issues
 
-1. **Fyers SDK** — force-added to git (ignored by *.jar), installed in workflow via `mvn install:install-file`
-2. **Maven cache corruption** — cleaned reactor-core cache in workflow
+1. **Fyers SDK** — force-added to git (ignored by *.jar), installed by `dev-stack.sh stage`
+2. **Maven cache corruption** — historical workflow issue; the active stage path uses Gradle
 3. **Log directory permissions** — changed from `/var/log/swing-trade/` (needs sudo) to `/home/dietpi/swing-trade/logs/`
 4. **Type mismatch** — `findUnprocessedBuySignalsSince` took `LocalDateTime` but `SignalEntity.date` is `LocalDate` (fixed in SignalRepository.java:168)
 5. **Docker bind mounts on Mac** — Docker Desktop Mac can't access bind-mounted paths from its VM. Local Grafana provisioning volumes fail. Use pi-grafana instead.
 6. **Container names with underscores** — Tomcat rejects Host headers with underscores. Use hyphenated names (e.g., `swing-trade-stage-api`).
-7. **GitHub Actions runners** — 6 runners on pi-node registered to `kayis-s-hq/gots`. Can only serve one repo. Swing-trade workflows run on self-hosted runners but need re-registration to the org.
+7. **GitHub Actions runners** — historical self-hosted definitions are archived; stage deployment is performed and verified through `dev-stack.sh stage`.

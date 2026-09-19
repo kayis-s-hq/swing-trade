@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Signal } from '../api/types'
 
-const apiMocks = vi.hoisted(() => ({ listCurrentStrategies: vi.fn() }))
+const apiMocks = vi.hoisted(() => ({ getStrategies: vi.fn() }))
 vi.mock('../api/strategies', () => apiMocks)
 
 import StrategyBoard from './StrategyBoard.vue'
@@ -12,6 +12,7 @@ const variant = (variantId: string, mode: string) => ({
   version: 1,
   strategyType: 'BREAKOUT',
   mode,
+  current: true,
 })
 
 const signal = (id: string, strategy: string, direction: Signal['direction'], timestamp: string): Signal => ({
@@ -23,11 +24,11 @@ const stubs = { 'router-link': { template: '<a><slot /></a>' } }
 
 describe('StrategyBoard', () => {
   beforeEach(() => {
-    apiMocks.listCurrentStrategies.mockReset()
+    apiMocks.getStrategies.mockReset()
   })
 
   it('lists active variants with mode and latest-date BUY counts, hiding OFF variants', async () => {
-    apiMocks.listCurrentStrategies.mockResolvedValue([
+    apiMocks.getStrategies.mockResolvedValue([
       variant('breakout-v1', 'SHADOW'),
       variant('pullback-v1', 'BACKTEST_ONLY'),
       variant('old-v1', 'OFF'),
@@ -52,7 +53,7 @@ describe('StrategyBoard', () => {
   })
 
   it('shows an empty state when the strategies request fails', async () => {
-    apiMocks.listCurrentStrategies.mockImplementation(() => Promise.reject(new Error('down')))
+    apiMocks.getStrategies.mockImplementation(() => Promise.reject(new Error('down')))
     const wrapper = mount(StrategyBoard, { props: { signals: [] }, global: { stubs } })
     await flushPromises()
     expect(wrapper.text()).toContain('No strategy variants configured')

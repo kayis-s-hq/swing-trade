@@ -1,205 +1,99 @@
 import { apiRequest } from './shared'
+import type {
+  PromotionConditionResult,
+  PromotionEligibilityResponse,
+  PromotionEligibilityStatus,
+  StrategyConfig,
+  StrategyMode,
+} from './types'
 
-/** Mirrors backend ParamDefResponse (StrategyConfigController, plan §4.4). */
-export interface ParamDef {
-  name: string
-  type: 'INT' | 'DECIMAL' | 'BOOL' | 'ENUM'
-  min: number | null
-  max: number | null
-  defaultValue: unknown
-  description: string | null
-  group: string | null
+const MODES = new Set<StrategyMode>(['OFF', 'BACKTEST_ONLY', 'SHADOW', 'CHAMPION'])
+const PROMOTION_STATUSES = new Set<PromotionEligibilityStatus>([
+  'ELIGIBLE',
+  'NOT_ELIGIBLE',
+  'INSUFFICIENT_SAMPLE',
+])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export interface StrategyTypeInfo {
-  type: string
-  params: ParamDef[]
-}
-
-export interface StrategyVariant {
-  variantId: string
-  version: number
-  strategyType: string
-  params: Record<string, unknown>
-  overlays: Record<string, unknown>
-  paramsHash: string
-  mode: 'OFF' | 'BACKTEST_ONLY' | 'SHADOW' | 'CHAMPION'
-  paperCapital: number | string
-  isCurrent: boolean
-  portfolioAction: 'CONTINUE' | 'RESET' | null
-  notes: string | null
-  createdAt: string
-}
-
-export interface ValidateParamsResult {
-  valid: boolean
-  errors: string[]
-  resolvedParams: Record<string, unknown>
-}
-
-export interface BacktestFoldResult {
-  fold: number
-  windowStart: string
-  windowEnd: string
-  metrics: Record<string, unknown>
-  equityCurve: Array<Record<string, unknown>>
-}
-
-export interface BacktestVariantResult {
-  variantId: string
-  version: number
-  strategyType: string
-  folds: BacktestFoldResult[]
-  deflatedSharpeRatio: number
-  trialsUsedForDsr: number
-  walkForwardUnstable: boolean
-  sharpeStdDevAcrossFolds: number | null
-}
-
-export interface BacktestCompareResult {
-  variants: BacktestVariantResult[]
-}
-
-export interface BacktestCompareRequest {
-  variants: Array<{ id: string; version?: number | null }>
-  start: string
-  end: string
-  symbols?: string[] | null
-  walkForward?: {
-    trainM?: number | null
-    testM?: number | null
-    stepM?: number | null
-    holdoutM?: number | null
-    unlockHoldout?: boolean | null
-  } | null
-  costsOn?: boolean
-}
-
-export async function listStrategyTypes(): Promise<StrategyTypeInfo[]> {
-  return apiRequest<StrategyTypeInfo[]>('/strategy-types', { responseContract: 'direct' })
-}
-
-export async function listCurrentStrategies(): Promise<StrategyVariant[]> {
-  return apiRequest<StrategyVariant[]>('/strategies', { responseContract: 'direct' })
-}
-
-export async function listStrategyVersions(variantId: string): Promise<StrategyVariant[]> {
-  return apiRequest<StrategyVariant[]>(
-    `/strategies/${encodeURIComponent(variantId)}/versions`,
-    { responseContract: 'direct' }
+function isStrategyConfig(value: unknown): value is StrategyConfig {
+  if (!isRecord(value)) return false
+  return (
+    (value.id === null || typeof value.id === 'number') &&
+    typeof value.variantId === 'string' &&
+    Number.isInteger(value.version) &&
+    typeof value.strategyType === 'string' &&
+    isRecord(value.params) &&
+    isRecord(value.overlays) &&
+    typeof value.paramsHash === 'string' &&
+    typeof value.mode === 'string' &&
+    MODES.has(value.mode as StrategyMode) &&
+    typeof value.paperCapital === 'number' &&
+    Number.isFinite(value.paperCapital) &&
+    typeof value.current === 'boolean' &&
+    (value.notes === null || typeof value.notes === 'string') &&
+    typeof value.createdAt === 'string'
   )
 }
 
-export async function createStrategyVariant(request: {
-  variantId: string
-  strategyType: string
-  params?: Record<string, unknown>
-  overlays?: Record<string, unknown>
-  paperCapital?: number
-  notes?: string
-}): Promise<StrategyVariant> {
-  return apiRequest<StrategyVariant>('/strategies', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-    responseContract: 'direct',
-  })
-}
-
-export async function createStrategyVersion(
-  variantId: string,
-  request: {
-    params?: Record<string, unknown>
-    overlays?: Record<string, unknown>
-    paperCapital?: number
-    portfolioAction?: 'CONTINUE' | 'RESET'
-    notes?: string
+function validateStrategies(value: unknown): value is StrategyConfig[] {
+  if (!Array.isArray(value) || !value.every(isStrategyConfig)) {
+    throw new Error('The strategy configuration response was invalid.')
   }
-): Promise<StrategyVariant> {
-  return apiRequest<StrategyVariant>(
-    `/strategies/${encodeURIComponent(variantId)}/versions`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
-      responseContract: 'direct',
-    }
+  return true
+}
+
+export function getStrategies(signal?: AbortSignal): Promise<StrategyConfig[]> {
+  return apiRequest<StrategyConfig[]>('/strategy-configs', {
+    method: 'GET',
+    responseContract: 'envelope',
+    signal,
+    validate: validateStrategies,
+  })
+}
+
+function isPromotionCondition(value: unknown): value is PromotionConditionResult {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.name === 'string' &&
+    typeof value.met === 'boolean' &&
+    typeof value.actualValue === 'string' &&
+    typeof value.threshold === 'string' &&
+    (value.note === null || typeof value.note === 'string')
   )
 }
 
-export async function cloneStrategyVariant(
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function isPromotionEligibilityResponse(value: unknown): value is PromotionEligibilityResponse {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.challengerVariantId === 'string' &&
+    typeof value.championVariantId === 'string' &&
+    typeof value.status === 'string' &&
+    PROMOTION_STATUSES.has(value.status as PromotionEligibilityStatus) &&
+    Array.isArray(value.conditions) &&
+    value.conditions.every(isPromotionCondition) &&
+    isStringArray(value.notes) &&
+    isStringArray(value.dataLimitations)
+  )
+}
+
+export function fetchPromotionEligibility(
   variantId: string,
-  newVariantId: string,
-  notes?: string
-): Promise<StrategyVariant> {
-  return apiRequest<StrategyVariant>(`/strategies/${encodeURIComponent(variantId)}/clone`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ newVariantId, notes }),
-    responseContract: 'direct',
-  })
-}
-
-export async function changeStrategyMode(
-  variantId: string,
-  mode: StrategyVariant['mode'],
-  confirm = false
-): Promise<StrategyVariant> {
-  return apiRequest<StrategyVariant>(`/strategies/${encodeURIComponent(variantId)}/mode`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode, confirm }),
-    responseContract: 'direct',
-  })
-}
-
-export async function validateStrategyParams(
-  strategyType: string,
-  params: Record<string, unknown>
-): Promise<ValidateParamsResult> {
-  return apiRequest<ValidateParamsResult>('/strategies/validate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ strategyType, params }),
-    responseContract: 'direct',
-  })
-}
-
-export async function compareBacktests(
-  request: BacktestCompareRequest
-): Promise<BacktestCompareResult> {
-  return apiRequest<BacktestCompareResult>('/backtest/compare', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-    responseContract: 'direct',
-  })
-}
-
-/** Mirrors backend PromotionEligibilityResponse.Condition (plan §7.4). */
-export interface PromotionEligibilityCondition {
-  met: boolean
-  actualValue: string
-  threshold: string
-}
-
-/** Mirrors backend PromotionEligibilityResponse (plan §7.4/§8). */
-export interface PromotionEligibilityResult {
-  challengerVariantId: string
-  championVariantId: string
-  tenureCalendarDays: number
-  status: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'INSUFFICIENT_SAMPLE'
-  tenureAndSampleSize: PromotionEligibilityCondition
-  expectancyVsChampion: PromotionEligibilityCondition
-  drawdownGuard: PromotionEligibilityCondition
-  walkForwardAndOverfitting: PromotionEligibilityCondition
-}
-
-export async function fetchPromotionEligibility(
-  variantId: string
-): Promise<PromotionEligibilityResult> {
-  return apiRequest<PromotionEligibilityResult>(
-    `/strategies/${encodeURIComponent(variantId)}/promotion-eligibility`,
-    { responseContract: 'direct' }
+  signal?: AbortSignal
+): Promise<PromotionEligibilityResponse> {
+  return apiRequest<PromotionEligibilityResponse>(
+    `/strategy-configs/${encodeURIComponent(variantId)}/promotion-eligibility`,
+    {
+      method: 'GET',
+      responseContract: 'envelope',
+      signal,
+      validate: isPromotionEligibilityResponse,
+    }
   )
 }

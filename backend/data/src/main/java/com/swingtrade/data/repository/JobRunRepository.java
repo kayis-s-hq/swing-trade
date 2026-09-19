@@ -16,6 +16,12 @@ public interface JobRunRepository extends JpaRepository<JobRunEntity, Long> {
     Optional<JobRunEntity> findByRunId(UUID runId);
     java.util.List<JobRunEntity> findAllByOrderByStartedAtDesc();
     java.util.List<JobRunEntity> findByStatusOrderByStartedAtDesc(String status);
+    Optional<JobRunEntity> findFirstByCandidateScanRunIdOrderByStartedAtDesc(UUID candidateScanRunId);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE JobRunEntity j SET j.candidateScanRunId = null WHERE j.runId = :runId")
+    int clearCandidateScanRunId(@Param("runId") UUID runId);
 
     /**
      * Atomically increments completedCount by 1. Defense in depth against the

@@ -4,6 +4,8 @@ import com.swingtrade.data.entity.CandidateScanResultEntity;
 import com.swingtrade.data.entity.CandidateScanRunEntity;
 import com.swingtrade.data.repository.CandidateScanResultRepository;
 import com.swingtrade.data.repository.CandidateScanRunRepository;
+import com.swingtrade.data.repository.CandidateHistoryEligibilityRepository;
+import com.swingtrade.data.entity.CandidateHistoryEligibilityEntity;
 import com.swingtrade.data.repository.FyersSymbolRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.data.service.AppSettingsService;
@@ -14,6 +16,7 @@ import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
 import com.swingtrade.strategy.PriceActionSignalEngine;
 import com.swingtrade.strategy.SignalResult;
+import com.swingtrade.strategy.WalkForwardEvaluation;
 import jakarta.annotation.PreDestroy;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -22,6 +25,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -56,14 +61,17 @@ public class CandidateScanService {
     private static final String KEY_BACKFILL_YEARS = "candidate-scan.backfill-years";
     private static final String KEY_MIN_TRADES = "candidate-scan.min-trades";
     private static final String KEY_OOS_DAYS = "candidate-scan.out-of-sample-days";
+    private static final String KEY_OOS_FOLDS = "candidate-scan.out-of-sample-folds";
     private static final double DEFAULT_MIN_WIN_RATE = 45.0;
     private static final double DEFAULT_MIN_TOTAL_RETURN = 0.0;
     private static final int DEFAULT_MIN_TRADES = 15;
     private static final int DEFAULT_OOS_DAYS = 252;
+    private static final int DEFAULT_OOS_FOLDS = 3;
 
     private final FyersSymbolRepository symbolRepository;
     private final CandidateScanRunRepository runRepository;
     private final CandidateScanResultRepository resultRepository;
+    private final CandidateHistoryEligibilityRepository eligibilityRepository;
     private final DataIngestionService ingestionService;
     private final WatchlistService watchlistService;
     private final CandleStore candleStore;
@@ -83,15 +91,11 @@ public class CandidateScanService {
     private final ConcurrentHashMap<UUID, Deque<ScanLogEvent>> logHistory = new ConcurrentHashMap<>();
     private static final int MAX_LOG_HISTORY = 500;
 
-    /** Returns whether a candidate scan currently owns the service's active-run slot. */
-    public boolean hasActiveRun() {
-        return activeRun.get() != null;
-    }
-
     @Autowired
     public CandidateScanService(FyersSymbolRepository symbolRepository,
                                 CandidateScanRunRepository runRepository,
                                 CandidateScanResultRepository resultRepository,
+                                CandidateHistoryEligibilityRepository eligibilityRepository,
                                 DataIngestionService ingestionService,
                                 WatchlistService watchlistService,
                                 AppSettingsService appSettingsService,
@@ -104,6 +108,7 @@ public class CandidateScanService {
         this.symbolRepository = symbolRepository;
         this.runRepository = runRepository;
         this.resultRepository = resultRepository;
+        this.eligibilityRepository = eligibilityRepository;
         this.ingestionService = ingestionService;
         this.watchlistService = watchlistService;
         this.appSettingsService = appSettingsService;
@@ -127,7 +132,7 @@ public class CandidateScanService {
                                 PriceActionSignalEngine signalEngine,
                                 BacktestEngine backtestEngine,
                                 int backfillYears, long delayMs, int maxConcurrent) {
-        this(symbolRepository, runRepository, resultRepository, ingestionService, null,
+        this(symbolRepository, runRepository, resultRepository, null, ingestionService, null,
             appSettingsService, candleStore, signalEngine, backtestEngine,
             backfillYears, delayMs, maxConcurrent);
     }
@@ -149,16 +154,21 @@ public class CandidateScanService {
     }
 
     @Transactional
-    public CandidateScanRunEntity start() {
+    public CandidateScanRunEntity start() { return start(false); }
+
+    /** Scheduled scans persist a handoff request; manual scans intentionally remain scan-only. */
+    @Transactional
+    public CandidateScanRunEntity startScheduled() {
+        CandidateScanRunEntity run = start(true);
+        return run;
+    }
+
+    private CandidateScanRunEntity start(boolean scheduled) {
         UUID existing = activeRun.get();
         if (existing != null || runRepository.existsByStatus("RUNNING")) {
             throw new IllegalStateException("Candidate scan already running: " + existing);
         }
 
-        // Candidate Explorer is a current-run view, not a scan archive. Remove the
-        // previous run and its child results before creating the replacement snapshot.
-        resultRepository.deleteAllInBatch();
-        runRepository.deleteAllInBatch();
         maxConcurrent = configuredMaxConcurrent();
         semaphore = new Semaphore(maxConcurrent);
 
@@ -174,6 +184,7 @@ public class CandidateScanService {
         run.setStatus("RUNNING");
         run.setTotalSymbols(symbols.size());
         run.setStartedAt(LocalDateTime.now(MARKET_ZONE));
+        run.setOrchestrationStatus(scheduled ? "PENDING" : "NOT_REQUIRED");
         runRepository.save(run);
         activeRun.set(run.getRunId());
         cancellations.put(run.getRunId(), new AtomicBoolean(false));
@@ -181,8 +192,32 @@ public class CandidateScanService {
         logHistory.put(run.getRunId(), new ConcurrentLinkedDeque<>());
         publish(run.getRunId(), "RUN_STARTED", null, "INFO",
             "Scanning " + symbols.size() + " NSE symbols with up to " + maxConcurrent + " workers.");
-        executor.submit(() -> execute(run.getRunId(), symbols));
+        Runnable scanTask = () -> execute(run.getRunId(), symbols);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    executor.submit(scanTask);
+                }
+
+                @Override
+                public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) {
+                        clearRunState(run.getRunId());
+                    }
+                }
+            });
+        } else {
+            executor.submit(scanTask);
+        }
         return run;
+    }
+
+    private void clearRunState(UUID runId) {
+        activeRun.compareAndSet(runId, null);
+        cancellations.remove(runId);
+        pauses.remove(runId);
+        logHistory.remove(runId);
     }
 
     private int configuredMaxConcurrent() {
@@ -239,6 +274,15 @@ public class CandidateScanService {
         }
     }
 
+    private int configuredOosFolds() {
+        try {
+            return Math.max(1, Math.min(8, Integer.parseInt(
+                appSettingsService.get(KEY_OOS_FOLDS, String.valueOf(DEFAULT_OOS_FOLDS)))));
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_OOS_FOLDS;
+        }
+    }
+
     public Map<String, String> getScanSettings() {
         Map<String, String> settings = new LinkedHashMap<>();
         settings.put(KEY_MIN_WIN_RATE, String.valueOf(configuredMinWinRate()));
@@ -247,6 +291,7 @@ public class CandidateScanService {
         settings.put(KEY_BACKFILL_YEARS, String.valueOf(configuredBackfillYears()));
         settings.put(KEY_MIN_TRADES, String.valueOf(configuredMinTrades()));
         settings.put(KEY_OOS_DAYS, String.valueOf(configuredOosDays()));
+        settings.put(KEY_OOS_FOLDS, String.valueOf(configuredOosFolds()));
         return settings;
     }
 
@@ -279,6 +324,11 @@ public class CandidateScanService {
             if (value < 60 || value > 1000) throw new IllegalArgumentException("out-of-sample-days must be between 60 and 1000");
             appSettingsService.set(KEY_OOS_DAYS, String.valueOf(value));
         }
+        if (updates.containsKey(KEY_OOS_FOLDS)) {
+            int value = Integer.parseInt(updates.get(KEY_OOS_FOLDS));
+            if (value < 1 || value > 8) throw new IllegalArgumentException("out-of-sample-folds must be between 1 and 8");
+            appSettingsService.set(KEY_OOS_FOLDS, String.valueOf(value));
+        }
         return getScanSettings();
     }
 
@@ -306,6 +356,14 @@ public class CandidateScanService {
 
     public CandidateScanRunEntity getRun(UUID runId) {
         return runRepository.findByRunId(runId).orElse(null);
+    }
+
+    public boolean hasActiveRun() {
+        return activeRun.get() != null || runRepository.existsByStatus("RUNNING") || runRepository.existsByStatus("PAUSED");
+    }
+
+    public boolean hasPendingHandoff() {
+        return runRepository.existsByStatusAndOrchestrationStatus("COMPLETED", "PENDING");
     }
 
     public List<CandidateScanResultEntity> getResults(UUID runId, int offset, int limit) {
@@ -408,6 +466,10 @@ public class CandidateScanService {
             run.setStatus(isCancelled(runId) || error != null ? "CANCELLED" : "COMPLETED");
             run.setCompletedAt(LocalDateTime.now(MARKET_ZONE));
             if (error != null) run.setErrorMessage(error.getMessage());
+            if ("COMPLETED".equals(run.getStatus()) && run.getQualifiedSymbols() == 0
+                && "PENDING".equals(run.getOrchestrationStatus())) {
+                run.setOrchestrationStatus("NOT_REQUIRED");
+            }
             runRepository.save(run);
             publish(runId, run.getStatus().equals("COMPLETED") ? "RUN_COMPLETED" : "RUN_CANCELLED",
                 null, error == null ? "SUCCESS" : "WARN",
@@ -423,11 +485,19 @@ public class CandidateScanService {
         int backfillYears = configuredBackfillYears();
         int candles = (int) candleStore.countBySymbol(symbol);
         boolean fetched = false;
+        DataIngestionService.BackfillOutcome outcome = null;
+        CandidateHistoryEligibilityEntity eligibility = eligibilityRepository == null ? null
+            : eligibilityRepository.findById(symbol).orElse(null);
         publish(runId, "STAGE_STARTED", symbol, "INFO", "Data: checking OHLCV history.");
+        LocalDate today = LocalDate.now(MARKET_ZONE);
+        if (candles < MIN_CANDLES && eligibility != null && eligibility.getRetryAfter() != null
+            && today.isBefore(eligibility.getRetryAfter())) {
+            return saveInsufficientResult(runId, symbol, candles, eligibility, "History retry scheduled");
+        }
         if (candles < MIN_CANDLES) {
             publish(runId, "STAGE_STARTED", symbol, "INFO",
                 "Data: fetching " + backfillYears + " years of OHLCV history.");
-            ingestionService.backfillStockData(symbol, backfillYears);
+            outcome = ingestionService.backfillStockDataWithOutcome(symbol, backfillYears);
             fetched = true;
             candles = (int) candleStore.countBySymbol(symbol);
         }
@@ -437,9 +507,32 @@ public class CandidateScanService {
         result.setRunId(runId);
         result.setSymbol(symbol);
         result.setCandleCount(candles);
+        List<com.swingtrade.domain.OhlcvCandle> availableCandles = new ArrayList<>(candleStore.findAllBySymbolOrderByDateDesc(symbol));
+        availableCandles.sort(java.util.Comparator.comparing(com.swingtrade.domain.OhlcvCandle::date));
+        if (!availableCandles.isEmpty()) {
+            result.setFirstAvailableDate(availableCandles.getFirst().date());
+            result.setLastAvailableDate(availableCandles.getLast().date());
+        }
+        if (outcome != null) {
+            result.setSourceOutcome(outcome.sourceOutcome());
+            result.setInvalidRows(outcome.invalidRows());
+        } else if (eligibility != null) {
+            result.setSourceOutcome(eligibility.getSourceOutcome());
+            result.setInvalidRows(eligibility.getInvalidRows());
+        } else result.setSourceOutcome("EXISTING_HISTORY");
         if (candles < MIN_CANDLES) {
+            if (outcome != null && "TRANSIENT_SOURCE_FAILURE".equals(outcome.sourceOutcome())) {
+                result.setDataStatus("ERROR");
+                result.setReason("Market-data source failed; history will be retried on the next scan");
+                result.setErrorMessage(outcome.errorMessage());
+                resultRepository.save(result);
+                return false;
+            }
             result.setDataStatus("INSUFFICIENT");
-            result.setReason("Insufficient OHLCV history (" + candles + " candles)");
+            LocalDate retryAfter = today.plusDays(7);
+            result.setRetryAfter(retryAfter);
+            result.setReason("Insufficient OHLCV history (" + candles + " candles); retry after " + retryAfter);
+            persistEligibility(symbol, result, retryAfter, outcome == null ? null : outcome.errorMessage());
             resultRepository.save(result);
             return false;
         }
@@ -460,19 +553,20 @@ public class CandidateScanService {
                 + String.format(java.util.Locale.ROOT, "%.1f%% win rate, %.2f%% return.",
                     backtest.winRate(), backtest.totalReturn()));
         int oosDays = configuredOosDays();
-        List<com.swingtrade.domain.OhlcvCandle> candlesForOos = new ArrayList<>(
-            candleStore.findAllBySymbolOrderByDateDesc(symbol));
-        candlesForOos.sort(java.util.Comparator.comparing(com.swingtrade.domain.OhlcvCandle::date));
-        if (candlesForOos.size() < oosDays) {
+        int oosFolds = configuredOosFolds();
+        WalkForwardEvaluation walkForward;
+        try {
+            walkForward = backtestEngine.runWalkForward(symbol, "NSE", BacktestConfig.defaults(), oosDays, oosFolds);
+        } catch (IllegalStateException e) {
             result.setQualified(false);
-            result.setReason("BUY rejected: fewer than " + oosDays + " out-of-sample candles");
+            result.setReason("BUY rejected: " + e.getMessage());
             resultRepository.save(result);
             return false;
         }
-        LocalDate oosStart = candlesForOos.get(candlesForOos.size() - oosDays).date();
-        LocalDate oosEnd = candlesForOos.get(candlesForOos.size() - 1).date();
-        BacktestResult oosBacktest = backtestEngine.runBacktestWindow(
-            symbol, "NSE", BacktestConfig.defaults(), oosStart, oosEnd);
+        WalkForwardEvaluation.Fold latestFold = walkForward.folds().get(walkForward.folds().size() - 1);
+        LocalDate oosStart = latestFold.startDate();
+        LocalDate oosEnd = latestFold.endDate();
+        BacktestResult oosBacktest = latestFold.result();
         result.setOosStartDate(oosStart);
         result.setOosEndDate(oosEnd);
         result.setOosTotalTrades(oosBacktest.totalTrades());
@@ -480,9 +574,9 @@ public class CandidateScanService {
         result.setOosTotalReturn(oosBacktest.totalReturn());
         result.setOosMaxDrawdownPct(oosBacktest.maxDrawdownPct());
         publish(runId, "STAGE_COMPLETED", symbol, "INFO",
-            "Out-of-sample backtest: " + oosBacktest.totalTrades() + " trades, "
-                + String.format(java.util.Locale.ROOT, "%.1f%% win rate, %.2f%% return.",
-                    oosBacktest.winRate(), oosBacktest.totalReturn()));
+            "Walk-forward OOS: " + oosFolds + " folds, " + walkForward.totalTrades() + " trades, "
+                + String.format(java.util.Locale.ROOT, "%.1f%% average win rate, %.2f%% average return.",
+                    walkForward.averageWinRate(), walkForward.averageTotalReturn()));
         double minWinRate = configuredMinWinRate();
         double minTotalReturn = configuredMinTotalReturn();
         int minTrades = configuredMinTrades();
@@ -490,12 +584,13 @@ public class CandidateScanService {
             && backtest.totalTrades() >= minTrades
             && backtest.winRate() >= minWinRate
             && backtest.totalReturn() > minTotalReturn
-            && oosBacktest.totalTrades() >= minTrades
-            && oosBacktest.winRate() >= minWinRate
-            && oosBacktest.totalReturn() > minTotalReturn;
+            && walkForward.isComplete(oosFolds)
+            && walkForward.folds().stream().allMatch(f -> f.result().totalTrades() >= minTrades
+                && f.result().winRate() >= minWinRate
+                && f.result().totalReturn() > minTotalReturn);
         result.setQualified(qualified);
         result.setReason(qualified ? "BUY and in-sample/out-of-sample backtest gates passed"
-            : qualificationReason(signal, backtest, oosBacktest, minTrades, minWinRate, minTotalReturn));
+            : qualificationReason(signal, backtest, oosBacktest, walkForward, minTrades, minWinRate, minTotalReturn));
         if (qualified && watchlistService != null) {
             watchlistService.addToWatchlist(symbol, symbol, "NSE");
             result.setActivated(true);
@@ -506,15 +601,54 @@ public class CandidateScanService {
         return qualified;
     }
 
-    private String qualificationReason(SignalResult signal, BacktestResult backtest, BacktestResult oosBacktest, int minTrades,
+    private boolean saveInsufficientResult(UUID runId, String symbol, int candles,
+                                           CandidateHistoryEligibilityEntity eligibility, String reason) {
+        CandidateScanResultEntity result = new CandidateScanResultEntity();
+        result.setRunId(runId);
+        result.setSymbol(symbol);
+        result.setCandleCount(candles);
+        result.setDataStatus("INSUFFICIENT");
+        result.setSourceOutcome(eligibility.getSourceOutcome());
+        result.setInvalidRows(eligibility.getInvalidRows());
+        result.setFirstAvailableDate(eligibility.getFirstAvailableDate());
+        result.setLastAvailableDate(eligibility.getLastAvailableDate());
+        result.setRetryAfter(eligibility.getRetryAfter());
+        result.setReason(reason + "; retry after " + eligibility.getRetryAfter());
+        resultRepository.save(result);
+        return false;
+    }
+
+    private void persistEligibility(String symbol, CandidateScanResultEntity result, LocalDate retryAfter, String error) {
+        if (eligibilityRepository == null) return;
+        CandidateHistoryEligibilityEntity record = eligibilityRepository.findById(symbol).orElseGet(CandidateHistoryEligibilityEntity::new);
+        record.setSymbol(symbol);
+        record.setCandleCount(result.getCandleCount());
+        record.setFirstAvailableDate(result.getFirstAvailableDate());
+        record.setLastAvailableDate(result.getLastAvailableDate());
+        record.setSourceOutcome(result.getSourceOutcome());
+        record.setInvalidRows(result.getInvalidRows());
+        record.setRetryAfter(retryAfter);
+        record.setErrorMessage(error);
+        record.setUpdatedAt(LocalDateTime.now(MARKET_ZONE));
+        eligibilityRepository.save(record);
+    }
+
+    private String qualificationReason(SignalResult signal, BacktestResult backtest, BacktestResult oosBacktest,
+                                       WalkForwardEvaluation walkForward, int minTrades,
                                        double minWinRate, double minTotalReturn) {
         if (signal.type() != com.swingtrade.domain.Signal.SignalType.BUY) return "Current signal is " + signal.type();
         if (backtest.totalTrades() < minTrades) return "BUY rejected: fewer than " + minTrades + " trades";
         if (backtest.winRate() < minWinRate) return "BUY rejected: win rate below " + minWinRate + "%";
         if (backtest.totalReturn() <= minTotalReturn) return "BUY rejected: backtest return not above " + minTotalReturn + "%";
-        if (oosBacktest.totalTrades() < minTrades) return "BUY rejected: out-of-sample trades below " + minTrades;
-        if (oosBacktest.winRate() < minWinRate) return "BUY rejected: out-of-sample win rate below " + minWinRate + "%";
-        return "BUY rejected: out-of-sample return not above " + minTotalReturn + "%";
+        return walkForward.folds().stream()
+            .filter(f -> f.result().totalTrades() < minTrades)
+            .findFirst()
+            .map(f -> "BUY rejected: OOS fold " + f.startDate() + " trades below " + minTrades)
+            .orElseGet(() -> walkForward.folds().stream()
+                .filter(f -> f.result().winRate() < minWinRate)
+                .findFirst()
+                .map(f -> "BUY rejected: OOS fold " + f.startDate() + " win rate below " + minWinRate + "%")
+                .orElse("BUY rejected: an OOS fold return is not above " + minTotalReturn + "%"));
     }
 
     private void saveFailure(UUID runId, String symbol, Exception error) {

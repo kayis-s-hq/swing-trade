@@ -99,6 +99,9 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
      */
     List<PositionEntity> findBySymbol(String symbol);
 
+    @Query("SELECT p FROM PositionEntity p WHERE p.signalId = :signalId AND p.status <> 'OPEN'")
+    List<PositionEntity> findClosedBySignalId(@Param("signalId") Long signalId);
+
     @Query("SELECT p FROM PositionEntity p WHERE p.brokerType = :brokerType ORDER BY p.entryDate DESC")
     List<PositionEntity> findByBrokerType(@Param("brokerType") String brokerType);
 
@@ -115,4 +118,24 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
      */
     @Query("SELECT p.positionId FROM PositionEntity p WHERE p.positionId IS NOT NULL")
     List<String> findAllPositionIds();
+
+    /** Open positions for a given strategy variant's own paper-trading portfolio. */
+    @Query("SELECT p FROM PositionEntity p WHERE p.portfolioId = :portfolioId "
+        + "AND p.symbol = :symbol AND p.status = 'OPEN'")
+    List<PositionEntity> findOpenByPortfolioIdAndSymbol(@Param("portfolioId") String portfolioId,
+                                                         @Param("symbol") String symbol);
+
+    /** All closed/stopped/target-hit trades for a given strategy variant's portfolio. */
+    @Query("SELECT p FROM PositionEntity p WHERE p.portfolioId = :portfolioId "
+        + "AND p.status <> 'OPEN' ORDER BY p.entryDate DESC")
+    List<PositionEntity> findClosedByPortfolioId(@Param("portfolioId") String portfolioId);
+
+    @Query("SELECT COUNT(p) FROM PositionEntity p WHERE p.portfolioId = :portfolioId AND p.status = 'OPEN'")
+    long countOpenByPortfolioId(@Param("portfolioId") String portfolioId);
+
+    /** Every position (any status) in a portfolio, most recently entered first. */
+    List<PositionEntity> findByPortfolioIdOrderByEntryDateDescIdDesc(String portfolioId);
+
+    /** Every portfolio-tagged position (i.e. not a real "default"-book position) on a symbol. */
+    List<PositionEntity> findBySymbolAndPortfolioIdIsNotNullOrderByEntryDateDescIdDesc(String symbol);
 }

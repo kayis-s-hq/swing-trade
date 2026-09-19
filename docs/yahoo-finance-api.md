@@ -14,6 +14,16 @@ query2.finance.yahoo.com   (fallback — works for browser clients)
 No authentication, crumb, or cookie required for v8/chart and v1/search endpoints.
 The v7/finance/quote endpoint is dead (401).
 
+## Usage boundary
+
+Yahoo Finance is an undocumented public service with no SLA. In this project it is intended for
+local development, paper-trading experiments, and historical backfills only; production market
+data should use an authenticated provider with an explicit exchange-data contract.
+
+`YahooFinanceClient.fetchCandle(symbol, date)` requests only the requested UTC day (the end bound
+is the following day because Yahoo's `period2` is exclusive), selects the matching exchange-local
+timestamp, and logs a warning when the response has no usable close value.
+
 ---
 
 ### 429 Blocking

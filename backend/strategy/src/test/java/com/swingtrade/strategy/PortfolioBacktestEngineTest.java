@@ -1,137 +1,241 @@
 package com.swingtrade.strategy;
 
 import com.swingtrade.domain.OhlcvCandle;
-import org.junit.jupiter.api.DisplayName;
+import com.swingtrade.domain.BenchmarkCandleSeries;
+import com.swingtrade.domain.BenchmarkComparison;
+import com.swingtrade.domain.CorrelationExposureLimit;
+import com.swingtrade.domain.PortfolioExposurePolicy;
+import com.swingtrade.domain.SectorExposureLimit;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * Plan §6.7: no-look-ahead property test at the portfolio-engine level, a basic end-to-end run,
- * and a data-quality-gate exclusion check. The parity requirement ("live SIGNAL-stage decision ==
- * LegacyPriceActionAdapter.evaluateEntry called directly == backtest decision at bar D") is
- * covered directly by {@code LegacyPriceActionAdapterGoldenParityTest} plus the fact that this
- * engine calls {@code strategy.evaluateEntry}/{@code evaluateExit} through the exact same
- * {@link SignalStrategy} SPI with no separate re-implementation of entry/exit rules; there is no
- * end-to-end orchestrator in this phase to run the live SIGNAL stage against, so full
- * orchestrator-level parity is deferred to Phase 5 per the plan.
- */
-@DisplayName("PortfolioBacktestEngine")
 class PortfolioBacktestEngineTest {
 
-    private final LegacyPriceActionAdapter strategy =
-        new LegacyPriceActionAdapter(new PriceActionStrategy());
-    private final StrategyParamsView params = LegacyPriceActionAdapter.defaultParams();
+    private final PortfolioBacktestEngine engine = new PortfolioBacktestEngine();
 
     @Test
-    @DisplayName("truncating future candles never changes a past entry/exit decision (no look-ahead)")
-    void noLookAheadProperty() {
-        List<OhlcvCandle> full = buildZigzagWithBump("SYM", 400, LocalDate.of(2023, 1, 2));
+    void simulateSharesCapitalAndRejectsAnUnaffordableOverlappingEntry() {
+        BacktestTrade held = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 5), 60, 1, 10);
+        BacktestTrade rejected = trade("BBB", LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 6), 60, 1, 10);
 
-        MarketContext fullCtx = MarketContext.of("SYM", full);
-        int probeBar = 350;
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", held), result("BBB", rejected)),
+                config(100), LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 6));
 
-        StrategyDecision decisionFromFull = strategy.evaluateEntry(fullCtx, probeBar, params);
-
-        // Truncate everything after the probe bar - the decision at probeBar must be identical,
-        // proving MarketContext.view()'s no-look-ahead guard actually holds end-to-end through a
-        // real SignalStrategy evaluation, not just at the accessor level (which
-        // MarketContextTest already covers).
-        List<OhlcvCandle> truncated = full.subList(0, probeBar + 1);
-        MarketContext truncatedCtx = MarketContext.of("SYM", truncated);
-        StrategyDecision decisionFromTruncated = strategy.evaluateEntry(truncatedCtx, probeBar, params);
-
-        assertThat(decisionFromTruncated.type()).isEqualTo(decisionFromFull.type());
-        assertThat(decisionFromTruncated.score()).isEqualByComparingTo(decisionFromFull.score());
-        assertThat(decisionFromTruncated.suggestedStop()).isEqualTo(decisionFromFull.suggestedStop());
-        assertThat(decisionFromTruncated.suggestedTarget()).isEqualTo(decisionFromFull.suggestedTarget());
+        assertThat(result.totalTrades()).isEqualTo(1);
+        assertThat(result.rejectedTrades()).isEqualTo(1);
+        assertThat(result.trades()).extracting(BacktestTrade::symbol).containsExactly("AAA");
+        assertThat(result.finalCapital()).isEqualTo(110.0);
+        assertThat(result.equityCurve()).extracting(PortfolioEquityPoint::date)
+                .containsExactly(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 2),
+                        LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 4),
+                        LocalDate.of(2024, 1, 5), LocalDate.of(2024, 1, 6));
     }
 
     @Test
-    @DisplayName("full portfolio run produces a daily equity curve covering the whole window and consistent trades")
-    void basicPortfolioRun() {
-        LocalDate windowStart = LocalDate.of(2023, 1, 2).plusDays(120);
-        List<OhlcvCandle> symbolA = buildZigzagWithBump("A", 400, LocalDate.of(2023, 1, 2));
-        List<OhlcvCandle> symbolB = buildZigzagWithBump("B", 400, LocalDate.of(2023, 1, 2));
-        Map<String, List<OhlcvCandle>> candlesBySymbol = Map.of("A", symbolA, "B", symbolB);
+    void sameDayExitDoesNotMakeProceedsAvailableBeforeT1Settlement() {
+        BacktestTrade first = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), 100, 1, 10);
+        BacktestTrade second = trade("BBB", LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 5), 100, 1, 10);
 
-        PortfolioBacktestConfig config = PortfolioBacktestConfig.defaults(BigDecimal.valueOf(1_000_000));
-        LocalDate end = symbolA.get(symbolA.size() - 1).date();
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", first), result("BBB", second)),
+                config(100), LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 5));
 
-        PortfolioBacktestResult result = new PortfolioBacktestEngine()
-            .run(candlesBySymbol, strategy, params, config, windowStart, end, 6.5);
-
-        assertThat(result.equityCurve()).isNotEmpty();
-        assertThat(result.equityCurve().get(0).date()).isEqualTo(windowStart);
-        assertThat(result.excludedSymbols()).isEmpty();
-        // Every trade's exit date must be on/after its entry date and quantities must be positive.
-        for (PortfolioTrade trade : result.trades()) {
-            assertThat(trade.exitDate()).isAfterOrEqualTo(trade.entryDate());
-            assertThat(trade.quantity()).isPositive();
-        }
-        // Metrics must be computable without throwing and produce a finite Sharpe.
-        assertThat(result.metrics()).isNotNull();
-        assertThat(Double.isNaN(result.metrics().sharpeRatio())).isFalse();
+        assertThat(result.totalTrades()).isEqualTo(1);
+        assertThat(result.rejectedTrades()).isEqualTo(1);
+        assertThat(result.finalCapital()).isEqualTo(110.0);
+        assertThat(result.equityCurve()).extracting(PortfolioEquityPoint::date)
+                .containsExactly(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 2),
+                        LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 4),
+                        LocalDate.of(2024, 1, 5));
+        PortfolioEquityPoint exitDay = result.equityCurve().get(3);
+        assertThat(exitDay.settledCash()).isEqualTo(0.0);
+        assertThat(exitDay.unsettledProceeds()).isEqualTo(110.0);
     }
 
     @Test
-    @DisplayName("a symbol failing the data-quality gate is excluded and logged with a reason, not silently dropped")
-    void excludesBadQualitySymbol() {
-        LocalDate start = LocalDate.of(2023, 1, 2);
-        List<OhlcvCandle> good = buildZigzagWithBump("GOOD", 400, start);
-        List<OhlcvCandle> bad = new ArrayList<>(buildZigzagWithBump("BAD", 400, start));
-        OhlcvCandle victim = bad.get(200);
-        bad.set(200, new OhlcvCandle(victim.symbol(), victim.date(), victim.open(), victim.high(), victim.low(),
-            BigDecimal.ZERO, victim.volume(), victim.adjClose()));
-
-        Map<String, List<OhlcvCandle>> candlesBySymbol = Map.of("GOOD", good, "BAD", bad);
-        PortfolioBacktestConfig config = PortfolioBacktestConfig.defaults(BigDecimal.valueOf(1_000_000));
-        LocalDate windowStart = start.plusDays(120);
-        LocalDate end = good.get(good.size() - 1).date();
-
-        PortfolioBacktestResult result = new PortfolioBacktestEngine()
-            .run(candlesBySymbol, strategy, params, config, windowStart, end, 6.5);
-
-        assertThat(result.excludedSymbols()).hasSize(1);
-        assertThat(result.excludedSymbols().get(0).symbol()).isEqualTo("BAD");
-        assertThat(result.excludedSymbols().get(0).reason()).contains("Zero or negative price");
-        assertThat(result.trades()).allMatch(t -> t.symbol().equals("GOOD"));
+    void invalidPortfolioInputsAreRejected() {
+        assertThatThrownBy(() -> engine.simulate(List.of(), config(100),
+                LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 1)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
-    /**
-     * A gentle zigzag uptrend (keeps RSI mid-band, price above both EMAs) with periodic volume
-     * bumps near the rolling high, so the fixture produces at least one clean entry setup
-     * without needing to reproduce the golden-parity fixture's exact tuning.
-     */
-    private static List<OhlcvCandle> buildZigzagWithBump(String symbol, int bars, LocalDate start) {
-        List<OhlcvCandle> candles = new ArrayList<>();
-        double price = 100.0;
-        LocalDate date = start;
-        for (int i = 0; i < bars; i++) {
-            boolean up = i % 3 != 0;
-            double changePct = up ? 0.006 : -0.004;
-            double open = price;
-            price = price * (1 + changePct);
-            double close = price;
-            double high = Math.max(open, close) * 1.002;
-            double low = Math.min(open, close) * 0.998;
-            long volume = (i % 20 == 0) ? 3_000_000L : 800_000L;
-            if (date.getDayOfWeek().getValue() >= 6) {
-                date = date.plusDays(2);
-            }
-            candles.add(OhlcvCandle.of(symbol, date, bd(open), bd(high), bd(low), bd(close), volume));
-            date = date.plusDays(1);
-        }
-        return candles;
+    @Test
+    void FridayExitSettlesOnMondayAndDailyCurveExposesCashTransition() {
+        BacktestTrade trade = trade("AAA", LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 5),
+                100, 1, 10);
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", trade)), config(100),
+                LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 8));
+
+        assertThat(result.equityCurve()).hasSize(5);
+        assertThat(result.equityCurve().get(1).unsettledProceeds()).isEqualTo(110.0);
+        assertThat(result.equityCurve().get(2).settledCash()).isEqualTo(0.0);
+        assertThat(result.equityCurve().get(4).settledCash()).isEqualTo(110.0);
     }
 
-    private static BigDecimal bd(double value) {
-        return BigDecimal.valueOf(value);
+    @Test
+    void marksOpenPositionAtEachTradingCandleCloseAndSettlesOnNextTradingCandle() {
+        BacktestTrade held = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4),
+                100, 1, 10);
+        Map<String, List<OhlcvCandle>> candles = Map.of("AAA", List.of(
+                candle("AAA", LocalDate.of(2024, 1, 2), 100),
+                candle("AAA", LocalDate.of(2024, 1, 3), 120),
+                candle("AAA", LocalDate.of(2024, 1, 4), 110),
+                candle("AAA", LocalDate.of(2024, 1, 5), 90)));
+
+        PortfolioBacktestResult result = engine.simulate(List.of(result("AAA", held)), config(100),
+                LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 5), candles);
+
+        assertThat(result.equityCurve()).extracting(PortfolioEquityPoint::date)
+                .containsExactly(LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 3),
+                        LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 5));
+        assertThat(result.equityCurve().get(1).positionMarketValue()).isEqualTo(120.0);
+        assertThat(result.equityCurve().get(1).equity()).isEqualTo(120.0);
+        assertThat(result.equityCurve().get(2).unsettledProceeds()).isEqualTo(110.0);
+        assertThat(result.equityCurve().get(3).settledCash()).isEqualTo(110.0);
+    }
+
+    @Test
+    void reportsPersistedNiftyPriceBenchmarkAndExcessReturn() {
+        BacktestTrade held = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), 100, 1, 10);
+        Map<String, List<OhlcvCandle>> candles = Map.of("AAA", List.of(
+                candle("AAA", LocalDate.of(2024, 1, 2), 100),
+                candle("AAA", LocalDate.of(2024, 1, 3), 110),
+                candle("AAA", LocalDate.of(2024, 1, 4), 110)));
+        BenchmarkCandleSeries nifty = new BenchmarkCandleSeries("NIFTY50",
+                LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), List.of(
+                candle("NIFTY50", LocalDate.of(2024, 1, 2), 100),
+                candle("NIFTY50", LocalDate.of(2024, 1, 4), 105)));
+
+        PortfolioBacktestResult result = engine.simulate(List.of(result("AAA", held)), config(100),
+                LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), candles, Map.of(), Optional.of(nifty));
+
+        assertThat(result.benchmarkComparison().benchmarkName()).isEqualTo(BenchmarkComparison.NIFTY50_PRICE);
+        assertThat(result.benchmarkComparison().benchmarkReturnPct()).isEqualTo(5.0);
+        assertThat(result.benchmarkComparison().excessReturnPct()).isEqualTo(5.0);
+    }
+
+    @Test
+    void appliesBreakevenAndTrailingStopBeforeScheduledExit() {
+        BacktestTrade candidate = new BacktestTrade("AAA", LocalDate.of(2024, 1, 2),
+                LocalDate.of(2024, 1, 5), BigDecimal.valueOf(100), BigDecimal.valueOf(120),
+                BigDecimal.valueOf(90), BigDecimal.valueOf(125), 1, ExitReason.TIME_STOP, 20, 20, 3);
+        Map<String, List<OhlcvCandle>> candles = Map.of("AAA", List.of(
+                candle("AAA", LocalDate.of(2024, 1, 2), 100),
+                candle("AAA", LocalDate.of(2024, 1, 3), 110),
+                candle("AAA", LocalDate.of(2024, 1, 4), 100, 100),
+                candle("AAA", LocalDate.of(2024, 1, 5), 120)));
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", candidate)),
+                new BacktestConfig(0, 0, .01, 100, 2, 2, 2, 20, false, 21,
+                        new TrailingBreakevenPolicy(1.0, .05)),
+                LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 5), candles);
+
+        assertThat(result.trades()).singleElement().satisfies(trade -> {
+            assertThat(trade.exitDate()).isEqualTo(LocalDate.of(2024, 1, 4));
+            assertThat(trade.exitReason()).isEqualTo(ExitReason.TRAILING_STOP);
+            assertThat(trade.exitPrice()).isEqualByComparingTo("104.5");
+        });
+        assertThat(result.finalCapital()).isEqualTo(104.5);
+    }
+
+    @Test
+    void rejectsEntryWhenSectorPositionLimitIsReachedAndRecordsReason() {
+        BacktestTrade first = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 5), 40, 1, 0);
+        BacktestTrade second = trade("BBB", LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 5), 40, 1, 0);
+        BacktestConfig config = new BacktestConfig(0, 0, .01, 100, 5, 2, 2, 20, false, 21,
+                com.swingtrade.domain.RiskManagementPolicy.none(), PortfolioExposurePolicy.limits(
+                        new SectorExposureLimit(1, 1.0), new CorrelationExposureLimit(1.0, 2)));
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", first), result("BBB", second)), config,
+                LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 5), Map.of(),
+                Map.of("AAA", "IT", "BBB", "IT"));
+
+        assertThat(result.totalTrades()).isEqualTo(1);
+        assertThat(result.rejectionReasons()).containsExactly("SECTOR_POSITION_LIMIT");
+    }
+
+    @Test
+    void rejectsEntryWhenCorrelationExceedsLimitWithStableReason() {
+        BacktestTrade first = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 5), 40, 1, 0);
+        BacktestTrade second = trade("BBB", LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 5), 40, 1, 0);
+        List<OhlcvCandle> prices = List.of(
+                candle("AAA", LocalDate.of(2024, 1, 1), 100), candle("AAA", LocalDate.of(2024, 1, 2), 101),
+                candle("AAA", LocalDate.of(2024, 1, 3), 102), candle("AAA", LocalDate.of(2024, 1, 4), 103),
+                candle("AAA", LocalDate.of(2024, 1, 5), 104));
+        List<OhlcvCandle> matchingPrices = prices.stream()
+                .map(candle -> candle("BBB", candle.date(), candle.close().doubleValue())).toList();
+        BacktestConfig config = new BacktestConfig(0, 0, .01, 100, 5, 2, 2, 20, false, 21,
+                com.swingtrade.domain.RiskManagementPolicy.none(), PortfolioExposurePolicy.limits(
+                        new SectorExposureLimit(5, 1.0), new CorrelationExposureLimit(.7, 4)));
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", first), result("BBB", second)), config,
+                LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 5),
+                Map.of("AAA", prices, "BBB", matchingPrices), Map.of("AAA", "IT", "BBB", "FINANCE"));
+
+        assertThat(result.rejectionReasons()).containsExactly("CORRELATION_LIMIT");
+    }
+
+    @Test
+    void attributesResultToTheSuppliedStrategyVariantId() {
+        BacktestTrade held = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), 100, 1, 10);
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", held)), config(100),
+                LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 4),
+                Map.of(), Map.of(), Optional.empty(), "rsi2-mean-reversion-v3");
+
+        assertThat(result.strategyVariantId()).isEqualTo("rsi2-mean-reversion-v3");
+    }
+
+    @Test
+    void strategyVariantIdDefaultsToNullWhenNotSupplied() {
+        BacktestTrade held = trade("AAA", LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 4), 100, 1, 10);
+
+        PortfolioBacktestResult result = engine.simulate(
+                List.of(result("AAA", held)), config(100),
+                LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 4));
+
+        assertThat(result.strategyVariantId()).isNull();
+    }
+
+    private static BacktestConfig config(double capital) {
+        return new BacktestConfig(0, 0, .01, capital, 2, 2, 2, 20, false, 21);
+    }
+
+    private static BacktestResult result(String symbol, BacktestTrade trade) {
+        return new BacktestResult(symbol, 1, trade.pnl() > 0 ? 1 : 0, trade.pnl() <= 0 ? 1 : 0,
+                trade.pnl() > 0 ? 100 : 0, 0, 0, 0, 0, 0, 0, List.of(trade));
+    }
+
+    private static BacktestTrade trade(String symbol, LocalDate entryDate, LocalDate exitDate,
+                                       double entryPrice, int quantity, double pnl) {
+        BigDecimal entry = BigDecimal.valueOf(entryPrice);
+        return new BacktestTrade(symbol, entryDate, exitDate, entry, entry,
+                entry.subtract(BigDecimal.ONE), entry.add(BigDecimal.ONE), quantity,
+                ExitReason.TIME_STOP, pnl, pnl, 1);
+    }
+
+    private static OhlcvCandle candle(String symbol, LocalDate date, double close) {
+        return candle(symbol, date, close, close);
+    }
+
+    private static OhlcvCandle candle(String symbol, LocalDate date, double close, double low) {
+        BigDecimal price = BigDecimal.valueOf(close);
+        return OhlcvCandle.of(symbol, date, price, BigDecimal.valueOf(Math.max(close, low)),
+                BigDecimal.valueOf(Math.min(close, low)), price, 1L);
     }
 }

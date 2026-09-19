@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Fyers v3 market status service.
@@ -17,13 +18,19 @@ public class FyersMarketStatusService {
 
     private static final Logger logger = LoggerFactory.getLogger(FyersMarketStatusService.class);
     private final FyersAuthService authService;
+    private final Supplier<FyersClass> sdkProvider;
 
     public FyersMarketStatusService(FyersAuthService authService) {
+        this(authService, FyersClass::getInstance);
+    }
+
+    FyersMarketStatusService(FyersAuthService authService, Supplier<FyersClass> sdkProvider) {
         this.authService = authService;
+        this.sdkProvider = sdkProvider;
     }
 
     private FyersClass getSdk() {
-        FyersClass sdk = FyersClass.getInstance();
+        FyersClass sdk = sdkProvider.get();
         sdk.clientId = authService.getClientId();
         String token = authService.getAccessToken();
         if (token != null) sdk.accessToken = token;

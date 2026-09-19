@@ -50,4 +50,12 @@ public class DataIngestionMetrics {
                         .register(meterRegistry));
         fetchFailures.get(source).increment();
     }
+
+    public void recordRateLimitWait(String source) {
+        meterRegistry.counter("data.rate_limit_hits", "source", source).increment();
+    }
+
+    public void recordRateLimitHit(String source) {
+        recordRateLimitWait(source);
+    }
 }

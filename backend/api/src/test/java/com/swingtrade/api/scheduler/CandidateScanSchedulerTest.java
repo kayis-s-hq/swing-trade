@@ -45,18 +45,18 @@ class CandidateScanSchedulerTest {
         void shouldStartScheduledScanWhenBothFlagsEnabled() {
             new CandidateScanScheduler(candidateScanService, true, true).runScheduledScan();
 
-            verify(candidateScanService).start();
+            verify(candidateScanService).startScheduled();
         }
 
         @Test
         @DisplayName("Already-running scan is handled gracefully without throwing")
         void shouldHandleAlreadyRunningScanGracefully() {
-            when(candidateScanService.start()).thenThrow(new IllegalStateException("scan already running"));
+            when(candidateScanService.startScheduled()).thenThrow(new IllegalStateException("scan already running"));
 
             assertThatCode(() -> new CandidateScanScheduler(candidateScanService, true, true).runScheduledScan())
                 .doesNotThrowAnyException();
 
-            verify(candidateScanService).start();
+            verify(candidateScanService).startScheduled();
         }
     }
 }

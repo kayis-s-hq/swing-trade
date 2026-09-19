@@ -9,14 +9,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
 
 /**
  * JPA entity for the Signal domain model.
@@ -80,22 +76,8 @@ public class SignalEntity {
     @Column(name = "strategy", nullable = false, length = 40)
     private String strategy = STRATEGY_DEFAULT;
 
-    @Column(name = "strategy_version")
+    @Column(name = "strategy_version", nullable = false)
     private Integer strategyVersion = 1;
-
-    // Multi-strategy provenance (V47, plan §4.2/§7.1): populated only for signals produced by
-    // the configurable SignalStrategy SPI fan-out (JobOrchestratorService's SIGNAL stage calling
-    // SignalPipeline#generateVariantSignals); rows written by the legacy engine leave these null.
-    @Column(name = "strategy_score", precision = 5, scale = 4)
-    private BigDecimal strategyScore;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "rule_outcomes")
-    private List<Map<String, Object>> ruleOutcomes;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "gate_outcomes")
-    private List<Map<String, Object>> gateOutcomes;
 
     // Warning flag constants
     public static final String WARNING_NONE = "";
@@ -124,14 +106,8 @@ public class SignalEntity {
         }
     }
 
-    // Strategy constants identifying which engine produced this signal.
-    // STRATEGY_DEFAULT's value changed from "DEFAULT" to "BREAKOUT_STRICT" as part of the
-    // configurable multi-strategy framework (plan docs/plans/2026-09-16-configurable-multi-
-    // strategy.md §4.2, task item 7): V47's one-time backfill of existing "DEFAULT" rows to
-    // "BREAKOUT_STRICT" only stays correct if new rows stop being written as "DEFAULT" too,
-    // and this default field value is what every new signal picks up when SignalPipeline
-    // doesn't set strategy explicitly.
-    public static final String STRATEGY_DEFAULT = "BREAKOUT_STRICT";
+    // Strategy constants identifying which engine produced this signal
+    public static final String STRATEGY_DEFAULT = "DEFAULT";
     public static final String STRATEGY_PRICE_ACTION = "PRICE_ACTION";
 
     @Column(name = "created_at", updatable = false)
@@ -172,6 +148,11 @@ public class SignalEntity {
     }
 
     public static SignalEntity fromDomain(Signal signal, String warningFlag) {
+        return fromDomain(signal, warningFlag, STRATEGY_DEFAULT, 1);
+    }
+
+    public static SignalEntity fromDomain(Signal signal, String warningFlag,
+                                          String strategy, Integer strategyVersion) {
         SignalEntity entity = new SignalEntity();
         entity.setSymbol(signal.symbol());
         entity.setDate(signal.date());
@@ -187,6 +168,8 @@ public class SignalEntity {
         entity.setWarningFlag(warningFlag);
         entity.setSentimentScore(signal.sentimentScore());
         entity.setSentimentReasoning(signal.sentimentReasoning());
+        entity.setStrategy(strategy == null || strategy.isBlank() ? STRATEGY_DEFAULT : strategy);
+        entity.setStrategyVersion(strategyVersion == null || strategyVersion < 1 ? 1 : strategyVersion);
         return entity;
     }
 
@@ -370,29 +353,5 @@ public class SignalEntity {
 
     public void setProcessed(Boolean processed) {
         this.processed = processed;
-    }
-
-    public BigDecimal getStrategyScore() {
-        return strategyScore;
-    }
-
-    public void setStrategyScore(BigDecimal strategyScore) {
-        this.strategyScore = strategyScore;
-    }
-
-    public List<Map<String, Object>> getRuleOutcomes() {
-        return ruleOutcomes;
-    }
-
-    public void setRuleOutcomes(List<Map<String, Object>> ruleOutcomes) {
-        this.ruleOutcomes = ruleOutcomes;
-    }
-
-    public List<Map<String, Object>> getGateOutcomes() {
-        return gateOutcomes;
-    }
-
-    public void setGateOutcomes(List<Map<String, Object>> gateOutcomes) {
-        this.gateOutcomes = gateOutcomes;
     }
 }

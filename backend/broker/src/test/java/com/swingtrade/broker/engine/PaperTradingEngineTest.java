@@ -1265,5 +1265,135 @@ class PaperTradingEngineTest {
             verify(positionManager).clearAllPositions();
             verify(orderManager).clearAllOrders();
         }
+
+        @Test
+        void queryMethodsDelegateAndCalculateDrawdown() {
+            Position open = mock(Position.class);
+            Position closed = mock(Position.class);
+            Order pending = new Order();
+            when(positionManager.getOpenPositions()).thenReturn(List.of(open));
+            when(positionManager.findOpenPositionBySymbol("ABC")).thenReturn(open);
+            when(positionManager.getClosedPositions()).thenReturn(List.of(closed));
+            when(positionManager.getTotalRealizedPnL()).thenReturn(BigDecimal.TEN);
+            when(positionManager.getTotalUnrealizedPnL()).thenReturn(BigDecimal.valueOf(-2));
+            when(orderManager.getPendingOrders()).thenReturn(List.of(pending));
+            when(orderManager.cancelOrder("o1")).thenReturn(true);
+            assertThat(engine.getOpenPositions()).containsExactly(open);
+            assertThat(engine.findOpenPositionBySymbol("ABC")).isSameAs(open);
+            assertThat(engine.getPosition("missing")).isEmpty();
+            assertThat(engine.getClosedPositions()).containsExactly(closed);
+            assertThat(engine.getTotalPnL()).isEqualByComparingTo("8");
+            assertThat(engine.getReturnPercentage()).isEqualByComparingTo("0");
+            assertThat(engine.getPendingOrders()).containsExactly(pending);
+            assertThat(engine.cancelOrder("o1")).isTrue();
+            assertThat(engine.getMaxConcurrentPositions()).isEqualTo(5);
+            assertThat(engine.getInitialCapital()).isEqualByComparingTo("750000");
+            assertThat(engine.getMaxCapitalPerPosition()).isEqualByComparingTo("500000");
+            assertThat(engine.getOpenPositionCount()).isEqualTo(0);
+            assertThat(engine.getCurrentCash()).isEqualByComparingTo("750000");
+            assertThat(engine.getTotalValue()).isEqualByComparingTo("750000");
+            assertThat(engine.canOpenPosition(BigDecimal.TEN, 100)).isTrue();
+            when(stateService.getSnapshots()).thenReturn(List.of());
+            assertThat(engine.getPortfolioMaxDrawdown()).isNull();
+            when(positionManager.getPosition("p1")).thenReturn(open);
+            assertThat(engine.getPosition("p1")).containsSame(open);
+            Order commissionOrder = new Order();
+            commissionOrder.setQuantity(BigDecimal.valueOf(10));
+            assertThat(engine.calculateCommission(commissionOrder)).isEqualByComparingTo("0.50");
+            engine.seedPositionCounter(4);
+            engine.seedPositionCounter(2);
+            engine.initState();
+            verify(stateService).loadState();
+            engine.setStateService(null);
+            engine.initState();
+
+            Order unfilled = new Order();
+            unfilled.setOrderId("pending");
+            unfilled.setStatus(OrderStatus.PENDING);
+            when(orderManager.executeOrder("pending", BigDecimal.TEN)).thenReturn(unfilled);
+            assertThat(engine.executePendingOrder("pending", BigDecimal.TEN)).isSameAs(unfilled);
+
+            var first = new com.swingtrade.broker.entity.PaperTradingSnapshotEntity();
+            first.setTotalValue(BigDecimal.valueOf(800));
+            var second = new com.swingtrade.broker.entity.PaperTradingSnapshotEntity();
+            second.setTotalValue(BigDecimal.valueOf(900));
+            var third = new com.swingtrade.broker.entity.PaperTradingSnapshotEntity();
+            third.setTotalValue(BigDecimal.valueOf(700));
+            engine.setStateService(stateService);
+            when(stateService.getSnapshots()).thenReturn(List.of(first, second, third));
+            assertThat(engine.getPortfolioMaxDrawdown()).isEqualByComparingTo("11.11");
+        }
+
+        @Test
+        void calculatesPositionSizingAndOrderMetadata() {
+            assertThat(engine.calculatePositionSize("ABC", BigDecimal.TEN, null))
+                .isEqualByComparingTo("100");
+            assertThat(engine.calculatePositionSize("ABC", BigDecimal.TEN, BigDecimal.TEN))
+                .isEqualByComparingTo("100");
+            assertThat(engine.calculatePositionSize("ABC", BigDecimal.valueOf(110), BigDecimal.valueOf(100)))
+                .isEqualByComparingTo("750");
+
+            Order order = new Order();
+            order.setPrice(BigDecimal.TEN);
+            order.setDirection(TradeDirection.LONG);
+            java.util.Map<String, Object> metadata = new java.util.HashMap<>();
+            metadata.put("stopLoss", "8.5");
+            metadata.put("target", "13.5");
+            metadata.put("atr", "1.2");
+            order.setAdditionalProperties(metadata);
+            assertThat(engine.getATRFromOrder(order)).isEqualByComparingTo("1.2");
+            assertThat(engine.calculateStopLossFromOrder(order)).isEqualByComparingTo("8.5");
+            assertThat(engine.calculateTargetFromOrder(order)).isEqualByComparingTo("13.5");
+            assertThat(engine.calculateCommission(order)).isEqualByComparingTo("0");
+            assertThat(engine.calculateCommission(null)).isEqualByComparingTo("0");
+            assertThat(engine.getATRFromOrder(null)).isNull();
+            assertThat(engine.calculateStopLossFromOrder(null)).isNull();
+            assertThat(engine.calculateTargetFromOrder(null)).isNull();
+
+            Order atrOrder = new Order();
+            atrOrder.setPrice(BigDecimal.TEN);
+            atrOrder.setDirection(TradeDirection.LONG);
+            atrOrder.setAdditionalProperties(java.util.Map.of("atr", "1"));
+            when(positionManager.calculateStopLoss(BigDecimal.TEN, TradeDirection.LONG, BigDecimal.ONE))
+                .thenReturn(BigDecimal.valueOf(8));
+            when(positionManager.calculateTarget(BigDecimal.TEN, BigDecimal.valueOf(8), TradeDirection.LONG))
+                .thenReturn(BigDecimal.valueOf(14));
+            assertThat(engine.calculateStopLossFromOrder(atrOrder)).isEqualByComparingTo("8");
+            assertThat(engine.calculateTargetFromOrder(atrOrder)).isEqualByComparingTo("14");
+        }
+
+        @Test
+        void validatesPositionCapacityBranches() {
+            when(positionManager.hasReachedPositionLimit()).thenReturn(true);
+            when(positionManager.getMaxPositions()).thenReturn(5);
+            assertThat(engine.validatePositionCapacity(BigDecimal.TEN, 100)).isFalse();
+            when(positionManager.hasReachedPositionLimit()).thenReturn(false);
+            assertThat(engine.validatePositionCapacity(BigDecimal.TEN, 100)).isTrue();
+            assertThat(engine.validatePositionCapacity(BigDecimal.valueOf(100_000_000), 100)).isFalse();
+            engine.getPortfolio().setCurrentCapital(BigDecimal.ZERO);
+            assertThat(engine.validatePositionCapacity(BigDecimal.TEN, 100)).isFalse();
+        }
+
+        @Test
+        void updatesPositionsAndChecksOnlyMatchingSymbols() {
+            OhlcvCandle candle = new OhlcvCandle("ABC", LocalDate.now(),
+                BigDecimal.TEN, BigDecimal.valueOf(12), BigDecimal.valueOf(9),
+                BigDecimal.valueOf(11), 100L, BigDecimal.valueOf(11));
+            Position matching = mock(Position.class);
+            Position other = mock(Position.class);
+            when(matching.symbol()).thenReturn("ABC");
+            when(other.symbol()).thenReturn("XYZ");
+            when(matching.status()).thenReturn(PositionStatus.OPEN);
+            when(positionManager.updatePositionsWithCandleData("ABC", candle))
+                .thenReturn(List.of(matching));
+            when(positionManager.updatePositionsWithCandleData("ABC", candle, null))
+                .thenReturn(List.of(matching));
+            when(positionManager.getOpenPositions()).thenReturn(List.of(matching, other));
+            engine.updatePositions(candle);
+            engine.checkPositionTriggers("ABC", candle);
+            engine.updatePositionsFromDomain(candle);
+            engine.updatePositionsFromDomain(candle, null);
+            verify(positionManager).checkPositionTriggers(matching, candle);
+        }
     }
 }

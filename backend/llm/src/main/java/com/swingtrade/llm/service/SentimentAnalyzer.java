@@ -170,6 +170,14 @@ public class SentimentAnalyzer {
     }
 
     /**
+     * Parses and grounds model-generated flags and catalysts against the
+     * numbered articles supplied in the prompt.
+     */
+    public SentimentOutput parseResponse(String jsonResponse, int articleCount) {
+        return SentimentOutputValidator.validate(parseResponse(jsonResponse), articleCount);
+    }
+
+    /**
      * Falls back to Jackson-based JSON parsing when BeanOutputConverter fails.
      */
     private SentimentOutput parseWithJackson(String jsonResponse) {
@@ -225,11 +233,23 @@ public class SentimentAnalyzer {
         double confidence;
         String summary;
 
-        boolean positive = containsUnqualifiedKeyword(lower, "positive");
-        boolean negative = containsUnqualifiedKeyword(lower, "negative");
+        boolean positive = containsAnyUnqualifiedKeyword(lower,
+                "positive", "bullish", "favorable", "favourable", "optimistic", "upbeat",
+                "supportive", "improving")
+                || containsAnyPhrase(lower, "earnings beat", "guidance raised", "strong demand",
+                "growth accelerates", "target raised", "upgrade to");
+        boolean negative = containsAnyUnqualifiedKeyword(lower,
+                "negative", "bearish", "unfavorable", "unfavourable", "pessimistic", "weak",
+                "deteriorating", "adverse", "concerning")
+                || containsAnyPhrase(lower, "earnings miss", "guidance cut", "weak demand",
+                "growth slows", "target cut", "downgrade to");
         if (positive ^ negative) {
             sentiment = positive ? SentimentType.POSITIVE : SentimentType.NEGATIVE;
             confidence = 0.4;
+        } else if (containsAnyPhrase(lower, "mixed", "balanced", "unchanged", "no material impact",
+                "limited impact")) {
+            sentiment = SentimentType.NEUTRAL;
+            confidence = 0.2;
         } else {
             sentiment = SentimentType.UNKNOWN;
             confidence = 0.0;
@@ -240,6 +260,25 @@ public class SentimentAnalyzer {
 
         logger.warn("Parsed plain text response: {} (confidence: {})", sentiment, confidence);
         return new SentimentOutput(sentiment, summary, confidence, List.of(), List.of(), "KEYWORD");
+    }
+
+    private boolean containsAnyUnqualifiedKeyword(String lowerText, String... keywords) {
+        for (String keyword : keywords) {
+            if (containsUnqualifiedKeyword(lowerText, keyword)) return true;
+        }
+        return false;
+    }
+
+    private boolean containsAnyPhrase(String lowerText, String... phrases) {
+        for (String phrase : phrases) {
+            int index = lowerText.indexOf(phrase);
+            if (index < 0) continue;
+            String before = lowerText.substring(Math.max(0, index - 40), index);
+            if (!before.matches(".*\\b(?:not|no|never|without|failed\\s+to|did\\s+not|didn't|lack(?:s|ed)?(?:\\s+of)?)\\b.*")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

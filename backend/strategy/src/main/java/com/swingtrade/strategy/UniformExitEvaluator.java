@@ -8,7 +8,7 @@ import java.math.BigDecimal;
  *
  * <p>Precedence, checked in this order every bar: {@link ExitReason#STOP_LOSS} then
  * {@link ExitReason#TARGET_HIT} then {@link ExitReason#SIGNAL_EXIT} then
- * {@link ExitReason#TRAILING} then {@link ExitReason#TIME_STOP}. When a bar's low breaches the
+ * {@link ExitReason#TRAILING_STOP} then {@link ExitReason#TIME_STOP}. When a bar's low breaches the
  * stop <em>and</em> its high reaches the target in the same bar, {@link ExitReason#STOP_LOSS} is
  * returned - the conservative assumption that the stop was touched first intrabar.
  *
@@ -59,7 +59,7 @@ public final class UniformExitEvaluator {
             BigDecimal highWaterMark = position.highWaterMark().max(close);
             BigDecimal trailingStop = highWaterMark.subtract(atr.multiply(trailAtrMult));
             if (close.compareTo(trailingStop) <= 0) {
-                return ExitDecision.exit(ExitReason.TRAILING, close,
+                return ExitDecision.exit(ExitReason.TRAILING_STOP, close,
                     "Close " + close + " breached trailing stop " + trailingStop);
             }
         }

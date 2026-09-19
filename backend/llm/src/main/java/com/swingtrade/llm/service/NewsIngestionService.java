@@ -2,6 +2,7 @@ package com.swingtrade.llm.service;
 
 import tools.jackson.databind.ObjectMapper;
 import com.swingtrade.domain.NewsArticle;
+import com.swingtrade.domain.PersistedNewsArticle;
 import com.swingtrade.domain.store.NewsArticleStore;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.slf4j.Logger;
@@ -33,6 +34,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -41,6 +43,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -513,6 +516,78 @@ public class NewsIngestionService {
     }
 
     /**
+     * Orders persisted articles before they are placed in an LLM prompt. The
+     * source fetches complete independently, so fetch order is not a stable
+     * ranking signal. Exchange filings win ties, followed by publication time
+     * and stable textual keys. Near-identical headlines are collapsed after
+     * ranking so the preferred representative is retained.
+     */
+    static List<PersistedNewsArticle> rankAndDeduplicateForLlm(
+            List<PersistedNewsArticle> articles) {
+        if (articles == null || articles.isEmpty()) {
+            return List.of();
+        }
+
+        List<PersistedNewsArticle> ranked = articles.stream()
+                .filter(article -> article != null && article.article() != null
+                        && article.article().title() != null
+                        && !article.article().title().isBlank())
+                .sorted(Comparator
+                        .comparingInt((PersistedNewsArticle article) -> sourcePriority(article.article().source()))
+                        .reversed()
+                        .thenComparing(article -> article.article().publishedDate(),
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(article -> normalizedTitle(article.article().title()))
+                        .thenComparing(article -> normalized(article.article().source()))
+                        .thenComparing(article -> normalized(article.article().link()))
+                        .thenComparingLong(PersistedNewsArticle::id))
+                .toList();
+
+        List<PersistedNewsArticle> selected = new ArrayList<>();
+        for (PersistedNewsArticle candidate : ranked) {
+            boolean duplicate = selected.stream().anyMatch(existing ->
+                    titleSimilarity(existing.article().title(), candidate.article().title()) >= 0.8);
+            if (!duplicate) {
+                selected.add(candidate);
+            }
+        }
+        return List.copyOf(selected);
+    }
+
+    private static int sourcePriority(String source) {
+        String normalized = normalized(source);
+        if (normalized.contains("nse") || normalized.contains("bse")) return 2;
+        if (normalized.contains("reuters") || normalized.contains("economic times")
+                || normalized.contains("business standard") || normalized.contains("moneycontrol")) return 1;
+        return 0;
+    }
+
+    private static double titleSimilarity(String left, String right) {
+        Set<String> leftWords = titleWords(left);
+        Set<String> rightWords = titleWords(right);
+        if (leftWords.isEmpty() || rightWords.isEmpty()) return 0.0;
+        Set<String> intersection = new HashSet<>(leftWords);
+        intersection.retainAll(rightWords);
+        Set<String> union = new HashSet<>(leftWords);
+        union.addAll(rightWords);
+        return intersection.size() / (double) union.size();
+    }
+
+    private static Set<String> titleWords(String title) {
+        return Stream.of(normalizedTitle(title).split(" "))
+                .filter(word -> !word.isBlank())
+                .collect(Collectors.toSet());
+    }
+
+    private static String normalizedTitle(String title) {
+        return normalized(title).replaceAll("[^a-z0-9 ]", " ").replaceAll("\\s+", " ").trim();
+    }
+
+    private static String normalized(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.ENGLISH).trim();
+    }
+
+    /**
      * Returns news admissible for a decision date. Historical dates are read only from the
      * persisted, bounded window; they never fall back to current live feeds.
      */
@@ -529,23 +604,55 @@ public class NewsIngestionService {
         return newsArticleStore.findBySymbolAndPublishedAtBetween(stockSymbol, from, through);
     }
 
+    /** Same decision-date contract as above, retaining persisted IDs for audit evidence. */
+    public List<PersistedNewsArticle> fetchPersistedStockNewsForDecisionDate(
+            String stockSymbol, LocalDate decisionDate) {
+        if (decisionDate == null) return List.of();
+        ZoneId marketZone = ZoneId.of("Asia/Kolkata");
+        OffsetDateTime from = decisionDate.minusDays(7).atStartOfDay(marketZone).toOffsetDateTime();
+        OffsetDateTime through = decisionDate.atTime(15, 30).atZone(marketZone).toOffsetDateTime();
+        if (decisionDate.isBefore(LocalDate.now(marketZone))) {
+            return newsArticleStore
+                .findPersistedBySymbolAndPublishedAtBetweenAndFirstSeenAtBeforeOrEqual(
+                    stockSymbol, from, through, through);
+        }
+
+        List<NewsArticle> fetched = fetchStockNews(stockSymbol);
+        Set<String> fetchedIdentities = fetched.stream().map(this::articleIdentity).collect(Collectors.toSet());
+        return newsArticleStore.findPersistedBySymbolAndPublishedAtBetween(stockSymbol, from, through).stream()
+            .filter(article -> fetchedIdentities.contains(articleIdentity(article.article())))
+            .toList();
+    }
+
+    private String articleIdentity(NewsArticle article) {
+        if (article.link() != null && !article.link().isBlank()) return article.link().trim();
+        return String.join("|", article.source() == null ? "" : article.source().trim(),
+            article.title() == null ? "" : article.title().trim(),
+            article.publishedDate() == null ? "" : article.publishedDate().toInstant().toString());
+    }
+
     /**
      * Fetches both articles and structured filings in parallel.
      */
     public NewsAndFilings fetchArticlesAndFilings(String symbol) {
         List<NewsArticle> articles = fetchStockNews(symbol);
-        List<StructuredFiling> filings = List.of();
+        return new NewsAndFilings(articles, fetchStructuredFilings(symbol));
+    }
 
+    /** Fetches exchange announcements independently from the article feeds. */
+    public List<StructuredFiling> fetchStructuredFilings(String symbol) {
+        List<StructuredFiling> filings = new ArrayList<>();
         try {
-            List<StructuredFiling> nseFilings = nseSource.fetchFilings(symbol);
-            List<StructuredFiling> bseFilings = bseSource.fetchFilings(symbol);
-            filings = new ArrayList<>(nseFilings);
-            filings.addAll(bseFilings);
+            filings.addAll(nseSource.fetchFilings(symbol));
         } catch (Exception e) {
-            logger.warn("Failed to fetch filings for {}: {}", symbol, e.getMessage());
+            logger.warn("Failed to fetch NSE filings for {}: {}", symbol, e.getMessage());
         }
-
-        return new NewsAndFilings(articles, filings);
+        try {
+            filings.addAll(bseSource.fetchFilings(symbol));
+        } catch (Exception e) {
+            logger.warn("Failed to fetch BSE filings for {}: {}", symbol, e.getMessage());
+        }
+        return filings;
     }
 
     /**

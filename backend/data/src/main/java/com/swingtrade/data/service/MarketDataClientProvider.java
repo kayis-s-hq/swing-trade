@@ -1,13 +1,16 @@
 package com.swingtrade.data.service;
 
+import com.swingtrade.core.metrics.DataIngestionMetrics;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -26,9 +29,24 @@ public class MarketDataClientProvider {
     private final AppSettingsService appSettingsService;
     private final AtomicReference<String> activeBroker;
 
-    @Autowired
     public MarketDataClientProvider(Map<String, MarketDataClient> clients, AppSettingsService appSettingsService) {
         this.clients = normalizeClientNames(clients);
+        this.appSettingsService = appSettingsService;
+        String configuredBroker = appSettingsService.get(SELECTED_BROKER_SETTING, "yahoo");
+        this.activeBroker = new AtomicReference<>(this.clients.containsKey(configuredBroker)
+            ? configuredBroker : "yahoo");
+        logger.info("Market data provider initialized without request throttling (compatibility constructor)");
+    }
+
+    @Autowired
+    MarketDataClientProvider(Map<String, MarketDataClient> clients, AppSettingsService appSettingsService,
+                             DataIngestionMetrics metrics,
+                             @Value("${market-data.rate-limit-ms:250}") long rateLimitMillis,
+                             @Value("${data.rate-limit.upstox.requests-per-minute:100}") long upstoxRpm,
+                             @Value("${data.rate-limit.fyers.requests-per-minute:60}") long fyersRpm,
+                             @Value("${data.rate-limit.default.requests-per-minute:30}") long defaultRpm) {
+        this.clients = rateLimitClients(normalizeClientNames(clients), metrics, rateLimitMillis,
+            upstoxRpm, fyersRpm, defaultRpm);
         this.appSettingsService = appSettingsService;
         String configuredBroker = appSettingsService.get(SELECTED_BROKER_SETTING, "yahoo");
         this.activeBroker = new AtomicReference<>(this.clients.containsKey(configuredBroker)
@@ -51,6 +69,32 @@ public class MarketDataClientProvider {
             normalized.putIfAbsent(FYERS, fyersClient);
         }
         return normalized;
+    }
+
+    private static Map<String, MarketDataClient> rateLimitClients(Map<String, MarketDataClient> clients,
+                                                                   DataIngestionMetrics metrics,
+                                                                   long yahooIntervalMillis,
+                                                                   long upstoxRpm, long fyersRpm,
+                                                                   long defaultRpm) {
+        Map<String, MarketDataClient> limited = new HashMap<>();
+        Map<MarketDataClient, MarketDataClient> wrappedByDelegate = new IdentityHashMap<>();
+        clients.forEach((name, client) -> {
+            if (client instanceof RateLimitedMarketDataClient) {
+                limited.put(name, client);
+                return;
+            }
+            MarketDataClient wrapped = wrappedByDelegate.computeIfAbsent(client, delegate -> {
+                long rpm = switch (name.toLowerCase()) {
+                    case "upstox" -> upstoxRpm;
+                    case "fyers", "fyersserviceclient" -> fyersRpm;
+                    default -> yahooIntervalMillis <= 0 ? defaultRpm
+                        : Math.max(1L, 60_000L / yahooIntervalMillis);
+                };
+                return new RateLimitedMarketDataClient(delegate, rpm, metrics, name);
+            });
+            limited.put(name, wrapped);
+        });
+        return limited;
     }
 
     /**

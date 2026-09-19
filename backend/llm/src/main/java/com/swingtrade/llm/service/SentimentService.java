@@ -3,6 +3,7 @@ package com.swingtrade.llm.service;
 import com.swingtrade.core.metrics.LlmMetrics;
 import com.swingtrade.core.metrics.SentimentMetrics;
 import com.swingtrade.domain.NewsArticle;
+import com.swingtrade.domain.PersistedNewsArticle;
 import com.swingtrade.domain.store.AppSettingsStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.StockStore;
@@ -15,6 +16,7 @@ import com.swingtrade.llm.SentimentType;
 import com.swingtrade.llm.client.LlmClient;
 import com.swingtrade.llm.config.SentimentPromptLoader;
 import com.swingtrade.llm.config.LlmProperties;
+import com.swingtrade.llm.domain.EarningsData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,6 +67,9 @@ public class SentimentService {
     private static final int PI_MAX_ARTICLE_CHARS = 450;
     private static final int DEFAULT_MAX_RESPONSE_TOKENS = 512;
     private static final int PI_MAX_RESPONSE_TOKENS = 128;
+    private static final int MAX_CONTEXT_FILINGS = 5;
+    private static final int MAX_CONTEXT_CHARS = 2400;
+    private static final int MAX_CONTEXT_FIELD_CHARS = 360;
 
     // Per-article character cap. This exists ONLY to keep the worst case (10
     // articles, all at the cap) under llamacpp.context (8192) — it is not a
@@ -107,6 +112,7 @@ public class SentimentService {
     private final SentimentMetrics sentimentMetrics;
     private final LlmAnalysisAuditRepository auditRepository;
     private final LlmProperties llmProperties;
+    private final PdfExtractionService pdfExtractionService;
 
     private final double defaultConfidence;
 
@@ -127,6 +133,7 @@ public class SentimentService {
             SentimentMetrics sentimentMetrics,
             LlmProperties llmProperties,
             LlmAnalysisAuditRepository auditRepository,
+            PdfExtractionService pdfExtractionService,
             @Value("${llm.sentiment.default-confidence:0.75}") double defaultConfidence) {
 
         this.clientProvider = clientProvider;
@@ -141,6 +148,7 @@ public class SentimentService {
         this.sentimentMetrics = sentimentMetrics;
         this.auditRepository = auditRepository;
         this.llmProperties = llmProperties;
+        this.pdfExtractionService = pdfExtractionService;
         this.defaultConfidence = defaultConfidence;
 
         // Initialize thread pool with bounded capacity
@@ -180,12 +188,23 @@ public class SentimentService {
     public SentimentResult analyzeStockSentiment(String stockSymbol, LocalDate date) {
         logger.info("Starting sentiment analysis for stock: {} on date: {}", stockSymbol, date);
         long start = System.currentTimeMillis();
+        String auditRequestId = UUID.randomUUID().toString();
 
         try {
             // Fetch news articles
-            List<NewsArticle> fetchedArticles =
-                    newsIngestionService.fetchStockNewsForDecisionDate(stockSymbol, date);
-            List<NewsArticle> articles = filterPointInTimeArticles(fetchedArticles, date);
+            List<PersistedNewsArticle> persistedArticles =
+                    newsIngestionService.fetchPersistedStockNewsForDecisionDate(stockSymbol, date);
+            List<PersistedNewsArticle> articles = persistedArticles.stream()
+                    .filter(article -> article.article().publishedDate() != null
+                        && !article.article().publishedDate().isBefore(
+                            date.minusDays(NEWS_LOOKBACK_DAYS).atStartOfDay(MARKET_ZONE))
+                        && !article.article().publishedDate().isAfter(
+                            date.atTime(15, 30).atZone(MARKET_ZONE)))
+                    .toList();
+
+            // Source completion order is nondeterministic. Rank and collapse
+            // syndicated headlines before the LLM article budget is applied.
+            articles = NewsIngestionService.rankAndDeduplicateForLlm(articles);
 
             if (articles.isEmpty()) {
                 logger.warn("No news articles found for stock: {}", stockSymbol);
@@ -204,10 +223,19 @@ public class SentimentService {
             // "request (8556 tokens) exceeds the available context size (4096)".
             // The lead of an article carries the sentiment signal, so trimming the
             // tail costs little and cuts prompt-eval time (and heat) substantially.
-            List<String> newsContent = java.util.stream.IntStream.range(0, articles.size())
+            Map<PersistedNewsArticle, String> cleanedArticles = new java.util.LinkedHashMap<>();
+            List<PersistedNewsArticle> usableArticles = articles.stream()
+                    .filter(article -> {
+                        String cleaned = newsIngestionService.cleanNewsText(article.article());
+                        if (cleaned == null || cleaned.trim().isEmpty()) return false;
+                        cleanedArticles.put(article, cleaned);
+                        return true;
+                    }).toList();
+            List<PersistedNewsArticle> preparedArticles = usableArticles;
+            List<String> newsContent = java.util.stream.IntStream.range(0, preparedArticles.size())
                     .mapToObj(index -> {
-                        NewsArticle article = articles.get(index);
-                        String cleaned = newsIngestionService.cleanNewsText(article);
+                        NewsArticle article = preparedArticles.get(index).article();
+                        String cleaned = cleanedArticles.get(preparedArticles.get(index));
                         if (cleaned == null || cleaned.trim().isEmpty()) return null;
                         String published = article.publishedDate().withZoneSameInstant(MARKET_ZONE)
                             .toLocalDate().toString();
@@ -225,22 +253,23 @@ public class SentimentService {
             }
 
             // Limit articles to fit within LLM context window
-            int articleCountForLlm = newsContent.size();
             if (newsContent.size() > maxArticles) {
                 logger.info("Truncating {} articles to {} for {} LLM analysis",
                         newsContent.size(), maxArticles, piBackend ? "Pi" : "configured");
                 newsContent = newsContent.subList(0, maxArticles);
+                usableArticles = usableArticles.subList(0, maxArticles);
             }
+            List<Long> articleIds = usableArticles.stream().map(PersistedNewsArticle::id).toList();
 
             // Perform sentiment analysis
             SentimentOutput analysisResult;
             try {
-                analysisResult = performSentimentAnalysis(stockSymbol, date, newsContent);
+                analysisResult = performSentimentAnalysis(stockSymbol, date, newsContent, auditRequestId);
             } catch (Exception llmEx) {
                 logger.warn("LLM unavailable for {}, falling back to keyword analysis: {}", stockSymbol, LlmErrorUtils.describeError(llmEx));
                 // Build a simple result from headlines
                 List<String> headlines = newsContent.stream().toList();
-                SentimentResult fallback = keywordBasedSentiment(stockSymbol, headlines);
+                SentimentResult fallback = keywordBasedSentiment(stockSymbol, date, headlines);
                 analysisResult = new SentimentOutput(
                         switch (fallback.score()) {
                             case POSITIVE -> SentimentType.POSITIVE;
@@ -253,7 +282,10 @@ public class SentimentService {
             }
 
             // Build and cache result
-            SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult, articleCountForLlm);
+            var selectedBackend = clientProvider.getBackend();
+            String provider = selectedBackend == null ? "unknown" : selectedBackend.getKey();
+            SentimentResult result = buildSentimentResult(stockSymbol, date, analysisResult,
+                    articleIds.size(), articleIds, provider, auditRequestId);
 
             // Persist to database
             try {
@@ -288,10 +320,23 @@ public class SentimentService {
             SentimentPromptLoader promptLoader, SentimentAnalyzer sentimentAnalyzer,
             NewsIngestionService newsIngestionService, SentimentStore sentimentStore,
             StockStore stockStore, AppSettingsStore appSettingsStore, LlmMetrics llmMetrics,
+            SentimentMetrics sentimentMetrics, PdfExtractionService pdfExtractionService,
+            double defaultConfidence) {
+        this(clientProvider, serverManagerProvider, promptLoader, sentimentAnalyzer,
+                newsIngestionService, sentimentStore, stockStore, appSettingsStore,
+                llmMetrics, sentimentMetrics, null, null, pdfExtractionService, defaultConfidence);
+    }
+
+    /** Compatibility constructor for lightweight unit tests. */
+    public SentimentService(
+            LlmClientProvider clientProvider, LlmServerManagerProvider serverManagerProvider,
+            SentimentPromptLoader promptLoader, SentimentAnalyzer sentimentAnalyzer,
+            NewsIngestionService newsIngestionService, SentimentStore sentimentStore,
+            StockStore stockStore, AppSettingsStore appSettingsStore, LlmMetrics llmMetrics,
             SentimentMetrics sentimentMetrics, double defaultConfidence) {
         this(clientProvider, serverManagerProvider, promptLoader, sentimentAnalyzer,
                 newsIngestionService, sentimentStore, stockStore, appSettingsStore,
-                llmMetrics, sentimentMetrics, null, null, defaultConfidence);
+                llmMetrics, sentimentMetrics, null, null, null, defaultConfidence);
     }
 
     /**
@@ -302,7 +347,7 @@ public class SentimentService {
      * @return sentiment analysis result
      */
     private SentimentOutput performSentimentAnalysis(String stockSymbol, LocalDate analysisDate,
-                                                     List<String> newsContent) {
+                                                     List<String> newsContent, String requestId) {
         logger.debug("Performing LLM sentiment analysis for {} with {} articles", stockSymbol, newsContent.size());
 
         if (newsContent.isEmpty()) {
@@ -319,7 +364,8 @@ public class SentimentService {
         // Create prompt using loaded templates
         String formattedUser = promptLoader.getUserPrompt()
                 .replace("{symbol}", stockSymbol)
-                .replace("{newsContent}", combinedContent);
+                .replace("{newsContent}", combinedContent)
+                .replace("{marketContext}", buildMarketContext(stockSymbol, analysisDate));
         List<Map<String, String>> messages = List.of(
                 Map.of("role", "system", "content", promptLoader.getSystemPrompt().replace("{symbol}", stockSymbol)),
                 Map.of("role", "user", "content", formattedUser)
@@ -328,7 +374,6 @@ public class SentimentService {
         var backend = clientProvider.getBackend();
         int maxResponseTokens = backend == LlmBackendSelector.Backend.PI_SSH
                 ? PI_MAX_RESPONSE_TOKENS : DEFAULT_MAX_RESPONSE_TOKENS;
-        String requestId = UUID.randomUUID().toString();
         String provider = backend != null ? backend.getKey() : "unknown";
         String modelVersion = configuredModel(provider);
         String promptHash = computePromptHash();
@@ -345,7 +390,7 @@ public class SentimentService {
             }
             LlmClient client = clientProvider.getClient();
             try {
-                llmResponse = client.generateChatCompletion(messages, maxResponseTokens, 0.3)
+                llmResponse = client.generateChatCompletion(messages, maxResponseTokens, 0.0)
                         .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
             } finally {
                 // Release the in-flight marker so the idle monitor can retire the
@@ -358,22 +403,21 @@ public class SentimentService {
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), true);
             llmMetrics.recordSentimentAnalyzed();
             if (llmResponse == null || llmResponse.isBlank()) {
-                SentimentOutput empty = new SentimentOutput(SentimentType.UNKNOWN,
-                        "No valid response from LLM", 0.0, List.of(), List.of(), "DEFAULT");
-                persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
-                        promptHash, messages, llmResponse, empty, "SUCCESS", null, maxResponseTokens,
-                        startedAt, latencyMs);
-                return empty;
+                // Treat an empty response as provider failure so the caller uses the
+                // auditable keyword fallback. Returning UNKNOWN here bypassed that path,
+                // mislabeled the audit as SUCCESS, and made an LLM outage look like a
+                // successful neutral/default analysis.
+                throw new IllegalStateException("LLM returned an empty response");
             }
-            SentimentOutput parsed = sentimentAnalyzer.parseResponse(llmResponse);
+            SentimentOutput parsed = sentimentAnalyzer.parseResponse(llmResponse, newsContent.size());
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion,
                     promptHash, messages, llmResponse, parsed, "SUCCESS", null, maxResponseTokens,
-                    startedAt, latencyMs);
+                    false, startedAt, latencyMs);
             return parsed;
         } catch (Exception e) {
             String errorDetail = LlmErrorUtils.describeError(e);
             persistAudit(requestId, stockSymbol, analysisDate, provider, modelVersion, promptHash,
-                    messages, null, null, "FAILED", errorDetail, maxResponseTokens, startedAt,
+                    messages, null, null, "FAILED", errorDetail, maxResponseTokens, true, startedAt,
                     System.currentTimeMillis() - llmStart);
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), false);
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
@@ -391,22 +435,88 @@ public class SentimentService {
 
     }
 
+    /**
+     * Builds a bounded, factual context block from structured Indian-market
+     * sources. Missing context is represented by an empty string so existing
+     * news-only behavior is preserved.
+     */
+    private String buildMarketContext(String symbol, LocalDate decisionDate) {
+        if (decisionDate == null) return "";
+        StringBuilder context = new StringBuilder();
+        try {
+            if (pdfExtractionService != null) {
+                EarningsData earnings = pdfExtractionService.extractLatestEarnings(symbol);
+                if (earnings != null && earnings.extractionDate() != null
+                        && !earnings.extractionDate().isAfter(decisionDate)) {
+                    context.append("Earnings: quarter=").append(safe(earnings.quarter()))
+                            .append(", revenue=").append(safe(earnings.revenue()))
+                            .append(", netProfit=").append(safe(earnings.netProfit()))
+                            .append(", EPS=").append(safe(earnings.eps()))
+                            .append(", EBITDA=").append(safe(earnings.ebitda()))
+                            .append(", guidance=").append(cap(safe(earnings.guidance()), MAX_CONTEXT_FIELD_CHARS))
+                            .append("\n");
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Structured earnings context unavailable for {}: {}", symbol, e.getMessage());
+        }
+        try {
+            LocalDate from = decisionDate.minusDays(NEWS_LOOKBACK_DAYS);
+            newsIngestionService.fetchStructuredFilings(symbol).stream()
+                    .filter(Objects::nonNull)
+                    .filter(f -> f.date() != null && !f.date().isBefore(from) && !f.date().isAfter(decisionDate))
+                    .sorted((a, b) -> b.date().compareTo(a.date()))
+                    .limit(MAX_CONTEXT_FILINGS)
+                    .forEach(f -> {
+                        context.append("Filing: ").append(f.date()).append(" | ")
+                                .append(f.typeLabel()).append(" | ")
+                                .append(cap(safe(f.title()), MAX_CONTEXT_FIELD_CHARS));
+                        String description = cap(safe(f.description()), MAX_CONTEXT_FIELD_CHARS);
+                        if (!description.isBlank()) context.append(" — ").append(description);
+                        context.append("\n");
+                    });
+        } catch (Exception e) {
+            logger.debug("Structured filing context unavailable for {}: {}", symbol, e.getMessage());
+        }
+        if (context.isEmpty()) return "";
+        if (context.length() > MAX_CONTEXT_CHARS) {
+            context.setLength(MAX_CONTEXT_CHARS);
+            context.append("\n[context truncated]");
+        }
+        return "\n=== Structured Indian-market context (reference only) ===\n"
+                + context + "Use only the supplied values; do not infer missing figures.\n";
+    }
+
+    private static String safe(Object value) {
+        return value == null ? "not available" : value.toString().replaceAll("[\\r\\n]+", " ").trim();
+    }
+
+    private static String cap(String value, int limit) {
+        return value.length() <= limit ? value : value.substring(0, limit) + "...";
+    }
+
     private void persistAudit(String requestId, String symbol, LocalDate analysisDate,
                               String provider, String model,
                               String promptHash, List<Map<String, String>> messages,
                               String rawResponse, SentimentOutput parsed, String status,
-                              String error, int maxResponseTokens, OffsetDateTime startedAt, long latencyMs) {
+                              String error, int maxResponseTokens, boolean fallbackUsed,
+                              OffsetDateTime startedAt, long latencyMs) {
         if (auditRepository == null) return;
         String score = parsed == null ? null : parsed.getSentiment().name();
         Double confidence = parsed == null ? null : parsed.getConfidence();
         auditRepository.save(new LlmAnalysisAuditEntity(requestId, symbol, analysisDate,
                 provider, model, promptHash, messages.get(0).get("content"),
                 messages.get(1).get("content"), rawResponse, score, confidence, status,
-                    error, false, maxResponseTokens, 0.3, startedAt,
+                    error, fallbackUsed, maxResponseTokens, 0.0, startedAt,
                 OffsetDateTime.now(ZoneOffset.UTC), latencyMs));
     }
 
     private String configuredModel(String provider) {
+        Optional<String> legacySetting = appSettingsStore.get("llamacpp.model");
+        if (("pi_ssh".equals(provider) || "local".equals(provider))
+                && legacySetting != null && legacySetting.isPresent() && !legacySetting.get().isBlank()) {
+            return legacySetting.get();
+        }
         if (llmProperties != null) {
             String configured = switch (provider) {
                 case "pi_ssh" -> llmProperties.getProviders().getPiSsh().getModel();
@@ -416,7 +526,6 @@ public class SentimentService {
             };
             if (configured != null && !configured.isBlank()) return configured;
         }
-        Optional<String> legacySetting = appSettingsStore.get("llamacpp.model");
         return legacySetting != null ? legacySetting.orElse("unknown") : "unknown";
     }
 
@@ -427,10 +536,23 @@ public class SentimentService {
             String stockSymbol,
             LocalDate date,
             SentimentOutput analysisResult,
-            int articleCount) {
+            int articleCount,
+            List<Long> articleIds,
+            String provider) {
+        return buildSentimentResult(stockSymbol, date, analysisResult, articleCount, articleIds,
+            provider, null);
+    }
 
-        String modelVersion = appSettingsStore.get("llamacpp.model")
-                .orElse("Qwen3-4B-Instruct");
+    private SentimentResult buildSentimentResult(
+            String stockSymbol,
+            LocalDate date,
+            SentimentOutput analysisResult,
+            int articleCount,
+            List<Long> articleIds,
+            String provider,
+            String auditRequestId) {
+
+        String modelVersion = configuredModel(provider);
         String promptHash = computePromptHash();
 
         SentimentResult.SentimentScore score;
@@ -462,7 +584,9 @@ public class SentimentService {
                 promptHash,
                 modelVersion,
                 articleCount,
-                analysisResult.getSource()
+                analysisResult.getSource(),
+                articleIds,
+                auditRequestId
         );
     }
 
@@ -604,7 +728,8 @@ public class SentimentService {
      * Classifies each headline by its overall sentiment using phrase matching,
      * then aggregates into a composite result.
      */
-    private SentimentResult keywordBasedSentiment(String symbol, List<String> headlines) {
+    private SentimentResult keywordBasedSentiment(String symbol, LocalDate analysisDate,
+                                                  List<String> headlines) {
         int posCount = 0, negCount = 0, neuCount = 0;
         List<String> posHeadlines = new ArrayList<>();
         List<String> negHeadlines = new ArrayList<>();
@@ -669,7 +794,7 @@ public class SentimentService {
         List<String> uniqueFlags = allFlags.stream().distinct().toList();
         List<String> uniqueCatalysts = allCatalysts.stream().distinct().toList();
 
-        return SentimentResult.create(symbol, LocalDate.now(), score,
+        return SentimentResult.create(symbol, analysisDate, score,
                 reasoning.toString(), "", confidence,
                 uniqueFlags.isEmpty() ? List.of() : uniqueFlags,
                 uniqueCatalysts.isEmpty() ? List.of() : uniqueCatalysts);

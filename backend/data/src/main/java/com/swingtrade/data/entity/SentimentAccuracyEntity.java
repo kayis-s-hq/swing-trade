@@ -51,6 +51,18 @@ public class SentimentAccuracyEntity {
     @Column(name = "actual_return_21d", precision = 10, scale = 6)
     private java.math.BigDecimal actualReturn21d;
 
+    @Column(name = "excess_return_1d", precision = 10, scale = 6)
+    private java.math.BigDecimal excessReturn1d;
+
+    @Column(name = "excess_return_5d", precision = 10, scale = 6)
+    private java.math.BigDecimal excessReturn5d;
+
+    @Column(name = "excess_return_21d", precision = 10, scale = 6)
+    private java.math.BigDecimal excessReturn21d;
+
+    @Column(name = "ground_truth_basis", length = 20)
+    private String groundTruthBasis;
+
     @Column(name = "ground_truth_label", length = 10)
     private String groundTruthLabel;
 
@@ -69,6 +81,9 @@ public class SentimentAccuracyEntity {
 
     @Column(name = "model_version", length = 255)
     private String modelVersion;
+
+    @Column(name = "sentiment_source", length = 20)
+    private String sentimentSource;
 
     @Column(name = "composite_score")
     private Integer compositeScore;
@@ -98,12 +113,17 @@ public class SentimentAccuracyEntity {
         this.actualReturn1d = accuracy.actualReturn1d();
         this.actualReturn5d = accuracy.actualReturn5d();
         this.actualReturn21d = accuracy.actualReturn21d();
+        this.excessReturn1d = accuracy.excessReturn1d();
+        this.excessReturn5d = accuracy.excessReturn5d();
+        this.excessReturn21d = accuracy.excessReturn21d();
+        this.groundTruthBasis = accuracy.groundTruthBasis();
         this.groundTruthLabel = accuracy.groundTruthLabel();
         this.wasCorrect = accuracy.wasCorrect();
         this.pnlPct = accuracy.pnlPct();
         this.marketRegime = accuracy.marketRegime();
         this.promptHash = accuracy.promptHash();
         this.modelVersion = accuracy.modelVersion();
+        this.sentimentSource = accuracy.sentimentSource();
         this.createdAt = java.time.LocalDateTime.now();
         this.evaluatedAt = accuracy.evaluatedAt();
     }
@@ -123,12 +143,17 @@ public class SentimentAccuracyEntity {
             actualReturn1d,
             actualReturn5d,
             actualReturn21d,
+            excessReturn1d,
+            excessReturn5d,
+            excessReturn21d,
+            groundTruthBasis,
             groundTruthLabel,
             wasCorrect,
             pnlPct,
             marketRegime,
             promptHash,
             modelVersion,
+            sentimentSource,
             evaluatedAt
         );
     }
@@ -205,6 +230,15 @@ public class SentimentAccuracyEntity {
         this.actualReturn21d = actualReturn21d;
     }
 
+    public java.math.BigDecimal getExcessReturn1d() { return excessReturn1d; }
+    public void setExcessReturn1d(java.math.BigDecimal value) { this.excessReturn1d = value; }
+    public java.math.BigDecimal getExcessReturn5d() { return excessReturn5d; }
+    public void setExcessReturn5d(java.math.BigDecimal value) { this.excessReturn5d = value; }
+    public java.math.BigDecimal getExcessReturn21d() { return excessReturn21d; }
+    public void setExcessReturn21d(java.math.BigDecimal value) { this.excessReturn21d = value; }
+    public String getGroundTruthBasis() { return groundTruthBasis; }
+    public void setGroundTruthBasis(String value) { this.groundTruthBasis = value; }
+
     public String getGroundTruthLabel() {
         return groundTruthLabel;
     }
@@ -252,6 +286,9 @@ public class SentimentAccuracyEntity {
     public void setModelVersion(String modelVersion) {
         this.modelVersion = modelVersion;
     }
+
+    public String getSentimentSource() { return sentimentSource; }
+    public void setSentimentSource(String sentimentSource) { this.sentimentSource = sentimentSource; }
 
     public Integer getCompositeScore() {
         return compositeScore;

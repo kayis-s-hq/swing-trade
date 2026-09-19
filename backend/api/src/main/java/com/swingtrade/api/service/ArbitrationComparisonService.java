@@ -2,7 +2,7 @@ package com.swingtrade.api.service;
 
 import com.swingtrade.data.entity.SignalSelectionEntity;
 import com.swingtrade.domain.ShadowClosedTrade;
-import com.swingtrade.domain.service.PaperPortfolioService;
+import com.swingtrade.domain.service.PortfolioQueryService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -24,9 +24,9 @@ import java.util.Optional;
 public class ArbitrationComparisonService {
 
     private final SignalArbiter arbiter;
-    private final PaperPortfolioService paperPortfolioService;
+    private final PortfolioQueryService paperPortfolioService;
 
-    public ArbitrationComparisonService(SignalArbiter arbiter, PaperPortfolioService paperPortfolioService) {
+    public ArbitrationComparisonService(SignalArbiter arbiter, PortfolioQueryService paperPortfolioService) {
         this.arbiter = arbiter;
         this.paperPortfolioService = paperPortfolioService;
     }

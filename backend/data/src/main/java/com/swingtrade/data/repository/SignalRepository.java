@@ -45,6 +45,12 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
         @Param("date") LocalDate date
     );
 
+    @Query("SELECT DISTINCT s.strategy FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date")
+    List<String> findStrategiesBySymbolAndDate(
+        @Param("symbol") String symbol,
+        @Param("date") LocalDate date
+    );
+
     /**
      * Finds all BUY signals generated on or after a date.
      *
@@ -157,14 +163,16 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
         @Param("strategy") String strategy
     );
 
+    @Query("SELECT s.id FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date AND s.strategy = :strategy")
+    List<Long> findIdsBySymbolAndDateAndStrategy(
+        @Param("symbol") String symbol, @Param("date") LocalDate date, @Param("strategy") String strategy);
+
+    @Query("SELECT s.strategy FROM SignalEntity s WHERE s.id = :signalId")
+    java.util.Optional<String> findStrategyById(@Param("signalId") Long signalId);
+
     /**
      * Finds every signal recorded for a specific date and variant, regardless of symbol - used by
-     * the nightly live-vs-backtest parity check (plan §7.3) to read what the live SIGNAL stage
-     * actually persisted for a variant on a given day.
-     *
-     * @param date     the date
-     * @param strategy the variant id (the {@code strategy} column)
-     * @return list of signals recorded for that date/variant
+     * strategy attribution to read what the SIGNAL stage persisted for a variant on a given day.
      */
     @Query("SELECT s FROM SignalEntity s WHERE s.date = :date AND s.strategy = :strategy")
     List<SignalEntity> findByDateAndStrategy(
@@ -198,47 +206,6 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
     );
 
     /**
-     * Finds unprocessed BUY signals from the last 30 days for a specific strategy variant
-     * (plan §7.2 routing gap fix - see {@link com.swingtrade.data.store.SignalStoreImpl}).
-     *
-     * @param since    the cutoff date
-     * @param strategy the variant id
-     * @return list of unprocessed BUY signals for that strategy
-     */
-    @Query("SELECT s FROM SignalEntity s WHERE s.signalType = 'BUY' AND s.date >= :since "
-        + "AND s.processed = false AND s.strategy = :strategy ORDER BY s.date ASC")
-    List<SignalEntity> findUnprocessedBuySignalsSinceAndStrategy(
-        @Param("since") LocalDate since,
-        @Param("strategy") String strategy
-    );
-
-    /**
-     * Marks every unprocessed BUY signal for {@code symbol} whose {@code strategy} is not
-     * {@code strategy} as processed, without executing them (plan §7.2 quarantine of
-     * non-champion variant signals from the single shared paper engine).
-     */
-    @Modifying
-    @Transactional
-    @Query("UPDATE SignalEntity s SET s.processed = true WHERE s.symbol = :symbol "
-        + "AND s.signalType = 'BUY' AND s.processed = false "
-        + "AND (s.strategy IS NULL OR s.strategy <> :strategy)")
-    int markProcessedExcludingStrategy(@Param("symbol") String symbol, @Param("strategy") String strategy);
-
-    /**
-     * Marks every unprocessed BUY signal for {@code symbol} whose {@code strategy} is not in
-     * {@code strategies} as processed, without executing them. Generalizes
-     * {@link #markProcessedExcludingStrategy} to the multi-variant paper-trade stage (plan §7.4):
-     * every currently-active variant's own BUYs are executed against its own portfolio, and only
-     * signals belonging to no active variant are quarantined this way.
-     */
-    @Modifying
-    @Transactional
-    @Query("UPDATE SignalEntity s SET s.processed = true WHERE s.symbol = :symbol "
-        + "AND s.signalType = 'BUY' AND s.processed = false "
-        + "AND (s.strategy IS NULL OR s.strategy NOT IN :strategies)")
-    int markProcessedExcludingStrategies(@Param("symbol") String symbol, @Param("strategies") List<String> strategies);
-
-    /**
      * Deletes all signals for a specific symbol and date.
      */
     @Modifying
@@ -251,21 +218,6 @@ public interface SignalRepository extends JpaRepository<SignalEntity, Long> {
     @Query("DELETE FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date AND s.strategy = :strategy")
     int deleteBySymbolAndDateAndStrategy(@Param("symbol") String symbol, @Param("date") LocalDate date,
                                          @Param("strategy") String strategy);
-
-    /**
-     * Deletes signals for a specific symbol/date/strategy/strategy-version - the multi-variant
-     * idempotency key (plan §7.1, replaces the old symbol/date/strategy-only key used by
-     * {@link #deleteBySymbolAndDateAndStrategy}) since several variants can now share a
-     * {@code strategy} (variantId) across versions but only the current version's row should
-     * survive a regeneration.
-     */
-    @Modifying
-    @Transactional
-    @Query("DELETE FROM SignalEntity s WHERE s.symbol = :symbol AND s.date = :date "
-        + "AND s.strategy = :strategy AND s.strategyVersion = :strategyVersion")
-    int deleteBySymbolAndDateAndStrategyAndVersion(@Param("symbol") String symbol, @Param("date") LocalDate date,
-                                                    @Param("strategy") String strategy,
-                                                    @Param("strategyVersion") int strategyVersion);
 
     /**
      * Deletes all signals for a specific date.

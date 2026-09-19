@@ -5,9 +5,9 @@ import com.swingtrade.data.entity.SignalSelectionEntity;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.ShadowPositionView;
 import com.swingtrade.domain.StrategyConfig;
-import com.swingtrade.domain.service.PaperPortfolioService;
+import com.swingtrade.domain.service.PortfolioQueryService;
 import com.swingtrade.domain.store.SignalStore;
-import com.swingtrade.domain.store.StrategyConfigStore;
+import com.swingtrade.api.service.ActiveVariantService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,14 +25,14 @@ public class SymbolStrategyController {
 
     private static final String SELECTED_PORTFOLIO_ID = "selected";
 
-    private final StrategyConfigStore strategyConfigStore;
+    private final ActiveVariantService activeVariantService;
     private final SignalStore signalStore;
-    private final PaperPortfolioService paperPortfolioService;
+    private final PortfolioQueryService paperPortfolioService;
     private final SignalArbiter signalArbiter;
 
-    public SymbolStrategyController(StrategyConfigStore strategyConfigStore, SignalStore signalStore,
-                                    PaperPortfolioService paperPortfolioService, SignalArbiter signalArbiter) {
-        this.strategyConfigStore = strategyConfigStore;
+    public SymbolStrategyController(ActiveVariantService activeVariantService, SignalStore signalStore,
+                                    PortfolioQueryService paperPortfolioService, SignalArbiter signalArbiter) {
+        this.activeVariantService = activeVariantService;
         this.signalStore = signalStore;
         this.paperPortfolioService = paperPortfolioService;
         this.signalArbiter = signalArbiter;
@@ -40,9 +40,9 @@ public class SymbolStrategyController {
 
     @GetMapping("/{symbol}/strategy-matrix")
     public StrategyMatrixResponse matrix(@PathVariable String symbol) {
-        List<ShadowPositionView> positions = paperPortfolioService.listShadowPositionsForSymbol(symbol);
+        List<ShadowPositionView> positions = paperPortfolioService.listPositionsForSymbol(symbol);
         List<StrategyRow> rows = new ArrayList<>();
-        for (StrategyConfig config : strategyConfigStore.findAllCurrent()) {
+        for (StrategyConfig config : activeVariantService.allCurrent()) {
             rows.add(row(config.variantId(), config.strategyType(), config.mode().name(), symbol, positions));
         }
         rows.add(row(SELECTED_PORTFOLIO_ID, "TOURNAMENT", "SELECTED", symbol, positions));

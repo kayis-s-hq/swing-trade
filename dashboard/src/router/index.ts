@@ -31,6 +31,11 @@ const router = createRouter({
       component: () => import('../views/SignalsView.vue'),
     },
     {
+      path: '/gate-effectiveness',
+      name: 'Gate Effectiveness',
+      component: () => import('../views/GateEffectivenessView.vue'),
+    },
+    {
       path: '/portfolio',
       name: 'Portfolio',
       component: () => import('../views/PortfolioView.vue'),

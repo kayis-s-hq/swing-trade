@@ -2,11 +2,11 @@ package com.swingtrade.domain.store;
 
 import com.swingtrade.domain.Signal;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import com.swingtrade.domain.SignalStrategyMetadata;
 
 public interface SignalStore {
 
@@ -18,45 +18,21 @@ public interface SignalStore {
 
     List<Signal> findBySymbolAndDate(String symbol, LocalDate date);
 
+    /**
+     * Returns the strategy identifiers represented by a symbol/date's signals.
+     * This is used when attributing downstream gate decisions to the signal
+     * variant that produced them.
+     */
+    List<String> findStrategiesBySymbolAndDate(String symbol, LocalDate date);
+
+    Optional<String> findStrategyById(Long signalId);
+
+    /** Returns persisted strategy provenance for the supplied signal IDs in one lookup. */
+    Map<Long, SignalStrategyMetadata> findStrategyMetadataByIds(List<Long> signalIds);
+
     List<Signal> findByType(Signal.SignalType type);
 
     List<Signal> findUnprocessed();
-
-    /**
-     * Unprocessed BUY signals produced by a specific strategy variant (plan §7.1's fan-out
-     * persists {@code strategy = variantId} per signal row). Used by the PAPER_TRADE stage
-     * (plan §7.2) to route a variant's own signals to its own paper portfolio instead of the
-     * single shared engine picking up any variant's row regardless of provenance.
-     *
-     * @param strategy the variant id (the {@code strategy} column)
-     */
-    List<Signal> findUnprocessedByStrategy(String strategy);
-
-    /**
-     * Marks every unprocessed BUY signal for {@code symbol} whose {@code strategy} is NOT
-     * {@code strategy} as processed, without executing them. Used to quarantine non-champion
-     * (SHADOW) variant signals away from the single live paper engine (plan §7.2 routing gap
-     * fix) - see {@code JobOrchestratorService.stagePaperTrade}'s comment for why this
-     * quarantines rather than executes per-variant today.
-     *
-     * @param symbol   the stock symbol
-     * @param strategy the strategy/variant id whose signals must NOT be touched
-     * @return number of signals marked processed
-     */
-    int markProcessedExcludingStrategy(String symbol, String strategy);
-
-    /**
-     * Generalizes {@link #markProcessedExcludingStrategy} to several variants at once: marks
-     * every unprocessed BUY signal for {@code symbol} whose {@code strategy} is not in
-     * {@code strategies} as processed, without executing them. Used by the PAPER_TRADE stage to
-     * quarantine only signals belonging to no currently-active variant, once every active
-     * variant (CHAMPION and SHADOW alike) executes against its own portfolio.
-     *
-     * @param symbol     the stock symbol
-     * @param strategies the variant ids whose signals must NOT be touched
-     * @return number of signals marked processed
-     */
-    int markProcessedExcludingStrategies(String symbol, List<String> strategies);
 
     Signal save(Signal signal);
 
@@ -67,19 +43,8 @@ public interface SignalStore {
 
     Signal save(Signal signal, String warningFlag, String strategy);
 
-    /**
-     * Saves a signal produced by the configurable multi-strategy fan-out (plan §7.1), with the
-     * additional provenance columns V47 added: {@code strategy_version}, {@code strategy_score},
-     * {@code rule_outcomes}, {@code gate_outcomes}.
-     *
-     * @param strategyVersion the variant's version number
-     * @param strategyScore   {@link com.swingtrade.domain.Signal}-independent score in [0,1]
-     * @param ruleOutcomes    serialisable rule outcomes (may be {@code null})
-     * @param gateOutcomes    serialisable gate outcomes (may be {@code null})
-     */
-    Signal saveVariantSignal(Signal signal, String warningFlag, String strategy, int strategyVersion,
-                              BigDecimal strategyScore, List<Map<String, Object>> ruleOutcomes,
-                              List<Map<String, Object>> gateOutcomes);
+    /** Saves a signal with its strategy variant and immutable configuration version. */
+    Signal save(Signal signal, String warningFlag, String strategy, Integer strategyVersion);
 
     void markProcessed(Long signalId);
 
@@ -117,13 +82,10 @@ public interface SignalStore {
 
     /**
      * Finds every signal recorded for a specific date and variant, regardless of symbol - used
-     * by the nightly live-vs-backtest parity check (plan §7.3) to read what the live SIGNAL
-     * stage actually persisted for a variant on a given day. Read-only: the parity check never
-     * writes to the {@code signals} table.
+     * by strategy attribution to read what the SIGNAL stage persisted for a variant on a day.
      *
      * @param date     the date
      * @param strategy the variant id (the {@code strategy} column)
-     * @return signals recorded for that date/variant
      */
     List<Signal> findByDateAndStrategy(LocalDate date, String strategy);
 
@@ -155,9 +117,6 @@ public interface SignalStore {
     int deleteBySymbolAndDate(String symbol, LocalDate date);
 
     int deleteBySymbolAndDateAndStrategy(String symbol, LocalDate date, String strategy);
-
-    /** Idempotency key extended with strategy version (plan §7.1, replaces the F5 key above). */
-    int deleteBySymbolAndDateAndStrategyAndVersion(String symbol, LocalDate date, String strategy, int strategyVersion);
 
     /**
      * Deletes all signals for a given date. Used to clear stale signals before regeneration.

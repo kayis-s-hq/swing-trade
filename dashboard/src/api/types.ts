@@ -105,6 +105,9 @@ export interface CandidateScanRun {
   startedAt: string
   completedAt?: string
   errorMessage?: string
+  orchestrationStatus?: 'PENDING' | 'NOT_REQUIRED' | 'STARTED' | 'FAILED'
+  orchestrationJobRunId?: string
+  orchestrationError?: string
 }
 
 export interface CandidateScanResult {
@@ -122,6 +125,21 @@ export interface CandidateScanResult {
   reason?: string
   errorMessage?: string
   createdAt: string
+  sourceOutcome?:
+    | 'EXISTING_HISTORY'
+    | 'DATA_RECEIVED'
+    | 'NO_USABLE_DATA'
+    | 'INVALID_ROWS_REJECTED'
+    | 'TRANSIENT_SOURCE_FAILURE'
+  invalidRows?: number
+  firstAvailableDate?: string
+  lastAvailableDate?: string
+  retryAfter?: string
+  oosStartDate?: string
+  oosEndDate?: string
+  oosTotalTrades?: number
+  oosWinRate?: number
+  oosTotalReturn?: number
 }
 
 export interface CandidateScanSettings {
@@ -129,6 +147,8 @@ export interface CandidateScanSettings {
   'candidate-scan.min-total-return': string
   'candidate-scan.max-concurrent': string
   'candidate-scan.backfill-years': string
+  'candidate-scan.min-trades': string
+  'candidate-scan.out-of-sample-days': string
 }
 
 export interface CandidateScanResultPage {
@@ -443,6 +463,46 @@ export interface TodayHolidayStatus {
   date: string
   marketClosed: boolean
   reason: Record<string, string>
+}
+
+// ---------------------------------------------------------------------------
+// Strategy configuration
+// ---------------------------------------------------------------------------
+
+export type StrategyMode = 'OFF' | 'BACKTEST_ONLY' | 'SHADOW' | 'CHAMPION'
+
+export interface StrategyConfig {
+  id: number | null
+  variantId: string
+  version: number
+  strategyType: string
+  params: Record<string, unknown>
+  overlays: Record<string, unknown>
+  paramsHash: string
+  mode: StrategyMode
+  paperCapital: number
+  current: boolean
+  notes: string | null
+  createdAt: string
+}
+
+export type PromotionEligibilityStatus = 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'INSUFFICIENT_SAMPLE'
+
+export interface PromotionConditionResult {
+  name: string
+  met: boolean
+  actualValue: string
+  threshold: string
+  note: string | null
+}
+
+export interface PromotionEligibilityResponse {
+  challengerVariantId: string
+  championVariantId: string
+  status: PromotionEligibilityStatus
+  conditions: PromotionConditionResult[]
+  notes: string[]
+  dataLimitations: string[]
 }
 
 // ---------------------------------------------------------------------------

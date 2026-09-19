@@ -3,6 +3,7 @@ package com.swingtrade.broker.manager;
 import com.swingtrade.broker.config.PaperTradingProperties;
 import com.swingtrade.domain.Exchange;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
@@ -446,6 +447,25 @@ class PositionManagerTest {
             assertThat(updated.get(0).status()).isEqualTo(PositionStatus.STOPPED);
             assertThat(updated.get(0).realizedPnL()).isEqualByComparingTo(new BigDecimal("-100.00"));
         }
+
+        @Test
+        void updatePositionsWithCandleData_lowerCircuitDefersExit() {
+            String positionId = "POS_00000001";
+            positionManager.createPosition(positionId, "RELIANCE-EQ", TradeDirection.LONG, 10,
+                new BigDecimal("100.00"), new BigDecimal("5.00"), "Test");
+            OhlcvCandle candle = new OhlcvCandle("RELIANCE-EQ", LocalDate.now(),
+                new BigDecimal("92"), new BigDecimal("95"), new BigDecimal("85"),
+                new BigDecimal("88"), 100000L, new BigDecimal("88"));
+            PriceBand band = new PriceBand("RELIANCE-EQ", candle.date(),
+                new BigDecimal("88"), new BigDecimal("110"));
+
+            List<Position> updated = positionManager.updatePositionsWithCandleData(
+                "RELIANCE-EQ", candle, band);
+
+            assertThat(updated).hasSize(1);
+            assertThat(updated.get(0).status()).isEqualTo(PositionStatus.OPEN);
+            assertThat(updated.get(0).realizedPnL()).isEqualByComparingTo(BigDecimal.ZERO);
+        }
     }
 
     // ==================== SL/TP Triggers ====================
@@ -731,13 +751,11 @@ class PositionManagerTest {
         @Test
         void partialExit_fullExit() {
             // Given: A long position with quantity 1
-            // Note: source code bug — remaining = truncated(exitQty), not original - exit.
-            // With qty=1, ratio=0.9: exitQty=0.9, truncated=0, remaining=0 => full exit triggers
             String positionId = "POS_00000003";
             positionManager.createPosition(positionId, "RELIANCE-EQ", TradeDirection.LONG, 1, new BigDecimal("100.00"), new BigDecimal("5.00"), "Test");
 
-            // When: Exit 90% of qty 1 => remaining becomes 0 => full exit
-            Position result = positionManager.partialExitPosition(positionId, new BigDecimal("0.9"), new BigDecimal("105.00"));
+            // When: Exit all of the one-share position
+            Position result = positionManager.partialExitPosition(positionId, BigDecimal.ONE, new BigDecimal("105.00"));
 
             // Then
             assertThat(result.status()).isEqualTo(PositionStatus.CLOSED);
@@ -761,18 +779,12 @@ class PositionManagerTest {
         @Test
         void partialExit_invalidRatio_overOne() {
             // Given: A valid position
-            // Note: source code condition is compareTo(ONE) > 1, but BigDecimal.compareTo
-            // only returns -1, 0, or 1 — so this condition can never be true.
-            // Any ratio > 1 silently passes through (source code bug).
             String positionId = "POS_00000005";
             positionManager.createPosition(positionId, "RELIANCE-EQ", TradeDirection.LONG, 10, new BigDecimal("100.00"), new BigDecimal("5.00"), "Test");
 
-            // When: ratio 3.0 should be rejected but source code bug lets it through
-            // The test documents the actual behavior
-            Position result = positionManager.partialExitPosition(positionId, new BigDecimal("3.0"), new BigDecimal("105.00"));
-
-            // Then: no exception thrown due to source code bug (compareTo returns max 1, never > 1)
-            assertThat(result).isNotNull();
+            assertThatThrownBy(() -> positionManager.partialExitPosition(positionId, new BigDecimal("3.0"), new BigDecimal("105.00")))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Exit ratio must be between 0 and 1");
         }
 
         @Test
@@ -1244,17 +1256,17 @@ class PositionManagerTest {
         }
 
         @Test
-        void edge_case_partialExitTruncatesQuantity() {
+        void edge_case_partialExitUsesActualSharesAndKeepsRemainder() {
             // Given: A position with quantity 7
             String positionId = "POS_00000007";
             positionManager.createPosition(positionId, "RELIANCE-EQ", TradeDirection.LONG, 7, new BigDecimal("100.00"), new BigDecimal("5.00"), "Test");
 
-            // When: Exit 30% => 7 * 0.3 = 2.1 => truncated to 2
-            // Note: source code bug — remaining = truncated exit qty (2), not original - exit (5)
+            // When: Exit 30% => 7 * 0.3 = 2.1 => sell 2 whole shares
             Position result = positionManager.partialExitPosition(positionId, new BigDecimal("0.3"), new BigDecimal("105.00"));
 
             // Then
-            assertThat(result.quantity()).isEqualTo(2);
+            assertThat(result.quantity()).isEqualTo(5);
+            assertThat(result.realizedPnL()).isEqualByComparingTo(new BigDecimal("10.00"));
         }
 
         @Test

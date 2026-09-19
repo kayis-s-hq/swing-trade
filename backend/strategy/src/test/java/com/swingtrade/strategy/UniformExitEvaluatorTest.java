@@ -97,7 +97,7 @@ class UniformExitEvaluatorTest {
             ctx.view(lastBar), position, params(BigDecimal.valueOf(0.5), 100), false);
 
         assertThat(decision.exit()).isTrue();
-        assertThat(decision.reason()).isEqualTo(ExitReason.TRAILING);
+        assertThat(decision.reason()).isEqualTo(ExitReason.TRAILING_STOP);
     }
 
     @Test

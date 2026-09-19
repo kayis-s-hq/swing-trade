@@ -195,7 +195,9 @@ public class LlmConfig {
             .model(model)
             .baseUrl(baseUrl)
             .apiKey(key)
-            .temperature(0.2);
+            // Sentiment and other structured outputs should be reproducible.
+            // Providers that support temperature receive the deterministic floor.
+            .temperature(0.0);
         if (timeout != null) {
             optionsBuilder.timeout(timeout);
         }

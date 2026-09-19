@@ -15,7 +15,7 @@ const apiMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../api/client', () => apiMocks)
-vi.mock('../api/strategies', () => ({ listCurrentStrategies: vi.fn().mockResolvedValue([]) }))
+vi.mock('../api/strategies', () => ({ getStrategies: vi.fn().mockResolvedValue([]) }))
 vi.mock('../api/positions', () => ({
   getMarketOverview: apiMocks.getMarketOverview,
   getPositions: apiMocks.getPositions,

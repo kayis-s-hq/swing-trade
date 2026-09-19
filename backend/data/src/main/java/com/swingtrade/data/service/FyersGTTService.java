@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Fyers v3 GTT (Good Till Triggered) order service.
@@ -16,13 +17,19 @@ public class FyersGTTService {
 
     private static final Logger logger = LoggerFactory.getLogger(FyersGTTService.class);
     private final FyersAuthService authService;
+    private final Supplier<FyersClass> sdkProvider;
 
     public FyersGTTService(FyersAuthService authService) {
+        this(authService, FyersClass::getInstance);
+    }
+
+    FyersGTTService(FyersAuthService authService, Supplier<FyersClass> sdkProvider) {
         this.authService = authService;
+        this.sdkProvider = sdkProvider;
     }
 
     private FyersClass getSdk() {
-        FyersClass sdk = FyersClass.getInstance();
+        FyersClass sdk = sdkProvider.get();
         sdk.clientId = authService.getClientId();
         String token = authService.getAccessToken();
         if (token != null) sdk.accessToken = token;

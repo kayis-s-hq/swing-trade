@@ -5,13 +5,11 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
 /**
- * A closed round-trip shadow-variant paper trade (plan §7.4 gap-fill): the BUY that
- * {@code executeVariantBuy} simulated, paired with the exit that later closed it. Returned by
- * {@link com.swingtrade.domain.service.PaperPortfolioService#findClosedTrades} so a caller (the
- * promotion-eligibility checker/REST endpoint) can compute P&L, hold duration and R-multiple
- * without needing to know how this is persisted. Mirrors the shape of the backtest-domain
- * {@code PortfolioTrade} (strategy module) where it fits cleanly, without depending on that
- * module from core.
+ * A closed round-trip paper trade in a strategy variant's (or the "selected" tournament
+ * book's) own portfolio: the simulated BUY paired with the exit that closed it. Returned by
+ * {@link com.swingtrade.domain.service.PortfolioQueryService#findClosedTrades} so callers
+ * (attribution, arbitration) can compute P&L, hold duration and R-multiple without knowing how
+ * the trade is persisted.
  */
 public record ShadowClosedTrade(
     String portfolioId,

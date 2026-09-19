@@ -23,7 +23,9 @@ public record QuoteData(
     String currency,
     String marketState,
     BigDecimal fiftyDayAverage,
-    BigDecimal twoHundredDayAverage
+    BigDecimal twoHundredDayAverage,
+    BigDecimal lowerPriceBand,
+    BigDecimal upperPriceBand
 ) {
     public static QuoteData of(
         String symbol, String shortName, String longName,
@@ -36,12 +38,32 @@ public record QuoteData(
         String marketState, BigDecimal fiftyDayAverage,
         BigDecimal twoHundredDayAverage
     ) {
+        return of(symbol, shortName, longName, regularMarketPrice, regularMarketChange,
+            regularMarketChangePercent, regularMarketDayHigh, regularMarketDayLow,
+            regularMarketPreviousClose, fiftyTwoWeekHigh, fiftyTwoWeekLow,
+            regularMarketVolume, currency, marketState, fiftyDayAverage,
+            twoHundredDayAverage, null, null);
+    }
+
+    public static QuoteData of(
+        String symbol, String shortName, String longName,
+        BigDecimal regularMarketPrice, BigDecimal regularMarketChange,
+        BigDecimal regularMarketChangePercent,
+        BigDecimal regularMarketDayHigh, BigDecimal regularMarketDayLow,
+        BigDecimal regularMarketPreviousClose,
+        BigDecimal fiftyTwoWeekHigh, BigDecimal fiftyTwoWeekLow,
+        Long regularMarketVolume, String currency,
+        String marketState, BigDecimal fiftyDayAverage,
+        BigDecimal twoHundredDayAverage, BigDecimal lowerPriceBand,
+        BigDecimal upperPriceBand
+    ) {
         return new QuoteData(
             symbol, shortName, longName,
             regularMarketPrice, regularMarketChange, regularMarketChangePercent,
             regularMarketDayHigh, regularMarketDayLow, regularMarketPreviousClose,
             fiftyTwoWeekHigh, fiftyTwoWeekLow, regularMarketVolume, currency,
-            marketState, fiftyDayAverage, twoHundredDayAverage
+            marketState, fiftyDayAverage, twoHundredDayAverage,
+            lowerPriceBand, upperPriceBand
         );
     }
 }

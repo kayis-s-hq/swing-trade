@@ -6,6 +6,8 @@ import com.swingtrade.data.entity.OhlcvCandleEntity;
 import com.swingtrade.data.repository.OhlcvCandleRepository;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.Position;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.store.PriceBandStore;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
 import org.junit.jupiter.api.BeforeEach;
@@ -93,7 +95,7 @@ class PaperTradingMonitorServiceTest {
         }
 
         @Test
-        void monitorPositions_singlePosition_fullFlow() {
+    void monitorPositions_singlePosition_fullFlow() {
             // Given: One open position
             Position position = makePosition("RELIANCE-EQ", PositionStatus.OPEN, new BigDecimal("100.00"));
             when(engine.getOpenPositions()).thenReturn(List.of(position));
@@ -161,6 +163,85 @@ class PaperTradingMonitorServiceTest {
             verify(stateService).saveSnapshot();
             verify(stateService).savePortfolio();
         }
+    }
+
+        @Test
+        void monitorPositions_appliesConfiguredTrailingPolicyBeforeFixedTriggers() {
+            properties.setRiskManagementEnabled(true);
+            Position position = new Position(
+                1L, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"), LocalDate.now().minusDays(1), 10,
+                new BigDecimal("90.00"), new BigDecimal("125.00"), PositionStatus.OPEN, "Test",
+                new BigDecimal("100.00"), "POS_00000001", null, null, TradeDirection.LONG,
+                new BigDecimal("100.00"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                null, null, null, null);
+            when(engine.getOpenPositions()).thenReturn(List.of(position));
+
+            OhlcvCandle candle = new OhlcvCandle("RELIANCE-EQ", LocalDate.now(), new BigDecimal("100"),
+                new BigDecimal("112"), new BigDecimal("99"), new BigDecimal("110"), 100000L,
+                new BigDecimal("110"));
+            OhlcvCandleEntity current = mock(OhlcvCandleEntity.class);
+            when(current.toDomain()).thenReturn(candle);
+            when(ohlcvCandleRepository.findLatestBySymbol("RELIANCE-EQ")).thenReturn(Optional.of(current));
+            OhlcvCandleEntity previous = mock(OhlcvCandleEntity.class);
+            when(previous.toDomain()).thenReturn(new OhlcvCandle("RELIANCE-EQ", LocalDate.now().minusDays(1),
+                new BigDecimal("108"), new BigDecimal("112"), new BigDecimal("107"), new BigDecimal("110"),
+                100000L, new BigDecimal("110")));
+            when(ohlcvCandleRepository.findAllBySymbolOrderByDateDesc("RELIANCE-EQ"))
+                .thenReturn(List.of(previous));
+
+            monitorService.monitorPositions();
+
+            verify(engine).closePosition("POS_00000001", new BigDecimal("100"), "TRAILING_STOP");
+            verify(engine, never()).updatePositionsFromDomain(any());
+        }
+
+        @Test
+        void monitorPositions_appliesOneTimePartialTargetExit() {
+            properties.setRiskManagementEnabled(true);
+            Position position = new Position(
+                1L, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"), LocalDate.now().minusDays(1), 10,
+                new BigDecimal("90.00"), new BigDecimal("125.00"), PositionStatus.OPEN, "Test",
+                new BigDecimal("100.00"), "POS_00000001", null, null, TradeDirection.LONG,
+                new BigDecimal("100.00"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                null, null, null, null);
+            when(engine.getOpenPositions()).thenReturn(List.of(position));
+
+            OhlcvCandle candle = new OhlcvCandle("RELIANCE-EQ", LocalDate.now(), new BigDecimal("120"),
+                new BigDecimal("120"), new BigDecimal("119"), new BigDecimal("120"), 100000L,
+                new BigDecimal("120"));
+            OhlcvCandleEntity current = mock(OhlcvCandleEntity.class);
+            when(current.toDomain()).thenReturn(candle);
+            when(ohlcvCandleRepository.findLatestBySymbol("RELIANCE-EQ")).thenReturn(Optional.of(current));
+            OhlcvCandleEntity previous = mock(OhlcvCandleEntity.class);
+            when(previous.toDomain()).thenReturn(new OhlcvCandle("RELIANCE-EQ", LocalDate.now().minusDays(1),
+                new BigDecimal("100"), new BigDecimal("101"), new BigDecimal("99"), new BigDecimal("100"),
+                100000L, new BigDecimal("100")));
+            when(ohlcvCandleRepository.findAllBySymbolOrderByDateDesc("RELIANCE-EQ"))
+                .thenReturn(List.of(previous));
+
+            monitorService.monitorPositions();
+
+            verify(engine).partialExitPosition("POS_00000001", new BigDecimal("0.5"), new BigDecimal("120"));
+            verify(engine, never()).updatePositionsFromDomain(any());
+        }
+
+    @Test
+    void monitorPositions_passesExplicitPriceBandToEngine() {
+        Position position = makePosition("RELIANCE-EQ", PositionStatus.OPEN, new BigDecimal("100.00"));
+        when(engine.getOpenPositions()).thenReturn(List.of(position));
+        OhlcvCandle candle = makeCandle("RELIANCE-EQ", new BigDecimal("90.00"));
+        OhlcvCandleEntity entity = mock(OhlcvCandleEntity.class);
+        when(entity.toDomain()).thenReturn(candle);
+        when(ohlcvCandleRepository.findLatestBySymbol("RELIANCE-EQ")).thenReturn(Optional.of(entity));
+        PriceBandStore bands = mock(PriceBandStore.class);
+        PriceBand band = new PriceBand("RELIANCE-EQ", candle.date(), new BigDecimal("90.00"), new BigDecimal("110.00"));
+        when(bands.findBySymbolAndDate("RELIANCE-EQ", candle.date())).thenReturn(Optional.of(band));
+        PaperTradingMonitorService service = new PaperTradingMonitorService(engine, stateService,
+            ohlcvCandleRepository, properties, bands);
+
+        service.monitorPositions();
+
+        verify(engine).updatePositionsFromDomain(candle, band);
     }
 
     // ==================== Position Updates ====================

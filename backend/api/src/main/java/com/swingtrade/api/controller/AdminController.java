@@ -1,6 +1,7 @@
 package com.swingtrade.api.controller;
 
 import com.swingtrade.api.dto.ApiResponse;
+import com.swingtrade.api.dto.DataQualityValidationRequest;
 import com.swingtrade.api.dto.KillSwitchRequest;
 import com.swingtrade.broker.risk.KillSwitchService;
 import com.swingtrade.data.repository.FyersSymbolRepository;
@@ -177,6 +178,33 @@ public class AdminController {
         data.put("timestamp", LocalDateTime.now());
 
         return ResponseEntity.ok(ApiResponse.ok(data));
+    }
+
+    /**
+     * Validate persisted OHLCV data for one symbol and an inclusive date range.
+     *
+     * @param request symbol and inclusive validation window
+     * @return gap and price-anomaly report
+     */
+    @PostMapping("/data/validate")
+    public ResponseEntity<ApiResponse<DataIngestionService.DataQualityReport>> validateData(
+            @RequestBody DataQualityValidationRequest request) {
+        if (request == null || request.symbol() == null || request.symbol().isBlank()
+                || request.fromDate() == null || request.toDate() == null
+                || request.fromDate().isAfter(request.toDate())) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(
+                    "symbol, fromDate, and toDate are required and the date range must be ordered"));
+        }
+
+        try {
+            DataIngestionService.DataQualityReport report = dataIngestionService.validateDataQuality(
+                    request.symbol(), request.fromDate(), request.toDate());
+            return ResponseEntity.ok(ApiResponse.ok(report));
+        } catch (Exception e) {
+            logger.error("Error validating data quality for {}: {}", request.symbol(), e.getMessage(), e);
+            return ResponseEntity.internalServerError().body(ApiResponse.error(
+                    "Failed to validate data quality: " + e.getMessage()));
+        }
     }
 
     // Upstox is unconfigured — this endpoint (backed by DataIngestionService.pullDataFromUpstox)

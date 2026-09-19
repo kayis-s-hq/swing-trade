@@ -28,6 +28,7 @@ import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.Trade;
 import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.service.OrderService;
 import com.swingtrade.domain.service.TradingService;
 import com.swingtrade.domain.store.CandleStore;
@@ -48,6 +49,7 @@ import org.mockito.quality.Strictness;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -103,6 +105,27 @@ class PositionServiceTest {
     void setUp() {
         positionService = new PositionService(positionStore, stockStore, positionRepository,
                 tradingService, orderService, candleStore, tradeStore, entityManager);
+    }
+
+    @Test
+    void filtersPositionsByNormalizedStockSector() {
+        Position technology = makeDomainPosition(1L, "TCS", new BigDecimal("100"),
+                new BigDecimal("105"), "POS_00000001");
+        Position energy = makeDomainPosition(2L, "RELIANCE", new BigDecimal("100"),
+                new BigDecimal("105"), "POS_00000002");
+        when(positionStore.findAll()).thenReturn(java.util.List.of(technology, energy));
+        when(stockStore.findBySymbol("TCS")).thenReturn(Optional.of(stock("TCS", Stock.Sector.IT)));
+        when(stockStore.findBySymbol("RELIANCE")).thenReturn(Optional.of(stock("RELIANCE", Stock.Sector.ENERGY)));
+
+        List<PositionResponse> result = positionService.getPositionsBySector("Technology");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getSymbol()).isEqualTo("TCS");
+    }
+
+    private Stock stock(String symbol, Stock.Sector sector) {
+        return new Stock(symbol, Stock.Exchange.NSE, symbol, sector,
+                null, null, null, null, null, LocalDate.now());
     }
 
     private Position makeDomainPosition(Long id, String symbol, BigDecimal entryPrice,

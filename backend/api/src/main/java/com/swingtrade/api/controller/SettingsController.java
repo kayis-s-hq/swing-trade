@@ -343,8 +343,22 @@ public class SettingsController {
                 Map.of("role", "system", "content", "Respond with a single word."),
                 Map.of("role", "user", "content", "Respond with a single word.")
             );
-            String response = client.generateChatCompletion(messages, 16, 0.0)
-                .block(Duration.ofSeconds(30));
+            LlmServerManager manager = switch (selector.resolve()) {
+                case LOCAL -> localServerManager;
+                case PI_SSH -> piServerManager;
+                case OPENAI, OLLAMA -> null;
+            };
+            if (manager != null) {
+                manager.ensureRunning();
+                manager.beginRequest();
+            }
+            String response;
+            try {
+                response = client.generateChatCompletion(messages, 16, 0.0)
+                    .block(Duration.ofSeconds(30));
+            } finally {
+                if (manager != null) manager.endRequest();
+            }
             boolean ok = response != null && !response.isBlank();
             result.put("success", ok);
             result.put("message", ok ? "OpenAI-compatible LLM responded successfully" : "LLM returned empty response");
@@ -413,9 +427,20 @@ public class SettingsController {
         try {
             logger.info("Stopping Pi llama-server via SSH...");
             piServerManager.stop();
-            result.put("success", true);
-            result.put("running", false);
-            result.put("message", "Pi llama-server stopped");
+            boolean running = piServerManager.isRunning();
+            boolean stopped = !running;
+            try {
+                Map<String, Object> lifecycle = piServerManager.lifecycleStatus();
+                Object lifecycleState = lifecycle == null ? null : lifecycle.get("state");
+                stopped = lifecycleState == null
+                    ? true
+                    : (!running && "STOPPED".equals(lifecycleState));
+            } catch (Exception diagnosticFailure) {
+                logger.debug("Pi lifecycle status unavailable after stop: {}", diagnosticFailure.getMessage());
+            }
+            result.put("success", stopped);
+            result.put("running", stopped ? false : running);
+            result.put("message", stopped ? "Pi llama-server stopped" : "Failed to confirm Pi llama-server stopped");
             return ResponseEntity.ok(ApiResponse.ok(result));
         } catch (Exception e) {
             logger.warn("Pi stop failed: {}", e.getMessage());
@@ -429,6 +454,9 @@ public class SettingsController {
     @GetMapping("/settings/pi/status")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getPiServerStatus() {
         Map<String, Object> result = new LinkedHashMap<>();
+        // Preserve the existing response while exposing lazy-start/idle-stop diagnostics.
+        Map<String, Object> lifecycle = piServerManager.lifecycleStatus();
+        if (lifecycle != null) result.putAll(lifecycle);
         boolean running = piServerManager.isRunning();
         result.put("running", running);
         result.put("success", true);

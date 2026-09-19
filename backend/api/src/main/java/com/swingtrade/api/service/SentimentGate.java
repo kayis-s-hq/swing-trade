@@ -18,7 +18,9 @@ package com.swingtrade.api.service;
 
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.store.SentimentStore;
+import com.swingtrade.domain.store.SignalStore;
 import com.swingtrade.llm.service.SentimentService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -38,10 +40,21 @@ public class SentimentGate {
 
     private final SentimentService sentimentService;
     private final SentimentStore sentimentStore;
+    private final SignalStore signalStore;
+
+    @Autowired(required = false)
+    private GateEffectivenessAuditService effectivenessAuditService;
 
     public SentimentGate(SentimentService sentimentService, SentimentStore sentimentStore) {
+        this(sentimentService, sentimentStore, null);
+    }
+
+    @Autowired
+    public SentimentGate(SentimentService sentimentService, SentimentStore sentimentStore,
+                         SignalStore signalStore) {
         this.sentimentService = sentimentService;
         this.sentimentStore = sentimentStore;
+        this.signalStore = signalStore;
     }
 
     /**
@@ -76,9 +89,20 @@ public class SentimentGate {
      *     default is to not trade an unvetted signal), otherwise the classified verdict
      */
     public SentimentVerdict evaluatePersisted(String symbol, LocalDate date) {
-        return sentimentStore.findBySymbolAndDate(symbol, date)
+        SentimentVerdict verdict = sentimentStore.findBySymbolAndDate(symbol, date)
             .map(this::classify)
             .orElseGet(SentimentVerdict::pending);
+        if (effectivenessAuditService != null) {
+            var strategies = signalStore == null ? java.util.List.<String>of()
+                : signalStore.findStrategiesBySymbolAndDate(symbol, date);
+            if (strategies.isEmpty()) {
+                effectivenessAuditService.recordSentimentVerdict(symbol, date, verdict);
+            } else {
+                strategies.forEach(strategy -> effectivenessAuditService
+                    .recordSentimentVerdict(symbol, date, verdict, strategy));
+            }
+        }
+        return verdict;
     }
 
     private SentimentVerdict classify(SentimentResult sentiment) {

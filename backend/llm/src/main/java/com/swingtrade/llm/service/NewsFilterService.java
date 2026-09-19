@@ -145,6 +145,15 @@ public class NewsFilterService {
             return null;
         }
 
+        // A generic short article from an untrusted source is not actionable market
+        // information, even though the source/content baseline alone would otherwise
+        // keep its combined score above the historical threshold.
+        if (calculateTradingRelevanceScore(content) <= 0.2
+                && !isHighQualitySource(article.source()) && !hasSubstance(article)) {
+            logger.trace("Article filtered out: no trading relevance");
+            return null;
+        }
+
         // Calculate relevance score
         double score = calculateRelevanceScore(article, ageHours);
 
@@ -322,6 +331,9 @@ public class NewsFilterService {
         }
 
         ZonedDateTime now = ZonedDateTime.now(publishedDate.getZone());
+        if (publishedDate.isAfter(now)) {
+            return MAX_HOURS + 1; // Future-dated content cannot be used safely
+        }
         return ChronoUnit.HOURS.between(publishedDate, now);
     }
 

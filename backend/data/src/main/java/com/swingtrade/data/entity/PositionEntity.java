@@ -83,6 +83,10 @@ public class PositionEntity {
     @Column(name = "position_id", length = 32)
     private String positionId;
 
+    /** Signal that caused this paper position, when the entry came through the signal pipeline. */
+    @Column(name = "signal_id")
+    private Long signalId;
+
     @Column(name = "broker_position_id", length = 64)
     private String brokerPositionId;
 
@@ -104,6 +108,9 @@ public class PositionEntity {
     @Column(name = "margin_utilized", precision = 15, scale = 2)
     private BigDecimal marginUtilized;
 
+    @Column(name = "partial_exit_taken", nullable = false)
+    private boolean partialExitTaken;
+
     @Column(name = "entry_time")
     private LocalDateTime entryTime;
 
@@ -112,6 +119,19 @@ public class PositionEntity {
 
     @Column(name = "exit_reason", length = 64)
     private String exitReason;
+
+    // Attributes a shadow/champion strategy-variant's own paper-trading portfolio (V63).
+    // Null for pre-existing champion/"default" positions opened before per-variant paper
+    // trading existed; set to StrategyConfig.variantId() for positions opened against a
+    // variant's own portfolio row. Deliberately NOT surfaced on the immutable Position
+    // domain record — variant paper trading reads/writes this entity field directly via
+    // PositionRepository rather than round-tripping through Position, to avoid widening
+    // that widely-shared record for a broker-module-only concern.
+    @Column(name = "portfolio_id", length = 40)
+    private String portfolioId;
+
+    public String getPortfolioId() { return portfolioId; }
+    public void setPortfolioId(String portfolioId) { this.portfolioId = portfolioId; }
 
     public PositionEntity() {
     }
@@ -135,6 +155,7 @@ public class PositionEntity {
         this.unrealizedPnL = position.unrealizedPnL();
         this.realizedPnL = position.realizedPnL();
         this.marginUtilized = position.marginUtilized();
+        this.partialExitTaken = position.partialExitTaken();
         this.entryTime = position.entryTime();
         this.exitTime = position.exitTime();
         this.exitReason = position.exitReason();
@@ -161,6 +182,7 @@ public class PositionEntity {
         entity.setUnrealizedPnL(position.unrealizedPnL());
         entity.setRealizedPnL(position.realizedPnL());
         entity.setMarginUtilized(position.marginUtilized());
+        entity.setPartialExitTaken(position.partialExitTaken());
         entity.setEntryTime(position.entryTime());
         entity.setExitTime(position.exitTime());
         entity.setExitReason(position.exitReason());
@@ -184,7 +206,7 @@ public class PositionEntity {
                 direction != null ? TradeDirection.valueOf(direction) : TradeDirection.LONG,
                 averagePrice
             ),
-            new PositionRisk(stopLoss, target, marginUtilized),
+            new PositionRisk(stopLoss, target, marginUtilized, partialExitTaken),
             new PositionValuation(currentPrice, unrealizedPnL, realizedPnL),
             status != null ? PositionStatus.valueOf(status) : PositionStatus.OPEN,
             exitTime == null && exitReason == null ? null : new PositionExit(exitTime, exitReason),
@@ -221,6 +243,8 @@ public class PositionEntity {
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
     public String getPositionId() { return positionId; }
     public void setPositionId(String positionId) { this.positionId = positionId; }
+    public Long getSignalId() { return signalId; }
+    public void setSignalId(Long signalId) { this.signalId = signalId; }
     public String getBrokerPositionId() { return brokerPositionId; }
     public void setBrokerPositionId(String brokerPositionId) { this.brokerPositionId = brokerPositionId; }
     public String getExchange() { return exchange; }
@@ -235,6 +259,8 @@ public class PositionEntity {
     public void setRealizedPnL(BigDecimal realizedPnL) { this.realizedPnL = realizedPnL; }
     public BigDecimal getMarginUtilized() { return marginUtilized; }
     public void setMarginUtilized(BigDecimal marginUtilized) { this.marginUtilized = marginUtilized; }
+    public boolean isPartialExitTaken() { return partialExitTaken; }
+    public void setPartialExitTaken(boolean partialExitTaken) { this.partialExitTaken = partialExitTaken; }
     public LocalDateTime getEntryTime() { return entryTime; }
     public void setEntryTime(LocalDateTime entryTime) { this.entryTime = entryTime; }
     public LocalDateTime getExitTime() { return exitTime; }

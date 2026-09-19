@@ -57,6 +57,29 @@ class KiteConnectClientTest {
     }
 
     @Test
+    void kiteConfigDelegatesAllProperties() {
+        KiteConfig config = new KiteConfig(new BrokerProperties());
+        config.setApiKey("key");
+        config.setAccessToken("token");
+        config.setEnvironment("sandbox");
+        config.setProxyHost("host");
+        config.setProxyPort(99);
+        assertThat(config.getApiKey()).isEqualTo("key");
+        assertThat(config.getAccessToken()).isEqualTo("token");
+        assertThat(config.getEnvironment()).isEqualTo("sandbox");
+        assertThat(config.getProxyHost()).isEqualTo("host");
+        assertThat(config.getProxyPort()).isEqualTo(99);
+        assertThat(config.isConfigured()).isTrue();
+        assertThat(config.isSandbox()).isTrue();
+        assertThat(config.isLive()).isFalse();
+
+        KiteConfig defaults = new KiteConfig(new BrokerProperties());
+        assertThat(defaults.isConfigured()).isFalse();
+        assertThat(defaults.isSandbox()).isFalse();
+        assertThat(defaults.isLive()).isTrue();
+    }
+
+    @Test
     void testConstructor_WithEmptyApiKey() {
         assertThat(emptyClient).isNotNull();
         assertThat(emptyClient.isConfigured()).isFalse();

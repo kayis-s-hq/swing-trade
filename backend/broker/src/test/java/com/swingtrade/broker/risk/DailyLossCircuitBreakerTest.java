@@ -11,7 +11,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -153,6 +152,26 @@ class DailyLossCircuitBreakerTest {
     }
 
     @Test
+    void historicalRealizedLossDoesNotTripTodaysCircuit() {
+        LocalDate yesterday = LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(1);
+        Position historicalLoss = new Position(
+            null, "PAPER", "TCS", new BigDecimal("100"), yesterday,
+            300, new BigDecimal("90"), new BigDecimal("125"),
+            PositionStatus.CLOSED, "test", new BigDecimal("50"),
+            null, null, Exchange.NSE, TradeDirection.LONG,
+            new BigDecimal("100"), BigDecimal.ZERO, new BigDecimal("-15000"), BigDecimal.ZERO,
+            yesterday.atStartOfDay(), yesterday.atTime(15, 30), "historical", null
+        );
+        when(positionManager.getClosedPositions()).thenReturn(java.util.List.of(historicalLoss));
+        when(positionManager.getOpenPositions()).thenReturn(java.util.List.of());
+
+        dailyLossCircuitBreaker.updateWithCurrentPositions();
+
+        assertThat(dailyLossCircuitBreaker.getCurrentDailyPnL()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(dailyLossCircuitBreaker.isCircuitOpen()).isFalse();
+    }
+
+    @Test
     void testGetCircuitOpenTime() {
         // When
         LocalDateTime actualTime = dailyLossCircuitBreaker.getCircuitOpenTime();
@@ -164,10 +183,7 @@ class DailyLossCircuitBreakerTest {
     @Test
     void testDailyTrackerUsesIndiaMarketZoneNotSystemDefault() throws Exception {
         // Given - the tracker is seeded on construction via resetDailyTracker()
-        Field trackerField = DailyLossCircuitBreaker.class.getDeclaredField("dailyPnLTracker");
-        trackerField.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        Map<LocalDate, BigDecimal> tracker = (Map<LocalDate, BigDecimal>) trackerField.get(dailyLossCircuitBreaker);
+        Map<LocalDate, BigDecimal> tracker = dailyLossCircuitBreaker.dailyPnLTracker;
 
         // Then - the seeded date must be "today" in Asia/Kolkata, regardless of
         // the JVM's default time zone.

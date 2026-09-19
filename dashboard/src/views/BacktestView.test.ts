@@ -1,12 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
 import BacktestView from './BacktestView.vue'
-vi.mock('../api/strategies', () => ({
-  listStrategyTypes: vi.fn().mockResolvedValue([]),
-  listCurrentStrategies: vi.fn().mockResolvedValue([]),
-  compareBacktests: vi.fn(),
-}))
 
 const apiMocks = vi.hoisted(() => ({
   runBacktest: vi.fn(),
@@ -111,22 +105,5 @@ describe('BacktestView — watchlist symbol selector', () => {
     // current selection) still works.
     expect(wrapper.text()).toContain('Tata Consultancy Services')
     wrapper.unmount()
-  })
-})
-
-describe('BacktestView — portfolio compare tab', () => {
-  it('shows the compare panel only after switching tabs and keeps the single-symbol form otherwise', async () => {
-    setActivePinia(createPinia())
-    apiMocks.getWatchlist.mockResolvedValue(entries)
-    apiMocks.listBacktestReports.mockResolvedValue([])
-    const wrapper = mount(BacktestView)
-    await flushPromises()
-
-    expect(wrapper.find('[aria-label="Portfolio compare"]').exists()).toBe(false)
-    const tab = wrapper.findAll('[role="tab"]').find((t) => t.text() === 'Portfolio compare')!
-    await tab.trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[aria-label="Portfolio compare"]').exists()).toBe(true)
-    expect(wrapper.find('form').isVisible()).toBe(false)
   })
 })

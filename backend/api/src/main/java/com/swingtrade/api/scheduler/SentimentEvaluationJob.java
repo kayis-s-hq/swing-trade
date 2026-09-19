@@ -1,9 +1,11 @@
 package com.swingtrade.api.scheduler;
 
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.BenchmarkCandleSeries;
 import com.swingtrade.domain.SentimentAccuracy;
 import com.swingtrade.domain.SentimentResult;
 import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.BenchmarkDataAdapter;
 import com.swingtrade.domain.store.SentimentAccuracyStore;
 import com.swingtrade.domain.store.SentimentStore;
 import org.slf4j.Logger;
@@ -34,6 +36,7 @@ public class SentimentEvaluationJob {
     private final CandleStore candleStore;
     private final SentimentAccuracyStore accuracyStore;
     private final SentimentStore sentimentStore;
+    private final BenchmarkDataAdapter benchmarkDataAdapter;
     private final boolean schedulerEnabled;
 
     // Last run tracking
@@ -41,14 +44,22 @@ public class SentimentEvaluationJob {
     private final AtomicReference<String> lastStatus = new AtomicReference<>(null);
     private final AtomicReference<Integer> lastCount = new AtomicReference<>(null);
 
+    @org.springframework.beans.factory.annotation.Autowired
     public SentimentEvaluationJob(CandleStore candleStore,
                                   SentimentAccuracyStore accuracyStore,
                                   SentimentStore sentimentStore,
-                                  @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled) {
+                                  @Value("${app.features.scheduler.enabled:true}") boolean schedulerEnabled,
+                                  BenchmarkDataAdapter benchmarkDataAdapter) {
         this.candleStore = candleStore;
         this.accuracyStore = accuracyStore;
         this.sentimentStore = sentimentStore;
         this.schedulerEnabled = schedulerEnabled;
+        this.benchmarkDataAdapter = benchmarkDataAdapter;
+    }
+
+    public SentimentEvaluationJob(CandleStore candleStore, SentimentAccuracyStore accuracyStore,
+                                  SentimentStore sentimentStore, boolean schedulerEnabled) {
+        this(candleStore, accuracyStore, sentimentStore, schedulerEnabled, null);
     }
 
     @Scheduled(cron = "0 0 2 * * *", zone = "Asia/Kolkata")
@@ -128,8 +139,16 @@ public class SentimentEvaluationJob {
         BigDecimal return5d = exit5 != null ? computeReturn(entry, exit5) : null;
         BigDecimal return21d = exit21 != null ? computeReturn(entry, exit21) : null;
 
+        BenchmarkCandleSeries benchmark = benchmarkDataAdapter == null ? null
+            : benchmarkDataAdapter.findNifty50(analysisDate,
+                exit21 != null ? exit21.date() : (exit5 != null ? exit5.date() : exit1.date())).orElse(null);
+        BigDecimal excess1d = excessReturn(benchmark, entry, exit1, return1d);
+        BigDecimal excess5d = excessReturn(benchmark, entry, exit5, return5d);
+        BigDecimal excess21d = excessReturn(benchmark, entry, exit21, return21d);
+
         // Determine ground truth from 1-day return
-        String label = classifyReturn(return1d);
+        BigDecimal labelReturn = excess1d != null ? excess1d : return1d;
+        String label = classifyReturn(labelReturn);
         boolean wasCorrect = wasCorrect(sentiment.score().name(), label);
 
         // Compute market regime
@@ -149,12 +168,17 @@ public class SentimentEvaluationJob {
             return1d,
             return5d,
             return21d,
+            excess1d,
+            excess5d,
+            excess21d,
+            excess1d != null ? "EXCESS_RETURN" : "RAW_RETURN",
             label,
             wasCorrect,
             null, // pnlPct
             regime,
             sentiment.promptHash(),
             sentiment.modelVersion(),
+            sentiment.source(),
             java.time.LocalDateTime.now()
         );
 
@@ -171,6 +195,19 @@ public class SentimentEvaluationJob {
         if (entry.close() == null || exit.close() == null) return null;
         BigDecimal diff = exit.close().subtract(entry.close());
         return diff.divide(entry.close(), 6, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal excessReturn(BenchmarkCandleSeries benchmark, OhlcvCandle entry,
+                                    OhlcvCandle exit, BigDecimal stockReturn) {
+        if (benchmark == null || exit == null || stockReturn == null) return null;
+        BigDecimal benchmarkEntry = benchmark.candles().stream()
+            .filter(c -> c.date().equals(entry.date())).map(OhlcvCandle::close).findFirst().orElse(null);
+        BigDecimal benchmarkExit = benchmark.candles().stream()
+            .filter(c -> c.date().equals(exit.date())).map(OhlcvCandle::close).findFirst().orElse(null);
+        if (benchmarkEntry == null || benchmarkExit == null || benchmarkEntry.signum() <= 0) return null;
+        BigDecimal benchmarkReturn = benchmarkExit.subtract(benchmarkEntry)
+            .divide(benchmarkEntry, 6, RoundingMode.HALF_UP);
+        return stockReturn.subtract(benchmarkReturn);
     }
 
     private String classifyReturn(BigDecimal returnVal) {

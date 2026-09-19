@@ -5,6 +5,7 @@ import com.swingtrade.api.service.SignalEngine;
 import com.swingtrade.api.service.SignalService;
 import com.swingtrade.api.service.TechnicalAnalysisService;
 import com.swingtrade.domain.Signal;
+import com.swingtrade.domain.SignalStrategyMetadata;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.SignalStore;
@@ -19,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -82,6 +84,21 @@ class SignalServiceTest {
         assertNotNull(signals, "Signals list should not be null");
         assertFalse(signals.isEmpty(), "Signals list should not be empty");
         assertEquals(5, signals.size(), "Should return all 5 signals from test data");
+    }
+
+    @Test
+    void testGetLatestSignals_ExposesPersistedStrategyProvenance() {
+        Signal signal = new Signal(42L, "TCS", LocalDate.now(), Signal.SignalType.BUY,
+                BigDecimal.valueOf(0.8), "reason", null, null, null, null, null,
+                LocalDate.now(), null, null);
+        when(signalStore.findLatestSignalPerSymbol()).thenReturn(List.of(signal));
+        when(signalStore.findStrategyMetadataByIds(List.of(42L)))
+                .thenReturn(Map.of(42L, new SignalStrategyMetadata("BREAKOUT", 3)));
+
+        SignalResponse response = signalService.getLatestSignals().get(0);
+
+        assertEquals("BREAKOUT", response.getStrategy());
+        assertEquals(3, response.getStrategyVersion());
     }
 
     @Test

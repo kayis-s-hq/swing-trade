@@ -58,6 +58,11 @@ public class CandidateScanResultEntity {
     private String reason;
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
+    @Column(name = "source_outcome", length = 32) private String sourceOutcome;
+    @Column(name = "invalid_rows", nullable = false) private int invalidRows;
+    @Column(name = "first_available_date") private LocalDate firstAvailableDate;
+    @Column(name = "last_available_date") private LocalDate lastAvailableDate;
+    @Column(name = "retry_after") private LocalDate retryAfter;
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -100,6 +105,16 @@ public class CandidateScanResultEntity {
     public void setReason(String value) { this.reason = value; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String value) { this.errorMessage = value; }
+    public String getSourceOutcome() { return sourceOutcome; }
+    public void setSourceOutcome(String value) { sourceOutcome = value; }
+    public int getInvalidRows() { return invalidRows; }
+    public void setInvalidRows(int value) { invalidRows = value; }
+    public LocalDate getFirstAvailableDate() { return firstAvailableDate; }
+    public void setFirstAvailableDate(LocalDate value) { firstAvailableDate = value; }
+    public LocalDate getLastAvailableDate() { return lastAvailableDate; }
+    public void setLastAvailableDate(LocalDate value) { lastAvailableDate = value; }
+    public LocalDate getRetryAfter() { return retryAfter; }
+    public void setRetryAfter(LocalDate value) { retryAfter = value; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime value) { this.createdAt = value; }
 }

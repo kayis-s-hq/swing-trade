@@ -1,15 +1,14 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.core.metrics.JobOrchestratorMetrics;
-import com.swingtrade.domain.StrategyConfig;
-import com.swingtrade.domain.service.PaperPortfolioService;
 import com.swingtrade.domain.service.TradingService;
-import com.swingtrade.domain.store.StrategyConfigStore;
+import com.swingtrade.domain.service.VariantTradingService;
 import com.swingtrade.data.entity.JobRunEntity;
 import com.swingtrade.data.entity.SignalSelectionEntity;
 import com.swingtrade.data.entity.JobRunStageEntity;
 import com.swingtrade.data.repository.JobRunRepository;
 import com.swingtrade.data.repository.JobRunStageRepository;
+import com.swingtrade.data.repository.StrategyConfigRepository;
 import com.swingtrade.data.service.DataIngestionService;
 import com.swingtrade.domain.JobRun;
 import com.swingtrade.domain.JobRunStage;
@@ -23,17 +22,13 @@ import com.swingtrade.domain.store.WatchlistStore;
 import com.swingtrade.domain.store.SentimentStore;
 import com.swingtrade.domain.store.BacktestResultStore;
 import com.swingtrade.domain.store.LlmAnalysisResultStore;
-import com.swingtrade.domain.ShadowPositionSnapshot;
 import com.swingtrade.llm.service.NewsIngestionService;
 import com.swingtrade.llm.service.SentimentService;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
-import com.swingtrade.strategy.ExitDecision;
-import com.swingtrade.strategy.MarketContext;
-import com.swingtrade.strategy.OpenPosition;
-import com.swingtrade.strategy.StrategyParamsView;
-import com.swingtrade.strategy.UniformExitEvaluator;
+import com.swingtrade.strategy.StrategyRegistry;
+import com.swingtrade.domain.StrategyConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,8 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -149,20 +143,30 @@ public class JobOrchestratorService {
     private final LlmAnalysisResultStore llmAnalysisResultStore;
     private final LlmAnalysisGate llmAnalysisGate;
     private final SentimentStore sentimentStore;
-    private final StrategyConfigStore strategyConfigStore;
-    private final PaperPortfolioService paperPortfolioService;
     private final boolean llmAnalysisEnabled;
     private final boolean llmAnalysisAdvisoryOnly;
+    private final StrategyConfigRepository strategyConfigRepository;
+    private final StrategyRegistry strategyRegistry;
+    private final LiveEligibilityService liveEligibilityService;
+    private final VariantTradingService variantTradingService;
+    private GateEffectivenessAuditService gateEffectivenessAuditService;
+
     private SignalArbiter signalArbiter;
 
     /** Paper portfolio that follows each day's signal-tournament winner. */
     static final String SELECTED_PORTFOLIO_ID = "selected";
-    private static final java.math.BigDecimal SELECTED_PORTFOLIO_CAPITAL = new java.math.BigDecimal("100000");
+    private static final BigDecimal SELECTED_PORTFOLIO_CAPITAL = new BigDecimal("100000");
     private static final int SELECTION_EXPIRY_DAYS = 5;
 
+    /** Optional: without an arbiter the pipeline behaves exactly as before (no tournament). */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSignalArbiter(SignalArbiter signalArbiter) {
         this.signalArbiter = signalArbiter;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setGateEffectivenessAuditService(GateEffectivenessAuditService service) {
+        this.gateEffectivenessAuditService = service;
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -188,8 +192,10 @@ public class JobOrchestratorService {
             LlmAnalysisResultStore llmAnalysisResultStore,
             LlmAnalysisGate llmAnalysisGate,
             SentimentStore sentimentStore,
-            StrategyConfigStore strategyConfigStore,
-            PaperPortfolioService paperPortfolioService,
+            StrategyConfigRepository strategyConfigRepository,
+            StrategyRegistry strategyRegistry,
+            LiveEligibilityService liveEligibilityService,
+            VariantTradingService variantTradingService,
             @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
             @Value("${job.orchestrator.poll-interval-ms:1000}") long pollIntervalMs,
             @Value("${job.orchestrator.reaper.enabled:true}") boolean reaperEnabled,
@@ -222,10 +228,26 @@ public class JobOrchestratorService {
         this.llmAnalysisResultStore = llmAnalysisResultStore;
         this.llmAnalysisGate = llmAnalysisGate;
         this.sentimentStore = sentimentStore;
-        this.strategyConfigStore = strategyConfigStore;
-        this.paperPortfolioService = paperPortfolioService;
         this.llmAnalysisEnabled = llmAnalysisEnabled;
         this.llmAnalysisAdvisoryOnly = llmAnalysisAdvisoryOnly;
+        this.strategyConfigRepository = strategyConfigRepository;
+        this.strategyRegistry = strategyRegistry;
+        this.liveEligibilityService = liveEligibilityService;
+        this.variantTradingService = variantTradingService;
+    }
+
+    /** Compatibility fixture constructor for pre-LLM pipeline tests. */
+    public JobOrchestratorService(
+            DataIngestionService d, NewsIngestionService n, SentimentService s, SignalPipeline p,
+            SentimentGate sg, BacktestEngine b, TradingService t, JobRunRepository jr,
+            JobRunStageRepository js, SignalStore ss, WatchlistStore w, CandleStore c,
+            JobOrchestratorMetrics m, TechnicalAnalysisService ta, FundamentalScorer fs,
+            CompositeAnalysisService ca, com.swingtrade.llm.service.SynthesisService sy,
+            BacktestResultStore br, LlmAnalysisResultStore lr, LlmAnalysisGate lg,
+            SentimentStore st, int max, long poll, boolean reaper, boolean llmEnabled,
+            boolean llmAdvisory) {
+        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,ta,fs,ca,sy,br,lr,lg,st,null,null,
+            null, null, max,poll,reaper,llmEnabled,llmAdvisory);
     }
 
     /** Compatibility fixture constructor for pre-LLM pipeline tests. */
@@ -233,7 +255,7 @@ public class JobOrchestratorService {
             SignalPipeline p, SentimentGate sg, BacktestEngine b, TradingService t,
             JobRunRepository jr, JobRunStageRepository js, SignalStore ss, WatchlistStore w,
             CandleStore c, JobOrchestratorMetrics m, int max, long poll, boolean reaper) {
-        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
+        this(d,n,s,p,sg,b,t,jr,js,ss,w,c,m,null,null,null,null,null,null,null,null,null,null,null,null,max,poll,reaper,false,true);
     }
 
     /**
@@ -246,6 +268,11 @@ public class JobOrchestratorService {
      *     before either has persisted its RUNNING row.
      */
     public JobRun startRun(JobRun.TriggerType triggerType) {
+        return startRun(triggerType, null);
+    }
+
+    /** Starts a run with an internal link to the scheduled candidate scan that selected it. */
+    public JobRun startRun(JobRun.TriggerType triggerType, UUID candidateScanRunId) {
         LocalDate today = LocalDate.now(IST);
         JobRun run;
         synchronized (runStartLock) {
@@ -261,7 +288,9 @@ public class JobOrchestratorService {
                 java.time.LocalDateTime.now(IST),
                 null, 0, 0, 0, null
             );
-            jobRunRepository.save(JobRunEntity.fromDomain(run));
+            JobRunEntity entity = JobRunEntity.fromDomain(run);
+            entity.setCandidateScanRunId(candidateScanRunId);
+            jobRunRepository.save(entity);
         }
         jobMetrics.recordRunStarted();
 
@@ -354,27 +383,24 @@ public class JobOrchestratorService {
             acquireSlot(symbol);
             try {
                 // Set by the SIGNAL stage's executor for the signal context used by the
-                // PAPER_TRADE stage. NEWS always runs for every symbol; SENTIMENT is gated (see
-                // sentimentTrigger below) once any multi-strategy variant is active (plan §7.1).
+                // PAPER_TRADE stage. NEWS and SENTIMENT intentionally run for every symbol;
+                // their output is useful for monitoring SELL/HOLD names as well as BUYs.
                 Signal.SignalType[] signalType = {null};
-                // True if the legacy signal was a BUY, or any active variant with sentimentGate
-                // enabled produced a BUY for this symbol/day (plan §7.1 item 5). Defaults to
-                // true when no variants are active at all, preserving today's "always run
-                // sentiment" behaviour for the pre-multi-strategy / no-variants-configured case.
-                boolean[] sentimentTrigger = {false};
+                Set<Long> tradeableSignalIds = ConcurrentHashMap.newKeySet();
+                boolean[] configuredLiveRun = {false};
 
                 List<StageDef> stageDefs = new java.util.ArrayList<>(List.of(
                     new StageDef(JobRunStage.StageName.DATA_FETCH,
                         () -> StageExecutionResult.completed(stageDataFetch(symbol)), TIMEOUT_DATA_FETCH),
                     new StageDef(JobRunStage.StageName.SIGNAL,
-                        () -> stageSignal(symbol, signalType, sentimentTrigger), TIMEOUT_SIGNAL),
+                        () -> stageSignal(symbol, signalType, tradeableSignalIds, configuredLiveRun), TIMEOUT_SIGNAL),
                     new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol), TIMEOUT_BACKTEST),
                     new StageDef(JobRunStage.StageName.NEWS,
                         () -> StageExecutionResult.completed(stageNews(symbol)), TIMEOUT_NEWS),
                     new StageDef(JobRunStage.StageName.SENTIMENT,
-                        () -> stageSentimentGated(symbol, today, sentimentTrigger[0]), TIMEOUT_SENTIMENT),
+                        () -> StageExecutionResult.completed(stageSentiment(symbol, today)), TIMEOUT_SENTIMENT),
                     new StageDef(JobRunStage.StageName.PAPER_TRADE,
-                        () -> StageExecutionResult.completed(stagePaperTrade(symbol)), TIMEOUT_PAPER_TRADE)
+                        () -> StageExecutionResult.completed(stagePaperTrade(symbol, tradeableSignalIds, configuredLiveRun[0])), TIMEOUT_PAPER_TRADE)
                 ));
                 if (llmAnalysisEnabled) {
                     stageDefs.add(stageDefs.size() - 1, new StageDef(JobRunStage.StageName.LLM_ANALYSIS,
@@ -401,19 +427,12 @@ public class JobOrchestratorService {
                             stageDef.name(), symbol);
                         continue;
                     }
-                    JobRunStage.Status stageStatus = executeStage(runId, symbol, stageDef.name(),
+                    boolean succeeded = executeStage(runId, symbol, stageDef.name(),
                         stageDef.executor(), stageDef.timeoutSec());
-                    boolean succeeded = stageStatus == JobRunStage.Status.COMPLETED;
                     // A timed-out/failed LLM analysis has no persisted verdict, so PAPER_TRADE
-                    // must still run and defer through LlmAnalysisGate.PENDING. A SENTIMENT stage
-                    // that was deliberately SKIPPED (no BUY signal to gate on, plan §7.1) is a
-                    // legitimate business outcome, not a failure - PAPER_TRADE must still run to
-                    // evaluate exits and pending selections. A SENTIMENT error/timeout still
-                    // cascades. Earlier stages retain the normal skip-cascade semantics.
-                    boolean gatedSentimentSkip = stageDef.name() == JobRunStage.StageName.SENTIMENT
-                        && stageStatus == JobRunStage.Status.SKIPPED;
-                    if (!succeeded && stageDef.name() != JobRunStage.StageName.LLM_ANALYSIS
-                            && !gatedSentimentSkip) {
+                    // must still run and defer through LlmAnalysisGate.PENDING. Earlier stages
+                    // retain the normal skip-cascade semantics.
+                    if (!succeeded && stageDef.name() != JobRunStage.StageName.LLM_ANALYSIS) {
                         priorStageBlocked = true;
                     }
                 }
@@ -450,7 +469,7 @@ public class JobOrchestratorService {
      *
      * @return true if the stage completed successfully, false if it errored, timed out, or skipped
      */
-    private JobRunStage.Status executeStage(UUID runId, String symbol, JobRunStage.StageName stage,
+    boolean executeStage(UUID runId, String symbol, JobRunStage.StageName stage,
                               StageExecutor executor, long timeoutSec) {
         String key = inFlightKey(runId, symbol);
         long start = System.currentTimeMillis();
@@ -476,14 +495,14 @@ public class JobOrchestratorService {
                 duration, null, result.summary());
             logger.debug("Stage {} finished with status {} for {} in {}ms",
                 stage, result.status(), symbol, duration);
-            return result.status();
+            return result.status() == JobRunStage.Status.COMPLETED;
         } catch (CancellationException e) {
             long duration = System.currentTimeMillis() - start;
             String msg = "Cancelled by user request";
             updateStageStatusTolerantly(runId, symbol, stage, JobRunStage.Status.CANCELLED,
                 duration, msg, null);
             logger.info("Stage {} cancelled for {}", stage, symbol);
-            return JobRunStage.Status.CANCELLED;
+            return false;
         } catch (TimeoutException e) {
             future.cancel(true);
             long duration = System.currentTimeMillis() - start;
@@ -491,13 +510,13 @@ public class JobOrchestratorService {
             updateStageStatusTolerantly(runId, symbol, stage, JobRunStage.Status.ERROR,
                 duration, msg, null);
             logger.warn("{} for {}", msg, symbol);
-            return JobRunStage.Status.ERROR;
+            return false;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - start;
             updateStageStatusTolerantly(runId, symbol, stage, JobRunStage.Status.ERROR,
                 duration, e.getMessage(), null);
             logger.warn("Stage {} failed for {}: {}", stage, symbol, e.getMessage());
-            return JobRunStage.Status.ERROR;
+            return false;
         } finally {
             inFlightStageFutures.remove(key, future);
         }
@@ -550,66 +569,57 @@ public class JobOrchestratorService {
         return result.score() + ", confidence " + result.confidence();
     }
 
-    /**
-     * Gates the SENTIMENT stage per plan §7.1 item 5: skips the (relatively expensive) sentiment
-     * analysis call when neither the legacy signal nor any active sentimentGate-enabled variant
-     * produced a BUY for this symbol/day.
-     */
-    private StageExecutionResult stageSentimentGated(String symbol, LocalDate date, boolean trigger) {
-        if (!trigger) {
-            return StageExecutionResult.skipped(
-                "No BUY signal (legacy or sentimentGate-enabled variant) for " + symbol + " on " + date);
-        }
-        return StageExecutionResult.completed(stageSentiment(symbol, date));
-    }
-
     private StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
-                                               boolean[] sentimentTriggerOut) {
+                                             Set<Long> tradeableSignalIds,
+                                             boolean[] configuredLiveRun) {
+        List<StrategyConfig> configs = liveConfigs();
+        if (!configs.isEmpty()) {
+            configuredLiveRun[0] = true;
+            boolean championSeen = configs.stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count() == 1;
+            int generated = 0;
+            List<VariantSignalOutcome> outcomes = new java.util.ArrayList<>();
+            for (StrategyConfig config : configs) {
+                java.util.Optional<com.swingtrade.strategy.TradingStrategy> selected;
+                try {
+                    selected = strategyRegistry.resolve(config);
+                } catch (IllegalArgumentException e) {
+                    logger.warn("Skipping configured strategy {}: invalid parameters: {}",
+                        config.variantId(), e.getMessage());
+                    continue;
+                }
+                if (selected.isEmpty()) {
+                    logger.warn("Skipping configured strategy {}: unsupported strategy type {} (fail-closed)",
+                        config.variantId(), config.strategyType());
+                    continue;
+                }
+                boolean champion = championSeen && config.mode() == StrategyConfig.Mode.CHAMPION;
+                try {
+                    var signal = signalPipeline.generateConfiguredSignal(symbol, config, selected.get(), champion);
+                    if (signal.isPresent()) {
+                        generated++;
+                        signalTypeOut[0] = signal.get().type();
+                        outcomes.add(new VariantSignalOutcome(config.variantId(), config.version(),
+                            signal.get().type(), false, true, signal.get().confidence()));
+                        if (champion && signal.get().id() != null) tradeableSignalIds.add(signal.get().id());
+                    }
+                } catch (RuntimeException e) {
+                    logger.warn("Configured strategy {} failed for {} (fail-closed): {}",
+                        config.variantId(), symbol, e.getMessage());
+                }
+            }
+            String summary = generated + " configured signal(s) generated";
+            Optional<SignalSelectionEntity> winner = arbitrate(symbol, outcomes);
+            if (winner.isPresent()) {
+                summary += "; winner " + winner.get().getWinnerVariantId()
+                    + " (" + winner.get().getWinnerConfidence().toPlainString() + ")";
+            }
+            return StageExecutionResult.completed(summary);
+        }
+
         var signal = signalPipeline.generatePrimarySignal(symbol);
         signalTypeOut[0] = signal.map(Signal::type).orElse(null);
-        boolean legacyBuy = signalTypeOut[0] == Signal.SignalType.BUY;
-
-        // Multi-strategy variant fan-out (plan §7.1). Runs in addition to the legacy signal
-        // above; failures for individual variants are isolated inside generateVariantSignals
-        // and never fail this stage.
-        List<SignalPipeline.VariantSignalOutcome> variantOutcomes;
-        try {
-            variantOutcomes = signalPipeline.generateVariantSignals(symbol);
-        } catch (Exception e) {
-            logger.error("Variant signal fan-out failed entirely for {}: {}", symbol, e.getMessage(), e);
-            variantOutcomes = List.of();
-        }
-        boolean anyVariantSentimentBuy = variantOutcomes.stream()
-            .anyMatch(o -> o.sentimentGateEnabled() && o.type() == Signal.SignalType.BUY);
-        // Preserve today's "always run sentiment" behaviour when the multi-strategy feature is
-        // unused (no active variants configured at all) - only gate once a variant actually
-        // exists to gate for.
-        boolean noVariantsConfigured = !signalPipeline.hasActiveVariants();
-        // The signal tournament's winner is the trade the rest of the pipeline follows, so
-        // sentiment/LLM must run for it whether or not its variant enabled sentimentGate.
-        Optional<SignalSelectionEntity> selection = Optional.empty();
-        if (signalArbiter != null && !variantOutcomes.isEmpty()) {
-            try {
-                Optional<OhlcvCandle> latestCandle = candleStore.findLatestBySymbol(symbol);
-                if (latestCandle.isPresent()) {
-                    selection = signalArbiter.arbitrate(symbol, latestCandle.get().date(), variantOutcomes);
-                }
-            } catch (Exception e) {
-                logger.error("Signal arbitration failed for {}: {}", symbol, e.getMessage(), e);
-            }
-        }
-        sentimentTriggerOut[0] = legacyBuy || anyVariantSentimentBuy || noVariantsConfigured
-            || selection.isPresent();
-
         String summary = signal.map(s -> "%s signal generated, confidence %.0f%%"
             .formatted(s.type(), s.confidence().doubleValue() * 100)).orElse("no signal");
-        if (!variantOutcomes.isEmpty()) {
-            summary += "; " + variantOutcomes.size() + " variant(s) evaluated";
-        }
-        if (selection.isPresent()) {
-            summary += "; winner " + selection.get().getWinnerVariantId()
-                + " (" + selection.get().getWinnerConfidence().toPlainString() + ")";
-        }
         return StageExecutionResult.completed(summary);
     }
 
@@ -634,14 +644,22 @@ public class JobOrchestratorService {
         }
     }
 
-    private StageExecutionResult stageLlmAnalysis(UUID runId, String symbol, LocalDate date) {
+    StageExecutionResult stageLlmAnalysis(UUID runId, String symbol, LocalDate date) {
         CompositeAnalysis.TechnicalScore technical;
         CompositeAnalysis.FundamentalScore fundamentals;
         boolean inputFallback = false;
-        try { technical = technicalAnalysisService.compute(symbol); }
-        catch (Exception e) { inputFallback = true; technical = new CompositeAnalysis.TechnicalScore(0, "HOLD", 0, List.of()); }
-        try { fundamentals = fundamentalScorer.compute(symbol); }
-        catch (Exception e) { inputFallback = true; fundamentals = new CompositeAnalysis.FundamentalScore(0, List.of("Unavailable")); }
+        try {
+            technical = technicalAnalysisService.compute(symbol);
+        } catch (Exception e) {
+            inputFallback = true;
+            technical = new CompositeAnalysis.TechnicalScore(0, "HOLD", 0, List.of());
+        }
+        try {
+            fundamentals = fundamentalScorer.compute(symbol);
+        } catch (Exception e) {
+            inputFallback = true;
+            fundamentals = new CompositeAnalysis.FundamentalScore(0, List.of("Unavailable"));
+        }
         CompositeAnalysis.BacktestScore backtest = backtestResultStore.findBySymbolAndDate(symbol, date)
             .map(r -> new CompositeAnalysis.BacktestScore(r.totalTrades(), r.winRate(), r.profitFactor(),
                 r.maxDrawdownPct(), r.totalReturn(), r.expectancy(), r.hasEnoughData()))
@@ -658,301 +676,27 @@ public class JobOrchestratorService {
         return StageExecutionResult.completed(summary);
     }
 
-    /**
-     * PAPER_TRADE stage (plan §7.2/§7 Phase 5). Every currently-active variant (CHAMPION or
-     * SHADOW) now executes its own unprocessed BUY signals against its own paper portfolio,
-     * independently:
-     * <ul>
-     *   <li>the CHAMPION variant (or, when no strategy configs exist yet, the single
-     *       pre-multi-strategy signal stream) still executes through {@link TradingService}
-     *       against the shared, order-executing "default" engine, exactly as before;</li>
-     *   <li>every other active (SHADOW) variant executes through
-     *       {@link com.swingtrade.domain.service.PaperPortfolioService#executeVariantBuy}, which
-     *       simulates the fill directly against that variant's own
-     *       {@code paper_trading_portfolio} row - its own capital, its own capacity check - never
-     *       touching the shared engine's position book;</li>
-     *   <li>a signal belonging to no currently-active variant is quarantined (marked processed
-     *       without executing) exactly as the earlier §7.2 fix did, generalized to the full set
-     *       of active variant ids via {@link com.swingtrade.domain.store.SignalStore#markProcessedExcludingStrategies}.</li>
-     * </ul>
-     * Each variant's execution loop is wrapped so one variant's failure (a bug, insufficient
-     * capital, a persistence error) cannot block another variant's execution for the same symbol.
-     */
-    private String stagePaperTrade(String symbol) {
-        // strategyConfigStore/paperPortfolioService are null in the pre-multi-strategy test
-        // fixture constructor (see JobOrchestratorService(DataIngestionService, ..., int, long,
-        // boolean) below) - guarded the same way llmAnalysisGate etc. already are, so those
-        // callers keep the old unfiltered, single-"default"-portfolio behaviour.
-        if (strategyConfigStore == null) {
-            return executeVariantSignals(symbol, "default", true,
-                signalStore.findUnprocessed().stream().filter(s -> s.symbol().equals(symbol)).toList());
-        }
+    String stagePaperTrade(String symbol) {
+        return stagePaperTrade(symbol, Set.of(), false);
+    }
 
-        String championVariantId = strategyConfigStore.findCurrentChampion()
-            .map(StrategyConfig::variantId)
-            .orElse(null);
-        List<StrategyConfig> activeConfigs = strategyConfigStore.findAllCurrent().stream()
-            .filter(StrategyConfig::isActive)
+    private String stagePaperTrade(String symbol, Set<Long> tradeableSignalIds, boolean configuredLiveRun) {
+        String selectedSummary = null;
+        if (configuredLiveRun) {
+            stageVariantPaperTrade(symbol);
+            selectedSummary = stageSelectedTrade(symbol);
+        }
+        List<Signal> unprocessed = signalStore.findUnprocessed()
+            .stream()
+            .filter(s -> s.symbol().equals(symbol))
+            .filter(s -> !configuredLiveRun || tradeableSignalIds.contains(s.id()))
             .toList();
-        List<String> activeVariantIds = activeConfigs.stream().map(StrategyConfig::variantId).toList();
 
-        if (activeVariantIds.isEmpty()) {
-            // No active variants configured at all - preserve pre-multi-strategy behaviour.
-            return executeVariantSignals(symbol, "default", true,
-                signalStore.findUnprocessed().stream().filter(s -> s.symbol().equals(symbol)).toList());
-        }
-
-        int quarantined = signalStore.markProcessedExcludingStrategies(symbol, activeVariantIds);
-        if (quarantined > 0) {
-            logger.info("Quarantined {} signal(s) for {} belonging to no active variant from paper execution",
-                quarantined, symbol);
-        }
-
-        StringBuilder summary = new StringBuilder();
-        for (StrategyConfig config : activeConfigs) {
-            String variantId = config.variantId();
-            boolean isChampion = variantId.equals(championVariantId);
-
-            // Exit evaluation for this variant's own open shadow position on this symbol, if
-            // any (plan §7.4 gap-fill) - runs regardless of whether there are new BUY signals to
-            // execute this run, and is isolated per variant exactly like BUY execution below: one
-            // variant's exit failure must never block another's or this stage as a whole.
-            if (!isChampion) {
-                try {
-                    evaluateShadowExit(symbol, config);
-                } catch (Exception e) {
-                    logger.error("Shadow exit evaluation failed for variant {} on {}: {}",
-                        variantId, symbol, e.getMessage(), e);
-                }
-            }
-
-            List<Signal> unprocessed;
-            try {
-                unprocessed = signalStore.findUnprocessedByStrategy(variantId).stream()
-                    .filter(s -> s.symbol().equals(symbol))
-                    .toList();
-            } catch (Exception e) {
-                logger.warn("Failed to load unprocessed signals for variant {} on {}: {}",
-                    variantId, symbol, e.getMessage(), e);
-                continue;
-            }
-            if (unprocessed.isEmpty()) {
-                continue;
-            }
-            // Per-variant failure isolation: one variant's exception must never block another's.
-            String variantSummary;
-            try {
-                variantSummary = executeVariantSignals(symbol, variantId, isChampion, unprocessed);
-            } catch (Exception e) {
-                logger.error("Paper trade execution failed entirely for variant {} on {}: {}",
-                    variantId, symbol, e.getMessage(), e);
-                variantSummary = "0 trade(s) executed (variant failed: " + e.getMessage() + ")";
-            }
-            if (summary.length() > 0) summary.append(" | ");
-            summary.append(variantId).append(": ").append(variantSummary);
-        }
-        try {
-            String selectedSummary = executeSelectedTrade(symbol, activeConfigs);
-            if (selectedSummary != null) {
-                if (summary.length() > 0) summary.append(" | ");
-                summary.append("selected: ").append(selectedSummary);
-            }
-        } catch (Exception e) {
-            logger.error("Selected-book execution failed for {}: {}", symbol, e.getMessage(), e);
-        }
-        return summary.length() == 0 ? "no active variant signals to execute" : summary.toString();
-    }
-
-    /**
-     * Drives the dedicated "selected" paper portfolio: evaluates exits for its open position on
-     * {@code symbol}, then executes the signal-tournament winner (highest-confidence BUY) if it is
-     * still PENDING and clears the same sentiment / LLM / daily-loss gates as any other BUY. The
-     * winner's own variant shadow book is unaffected - this only adds a follow-the-winner book.
-     *
-     * @return a short summary, or {@code null} when there is nothing selected to act on
-     */
-    private String executeSelectedTrade(String symbol, List<StrategyConfig> activeConfigs) {
-        if (signalArbiter == null || paperPortfolioService == null) {
-            return null;
-        }
-        paperPortfolioService.ensurePortfolio(SELECTED_PORTFOLIO_ID, SELECTED_PORTFOLIO_CAPITAL);
-
-        signalArbiter.findLatest(symbol, SignalSelectionEntity.EXECUTED)
-            .flatMap(sel -> activeConfigs.stream()
-                .filter(c -> c.variantId().equals(sel.getWinnerVariantId())).findFirst())
-            .ifPresent(cfg -> evaluateShadowExit(symbol, cfg, SELECTED_PORTFOLIO_ID));
-
-        Optional<SignalSelectionEntity> pending = signalArbiter.findLatest(symbol, SignalSelectionEntity.PENDING);
-        if (pending.isEmpty()) {
-            return null;
-        }
-        SignalSelectionEntity selection = pending.get();
-        if (selection.getSelectionDate().isBefore(LocalDate.now(IST).minusDays(SELECTION_EXPIRY_DAYS))) {
-            signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, "expired before gates cleared");
-            return "expired " + selection.getWinnerVariantId();
-        }
-        Optional<Signal> signal = signalStore.findLatestBySymbolAndStrategy(symbol, selection.getWinnerVariantId())
-            .filter(s -> selection.getWinnerSignalId() == null || selection.getWinnerSignalId().equals(s.id()));
-        if (signal.isEmpty() || signal.get().type() != Signal.SignalType.BUY) {
-            signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, "winning signal no longer available");
-            return "winning signal missing";
-        }
-
-        BuyGate gate = evaluateBuyGates(symbol, signal.get(), SELECTED_PORTFOLIO_ID);
-        if (gate.kind() == BuyGate.Kind.DEFER) {
-            return "deferred " + selection.getWinnerVariantId() + " (awaiting sentiment/LLM)";
-        }
-        if (gate.kind() != BuyGate.Kind.PASS) {
-            signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED,
-                gate.kind().name() + (gate.reason() == null ? "" : ": " + gate.reason()));
-            return "blocked " + selection.getWinnerVariantId() + " (" + gate.kind() + ")";
-        }
-        OhlcvCandle latest = candleStore.findLatestBySymbol(symbol).orElse(null);
-        if (latest == null || latest.close() == null) {
-            return null;
-        }
-        boolean executed = paperPortfolioService.executeVariantBuy(SELECTED_PORTFOLIO_ID, signal.get(), latest.close());
-        if (!executed) {
-            return "could not execute " + selection.getWinnerVariantId() + " (will retry)";
-        }
-        signalArbiter.markStatus(selection, SignalSelectionEntity.EXECUTED, null);
-        return "executed " + selection.getWinnerVariantId();
-    }
-
-    /**
-     * Evaluates and, if triggered, simulates an exit for {@code config}'s variant's own open
-     * shadow position on {@code symbol} (plan §7.4 gap-fill: SHADOW variants only ever BUY,
-     * never exit, so the promotion-eligibility checker had no closed trades to score). Reuses
-     * the same {@link MarketContext}/{@link UniformExitEvaluator} exit-precedence logic already
-     * used by the {@code SignalStrategy} SPI (Phase 1) rather than duplicating it. A no-op if
-     * this variant has no open position on this symbol, or if there isn't enough candle history
-     * to build a context.
-     */
-    private void evaluateShadowExit(String symbol, StrategyConfig config) {
-        evaluateShadowExit(symbol, config, config.variantId());
-    }
-
-    private void evaluateShadowExit(String symbol, StrategyConfig config, String portfolioId) {
-        if (paperPortfolioService == null) {
-            return;
-        }
-        Optional<ShadowPositionSnapshot> openPosition =
-            paperPortfolioService.findOpenShadowPosition(portfolioId, symbol);
-        if (openPosition.isEmpty()) {
-            return;
-        }
-        ShadowPositionSnapshot snapshot = openPosition.get();
-
-        List<OhlcvCandle> candles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 100);
-        if (candles.isEmpty()) {
-            logger.debug("No candles for {} to evaluate shadow exit for variant {}", symbol, portfolioId);
-            return;
-        }
-        List<OhlcvCandle> chronological = new ArrayList<>(candles);
-        Collections.reverse(chronological);
-
-        MarketContext ctx;
-        try {
-            ctx = MarketContext.of(symbol, chronological);
-        } catch (RuntimeException e) {
-            logger.warn("Could not build MarketContext for {} shadow exit ({}): {}",
-                symbol, portfolioId, e.getMessage());
-            return;
-        }
-        int barIndex = ctx.barCount() - 1;
-
-        int entryIndex = 0;
-        for (int i = 0; i < chronological.size(); i++) {
-            if (chronological.get(i).date().equals(snapshot.entryDate())) {
-                entryIndex = i;
-                break;
-            }
-        }
-
-        OpenPosition position = OpenPosition.open(entryIndex, snapshot.entryDate(), snapshot.entryPrice(),
-            snapshot.stopLoss(), snapshot.target(), snapshot.quantity())
-            .advanceHighWaterMark(snapshot.highWaterMark());
-        StrategyParamsView params = StrategyParamsView.of(config.params());
-        MarketContext.View view = ctx.view(barIndex);
-
-        ExitDecision decision;
-        try {
-            // No per-strategy signal-exit hook is wired here (SIGNAL_EXIT is skipped) - this
-            // mirrors the SIGNAL stage's own documented simplification for the paper-trading
-            // phase; STOP_LOSS/TARGET_HIT/TRAILING/TIME_STOP are still fully evaluated.
-            decision = UniformExitEvaluator.evaluate(view, position, params, false);
-        } catch (RuntimeException e) {
-            logger.warn("Exit evaluation failed for variant {} on {}: {}", portfolioId, symbol, e.getMessage(), e);
-            return;
-        }
-
-        if (decision.exit()) {
-            boolean closed = paperPortfolioService.executeVariantExit(
-                portfolioId, symbol, decision.exitPrice(), decision.reason().name());
-            if (closed) {
-                logger.info("Shadow exit for variant {} on {}: {} at {}",
-                    portfolioId, symbol, decision.reason(), decision.exitPrice());
-            }
-        } else {
-            paperPortfolioService.advanceShadowPositionHighWaterMark(portfolioId, symbol, view.close());
-        }
-    }
-
-    /** Outcome of the sentiment / LLM / daily-loss gates a BUY signal must clear before execution. */
-    private record BuyGate(Kind kind, String reason) {
-        enum Kind { PASS, DEFER, SENTIMENT_BLOCK, LLM_BLOCK, KILL_SWITCH_BLOCK }
-
-        static BuyGate of(Kind kind) { return new BuyGate(kind, null); }
-    }
-
-    private BuyGate evaluateBuyGates(String symbol, Signal signal, String portfolioId) {
-        // A BUY reads its persisted verdict rather than assuming the latest sentiment call
-        // applies, since a stale unprocessed BUY from an earlier run may have no verdict for its
-        // signal date.
-        var verdict = sentimentGate.evaluatePersisted(symbol, signal.date());
-        if (verdict.action() == SentimentGate.SentimentVerdict.Action.PENDING) {
-            logger.debug("Deferring BUY signal {} for {}: sentiment not yet evaluated for {}",
-                signal.id(), symbol, signal.date());
-            return BuyGate.of(BuyGate.Kind.DEFER);
-        }
-        if (verdict.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
-            logger.info("Blocked BUY signal {} for {} on sentiment: {}", signal.id(), symbol, verdict.reason());
-            return new BuyGate(BuyGate.Kind.SENTIMENT_BLOCK, verdict.reason());
-        }
-        var llmVerdict = llmAnalysisEnabled && llmAnalysisGate != null
-            ? llmAnalysisGate.evaluatePersisted(symbol, signal.date()) : null;
-        if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.PENDING) {
-            return BuyGate.of(BuyGate.Kind.DEFER);
-        }
-        if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.SUPPRESS
-                && !llmAnalysisAdvisoryOnly) {
-            logger.info("Blocked BUY signal {} for {} by LLM analysis: {}", signal.id(), symbol, llmVerdict.reason());
-            return new BuyGate(BuyGate.Kind.LLM_BLOCK, llmVerdict.reason());
-        }
-        // Per-portfolio daily loss breaker (plan §7.2), consulted for every portfolio.
-        if (paperPortfolioService != null && paperPortfolioService.isDailyLossBreached(portfolioId)) {
-            logger.warn("Blocked BUY signal {} for {}: daily loss breaker tripped for portfolio {}",
-                signal.id(), symbol, portfolioId);
-            return new BuyGate(BuyGate.Kind.KILL_SWITCH_BLOCK, "daily loss breaker tripped");
-        }
-        return BuyGate.of(BuyGate.Kind.PASS);
-    }
-
-    /**
-     * Executes every signal in {@code unprocessed} for a single portfolio/variant
-     * ({@code portfolioId}). When {@code useSharedEngine} is true (the CHAMPION variant, or the
-     * pre-multi-strategy fallback), orders route through {@link TradingService} against the
-     * shared "default" engine exactly as before Phase 5. Otherwise (a SHADOW variant) orders
-     * route through {@link com.swingtrade.domain.service.PaperPortfolioService#executeVariantBuy}
-     * against that variant's own independent portfolio.
-     */
-    private String executeVariantSignals(String symbol, String portfolioId, boolean useSharedEngine,
-                                          List<Signal> unprocessed) {
         int executed = 0;
         int failedToQueue = 0;
         int blockedBySentiment = 0;
         int blockedByLlm = 0;
-        int blockedByKillSwitch = 0;
+        int blockedByEligibility = 0;
         for (Signal signal : unprocessed) {
             OhlcvCandle latest = candleStore.findLatestBySymbol(symbol)
                 .orElse(null);
@@ -962,43 +706,75 @@ public class JobOrchestratorService {
             // here rather than assuming the latest sentiment call applies, since a stale
             // unprocessed BUY from an earlier run may have no verdict for its signal date.
             if (signal.type() == Signal.SignalType.BUY) {
-                BuyGate gate = evaluateBuyGates(symbol, signal, portfolioId);
-                if (gate.kind() == BuyGate.Kind.DEFER) {
-                    continue; // leave unprocessed, retry once sentiment/LLM verdict exists
+                var verdict = sentimentGate.evaluatePersisted(symbol, signal.date());
+                if (verdict.action() == SentimentGate.SentimentVerdict.Action.PENDING) {
+                    logger.debug("Deferring BUY signal {} for {}: sentiment not yet evaluated for {}",
+                        signal.id(), symbol, signal.date());
+                    continue; // leave unprocessed, retry once sentiment exists
                 }
-                if (gate.kind() != BuyGate.Kind.PASS) {
+                if (verdict.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
                     try {
                         signalStore.markProcessed(signal.id());
                     } catch (Exception e) {
-                        logger.warn("Failed to mark gate-blocked signal {} processed for {}: {}",
+                        logger.warn("Failed to mark sentiment-blocked signal {} processed for {}: {}",
                             signal.id(), symbol, e.getMessage());
                         continue;
                     }
-                    switch (gate.kind()) {
-                        case SENTIMENT_BLOCK -> blockedBySentiment++;
-                        case LLM_BLOCK -> blockedByLlm++;
-                        default -> blockedByKillSwitch++;
-                    }
+                    blockedBySentiment++;
+                    logger.info("Blocked BUY signal {} for {} on sentiment: {}",
+                        signal.id(), symbol, verdict.reason());
                     continue;
+                }
+                var llmVerdict = llmAnalysisEnabled && llmAnalysisGate != null
+                    ? llmAnalysisGate.evaluatePersisted(symbol, signal.date()) : null;
+                String signalStrategy = signal.id() == null || signalStore == null
+                    ? GateEffectivenessAuditService.DEFAULT_STRATEGY
+                    : signalStore.findStrategyById(signal.id())
+                        .orElse(GateEffectivenessAuditService.DEFAULT_STRATEGY);
+                if (llmVerdict != null && llmVerdict.action() != LlmAnalysisGate.LlmVerdict.Action.PENDING
+                        && gateEffectivenessAuditService != null) {
+                    gateEffectivenessAuditService.recordGateVerdict(symbol, signal.date(),
+                        GateEffectivenessAuditService.LLM_GATE, llmVerdict.action().name(),
+                        llmVerdict.reason(), signalStrategy);
+                }
+                if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.PENDING) continue;
+                if (llmVerdict != null && llmVerdict.action() == LlmAnalysisGate.LlmVerdict.Action.SUPPRESS && !llmAnalysisAdvisoryOnly) {
+                    try {
+                        signalStore.markProcessed(signal.id());
+                    } catch (Exception e) {
+                        continue;
+                    }
+                    blockedByLlm++;
+                    logger.info("Blocked BUY signal {} for {} by LLM analysis: {}", signal.id(), symbol, llmVerdict.reason());
+                    continue;
+                }
+                if (liveEligibilityService != null) {
+                    var eligibility = liveEligibilityService.assess(symbol, signal.date(), latest.close());
+                    if (gateEffectivenessAuditService != null) {
+                        gateEffectivenessAuditService.recordGateVerdict(symbol, signal.date(),
+                            GateEffectivenessAuditService.ELIGIBILITY_GATE,
+                            eligibility.eligible() ? "ALLOW" : "SUPPRESS",
+                            eligibility.eligible() ? "Eligible" : eligibility.rejectionReasons().toString(),
+                            signalStrategy);
+                    }
+                    if (!eligibility.eligible()) {
+                        blockedByEligibility++;
+                        logger.info("Blocked BUY signal {} for {} by live eligibility: unavailable={}, rejected={}",
+                            signal.id(), symbol, eligibility.unavailableInputs(), eligibility.rejectionReasons());
+                        continue;
+                    }
                 }
             }
 
+            // Queue before marking processed. A capacity rejection returns null and must leave
+            // the signal retryable. If persistence fails after a queue succeeds, queueSignal's
+            // signal-id dedupe returns the existing pending order on the next run.
             try {
-                boolean success;
-                if (useSharedEngine) {
-                    // Queue before marking processed. A capacity rejection returns null and must
-                    // leave the signal retryable. If persistence fails after a queue succeeds,
-                    // queueSignal's signal-id dedupe returns the existing pending order next run.
-                    var queuedOrder = tradingService.queueSignal(signal, latest.close());
-                    success = queuedOrder != null;
-                } else {
-                    success = paperPortfolioService != null
-                        && paperPortfolioService.executeVariantBuy(portfolioId, signal, latest.close());
-                }
-                if (!success) {
+                var queuedOrder = tradingService.queueSignal(signal, latest.close());
+                if (queuedOrder == null) {
                     failedToQueue++;
-                    logger.warn("Could not execute BUY signal {} for {} on portfolio {}; "
-                        + "leaving it unprocessed for retry", signal.id(), symbol, portfolioId);
+                    logger.warn("Could not queue BUY signal {} for {}; leaving it unprocessed for retry",
+                        signal.id(), symbol);
                     continue;
                 }
                 signalStore.markProcessed(signal.id());
@@ -1006,8 +782,8 @@ public class JobOrchestratorService {
             } catch (Exception e) {
                 failedToQueue++;
                 logger.warn("""
-                    Failed to execute or mark signal {} for {} on portfolio {} — leaving the signal retryable: {}""",
-                    signal.id(), symbol, portfolioId, e.getMessage());
+                    Failed to queue or mark signal {} for {} — leaving the signal retryable: {}""",
+                    signal.id(), symbol, e.getMessage());
                 continue;
             }
         }
@@ -1016,13 +792,166 @@ public class JobOrchestratorService {
             summary.append(", ").append(blockedBySentiment).append(" blocked by sentiment");
         }
         if (blockedByLlm > 0) summary.append(", ").append(blockedByLlm).append(" blocked by LLM analysis");
-        if (blockedByKillSwitch > 0) {
-            summary.append(", ").append(blockedByKillSwitch).append(" blocked by daily loss breaker");
-        }
+        if (blockedByEligibility > 0) summary.append(", ").append(blockedByEligibility)
+            .append(" blocked by live eligibility");
         if (failedToQueue > 0) {
             summary.append(", ").append(failedToQueue).append(" failed to queue (see logs)");
         }
+        if (selectedSummary != null) {
+            summary.append(" | selected: ").append(selectedSummary);
+        }
         return summary.toString();
+    }
+
+    /** Records the signal tournament for {@code symbol}; a failure never fails the SIGNAL stage. */
+    private Optional<SignalSelectionEntity> arbitrate(String symbol, List<VariantSignalOutcome> outcomes) {
+        if (signalArbiter == null || outcomes.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            Optional<OhlcvCandle> latest = candleStore.findLatestBySymbol(symbol);
+            if (latest.isEmpty()) {
+                return Optional.empty();
+            }
+            return signalArbiter.arbitrate(symbol, latest.get().date(), outcomes);
+        } catch (RuntimeException e) {
+            logger.error("Signal arbitration failed for {}: {}", symbol, e.getMessage(), e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Drives the dedicated "selected" paper book: evaluates exits on its open position for
+     * {@code symbol}, then executes the tournament winner if it is still PENDING and clears the
+     * same sentiment / LLM / live-eligibility gates as the champion's BUYs. The winner's own
+     * variant book is unaffected - this only adds a follow-the-winner book.
+     *
+     * @return a short summary, or {@code null} when there is nothing selected to act on
+     */
+    private String stageSelectedTrade(String symbol) {
+        if (signalArbiter == null || variantTradingService == null) {
+            return null;
+        }
+        try {
+            variantTradingService.ensurePortfolio(SELECTED_PORTFOLIO_ID, SELECTED_PORTFOLIO_CAPITAL);
+            OhlcvCandle latest = candleStore.findLatestBySymbol(symbol).orElse(null);
+            if (latest == null || latest.close() == null) {
+                return null;
+            }
+            variantTradingService.evaluateOpenPositions(SELECTED_PORTFOLIO_ID, symbol, latest);
+
+            Optional<SignalSelectionEntity> pending =
+                signalArbiter.findLatest(symbol, SignalSelectionEntity.PENDING);
+            if (pending.isEmpty()) {
+                return null;
+            }
+            SignalSelectionEntity selection = pending.get();
+            String winner = selection.getWinnerVariantId();
+            if (selection.getSelectionDate().isBefore(LocalDate.now(IST).minusDays(SELECTION_EXPIRY_DAYS))) {
+                signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, "expired before gates cleared");
+                return "expired " + winner;
+            }
+            Optional<Signal> signal = signalStore.findLatestBySymbolAndStrategy(symbol, winner)
+                .filter(s -> selection.getWinnerSignalId() == null || selection.getWinnerSignalId().equals(s.id()));
+            if (signal.isEmpty() || signal.get().type() != Signal.SignalType.BUY) {
+                signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, "winning signal no longer available");
+                return "winning signal missing";
+            }
+
+            String block = null;
+            var sentiment = sentimentGate.evaluatePersisted(symbol, signal.get().date());
+            if (sentiment.action() == SentimentGate.SentimentVerdict.Action.PENDING) {
+                return "deferred " + winner + " (awaiting sentiment)";
+            }
+            if (sentiment.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
+                block = "SENTIMENT_BLOCK: " + sentiment.reason();
+            }
+            if (block == null && llmAnalysisEnabled && llmAnalysisGate != null) {
+                var llm = llmAnalysisGate.evaluatePersisted(symbol, signal.get().date());
+                if (llm.action() == LlmAnalysisGate.LlmVerdict.Action.PENDING) {
+                    return "deferred " + winner + " (awaiting LLM analysis)";
+                }
+                if (llm.action() == LlmAnalysisGate.LlmVerdict.Action.SUPPRESS && !llmAnalysisAdvisoryOnly) {
+                    block = "LLM_BLOCK: " + llm.reason();
+                }
+            }
+            if (block == null && liveEligibilityService != null) {
+                var eligibility = liveEligibilityService.assess(symbol, signal.get().date(), latest.close());
+                if (!eligibility.eligible()) {
+                    block = "ELIGIBILITY_BLOCK: " + eligibility.rejectionReasons();
+                }
+            }
+            if (block != null) {
+                signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, block);
+                logger.info("Selected-book BUY {} for {} blocked: {}", winner, symbol, block);
+                return "blocked " + winner;
+            }
+            if (!variantTradingService.openPosition(SELECTED_PORTFOLIO_ID, signal.get(), latest.close())) {
+                return "could not open " + winner + " (will retry)";
+            }
+            signalArbiter.markStatus(selection, SignalSelectionEntity.EXECUTED, null);
+            return "executed " + winner;
+        } catch (RuntimeException e) {
+            logger.error("Selected-book execution failed for {}: {}", symbol, e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Runs every active variant's own simulated paper trading — SHADOW variants entirely,
+     * and the CHAMPION too (in addition to its existing real order-queueing path below),
+     * so every variant's own portfolio bookkeeping is directly comparable. Each variant is
+     * isolated in its own try/catch: one variant's failure for this symbol/day must not
+     * block another variant's execution (task constraint 4).
+     */
+    private void stageVariantPaperTrade(String symbol) {
+        if (variantTradingService == null) return;
+        List<StrategyConfig> configs = liveConfigs();
+        if (configs.isEmpty()) return;
+        OhlcvCandle latest = candleStore.findLatestBySymbol(symbol).orElse(null);
+        if (latest == null || latest.close() == null) return;
+
+        for (StrategyConfig config : configs) {
+            String variantId = config.variantId();
+            try {
+                variantTradingService.ensurePortfolio(variantId, config.paperCapital());
+                variantTradingService.evaluateOpenPositions(variantId, symbol, latest);
+
+                List<Signal> variantSignals = signalStore.findUnprocessed().stream()
+                    .filter(s -> s.symbol().equals(symbol))
+                    .filter(s -> signalStore.findStrategyById(s.id())
+                        .map(variantId::equals).orElse(false))
+                    .toList();
+                for (Signal signal : variantSignals) {
+                    try {
+                        if (signal.type() == Signal.SignalType.BUY) {
+                            variantTradingService.openPosition(variantId, signal, latest.close());
+                        } else if (signal.type() == Signal.SignalType.SELL) {
+                            variantTradingService.closePosition(variantId, symbol, latest.close(),
+                                "Strategy SELL signal");
+                        }
+                        signalStore.markProcessed(signal.id());
+                    } catch (RuntimeException e) {
+                        logger.warn("Variant {} failed to process signal {} for {}: {}",
+                            variantId, signal.id(), symbol, e.getMessage());
+                    }
+                }
+            } catch (RuntimeException e) {
+                logger.warn("Variant paper trading failed for {} on {} (isolated, other variants unaffected): {}",
+                    variantId, symbol, e.getMessage());
+            }
+        }
+    }
+
+    private List<StrategyConfig> liveConfigs() {
+        if (strategyConfigRepository == null || strategyRegistry == null) return List.of();
+        return strategyConfigRepository.findAll().stream()
+            .map(com.swingtrade.data.entity.StrategyConfigEntity::toDomain)
+            .filter(StrategyConfig::current)
+            .filter(config -> config.mode() == StrategyConfig.Mode.CHAMPION
+                || config.mode() == StrategyConfig.Mode.SHADOW)
+            .sorted(java.util.Comparator.comparing(StrategyConfig::variantId))
+            .toList();
     }
 
     private void updateStageStatus(UUID runId, String symbol, JobRunStage.StageName stage,
@@ -1418,7 +1347,7 @@ public class JobOrchestratorService {
     }
 
     @FunctionalInterface
-    private interface StageExecutor {
+    interface StageExecutor {
         StageExecutionResult execute() throws Exception;
     }
 
@@ -1426,7 +1355,7 @@ public class JobOrchestratorService {
     private record StageDef(JobRunStage.StageName name, StageExecutor executor, long timeoutSec) {}
 
     /** A stage can complete normally or skip without being treated as an operational error. */
-    private record StageExecutionResult(JobRunStage.Status status, String summary) {
+    record StageExecutionResult(JobRunStage.Status status, String summary) {
         private static StageExecutionResult completed(String summary) {
             return new StageExecutionResult(JobRunStage.Status.COMPLETED, summary);
         }

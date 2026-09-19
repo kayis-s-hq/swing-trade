@@ -161,9 +161,9 @@ public class GpuHubDeploymentClient {
                 .bodyValue(Map.of("deployment_uuid", deploymentUuid, "operation", "stop"))
                 .retrieve()
                 .bodyToMono(JsonNode.class)
-                .map(node -> {
+                .flatMap(node -> {
                     checkSuccess(node);
-                    return (Void) null;
+                    return Mono.<Void>empty();
                 })
                 .doOnSuccess(r -> logger.info("GPUHUB deployment stopped: {}", deploymentUuid))
                 .doOnError(error -> logger.error("GPUHUB deployment stop failed: {}", error.getMessage()));
@@ -180,9 +180,9 @@ public class GpuHubDeploymentClient {
                 .bodyValue(Map.of("deployment_uuid", deploymentUuid))
                 .retrieve()
                 .bodyToMono(JsonNode.class)
-                .map(node -> {
+                .flatMap(node -> {
                     checkSuccess(node);
-                    return (Void) null;
+                    return Mono.<Void>empty();
                 })
                 .doOnSuccess(r -> logger.info("GPUHUB deployment deleted: {}", deploymentUuid))
                 .doOnError(error -> logger.error("GPUHUB deployment delete failed: {}", error.getMessage()));
@@ -222,9 +222,9 @@ public class GpuHubDeploymentClient {
                 .bodyValue(Map.of("deployment_container_uuid", deploymentContainerUuid))
                 .retrieve()
                 .bodyToMono(JsonNode.class)
-                .map(node -> {
+                .flatMap(node -> {
                     checkSuccess(node);
-                    return (Void) null;
+                    return Mono.<Void>empty();
                 })
                 .doOnSuccess(r -> logger.info("GPUHUB container stopped: {}", deploymentContainerUuid))
                 .doOnError(error -> logger.error("GPUHUB container stop failed: {}", error.getMessage()));

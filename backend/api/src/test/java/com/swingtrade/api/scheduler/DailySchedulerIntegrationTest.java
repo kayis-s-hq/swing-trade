@@ -25,8 +25,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -230,7 +230,7 @@ class DailySchedulerIntegrationTest {
      * Provides DataSource, EntityManagerFactory, JdbcTemplate, and TransactionManager
      * for the full application context to work with H2 in-memory database.
      */
-    @Configuration
+    @TestConfiguration
     static class TestBeans {
 
         @Bean

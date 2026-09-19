@@ -92,7 +92,7 @@ public class CompositeAnalysisService {
             sources.add(new CompositeAnalysis.SourceScore("News Sentiment", news.score(), NEWS_WEIGHT, "LLM analysis of news articles"));
         }
         sources.add(new CompositeAnalysis.SourceScore("Technical Signal", technical.score(), TECHNICAL_WEIGHT, "TA4j indicators"));
-        sources.add(new CompositeAnalysis.SourceScore("Fundamentals", fundamentals.score(), FUNDAMENTAL_WEIGHT, "Price-based fundamentals"));
+        sources.add(new CompositeAnalysis.SourceScore("Fundamentals", fundamentals.score(), FUNDAMENTAL_WEIGHT, "Sourced company fundamentals"));
 
         String reasoning = buildReasoning(news, technical, fundamentals, backtest, composite);
 

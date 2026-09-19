@@ -1,22 +1,16 @@
 package com.swingtrade.api.service;
 
+import com.swingtrade.api.dto.StrategyConfigRequest;
+import com.swingtrade.api.dto.StrategyModeRequest;
+import com.swingtrade.data.entity.StrategyConfigEntity;
+import com.swingtrade.data.repository.StrategyConfigRepository;
 import com.swingtrade.domain.StrategyConfig;
-import com.swingtrade.domain.StrategyMode;
-import com.swingtrade.domain.service.PaperPortfolioService;
+import com.swingtrade.domain.service.VariantTradingService;
 import com.swingtrade.domain.store.StrategyConfigStore;
-import com.swingtrade.strategy.LegacyPriceActionAdapter;
-import com.swingtrade.strategy.ParamSchemaValidator;
-import com.swingtrade.strategy.PriceActionStrategy;
-import com.swingtrade.strategy.SignalStrategy;
-import com.swingtrade.strategy.StrategyConfigHasher;
-import com.swingtrade.strategy.StrategyTypeRegistry;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.web.server.ResponseStatusException;
-import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,146 +21,87 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class StrategyConfigServiceTest {
-
-    @Mock
     private StrategyConfigStore store;
-
-    @Mock
-    private PaperPortfolioService paperPortfolioService;
-
+    private StrategyConfigRepository repository;
+    private EntityManager entityManager;
+    private Query clearCurrentQuery;
     private StrategyConfigService service;
 
     @BeforeEach
     void setUp() {
-        SignalStrategy breakout = new LegacyPriceActionAdapter(mock(PriceActionStrategy.class));
-        StrategyTypeRegistry registry = new StrategyTypeRegistry(List.of(breakout));
-        ParamSchemaValidator validator = new ParamSchemaValidator();
-        StrategyConfigHasher hasher = new StrategyConfigHasher(new ObjectMapper());
-        service = new StrategyConfigService(store, registry, validator, hasher, paperPortfolioService);
-    }
-
-    private StrategyConfig config(String variantId, int version, StrategyMode mode) {
-        return new StrategyConfig(
-            1L, variantId, version, "BREAKOUT", Map.of("emaFast", 20, "emaSlow", 50), Map.of(),
-            "hash", mode, new BigDecimal("500000"), true, null, null, LocalDateTime.now());
-    }
-
-    @Test
-    void createVariantRejectsUnknownStrategyType() {
-        when(store.findCurrent("X")).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.createVariant("X", "NOT_A_TYPE", Map.of(), Map.of(), null, null))
-            .isInstanceOf(ResponseStatusException.class);
+        store = mock(StrategyConfigStore.class);
+        repository = mock(StrategyConfigRepository.class);
+        entityManager = mock(EntityManager.class);
+        clearCurrentQuery = mock(Query.class);
+        when(entityManager.createQuery(any(String.class))).thenReturn(clearCurrentQuery);
+        when(clearCurrentQuery.setParameter(any(String.class), any())).thenReturn(clearCurrentQuery);
+        when(clearCurrentQuery.executeUpdate()).thenReturn(1);
+        when(repository.findAll()).thenReturn(List.of());
+        service = new StrategyConfigService(store, repository, entityManager, mock(VariantTradingService.class));
     }
 
     @Test
-    void createVariantRejectsDuplicateVariantId() {
-        when(store.findCurrent("BREAKOUT_STRICT")).thenReturn(Optional.of(config("BREAKOUT_STRICT", 1, StrategyMode.CHAMPION)));
+    void createsFirstVersionWithHashAndCurrentFlag() {
+        StrategyConfig saved = config("BREAKOUT", 1, StrategyConfig.Mode.SHADOW, true);
+        when(store.save(any(StrategyConfig.class))).thenReturn(saved);
 
-        assertThatThrownBy(() -> service.createVariant(
-            "BREAKOUT_STRICT", "BREAKOUT", Map.of(), Map.of(), null, null))
-            .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("409");
+        var response = service.create(request("BREAKOUT", null, StrategyConfig.Mode.SHADOW));
+
+        assertThat(response.variantId()).isEqualTo("BREAKOUT");
+        assertThat(response.paramsHash()).hasSize(64);
+        verify(clearCurrentQuery).setParameter("variantId", "BREAKOUT");
+        verify(store).save(any(StrategyConfig.class));
     }
 
     @Test
-    void changeModeToChampionRequiresConfirm() {
-        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)));
+    void modeChangeCreatesNextVersionAndRetiresPriorCurrentVersion() {
+        StrategyConfig current = config("BREAKOUT", 2, StrategyConfig.Mode.SHADOW, true);
+        StrategyConfig saved = config("BREAKOUT", 3, StrategyConfig.Mode.CHAMPION, true);
+        when(store.findCurrentByVariantId("BREAKOUT")).thenReturn(Optional.of(current));
+        when(store.save(any(StrategyConfig.class))).thenReturn(saved);
 
-        assertThatThrownBy(() -> service.changeMode("V1", "CHAMPION", false))
-            .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("400");
+        var response = service.changeMode("BREAKOUT", new StrategyModeRequest(StrategyConfig.Mode.CHAMPION, null));
+
+        assertThat(response.version()).isEqualTo(3);
+        assertThat(response.mode()).isEqualTo(StrategyConfig.Mode.CHAMPION);
+        verify(clearCurrentQuery).executeUpdate();
     }
 
     @Test
-    void changeModeToChampionRejects409WhenAnotherChampionExists() {
-        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)));
-        when(store.findCurrentChampion()).thenReturn(Optional.of(config("OTHER", 1, StrategyMode.CHAMPION)));
+    void rejectsSecondChampion() {
+        StrategyConfig champion = config("OTHER", 1, StrategyConfig.Mode.CHAMPION, true);
+        when(repository.findAll()).thenReturn(List.of(StrategyConfigEntity.fromDomain(champion)));
 
-        assertThatThrownBy(() -> service.changeMode("V1", "CHAMPION", true))
-            .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("409");
+        assertThatThrownBy(() -> service.create(request("BREAKOUT", null, StrategyConfig.Mode.CHAMPION)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("one current CHAMPION");
     }
 
     @Test
-    void changeModeToShadowRejects409WhenAtActiveCap() {
-        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)));
-        when(store.countActive()).thenReturn(12L);
+    void rejectsThirteenthActiveVariant() {
+        List<StrategyConfigEntity> active = java.util.stream.IntStream.range(0, 12)
+            .mapToObj(i -> StrategyConfigEntity.fromDomain(
+                config("V" + i, 1, StrategyConfig.Mode.SHADOW, true)))
+            .toList();
+        when(repository.findAll()).thenReturn(active);
 
-        assertThatThrownBy(() -> service.changeMode("V1", "SHADOW", false))
-            .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("409");
+        assertThatThrownBy(() -> service.create(request("NEW", null, StrategyConfig.Mode.SHADOW)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("At most 12");
     }
 
-    @Test
-    void changeModeToShadowSucceedsUnderCap() {
-        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)))
-            .thenReturn(Optional.of(config("V1", 1, StrategyMode.SHADOW)));
-        when(store.countActive()).thenReturn(3L);
-
-        StrategyConfig result = service.changeMode("V1", "SHADOW", false);
-
-        assertThat(result.mode()).isEqualTo(StrategyMode.SHADOW);
+    private static StrategyConfigRequest request(String variantId, Integer version, StrategyConfig.Mode mode) {
+        return new StrategyConfigRequest(variantId, version, "BREAKOUT", Map.of("rsiMin", 50),
+            Map.of(), mode, BigDecimal.valueOf(500_000), null);
     }
 
-    @Test
-    void changeModeToShadowProvisionsPaperPortfolio() {
-        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)))
-            .thenReturn(Optional.of(config("V1", 1, StrategyMode.SHADOW)));
-        when(store.countActive()).thenReturn(3L);
-
-        service.changeMode("V1", "SHADOW", false);
-
-        verify(paperPortfolioService).ensurePortfolio("V1", new BigDecimal("500000"));
-    }
-
-    @Test
-    void changeModeToChampionProvisionsPaperPortfolio() {
-        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)))
-            .thenReturn(Optional.of(config("V1", 1, StrategyMode.CHAMPION)));
-        when(store.countActive()).thenReturn(3L);
-        when(store.findCurrentChampion()).thenReturn(Optional.empty());
-
-        service.changeMode("V1", "CHAMPION", true);
-
-        verify(paperPortfolioService).ensurePortfolio("V1", new BigDecimal("500000"));
-    }
-
-    @Test
-    void changeModeToOffDoesNotProvisionPaperPortfolio() {
-        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.SHADOW)))
-            .thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)));
-
-        service.changeMode("V1", "OFF", false);
-
-        verify(paperPortfolioService, never()).ensurePortfolio(anyString(), any());
-    }
-
-    @Test
-    void createVersionDedupesOnIdenticalParamsHash() {
-        StrategyConfig current = config("V1", 1, StrategyMode.OFF);
-        when(store.findCurrent("V1")).thenReturn(Optional.of(current));
-        when(store.findByParamsHash(anyString(), anyString())).thenReturn(Optional.of(current));
-
-        StrategyConfig result = service.createVersion("V1", Map.of("emaFast", 20, "emaSlow", 50), Map.of(), null, null, null);
-
-        assertThat(result.version()).isEqualTo(1);
-    }
-
-    @Test
-    void createVersionRejectsInvalidParams() {
-        when(store.findCurrent("V1")).thenReturn(Optional.of(config("V1", 1, StrategyMode.OFF)));
-
-        assertThatThrownBy(() -> service.createVersion("V1", Map.of("emaFast", 1000), Map.of(), null, null, null))
-            .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("400");
+    private static StrategyConfig config(String variantId, int version, StrategyConfig.Mode mode, boolean current) {
+        return StrategyConfig.create(variantId, version, "BREAKOUT", Map.of("rsiMin", 50),
+            Map.of(), mode, BigDecimal.valueOf(500_000), current, null, LocalDateTime.now());
     }
 }

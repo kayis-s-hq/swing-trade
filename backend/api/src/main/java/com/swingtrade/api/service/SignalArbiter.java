@@ -4,7 +4,7 @@ import com.swingtrade.data.entity.SignalSelectionEntity;
 import com.swingtrade.data.repository.SignalSelectionRepository;
 import com.swingtrade.domain.ShadowClosedTrade;
 import com.swingtrade.domain.Signal;
-import com.swingtrade.domain.service.PaperPortfolioService;
+import com.swingtrade.domain.service.PortfolioQueryService;
 import com.swingtrade.domain.store.SignalStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,12 +38,12 @@ public class SignalArbiter {
 
     private final SignalSelectionRepository repository;
     private final SignalStore signalStore;
-    private final PaperPortfolioService paperPortfolioService;
+    private final PortfolioQueryService paperPortfolioService;
     private final ArbitrationRule rule;
 
     @Autowired
     public SignalArbiter(SignalSelectionRepository repository, SignalStore signalStore,
-                         PaperPortfolioService paperPortfolioService,
+                         PortfolioQueryService paperPortfolioService,
                          @Value("${strategy.arbitration.rule:HIGHEST_CONFIDENCE}") String ruleName) {
         this.repository = repository;
         this.signalStore = signalStore;
@@ -88,10 +88,10 @@ public class SignalArbiter {
             .map(Candidate::variantId);
     }
 
-    private Map<String, Double> currentEvidence(List<SignalPipeline.VariantSignalOutcome> outcomes) {
+    private Map<String, Double> currentEvidence(List<VariantSignalOutcome> outcomes) {
         Map<String, Double> result = new HashMap<>();
         LocalDate tomorrow = LocalDate.now().plusDays(1);
-        for (SignalPipeline.VariantSignalOutcome o : outcomes) {
+        for (VariantSignalOutcome o : outcomes) {
             evidence(paperPortfolioService.findClosedTrades(o.variantId()), tomorrow)
                 .ifPresent(v -> result.put(o.variantId(), v));
         }
@@ -102,14 +102,14 @@ public class SignalArbiter {
      * Highest-confidence BUY wins; ties break on variantId (stable, deterministic). Only outcomes
      * whose signal row was persisted are eligible, since the selected book needs a real signal.
      */
-    static Optional<SignalPipeline.VariantSignalOutcome> pick(List<SignalPipeline.VariantSignalOutcome> outcomes) {
+    static Optional<VariantSignalOutcome> pick(List<VariantSignalOutcome> outcomes) {
         return pick(outcomes, ArbitrationRule.HIGHEST_CONFIDENCE, Map.of());
     }
 
-    static Optional<SignalPipeline.VariantSignalOutcome> pick(List<SignalPipeline.VariantSignalOutcome> outcomes,
+    static Optional<VariantSignalOutcome> pick(List<VariantSignalOutcome> outcomes,
                                                               ArbitrationRule rule,
                                                               Map<String, Double> evidenceByVariant) {
-        List<SignalPipeline.VariantSignalOutcome> eligible = outcomes.stream()
+        List<VariantSignalOutcome> eligible = outcomes.stream()
             .filter(o -> o.type() == Signal.SignalType.BUY && o.persisted() && o.confidence() != null)
             .toList();
         return pickVariant(eligible.stream().map(o -> new Candidate(o.variantId(), o.confidence())).toList(),
@@ -123,13 +123,13 @@ public class SignalArbiter {
      * this symbol/day is left untouched so a re-run cannot double-trade or re-open a blocked pick.
      */
     public Optional<SignalSelectionEntity> arbitrate(String symbol, LocalDate date,
-                                                     List<SignalPipeline.VariantSignalOutcome> outcomes) {
-        Optional<SignalPipeline.VariantSignalOutcome> winner = pick(outcomes, rule,
+                                                     List<VariantSignalOutcome> outcomes) {
+        Optional<VariantSignalOutcome> winner = pick(outcomes, rule,
             rule == ArbitrationRule.EVIDENCE_RANKED ? currentEvidence(outcomes) : Map.of());
         if (winner.isEmpty()) {
             return Optional.empty();
         }
-        SignalPipeline.VariantSignalOutcome w = winner.get();
+        VariantSignalOutcome w = winner.get();
 
         Optional<SignalSelectionEntity> existing = repository.findBySymbolAndSelectionDate(symbol, date);
         if (existing.isPresent() && !SignalSelectionEntity.PENDING.equals(existing.get().getStatus())) {
@@ -142,7 +142,7 @@ public class SignalArbiter {
             .orElse(null);
 
         List<Map<String, Object>> slate = new ArrayList<>();
-        for (SignalPipeline.VariantSignalOutcome o : outcomes) {
+        for (VariantSignalOutcome o : outcomes) {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("variantId", o.variantId());
             row.put("version", o.strategyVersion());

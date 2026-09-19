@@ -16,7 +16,7 @@ vi.mock('../api/client', () => apiMocks)
 vi.mock('../api/watchlist', () => apiMocks)
 vi.mock('../api/signals', () => apiMocks)
 vi.mock('../api/strategies', () => ({
-  listCurrentStrategies: vi.fn().mockResolvedValue([
+  getStrategies: vi.fn().mockResolvedValue([
     { variantId: 'breakout-v1' },
     { variantId: 'pullback-v1' },
     { variantId: 'squeeze-v1' },

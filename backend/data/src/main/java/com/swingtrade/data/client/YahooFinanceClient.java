@@ -212,47 +212,11 @@ public class YahooFinanceClient implements MarketDataClient {
     @Override
     public CandleData fetchCandle(String symbol, LocalDate date) {
         try {
-            // Yahoo Finance uses symbols like "RELIANCE.NS" for NSE
-            String yfinanceSymbol = formatSymbolForYahoo(symbol);
-
-            long timestamp = date.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
-            long nextDay = date.plusDays(1).atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC);
-
-            String uri = String.format(CANDLE_URI_FMT, yfinanceSymbol, timestamp, nextDay);
-
-            String response = executeWithResilience(client ->
-                    client.get().uri(uri)
-                        .retrieve()
-                        .onStatus(s -> s.value() == 404, r -> Mono.empty())
-                        .onStatus(s -> s.value() >= 400,
-                                r -> Mono.error(new YahooHttpException(r.statusCode().value())))
-                        .bodyToMono(String.class));
-
-            if (response == null || response.isEmpty()) return null;
-            JsonNode root = objectMapper.readTree(response);
-            JsonNode result = root.path("chart").path("result");
-            if (!result.isArray() || result.size() == 0) return null;
-            JsonNode quoteObj = result.get(0).path("indicators").path("quote").get(0);
-            JsonNode timestamps = result.get(0).path("timestamp");
-            if (!quoteObj.isObject() || !timestamps.isArray() || timestamps.size() == 0) return null;
-
-            JsonNode openArr = quoteObj.path("open");
-            JsonNode highArr = quoteObj.path("high");
-            JsonNode lowArr = quoteObj.path("low");
-            JsonNode closeArr = quoteObj.path("close");
-            JsonNode volumeArr = quoteObj.path("volume");
-            JsonNode adjArr = result.get(0).path("indicators").path("adjclose")
-                .isArray() && result.get(0).path("indicators").path("adjclose").size() > 0
-                    ? result.get(0).path("indicators").path("adjclose").get(0).path("adjclose") : null;
-            double closeVal = closeArr.isNull() ? 0 : closeArr.get(0).asDouble(0);
-            if (closeVal == 0) return null;
-            long volume = volumeArr.isNull() ? 0 : volumeArr.get(0).asLong(0);
-            if (volume == 0) return null;
-            return CandleData.of(symbol, date,
-                parseBigDecimal(openArr.get(0)), parseBigDecimal(highArr.get(0)),
-                parseBigDecimal(lowArr.get(0)), parseBigDecimal(closeArr.get(0)), volume,
-                (adjArr != null && !adjArr.isNull()) ? parseBigDecimal(adjArr.get(0))
-                    : parseBigDecimal(closeArr.get(0)));
+            for (CandleData candle : fetchCandles(symbol, date, date)) {
+                if (date.equals(candle.date())) return candle;
+            }
+            logger.warn("Yahoo single-day fetch returned no valid close values for {} on {}", symbol, date);
+            return null;
 
         } catch (Exception e) {
             logger.warn("Failed to fetch candle for {} on {}: {}", symbol, date, e.getMessage());
@@ -620,6 +584,9 @@ public class YahooFinanceClient implements MarketDataClient {
     }
 
     private String formatSymbolForYahoo(String symbol) {
+        if ("NIFTY50".equalsIgnoreCase(symbol) || "NIFTY 50".equalsIgnoreCase(symbol)) {
+            return "^NSEI";
+        }
         if (symbol.endsWith(".NS") || symbol.endsWith(".BO")) return symbol;
         return symbol + ".NS";
     }

@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
@@ -37,6 +38,8 @@ class SynthesisServiceTest {
     private SynthesisPromptLoader promptLoader;
     @Mock
     private LlmServerManagerProvider serverManagerProvider;
+    @Mock
+    private SynthesisEvaluationService evaluationService;
 
     private SynthesisService service;
     private CompositeAnalysis composite;
@@ -45,7 +48,7 @@ class SynthesisServiceTest {
     void setUp() {
         when(promptLoader.getSystemPrompt()).thenReturn("You are a financial analyst.");
 
-        service = new SynthesisService(llmClientProvider, promptLoader, serverManagerProvider);
+        service = new SynthesisService(llmClientProvider, promptLoader, serverManagerProvider, evaluationService);
 
         composite = new CompositeAnalysis(
                 "RELIANCE",
@@ -213,8 +216,8 @@ class SynthesisServiceTest {
             // Assert
             org.mockito.Mockito.verify(llmClient).generateChatCompletion(
                     org.mockito.ArgumentMatchers.anyList(),
-                    org.mockito.ArgumentMatchers.anyInt(),
-                    org.mockito.ArgumentMatchers.anyDouble()
+                    org.mockito.ArgumentMatchers.eq(1024),
+                    eq(0.0)
             );
         }
     }

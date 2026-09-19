@@ -1,9 +1,21 @@
 package com.swingtrade.strategy;
 
 import tools.jackson.databind.ObjectMapper;
+import com.swingtrade.domain.BenchmarkComparison;
+import com.swingtrade.domain.BenchmarkCandleSeries;
+import com.swingtrade.domain.CorporateAction;
+import com.swingtrade.domain.HistoricalCandleAdjuster;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.OhlcvDataQuality;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.PriceBandPolicy;
+import com.swingtrade.domain.RiskManagementPolicy;
 import com.swingtrade.domain.Stock;
 import com.swingtrade.domain.store.CandleStore;
+import com.swingtrade.domain.store.BenchmarkDataAdapter;
+import com.swingtrade.domain.store.PriceBandStore;
+import com.swingtrade.domain.store.CorporateActionStore;
+import com.swingtrade.domain.store.UniverseSnapshotStore;
 import com.swingtrade.domain.store.WatchlistStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,7 +45,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Simulates the Phase 2 price-action entry rules bar-by-bar against historical candles to
@@ -56,6 +71,7 @@ public class BacktestEngine {
      */
     private static final int MIN_CANDLES_FOR_BACKTEST = 60;
     private static final BacktestCostModel DEFAULT_COST_MODEL = new ZerodhaDeliveryCostModel();
+    private final PortfolioBacktestEngine portfolioBacktestEngine = new PortfolioBacktestEngine();
 
     private final CandleStore candleStore;
     private final WatchlistStore watchlistStore;
@@ -63,6 +79,10 @@ public class BacktestEngine {
     private final StrategyRegistry strategyRegistry;
     private final ObjectMapper objectMapper;
     private final String reportsDir;
+    private final PriceBandStore priceBandStore;
+    private final UniverseSnapshotStore universeSnapshotStore;
+    private final CorporateActionStore corporateActionStore;
+    private final BenchmarkDataAdapter benchmarkDataAdapter;
 
     public BacktestEngine(CandleStore candleStore,
                           WatchlistStore watchlistStore,
@@ -70,12 +90,80 @@ public class BacktestEngine {
                           StrategyRegistry strategyRegistry,
                           ObjectMapper objectMapper,
                           @Value("${backtest.reports.dir:reports}") String reportsDir) {
+        this(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry, objectMapper,
+            reportsDir, emptyPriceBandStore());
+    }
+
+    public BacktestEngine(CandleStore candleStore,
+                          WatchlistStore watchlistStore,
+                          PriceActionSignalEngine priceActionSignalEngine,
+                          StrategyRegistry strategyRegistry,
+                          ObjectMapper objectMapper,
+                          @Value("${backtest.reports.dir:reports}") String reportsDir,
+                          PriceBandStore priceBandStore) {
+        this(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry, objectMapper, reportsDir,
+            priceBandStore, permissiveUniverseStore(), permissiveCorporateActionStore());
+    }
+
+    /** Production constructor: historical analytics are fail-closed on missing provenance. */
+    public BacktestEngine(CandleStore candleStore, WatchlistStore watchlistStore,
+                          PriceActionSignalEngine priceActionSignalEngine, StrategyRegistry strategyRegistry,
+                          ObjectMapper objectMapper,
+                          @Value("${backtest.reports.dir:reports}") String reportsDir,
+                          PriceBandStore priceBandStore,
+                          UniverseSnapshotStore universeSnapshotStore, CorporateActionStore corporateActionStore) {
+        this(candleStore, watchlistStore, priceActionSignalEngine, strategyRegistry, objectMapper, reportsDir,
+                priceBandStore, universeSnapshotStore, corporateActionStore, emptyBenchmarkDataAdapter());
+    }
+
+    /** Production constructor: historical analytics are fail-closed on missing provenance. */
+    @org.springframework.beans.factory.annotation.Autowired
+    public BacktestEngine(CandleStore candleStore, WatchlistStore watchlistStore,
+                          PriceActionSignalEngine priceActionSignalEngine, StrategyRegistry strategyRegistry,
+                          ObjectMapper objectMapper,
+                          @Value("${backtest.reports.dir:reports}") String reportsDir,
+                          PriceBandStore priceBandStore,
+                          UniverseSnapshotStore universeSnapshotStore, CorporateActionStore corporateActionStore,
+                          BenchmarkDataAdapter benchmarkDataAdapter) {
         this.candleStore = candleStore;
         this.watchlistStore = watchlistStore;
         this.priceActionSignalEngine = priceActionSignalEngine;
         this.strategyRegistry = strategyRegistry;
         this.objectMapper = objectMapper;
         this.reportsDir = reportsDir;
+        this.priceBandStore = priceBandStore;
+        this.universeSnapshotStore = universeSnapshotStore;
+        this.corporateActionStore = corporateActionStore;
+        this.benchmarkDataAdapter = benchmarkDataAdapter;
+    }
+
+    private static UniverseSnapshotStore permissiveUniverseStore() {
+        return new UniverseSnapshotStore() {
+            public java.util.Optional<com.swingtrade.domain.UniverseSnapshot> findBySymbolAndDate(String s, LocalDate d) { return java.util.Optional.empty(); }
+            public java.util.Optional<com.swingtrade.domain.UniverseSnapshot> findLatestBySymbolAndDateOnOrBefore(String s, LocalDate d) { return java.util.Optional.of(new com.swingtrade.domain.UniverseSnapshot(s, d, null, null, true, "legacy-test", java.time.Instant.EPOCH)); }
+            public List<com.swingtrade.domain.UniverseSnapshot> findByDate(LocalDate d) { return List.of(); }
+            public void save(com.swingtrade.domain.UniverseSnapshot snapshot) {}
+        };
+    }
+
+    private static CorporateActionStore permissiveCorporateActionStore() {
+        return new CorporateActionStore() {
+            public List<CorporateAction> findBySymbolAndEffectiveDateBetween(String s, LocalDate f, LocalDate t) { return List.of(); }
+            public void save(CorporateAction action) {}
+        };
+    }
+
+    private static PriceBandStore emptyPriceBandStore() {
+        return new PriceBandStore() {
+            @Override public java.util.Optional<PriceBand> findBySymbolAndDate(String symbol, LocalDate date) {
+                return java.util.Optional.empty();
+            }
+            @Override public void save(PriceBand priceBand) {}
+        };
+    }
+
+    private static BenchmarkDataAdapter emptyBenchmarkDataAdapter() {
+        return (from, to) -> Optional.empty();
     }
 
     /**
@@ -110,9 +198,10 @@ public class BacktestEngine {
         }
         logger.debug("Running backtest for {} on {} using strategy {}", symbol, exchange, strategy.name());
 
-        List<OhlcvCandle> chronologicalCandles = getDescendingCandles(symbol, candleStore, MIN_CANDLES_FOR_BACKTEST);
+        List<OhlcvCandle> chronologicalCandles = historicalCandles(symbol, exchange,
+            getDescendingCandles(symbol, candleStore, MIN_CANDLES_FOR_BACKTEST));
 
-        return simulate(symbol, chronologicalCandles, config, strategy);
+        return simulate(symbol, qualityChecked(symbol, chronologicalCandles), config, strategy);
     }
 
     /**
@@ -139,6 +228,8 @@ public class BacktestEngine {
             symbol, evaluationStart.minusDays(400), evaluationEnd);
         List<OhlcvCandle> chronological = new ArrayList<>(descending);
         chronological.sort(Comparator.comparing(OhlcvCandle::date));
+        chronological = historicalCandles(symbol, exchange, chronological);
+        chronological = qualityChecked(symbol, chronological);
         if (chronological.size() < MIN_CANDLES_FOR_BACKTEST) {
             throw new IllegalStateException("Insufficient candle history for evaluation window");
         }
@@ -152,6 +243,65 @@ public class BacktestEngine {
         return simulate(symbol, chronological, config, strategy, start, end);
     }
 
+    private List<OhlcvCandle> historicalCandles(String symbol, String exchange, List<OhlcvCandle> candles) {
+        if (candles.isEmpty()) return candles;
+        LocalDate from = candles.get(0).date();
+        LocalDate to = candles.get(candles.size() - 1).date();
+        List<CorporateAction> actions = corporateActionStore
+            .findBySymbolAndEffectiveDateBetween(symbol, from, to);
+        return candles.stream().map(candle -> {
+            var snapshot = universeSnapshotStore.findLatestBySymbolAndDateOnOrBefore(symbol, candle.date());
+            if (snapshot.isEmpty() || !snapshot.get().included()
+                    || (exchange != null && !exchange.isBlank() && snapshot.get().exchange() != null
+                        && !exchange.equalsIgnoreCase(snapshot.get().exchange()))) {
+                throw new IllegalStateException("No included historical universe membership for "
+                    + symbol + " on " + candle.date());
+            }
+            return HistoricalCandleAdjuster.adjust(candle, actions);
+        }).toList();
+    }
+
+    /**
+     * Evaluates bounded, non-overlapping trailing OOS folds. Folds are returned in
+     * chronological order; each fold retains the normal indicator warm-up behavior.
+     */
+    public WalkForwardEvaluation runWalkForward(String symbol, String exchange, BacktestConfig config,
+                                                 int oosDays, int requestedFolds) {
+        return runWalkForward(symbol, exchange, config, strategyRegistry.defaultStrategy(), oosDays,
+            requestedFolds);
+    }
+
+    public WalkForwardEvaluation runWalkForward(String symbol, String exchange, BacktestConfig config,
+                                                 TradingStrategy strategy, int oosDays, int requestedFolds) {
+        if (oosDays < 60 || oosDays > 1000) {
+            throw new IllegalArgumentException("oosDays must be between 60 and 1000");
+        }
+        if (requestedFolds < 1 || requestedFolds > 8) {
+            throw new IllegalArgumentException("requestedFolds must be between 1 and 8");
+        }
+        List<OhlcvCandle> candles = new ArrayList<>(candleStore.findAllBySymbolOrderByDateDesc(symbol));
+        candles.sort(Comparator.comparing(OhlcvCandle::date));
+        int required = oosDays * requestedFolds;
+        if (candles.size() < required) {
+            throw new IllegalStateException("Insufficient candle history for " + requestedFolds
+                + " OOS folds: need at least " + required + " candles, found " + candles.size());
+        }
+
+        List<WalkForwardEvaluation.Fold> folds = new ArrayList<>(requestedFolds);
+        for (int fold = requestedFolds - 1; fold >= 0; fold--) {
+            int startIndex = candles.size() - ((fold + 1) * oosDays);
+            int endIndex = startIndex + oosDays - 1;
+            LocalDate startDate = candles.get(startIndex).date();
+            LocalDate endDate = candles.get(endIndex).date();
+            BacktestResult result = runBacktestWindow(symbol, exchange, config, strategy, startDate, endDate);
+            folds.add(new WalkForwardEvaluation.Fold(startDate, endDate, result));
+        }
+        double averageWinRate = folds.stream().mapToDouble(f -> f.result().winRate()).average().orElse(0.0);
+        double averageTotalReturn = folds.stream().mapToDouble(f -> f.result().totalReturn()).average().orElse(0.0);
+        int totalTrades = folds.stream().mapToInt(f -> f.result().totalTrades()).sum();
+        return new WalkForwardEvaluation(folds, averageWinRate, averageTotalReturn, totalTrades);
+    }
+
     static List<OhlcvCandle> getDescendingCandles(String symbol, CandleStore candleStore, int minCandles) {
         List<OhlcvCandle> descendingCandles = candleStore.findTopBySymbolOrderByDateDesc(symbol, 1000);
         if (descendingCandles.size() < minCandles) {
@@ -163,6 +313,19 @@ public class BacktestEngine {
         List<OhlcvCandle> chronologicalCandles = new ArrayList<>(descendingCandles);
         Collections.reverse(chronologicalCandles);
         return chronologicalCandles;
+    }
+
+    private List<OhlcvCandle> qualityChecked(String symbol, List<OhlcvCandle> candles) {
+        OhlcvDataQuality.Assessment quality = OhlcvDataQuality.quarantineUnexplainedGaps(
+            candles, PriceActionSignalEngine.MAX_ANALYTICAL_GAP_RATIO);
+        if (!quality.quarantined().isEmpty()) {
+            logger.warn("Quarantined {} candle(s) from backtest input for {}: {}",
+                quality.quarantined().size(), symbol, quality.quarantined().get(0).reason());
+        }
+        if (quality.accepted().size() < MIN_CANDLES_FOR_BACKTEST) {
+            throw new IllegalStateException("Insufficient quality candle history for " + symbol);
+        }
+        return quality.accepted();
     }
 
     /**
@@ -216,6 +379,95 @@ public class BacktestEngine {
                 .map(Stock::symbol)
                 .toList();
         return runBacktestAll(symbols, exchange, config, strategy);
+    }
+
+    /**
+     * Runs each symbol through the existing windowed backtest, then applies the resulting dated
+     * trades to one shared cash account. This is intentionally bounded to the supplied symbols
+     * and window; the existing independent-symbol APIs remain unchanged.
+     */
+    public PortfolioBacktestResult runPortfolioBacktest(List<String> symbols, String exchange,
+                                                        BacktestConfig config,
+                                                        LocalDate evaluationStart, LocalDate evaluationEnd) {
+        return runPortfolioBacktest(symbols, exchange, config, strategyRegistry.defaultStrategy(),
+                evaluationStart, evaluationEnd);
+    }
+
+    /**
+     * Runs the portfolio backtest against an explicitly chosen {@link TradingStrategy}, with the
+     * result attributed to {@link TradingStrategy#name()}. The portfolio backtest evaluates a
+     * single strategy across every symbol in one run; use
+     * {@link #runPortfolioBacktest(List, String, BacktestConfig, TradingStrategy, String, LocalDate, LocalDate)}
+     * to attribute the run to a persisted {@code StrategyConfig} variant id instead (e.g. when
+     * comparing shadow/champion variants).
+     */
+    public PortfolioBacktestResult runPortfolioBacktest(List<String> symbols, String exchange,
+                                                        BacktestConfig config, TradingStrategy strategy,
+                                                        LocalDate evaluationStart, LocalDate evaluationEnd) {
+        return runPortfolioBacktest(symbols, exchange, config, strategy,
+                strategy == null ? null : strategy.name(), evaluationStart, evaluationEnd);
+    }
+
+    /**
+     * Runs the portfolio backtest against an explicitly chosen {@link TradingStrategy}, tagging
+     * the resulting {@link PortfolioBacktestResult#strategyVariantId()} with the given id so
+     * portfolio-level runs across multiple configured strategy variants can be told apart and
+     * compared downstream (e.g. by a future portfolio-level analogue of
+     * {@code PromotionEligibilityChecker}). Sector exposure limits (see
+     * {@link com.swingtrade.domain.PortfolioExposurePolicy}) are evaluated against each symbol's
+     * production {@link com.swingtrade.domain.Stock.Sector} taxonomy, sourced from the watchlist.
+     */
+    public PortfolioBacktestResult runPortfolioBacktest(List<String> symbols, String exchange,
+                                                        BacktestConfig config, TradingStrategy strategy,
+                                                        String strategyVariantId,
+                                                        LocalDate evaluationStart, LocalDate evaluationEnd) {
+        if (symbols == null || symbols.isEmpty()) {
+            throw new IllegalArgumentException("Symbols cannot be null or empty");
+        }
+        if (config == null || strategy == null) {
+            throw new IllegalArgumentException("Config and strategy cannot be null");
+        }
+        List<BacktestResult> results = new ArrayList<>();
+        Map<String, List<OhlcvCandle>> marketData = new HashMap<>();
+        for (String symbol : symbols.stream().distinct().sorted().toList()) {
+            try {
+                List<OhlcvCandle> candles = new ArrayList<>(candleStore.findBySymbolAndDateRange(
+                        symbol, evaluationStart.minusDays(400), evaluationEnd));
+                candles.sort(Comparator.comparing(OhlcvCandle::date));
+                marketData.put(symbol, qualityChecked(symbol, historicalCandles(symbol, exchange, candles)).stream()
+                        .filter(candle -> !candle.date().isBefore(evaluationStart)
+                                && !candle.date().isAfter(evaluationEnd)).toList());
+                results.add(runBacktestWindow(symbol, exchange, config, strategy, evaluationStart, evaluationEnd));
+            } catch (RuntimeException e) {
+                marketData.remove(symbol);
+                logger.warn("Skipping {} in portfolio backtest: {}", symbol, e.getMessage());
+            }
+        }
+        Optional<BenchmarkCandleSeries> benchmark;
+        try {
+            benchmark = benchmarkDataAdapter.findNifty50(evaluationStart, evaluationEnd);
+        } catch (RuntimeException e) {
+            logger.warn("NIFTY benchmark unavailable for portfolio backtest: {}", e.getMessage());
+            benchmark = Optional.empty();
+        }
+        return portfolioBacktestEngine.simulate(results, config, evaluationStart, evaluationEnd, marketData,
+                sectorsBySymbol(), benchmark, strategyVariantId);
+    }
+
+    /**
+     * Sector taxonomy for {@link com.swingtrade.domain.PortfolioExposurePolicy} sector-exposure
+     * limits, sourced from the production watchlist ({@link Stock#sector()}, populated via
+     * fundamental-data ingestion). Stocks with no recorded sector are omitted rather than
+     * fabricated, so an unclassified symbol is simply never sector-limited.
+     */
+    Map<String, String> sectorsBySymbol() {
+        Map<String, String> sectors = new HashMap<>();
+        for (Stock stock : watchlistStore.getWatchlist()) {
+            if (stock.sector() != null) {
+                sectors.put(stock.symbol(), stock.sector().name());
+            }
+        }
+        return sectors;
     }
 
     /**
@@ -293,47 +545,81 @@ public class BacktestEngine {
                 BigDecimal exitPrice = null;
                 ExitReason reason = null;
 
+                RiskManagementPolicy.RiskManagementDecision managedDecision = config.riskManagementPolicy()
+                        .evaluate(new RiskManagementPolicy.RiskManagementContext(
+                                open.entryPrice(), open.stopLoss(), open.target(), close, low,
+                                high, open.highestCloseBeforeBar(), i - open.entryIndex(),
+                                open.partialExitTaken(), numToBigDecimal(atr.getValue(Math.max(0, i - 1)))));
+                boolean partialExit = false;
+                if (managedDecision.partialExitRatio() != null) {
+                    int partialQuantity = (int) Math.floor(open.quantity()
+                            * managedDecision.partialExitRatio().doubleValue());
+                    if (partialQuantity > 0 && partialQuantity < open.quantity()) {
+                        BigDecimal partialPrice = managedDecision.stopPrice();
+                        BigDecimal barOpen = openPriceForBar(openPrice, i);
+                        if (barOpen.compareTo(partialPrice) >= 0) partialPrice = barOpen;
+                        BacktestTrade partialTrade = closeTrade(symbol, open, partialPrice,
+                                chronologicalCandles.get(i).date(), i, ExitReason.TARGET_HIT, config,
+                                partialQuantity);
+                        trades.add(partialTrade);
+                        capital += partialTrade.pnl();
+                        open = new OpenPosition(open.entryIndex(), open.entryDate(), open.entryPrice(),
+                                open.stopLoss(), open.target(), open.quantity() - partialQuantity,
+                                streak, open.highestCloseBeforeBar().max(close), true);
+                        partialExit = true;
+                    }
+                }
+                if (!partialExit && managedDecision.exit()) {
+                    reason = managedExitReason(managedDecision.reason());
+                    exitPrice = managedDecision.stopPrice();
+                }
+
                 // Evaluated through the same TradingStrategy instance used for entry so the
                 // backtest can never drift from its rules.
                 boolean signalExitTriggered = strategy.isSignalExit(exitIndicators);
 
-                if (low.compareTo(open.stopLoss()) <= 0) {
+                if (!partialExit && reason == null && low.compareTo(open.stopLoss()) <= 0) {
                     reason = ExitReason.STOP_LOSS;
                     BigDecimal barOpen = openPriceForBar(openPrice, i);
                     exitPrice = barOpen.compareTo(open.stopLoss()) <= 0
                             ? barOpen : open.stopLoss();
-                } else if (high.compareTo(open.target()) >= 0) {
+                } else if (!partialExit && reason == null && high.compareTo(open.target()) >= 0) {
                     reason = ExitReason.TARGET_HIT;
                     BigDecimal barOpen = openPriceForBar(openPrice, i);
                     exitPrice = barOpen.compareTo(open.target()) >= 0 ? barOpen : open.target();
-                } else if (config.signalExitEnabled() && signalExitTriggered) {
+                } else if (!partialExit && reason == null && config.signalExitEnabled() && signalExitTriggered) {
                     reason = ExitReason.SIGNAL_EXIT;
                     exitPrice = close;
-                } else if (streak >= config.trendBreakStreakDays()) {
+                } else if (!partialExit && reason == null && streak >= config.trendBreakStreakDays()) {
                     reason = ExitReason.TREND_BREAK;
                     exitPrice = close;
-                } else if ((i - open.entryIndex()) >= config.maxHoldingDays()) {
+                } else if (!partialExit && reason == null && (i - open.entryIndex()) >= config.maxHoldingDays()) {
                     reason = ExitReason.TIME_STOP;
                     exitPrice = close;
                 }
 
-                if (reason != null) {
+                PriceBand band = priceBandStore.findBySymbolAndDate(symbol,
+                    chronologicalCandles.get(i).date()).orElse(null);
+                if (reason != null && !PriceBandPolicy.blocksLongExit(band, chronologicalCandles.get(i))) {
                     LocalDate exitDate = chronologicalCandles.get(i).date();
                     BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, i, reason, config);
                     trades.add(trade);
                     capital += trade.pnl();
                     open = null;
-                } else {
+                } else if (!partialExit) {
                     open = new OpenPosition(open.entryIndex(), open.entryDate(), open.entryPrice(),
-                            open.stopLoss(), open.target(), open.quantity(), streak);
+                            open.stopLoss(), open.target(), open.quantity(), streak,
+                            open.highestCloseBeforeBar().max(close), open.partialExitTaken());
                 }
             }
 
             capitalCurve.add(markToMarket(capital, open, closePrice, i));
 
             if (open == null && i + 1 <= lastEvaluationBar) {
+                PriceBand entryBand = priceBandStore.findBySymbolAndDate(symbol,
+                    chronologicalCandles.get(i + 1).date()).orElse(null);
                 open = tryEnter(chronologicalCandles, series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
-                        weeklyHigh, i, capital, config, strategy);
+                        weeklyHigh, i, capital, config, strategy, entryBand);
             }
         }
 
@@ -341,15 +627,27 @@ public class BacktestEngine {
             int lastIndex = lastEvaluationBar;
             BigDecimal exitPrice = numToBigDecimal(closePrice.getValue(lastIndex));
             LocalDate exitDate = chronologicalCandles.get(lastIndex).date();
-            BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, lastIndex, ExitReason.TIME_STOP, config);
-            trades.add(trade);
-            capital += trade.pnl();
+            PriceBand finalBand = priceBandStore.findBySymbolAndDate(symbol, exitDate).orElse(null);
+            if (!PriceBandPolicy.blocksLongExit(finalBand, chronologicalCandles.get(lastIndex))) {
+                BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, lastIndex, ExitReason.TIME_STOP, config);
+                trades.add(trade);
+                capital += trade.pnl();
+            } else {
+                // No fill is assumed while the final bar is locked at the lower band.
+                // Return marked-to-market capital and leave the trade absent from closed trades.
+                capital = markToMarket(capital, open, closePrice, lastIndex);
+            }
         }
         capitalCurve.add(capital);
 
         LocalDate evaluationStart = chronologicalCandles.get(firstEvaluationBar).date();
         LocalDate evaluationEnd = chronologicalCandles.get(lastEvaluationBar).date();
-        return buildResult(symbol, trades, capitalCurve, capital, config, evaluationStart, evaluationEnd);
+        BigDecimal benchmarkStartClose = chronologicalCandles.get(firstEvaluationBar)
+                .adjustedForAnalysis().close();
+        BigDecimal benchmarkEndClose = chronologicalCandles.get(lastEvaluationBar)
+                .adjustedForAnalysis().close();
+        return buildResult(symbol, trades, capitalCurve, capital, config, evaluationStart, evaluationEnd,
+                benchmarkStartClose, benchmarkEndClose);
     }
 
     private OpenPosition tryEnter(List<OhlcvCandle> chronologicalCandles,
@@ -357,7 +655,8 @@ public class BacktestEngine {
                                   ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
                                   EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
                                   VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
-                                  int i, double capital, BacktestConfig config, TradingStrategy strategy) {
+                                  int i, double capital, BacktestConfig config, TradingStrategy strategy,
+                                  PriceBand entryBand) {
         Indicators ind = indicatorsAt(series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
                 weeklyHigh, i);
 
@@ -369,6 +668,9 @@ public class BacktestEngine {
 
         int entryIndex = i + 1;
         BigDecimal nextOpen = numToBigDecimal(openPrice.getValue(entryIndex));
+        if (PriceBandPolicy.blocksLongEntry(entryBand, nextOpen)) {
+            return null;
+        }
         BigDecimal entryPrice = nextOpen.multiply(BigDecimal.valueOf(1 + config.slippagePct()));
         BigDecimal atrVal = numToBigDecimal(atr.getValue(i));
         BigDecimal stopLoss = entryPrice.subtract(atrVal.multiply(BigDecimal.valueOf(config.atrMultiplierStop())));
@@ -386,22 +688,36 @@ public class BacktestEngine {
         }
 
         LocalDate entryDate = chronologicalCandles.get(entryIndex).date();
-        return new OpenPosition(entryIndex, entryDate, entryPrice, stopLoss, target, quantity);
+        return new OpenPosition(entryIndex, entryDate, entryPrice, stopLoss, target, quantity,
+                0, entryPrice, false);
     }
 
     private BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
                                      int exitIndex, ExitReason reason, BacktestConfig config) {
+        return closeTrade(symbol, open, exitPrice, exitDate, exitIndex, reason, config, open.quantity);
+    }
+
+    private BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
+                                     int exitIndex, ExitReason reason, BacktestConfig config, int quantity) {
         exitPrice = exitPrice.multiply(BigDecimal.valueOf(1 - config.slippagePct()));
-        double grossPnl = exitPrice.subtract(open.entryPrice).doubleValue() * open.quantity;
-        BigDecimal costs = DEFAULT_COST_MODEL.roundTripCost(open.entryPrice, exitPrice, open.quantity,
+        double grossPnl = exitPrice.subtract(open.entryPrice).doubleValue() * quantity;
+        BigDecimal costs = DEFAULT_COST_MODEL.roundTripCost(open.entryPrice, exitPrice, quantity,
             BigDecimal.valueOf(config.brokeragePerTrade()));
         double netPnl = grossPnl - costs.doubleValue();
-        double entryCost = open.entryPrice.doubleValue() * open.quantity;
+        double entryCost = open.entryPrice.doubleValue() * quantity;
         double pnlPct = entryCost != 0 ? (netPnl / entryCost) * 100.0 : 0.0;
         int holdingDays = exitIndex - open.entryIndex;
 
         return new BacktestTrade(symbol, open.entryDate, exitDate, open.entryPrice, exitPrice,
-                open.stopLoss, open.target, open.quantity, reason, netPnl, pnlPct, holdingDays);
+                open.stopLoss, open.target, quantity, reason, netPnl, pnlPct, holdingDays);
+    }
+
+    private static ExitReason managedExitReason(String reason) {
+        return switch (reason) {
+            case "TRAILING_STOP" -> ExitReason.TRAILING_STOP;
+            case "BREAKEVEN_STOP" -> ExitReason.BREAKEVEN_STOP;
+            default -> throw new IllegalArgumentException("Unsupported risk-management exit: " + reason);
+        };
     }
 
     private static BigDecimal openPriceForBar(OpenPriceIndicator openPrice, int index) {
@@ -419,7 +735,8 @@ public class BacktestEngine {
 
     private BacktestResult buildResult(String symbol, List<BacktestTrade> trades, List<Double> capitalCurve,
                                        double finalCapital, BacktestConfig config,
-                                       LocalDate evaluationStart, LocalDate evaluationEnd) {
+                                       LocalDate evaluationStart, LocalDate evaluationEnd,
+                                       BigDecimal benchmarkStartClose, BigDecimal benchmarkEndClose) {
         int totalTrades = trades.size();
         List<BacktestTrade> wins = trades.stream().filter(t -> t.pnl() > 0).toList();
         List<BacktestTrade> losses = trades.stream().filter(t -> t.pnl() <= 0).toList();
@@ -435,12 +752,14 @@ public class BacktestEngine {
                 evaluationStart, evaluationEnd);
         double sortinoRatio = BacktestMetrics.sortinoRatio(capitalCurve);
         double calmarRatio = BacktestMetrics.calmarRatio(cagrPct, maxDrawdownPct);
+        BenchmarkComparison benchmarkComparison = BacktestMetrics.buyAndHoldComparison(
+                totalReturn, benchmarkStartClose, benchmarkEndClose);
         double winRatio = winRate / 100.0;
         double expectancy = (winRatio * avgGainPct) - ((1 - winRatio) * avgLossPct);
 
         return new BacktestResult(symbol, totalTrades, wins.size(), losses.size(), winRate, avgGainPct, avgLossPct,
                 maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades,
-                cagrPct, sortinoRatio, calmarRatio);
+                cagrPct, sortinoRatio, calmarRatio, benchmarkComparison);
     }
 
     private double computeSharpeRatio(List<Double> capitalCurve) {
@@ -558,14 +877,17 @@ public class BacktestEngine {
                                 BigDecimal stopLoss,
                                 BigDecimal target,
                                 int quantity,
-                                int belowEma20Streak) {
+                                int belowEma20Streak,
+                                BigDecimal highestCloseBeforeBar,
+                                boolean partialExitTaken) {
         OpenPosition {
             belowEma20Streak = Math.max(0, belowEma20Streak);
+            highestCloseBeforeBar = highestCloseBeforeBar == null ? entryPrice : highestCloseBeforeBar;
         }
 
         OpenPosition(int entryIndex, LocalDate entryDate, BigDecimal entryPrice, BigDecimal stopLoss,
                      BigDecimal target, int quantity) {
-            this(entryIndex, entryDate, entryPrice, stopLoss, target, quantity, 0);
+            this(entryIndex, entryDate, entryPrice, stopLoss, target, quantity, 0, entryPrice, false);
         }
     }
 }

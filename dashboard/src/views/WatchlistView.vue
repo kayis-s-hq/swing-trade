@@ -251,7 +251,7 @@ import {
   toggleWatchlistActive,
 } from '../api/watchlist'
 import { getSignals } from '../api/signals'
-import { listCurrentStrategies } from '../api/strategies'
+import { getStrategies } from '../api/strategies'
 import { groupSignalsBySymbol } from '../utils/signalGrouping'
 import type { Signal, WatchlistEntry } from '../api/types'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -327,7 +327,7 @@ const loadWatchlist = async (): Promise<boolean> => {
     watchlist.value = entries
     signals.value = latest
     // Supplementary: consensus badges simply stay hidden if variants can't be listed.
-    listCurrentStrategies()
+    getStrategies()
       .then((variants) => {
         variantIds.value = new Set(variants.map((v) => v.variantId))
       })

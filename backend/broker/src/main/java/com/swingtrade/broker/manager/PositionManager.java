@@ -5,6 +5,8 @@ import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.domain.OhlcvCandle;
+import com.swingtrade.domain.PriceBand;
+import com.swingtrade.domain.PriceBandPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -141,6 +143,12 @@ public class PositionManager {
      * Updates positions based on new candle data.
      */
     public List<Position> updatePositionsWithCandleData(String symbol, OhlcvCandle candleData) {
+        return updatePositionsWithCandleData(symbol, candleData, null);
+    }
+
+    /** Updates positions, deferring long exits when an explicit lower band locks the market. */
+    public List<Position> updatePositionsWithCandleData(String symbol, OhlcvCandle candleData,
+                                                        PriceBand priceBand) {
         List<Position> updatedPositions = new ArrayList<>();
 
         for (Map.Entry<String, Position> entry : positions.entrySet()) {
@@ -148,7 +156,7 @@ public class PositionManager {
 
             if (position.symbol().equals(symbol) && position.status() == PositionStatus.OPEN) {
                 Position updated = updatePositionPrice(entry.getKey(), candleData.close());
-                checkPositionTriggers(updated, candleData);
+                checkPositionTriggers(updated, candleData, priceBand);
 
                 // Re-read from the map: checkPositionTriggers may have replaced this
                 // entry with a closed instance (stop-loss/target hit). Callers branch
@@ -164,7 +172,18 @@ public class PositionManager {
      * Checks if position has hit stop loss or target levels based on candle data.
      */
     public void checkPositionTriggers(Position position, OhlcvCandle candleData) {
+        checkPositionTriggers(position, candleData, null);
+    }
+
+    /** Checks triggers while respecting an explicitly supplied daily price band. */
+    public void checkPositionTriggers(Position position, OhlcvCandle candleData, PriceBand priceBand) {
         if (position.status() != PositionStatus.OPEN) {
+            return;
+        }
+
+        if (PriceBandPolicy.blocksLongExit(priceBand, candleData)) {
+            logger.info("Deferring exit for {}: lower circuit limit {} is locked on {}",
+                position.positionId(), priceBand.lowerLimit(), candleData.date());
             return;
         }
 
@@ -243,13 +262,19 @@ public class PositionManager {
             throw new IllegalStateException("Position is not open: " + positionId);
         }
 
-        if (exitRatio.compareTo(BigDecimal.ZERO) <= 0 || exitRatio.compareTo(BigDecimal.ONE) > 1) {
+        if (exitRatio == null || exitRatio.compareTo(BigDecimal.ZERO) <= 0
+                || exitRatio.compareTo(BigDecimal.ONE) > 0) {
             throw new IllegalArgumentException("Exit ratio must be between 0 and 1: " + exitRatio);
         }
 
         Integer originalQuantity = position.quantity();
-        BigDecimal exitQuantity = BigDecimal.valueOf(originalQuantity).multiply(exitRatio);
-        Integer remainingQuantity = exitQuantity.setScale(0, BigDecimal.ROUND_DOWN).intValue();
+        int exitedShares = BigDecimal.valueOf(originalQuantity).multiply(exitRatio)
+                .setScale(0, java.math.RoundingMode.DOWN).intValue();
+        if (exitedShares <= 0) {
+            throw new IllegalArgumentException("Exit ratio must sell at least one share: " + exitRatio);
+        }
+        int remainingShares = originalQuantity - exitedShares;
+        BigDecimal exitQuantity = BigDecimal.valueOf(exitedShares);
 
         // Calculate realized P&L from partial exit
         BigDecimal realizedPnL = calculatePartialExitPnL(position, exitQuantity, exitPrice);
@@ -257,11 +282,12 @@ public class PositionManager {
 
         // Update quantity and track realized P&L
         Position updated = position.withQuantityAndRealizedPnL(
-            remainingQuantity,
-            position.realizedPnL().add(realizedPnL)
+            remainingShares,
+            position.realizedPnL().add(realizedPnL),
+            true
         ).withValuation(position.currentPrice(), currentUnrealized);
 
-        if (remainingQuantity == 0) {
+        if (remainingShares == 0) {
             // Full exit
             updated = updated.close(
                 PositionStatus.CLOSED,
@@ -276,7 +302,7 @@ public class PositionManager {
         } else {
             positions.put(positionId, updated);
             logger.info("Partial exit of position {}: sold {} at {}, remaining {} (Exit P&L: {})",
-                positionId, exitQuantity, exitPrice, remainingQuantity, realizedPnL);
+                positionId, exitQuantity, exitPrice, remainingShares, realizedPnL);
         }
 
         return updated;

@@ -4,9 +4,8 @@ import com.swingtrade.data.entity.SignalSelectionEntity;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.ShadowClosedTrade;
 import com.swingtrade.domain.StrategyConfig;
-import com.swingtrade.domain.service.PaperPortfolioService;
+import com.swingtrade.domain.service.PortfolioQueryService;
 import com.swingtrade.domain.store.SignalStore;
-import com.swingtrade.domain.store.StrategyConfigStore;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -49,16 +48,16 @@ public class StrategyAttributionService {
 
     private final SignalArbiter arbiter;
     private final SignalStore signalStore;
-    private final PaperPortfolioService paperPortfolioService;
-    private final StrategyConfigStore strategyConfigStore;
+    private final PortfolioQueryService paperPortfolioService;
+    private final ActiveVariantService activeVariantService;
 
     public StrategyAttributionService(SignalArbiter arbiter, SignalStore signalStore,
-                                      PaperPortfolioService paperPortfolioService,
-                                      StrategyConfigStore strategyConfigStore) {
+                                      PortfolioQueryService paperPortfolioService,
+                                      ActiveVariantService activeVariantService) {
         this.arbiter = arbiter;
         this.signalStore = signalStore;
         this.paperPortfolioService = paperPortfolioService;
-        this.strategyConfigStore = strategyConfigStore;
+        this.activeVariantService = activeVariantService;
     }
 
     public record VariantInfo(String variantId, String strategyType, String mode) {}
@@ -91,8 +90,7 @@ public class StrategyAttributionService {
         if (ChronoUnit.DAYS.between(from, to) > MAX_RANGE_DAYS) {
             throw new IllegalArgumentException("range must not exceed " + MAX_RANGE_DAYS + " days");
         }
-        List<StrategyConfig> active = strategyConfigStore.findAllCurrent().stream()
-            .filter(StrategyConfig::isActive).toList();
+        List<StrategyConfig> active = activeVariantService.active();
         List<VariantInfo> variants = active.stream()
             .map(c -> new VariantInfo(c.variantId(), c.strategyType(), c.mode().name())).toList();
 

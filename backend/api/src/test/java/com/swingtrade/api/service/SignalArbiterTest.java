@@ -1,6 +1,5 @@
 package com.swingtrade.api.service;
 
-import com.swingtrade.api.service.SignalPipeline.VariantSignalOutcome;
 import com.swingtrade.domain.Signal.SignalType;
 import org.junit.jupiter.api.Test;
 

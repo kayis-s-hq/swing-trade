@@ -64,22 +64,9 @@ public class PaperTradingOrderEntity {
     @Column(name = "signal_id", length = 64)
     private String signalId;
 
-    // Maps the previously-unmapped paper_trading_orders.portfolio_id column (added by
-    // V47__strategy_provenance.sql as VARCHAR(40), DB default 'default'). Lets every order
-    // raised for a strategy variant's own execution be tagged with that variant's portfolio
-    // id, so per-portfolio order/trade history can be queried independently (plan §7 Phase
-    // 5). length must stay 40, matching the migration - a mismatch here makes Hibernate's
-    // ddl-auto=update (dev/local profile) silently narrow the real DB column on startup.
-    @Column(name = "portfolio_id", length = 40)
-    private String portfolioId;
-
     public PaperTradingOrderEntity() {}
 
     public PaperTradingOrderEntity(com.swingtrade.domain.Order order) {
-        this(order, "default");
-    }
-
-    public PaperTradingOrderEntity(com.swingtrade.domain.Order order, String portfolioId) {
         this.orderId = order.getOrderId();
         this.symbol = order.getSymbol();
         this.type = order.getType() != null ? order.getType().name() : null;
@@ -95,7 +82,6 @@ public class PaperTradingOrderEntity {
         this.updatedAt = LocalDateTime.now();
         this.signalId = order.getAdditionalProperties() != null
             ? String.valueOf(order.getAdditionalProperties().getOrDefault("signalId", "")) : null;
-        this.portfolioId = portfolioId != null ? portfolioId : "default";
     }
 
     public Long getId() { return id; }
@@ -128,6 +114,4 @@ public class PaperTradingOrderEntity {
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
     public String getSignalId() { return signalId; }
     public void setSignalId(String signalId) { this.signalId = signalId; }
-    public String getPortfolioId() { return portfolioId; }
-    public void setPortfolioId(String portfolioId) { this.portfolioId = portfolioId; }
 }

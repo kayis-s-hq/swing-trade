@@ -35,7 +35,7 @@ public class DailyLossCircuitBreaker {
     private BigDecimal initialCapital;
 
     // Track daily P&L
-    private final Map<LocalDate, BigDecimal> dailyPnLTracker = new ConcurrentHashMap<>();
+    final Map<LocalDate, BigDecimal> dailyPnLTracker = new ConcurrentHashMap<>();
 
     // Circuit breaker state
     private volatile boolean isCircuitOpen = false;
@@ -134,7 +134,7 @@ public class DailyLossCircuitBreaker {
      */
     public void updateWithCurrentPositions() {
         BigDecimal totalUnrealizedPnL = calculateTotalUnrealizedPnL();
-        BigDecimal totalRealizedPnL = calculateTotalRealizedPnL();
+        BigDecimal totalRealizedPnL = calculateRealizedPnLForDate(LocalDate.now(MARKET_ZONE));
 
         BigDecimal dailyPnL = totalUnrealizedPnL.add(totalRealizedPnL);
         dailyPnLTracker.put(LocalDate.now(MARKET_ZONE), dailyPnL);
@@ -269,9 +269,13 @@ public class DailyLossCircuitBreaker {
         return total;
     }
 
-    private BigDecimal calculateTotalRealizedPnL() {
-        BigDecimal pnl = positionManager.getTotalRealizedPnL();
-        return pnl != null ? pnl : BigDecimal.ZERO;
+    private BigDecimal calculateRealizedPnLForDate(LocalDate date) {
+        return positionManager.getClosedPositions().stream()
+            .filter(position -> position.exitTime() != null
+                && position.exitTime().atZone(MARKET_ZONE).toLocalDate().equals(date))
+            .map(Position::realizedPnL)
+            .filter(java.util.Objects::nonNull)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private BigDecimal calculateLossPercent() {

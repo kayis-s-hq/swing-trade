@@ -75,6 +75,9 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
      */
     List<OhlcvCandleEntity> findAllBySymbolOrderByDateDesc(String symbol);
 
+    /** Finds the unique candle for a symbol on a trading date. */
+    Optional<OhlcvCandleEntity> findBySymbolAndDate(String symbol, LocalDate date);
+
     /**
      * Finds all unique symbols that have candle data.
      *
@@ -135,6 +138,16 @@ public interface OhlcvCandleRepository extends JpaRepository<OhlcvCandleEntity, 
      */
     @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.date BETWEEN :startDate AND :endDate ORDER BY c.date DESC, c.symbol ASC")
     List<OhlcvCandleEntity> findByDateRange(
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate,
+        Pageable pageable
+    );
+
+    /** Finds a bounded page of candles for a selected set of symbols. */
+    @Query("SELECT c FROM OhlcvCandleEntity c WHERE c.symbol IN :symbols "
+        + "AND c.date BETWEEN :startDate AND :endDate ORDER BY c.date ASC, c.symbol ASC")
+    List<OhlcvCandleEntity> findBySymbolsAndDateRange(
+        @Param("symbols") List<String> symbols,
         @Param("startDate") LocalDate startDate,
         @Param("endDate") LocalDate endDate,
         Pageable pageable

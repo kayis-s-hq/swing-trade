@@ -1,344 +1,295 @@
 package com.swingtrade.strategy;
 
 import com.swingtrade.domain.OhlcvCandle;
-import com.swingtrade.domain.Signal.SignalType;
+import com.swingtrade.domain.BenchmarkCandleSeries;
+import com.swingtrade.domain.BenchmarkComparison;
+import com.swingtrade.domain.RiskManagementPolicy;
+import com.swingtrade.domain.PortfolioExposureContext;
+import com.swingtrade.domain.PortfolioExposureDecision;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.DayOfWeek;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TreeSet;
 
 /**
- * Multi-symbol portfolio backtest simulator (plan §6.1). Iterates by calendar date across every
- * candidate symbol with shared cash, honouring {@code maxConcurrentPositions} and
- * {@code maxCapitalPerPositionPct} the same way {@code paper_trading_portfolio} does live.
- *
- * <p>Fill semantics mirror the live pending-order flow (checked against
- * {@code PendingOrderExecutionScheduler} before writing this class): a strategy's entry decision
- * is made from bar T's close, and the fill happens at bar T+1's open plus slippage - never at T's
- * own close. Exits are evaluated through {@link SignalStrategy#evaluateExit}, which already
- * (via {@link UniformExitEvaluator}) fills a gapped-through stop/target at that bar's open rather
- * than the stop/target price itself, so no separate gap handling is needed here.
- *
- * <p>Position sizing is risk-based: {@code riskPerTradePct * equity / (entry - stop)}, capped by
- * {@code maxCapitalPerPositionPct * equity} and by available cash. Equity used for sizing is the
- * most recently closed day's mark-to-market equity (yesterday's), never today's still-unknown
- * value - this keeps sizing decisions look-ahead free.
- *
- * <p>Equity is marked to market every calendar date in the run (fixes finding F10: the legacy
- * single-symbol {@link BacktestEngine} only updates equity at trade exit, which biases
- * Sharpe/MaxDD to look smoother than the true daily P&amp;L path).
- *
- * <p>The single-symbol {@link BacktestEngine} is left untouched and keeps serving diagnostics
- * (plan §6.1: "leaderboard uses portfolio engine only").
+ * Applies shared-capital and position-capacity constraints to independently generated trade
+ * candidates. Candidates are consumed in date order; exits are processed before same-day entries.
  */
-public final class PortfolioBacktestEngine {
+final class PortfolioBacktestEngine {
 
-    /** Symbol-concentration flag threshold (plan §6.2: "flag if one symbol > 40% of P&L"). */
-    static final double SYMBOL_CONCENTRATION_THRESHOLD_PCT = 40.0;
-
-    /**
-     * Runs the portfolio simulation.
-     *
-     * @param candlesBySymbol   chronologically-ordered candle history per symbol, including
-     *                          enough leading warm-up history before {@code evaluationStart} for
-     *                          {@code strategy.warmupBars(params)}
-     * @param strategy          the {@link SignalStrategy} under test (e.g.
-     *                          {@link LegacyPriceActionAdapter})
-     * @param params            resolved params for {@code strategy}
-     * @param config            capital/risk/cost configuration (plan §6.1)
-     * @param evaluationStart   first date new entries may be taken (inclusive)
-     * @param evaluationEnd     last date the simulation runs to (inclusive)
-     * @param annualRiskFreeRatePct annualised risk-free rate for Sharpe/Sortino, e.g. 6.5
-     */
-    public PortfolioBacktestResult run(Map<String, List<OhlcvCandle>> candlesBySymbol,
-                                        SignalStrategy strategy,
-                                        StrategyParamsView params,
-                                        PortfolioBacktestConfig config,
-                                        LocalDate evaluationStart,
-                                        LocalDate evaluationEnd,
-                                        double annualRiskFreeRatePct) {
-        if (candlesBySymbol == null || candlesBySymbol.isEmpty()) {
-            throw new IllegalArgumentException("candlesBySymbol cannot be null/empty");
-        }
-        if (evaluationStart == null || evaluationEnd == null || evaluationStart.isAfter(evaluationEnd)) {
-            throw new IllegalArgumentException("Evaluation window must be non-empty and ordered");
-        }
-
-        List<ExcludedSymbol> excluded = new ArrayList<>();
-        Map<String, MarketContext> contexts = new HashMap<>();
-        Map<String, Map<LocalDate, Integer>> dateIndex = new HashMap<>();
-        buildContexts(candlesBySymbol, strategy, params, evaluationStart, evaluationEnd, excluded, contexts,
-            dateIndex);
-
-        if (contexts.isEmpty()) {
-            throw new IllegalStateException("No symbol passed data-quality gates: " + excluded);
-        }
-
-        TreeSet<LocalDate> globalDates = collectGlobalDates(dateIndex, evaluationStart, evaluationEnd);
-
-        SimState state = new SimState(config.initialCapital());
-        List<PortfolioTrade> trades = new ArrayList<>();
-        List<DailyEquityPoint> equityCurve = new ArrayList<>();
-
-        for (LocalDate date : globalDates) {
-            fillPendingEntries(date, state, contexts, dateIndex, config);
-            manageExits(date, state, contexts, dateIndex, strategy, params, config, trades);
-            selectCandidates(date, state, contexts, dateIndex, strategy, params, config);
-            equityCurve.add(markToMarket(date, state));
-        }
-
-        LocalDate lastDate = globalDates.isEmpty() ? evaluationEnd : globalDates.last();
-        forceCloseRemaining(lastDate, state, config, trades);
-
-        if (equityCurve.isEmpty()) {
-            throw new IllegalStateException("No trading dates in evaluation window for any surviving symbol");
-        }
-
-        return buildResult(trades, equityCurve, excluded, annualRiskFreeRatePct);
+    PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
+                                     LocalDate evaluationStart, LocalDate evaluationEnd) {
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, Map.of(), Map.of(), Optional.empty());
     }
 
-    private void buildContexts(Map<String, List<OhlcvCandle>> candlesBySymbol, SignalStrategy strategy,
-                                StrategyParamsView params, LocalDate evaluationStart, LocalDate evaluationEnd,
-                                List<ExcludedSymbol> excluded, Map<String, MarketContext> contexts,
-                                Map<String, Map<LocalDate, Integer>> dateIndex) {
-        int warmupBars = strategy.warmupBars(params);
-        for (Map.Entry<String, List<OhlcvCandle>> entry : candlesBySymbol.entrySet()) {
-            String symbol = entry.getKey();
-            List<OhlcvCandle> candles = entry.getValue();
-            Optional<String> reason = DataQualityGate.evaluate(symbol, candles, evaluationStart, evaluationEnd);
-            if (reason.isPresent()) {
-                excluded.add(new ExcludedSymbol(symbol, reason.get()));
-                continue;
-            }
-            if (candles.size() <= warmupBars + 1) {
-                excluded.add(new ExcludedSymbol(symbol, "Insufficient candle history for warm-up ("
-                    + candles.size() + " <= " + (warmupBars + 1) + ")"));
-                continue;
-            }
-            MarketContext ctx = MarketContext.of(symbol, candles);
-            Map<LocalDate, Integer> byDate = new HashMap<>();
-            for (int i = 0; i < candles.size(); i++) {
-                byDate.put(candles.get(i).date(), i);
-            }
-            contexts.put(symbol, ctx);
-            dateIndex.put(symbol, byDate);
-        }
+    PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
+                                     LocalDate evaluationStart, LocalDate evaluationEnd,
+                                     Map<String, List<OhlcvCandle>> marketData) {
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, marketData, Map.of(), Optional.empty());
     }
 
-    private TreeSet<LocalDate> collectGlobalDates(Map<String, Map<LocalDate, Integer>> dateIndex,
-                                                   LocalDate evaluationStart, LocalDate evaluationEnd) {
-        TreeSet<LocalDate> globalDates = new TreeSet<>();
-        for (Map<LocalDate, Integer> byDate : dateIndex.values()) {
-            for (LocalDate d : byDate.keySet()) {
-                if (!d.isBefore(evaluationStart) && !d.isAfter(evaluationEnd)) {
-                    globalDates.add(d);
+    PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
+                                     LocalDate evaluationStart, LocalDate evaluationEnd,
+                                     Map<String, List<OhlcvCandle>> marketData,
+                                     Map<String, String> sectors) {
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, marketData, sectors, Optional.empty());
+    }
+
+    PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
+                                     LocalDate evaluationStart, LocalDate evaluationEnd,
+                                     Map<String, List<OhlcvCandle>> marketData,
+                                     Map<String, String> sectors,
+                                     Optional<BenchmarkCandleSeries> benchmark) {
+        return simulate(symbolResults, config, evaluationStart, evaluationEnd, marketData, sectors, benchmark, null);
+    }
+
+    PortfolioBacktestResult simulate(List<BacktestResult> symbolResults, BacktestConfig config,
+                                     LocalDate evaluationStart, LocalDate evaluationEnd,
+                                     Map<String, List<OhlcvCandle>> marketData,
+                                     Map<String, String> sectors,
+                                     Optional<BenchmarkCandleSeries> benchmark,
+                                     String strategyVariantId) {
+        if (symbolResults == null || config == null || evaluationStart == null || evaluationEnd == null
+                || evaluationStart.isAfter(evaluationEnd)) {
+            throw new IllegalArgumentException("Portfolio inputs must be non-null and the window must be ordered");
+        }
+        Map<String, List<OhlcvCandle>> effectiveMarketData = marketData == null ? Map.of() : marketData;
+        if (config.initialCapital() <= 0 || config.maxConcurrentPositions() <= 0) {
+            throw new IllegalArgumentException("Portfolio capital and max positions must be positive");
+        }
+
+        List<BacktestTrade> candidates = symbolResults.stream()
+                .filter(result -> result != null)
+                .flatMap(result -> result.trades().stream())
+                .filter(trade -> !trade.entryDate().isBefore(evaluationStart)
+                        && !trade.exitDate().isAfter(evaluationEnd))
+                .sorted(Comparator.comparing(BacktestTrade::entryDate)
+                        .thenComparing(BacktestTrade::symbol)
+                        .thenComparing(BacktestTrade::exitDate))
+                .toList();
+
+        Map<LocalDate, List<BacktestTrade>> entriesByDate = new HashMap<>();
+        Map<LocalDate, List<BacktestTrade>> exitsByDate = new HashMap<>();
+        for (BacktestTrade candidate : candidates) {
+            entriesByDate.computeIfAbsent(candidate.entryDate(), ignored -> new ArrayList<>()).add(candidate);
+            exitsByDate.computeIfAbsent(candidate.exitDate(), ignored -> new ArrayList<>()).add(candidate);
+        }
+
+        List<BacktestTrade> accepted = new ArrayList<>();
+        List<PortfolioEquityPoint> equityCurve = new ArrayList<>();
+        Map<String, BacktestTrade> open = new HashMap<>();
+        Map<String, Double> highestClose = new HashMap<>();
+        Map<LocalDate, Double> unsettledByDate = new HashMap<>();
+        List<LocalDate> observationDates = observationDates(effectiveMarketData, evaluationStart, evaluationEnd);
+        Map<LocalDate, LocalDate> nextTradingDate = effectiveMarketData.isEmpty()
+                ? Map.of() : nextTradingDates(observationDates);
+        double cash = config.initialCapital();
+
+        int rejected = 0;
+        List<String> rejectionReasons = new ArrayList<>();
+        for (LocalDate date : observationDates) {
+            Double settled = unsettledByDate.remove(date);
+            if (settled != null) {
+                cash += settled;
+            }
+
+            // Apply policy stops before the candidate's original exit. The highest close is
+            // deliberately from a completed prior bar, avoiding same-bar look-ahead.
+            for (BacktestTrade held : List.copyOf(open.values())) {
+                OhlcvCandle candle = candleOn(effectiveMarketData, held.symbol(), date);
+                if (candle == null) continue;
+                RiskManagementPolicy.RiskManagementDecision decision = config.riskManagementPolicy()
+                        .evaluate(new RiskManagementPolicy.RiskManagementContext(
+                                held.entryPrice(), held.stopLoss(), held.target(), candle.close(), candle.low(),
+                                BigDecimal.valueOf(highestClose.getOrDefault(held.symbol(),
+                                        held.entryPrice().doubleValue())),
+                                (int) (date.toEpochDay() - held.entryDate().toEpochDay())));
+                if (decision.exit()) {
+                    open.remove(held.symbol());
+                    BacktestTrade managed = managedExit(held, date, decision.stopPrice(), decision.reason());
+                    unsettledByDate.merge(nextSettlementDate(date, nextTradingDate),
+                            entryNotional(managed) + managed.pnl(), Double::sum);
+                    replaceAccepted(accepted, held, managed);
                 }
             }
-        }
-        return globalDates;
-    }
 
-    /** Fills entries decided on the previous date at today's open + slippage (plan §6.1). */
-    private void fillPendingEntries(LocalDate date, SimState state, Map<String, MarketContext> contexts,
-                                     Map<String, Map<LocalDate, Integer>> dateIndex,
-                                     PortfolioBacktestConfig config) {
-        Map<String, StrategyDecision> toFill = state.pendingEntries;
-        state.pendingEntries = new HashMap<>();
-        for (Map.Entry<String, StrategyDecision> e : toFill.entrySet()) {
-            String symbol = e.getKey();
-            Integer idx = dateIndex.get(symbol).get(date);
-            if (idx == null) {
-                continue; // symbol didn't trade today; decision lapses (documented simplification)
+            for (BacktestTrade trade : exitsByDate.getOrDefault(date, List.of())) {
+                BacktestTrade held = open.remove(trade.symbol());
+                if (held != null) {
+                    double proceeds = entryNotional(held) + held.pnl();
+                    unsettledByDate.merge(nextSettlementDate(date, nextTradingDate), proceeds, Double::sum);
+                }
             }
-            MarketContext.View view = contexts.get(symbol).view(idx);
-            BigDecimal fillPrice = view.open().multiply(BigDecimal.valueOf(1 + config.slippagePct()));
-            StrategyDecision decision = e.getValue();
-            BigDecimal stop = decision.suggestedStop();
-            BigDecimal target = decision.suggestedTarget();
-            BigDecimal riskPerShare = fillPrice.subtract(stop);
-            if (riskPerShare.signum() <= 0) {
-                continue;
+
+            for (BacktestTrade held : open.values()) {
+                OhlcvCandle candle = candleOn(effectiveMarketData, held.symbol(), date);
+                if (candle != null) {
+                    highestClose.merge(held.symbol(), candle.close().doubleValue(), Math::max);
+                }
             }
-            int quantity = sizePosition(state, config, fillPrice, riskPerShare);
-            if (quantity <= 0) {
-                continue;
+
+            for (BacktestTrade candidate : entriesByDate.getOrDefault(date, List.of())) {
+                double notional = entryNotional(candidate);
+                String baseRejection = open.containsKey(candidate.symbol()) ? "OPEN_POSITION"
+                        : open.size() >= config.maxConcurrentPositions() ? "MAX_CONCURRENT_POSITIONS"
+                        : notional <= 0 ? "INVALID_NOTIONAL"
+                        : notional > cash ? "INSUFFICIENT_CAPITAL" : null;
+                PortfolioExposureDecision exposure = baseRejection == null
+                        ? config.portfolioExposurePolicy().evaluate(new PortfolioExposureContext(
+                                candidate.symbol(), sectors.get(candidate.symbol()), notional,
+                                config.initialCapital(), open.values().stream()
+                                .map(held -> new PortfolioExposureContext.Holding(held.symbol(),
+                                        sectors.get(held.symbol()), entryNotional(held))).toList(),
+                                closingPrices(effectiveMarketData)))
+                        : PortfolioExposureDecision.accept();
+                if (baseRejection != null || !exposure.accepted()) {
+                    rejected++;
+                    rejectionReasons.add(baseRejection != null ? baseRejection : exposure.reason());
+                    continue;
+                }
+                open.put(candidate.symbol(), candidate);
+                accepted.add(candidate);
+                cash -= notional;
             }
-            state.cash = state.cash.subtract(fillPrice.multiply(BigDecimal.valueOf(quantity)));
-            state.openPositions.put(symbol, OpenPosition.open(idx, date, fillPrice, stop, target, quantity));
-            state.excursions.put(symbol, new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO});
-            state.lastKnownPrice.put(symbol, fillPrice);
+
+            double unsettled = unsettledByDate.values().stream().mapToDouble(Double::doubleValue).sum();
+            LocalDate valuationDate = date;
+            double positionValue = open.values().stream()
+                    .mapToDouble(trade -> marketValue(trade, valuationDate, effectiveMarketData))
+                    .sum();
+            equityCurve.add(new PortfolioEquityPoint(date, cash + unsettled + positionValue,
+                    cash, unsettled, positionValue));
         }
+
+        double finalCapital = equityCurve.getLast().equity();
+        int winners = (int) accepted.stream().filter(trade -> trade.pnl() > 0).count();
+        double maxDrawdown = maxDrawdownPct(equityCurve);
+        double cagr = BacktestMetrics.cagrPct(config.initialCapital(), finalCapital,
+                evaluationStart, evaluationEnd);
+        double totalReturn = (finalCapital - config.initialCapital()) / config.initialCapital() * 100.0;
+        BenchmarkComparison benchmarkComparison = benchmark.flatMap(PortfolioBacktestEngine::benchmarkComparison)
+                .map(value -> BenchmarkComparison.nifty50Price(totalReturn, value.benchmarkReturnPct()))
+                .orElseGet(() -> BenchmarkComparison.unavailable(totalReturn));
+        return new PortfolioBacktestResult(evaluationStart, evaluationEnd, config.initialCapital(), finalCapital,
+                totalReturn,
+                maxDrawdown, BacktestMetrics.sharpeRatio(equityCurve.stream()
+                        .map(PortfolioEquityPoint::equity).toList()), cagr, BacktestMetrics.sortinoRatio(equityCurve.stream()
+                        .map(PortfolioEquityPoint::equity).toList()),
+                BacktestMetrics.calmarRatio(cagr, maxDrawdown), accepted.size(), winners, rejected,
+                accepted, equityCurve, rejectionReasons, benchmarkComparison, strategyVariantId);
     }
 
-    private int sizePosition(SimState state, PortfolioBacktestConfig config, BigDecimal fillPrice,
-                              BigDecimal riskPerShare) {
-        BigDecimal riskAmount = state.equity.multiply(config.riskPerTradePct());
-        int qtyByRisk = riskAmount.divide(riskPerShare, 0, RoundingMode.FLOOR).intValue();
-        BigDecimal maxCapital = state.equity.multiply(config.maxCapitalPerPositionPct());
-        int qtyByCapital = fillPrice.signum() == 0 ? 0
-            : maxCapital.divide(fillPrice, 0, RoundingMode.FLOOR).intValue();
-        int qtyByCash = fillPrice.signum() == 0 ? 0
-            : state.cash.divide(fillPrice, 0, RoundingMode.FLOOR).intValue();
-        return Math.min(Math.min(qtyByRisk, qtyByCapital), qtyByCash);
+    private static Optional<BenchmarkComparison> benchmarkComparison(BenchmarkCandleSeries series) {
+        List<OhlcvCandle> candles = series.candles();
+        if (candles.size() < 2) return Optional.empty();
+        OhlcvCandle first = candles.getFirst();
+        OhlcvCandle last = candles.getLast();
+        if (first.close() == null || last.close() == null || first.close().signum() <= 0
+                || last.close().signum() <= 0) return Optional.empty();
+        double returnPct = last.close().subtract(first.close())
+                .divide(first.close(), java.math.MathContext.DECIMAL64)
+                .doubleValue() * 100.0;
+        return Optional.of(BenchmarkComparison.buyAndHold(0.0, returnPct));
     }
 
-    /** Manages exits (and MAE/MFE tracking) for open positions with a bar today (plan §6.1/§6.2). */
-    private void manageExits(LocalDate date, SimState state, Map<String, MarketContext> contexts,
-                              Map<String, Map<LocalDate, Integer>> dateIndex, SignalStrategy strategy,
-                              StrategyParamsView params, PortfolioBacktestConfig config,
-                              List<PortfolioTrade> trades) {
-        for (String symbol : new ArrayList<>(state.openPositions.keySet())) {
-            Integer idx = dateIndex.get(symbol).get(date);
-            if (idx == null) {
-                continue;
+    private static double entryNotional(BacktestTrade trade) {
+        return trade.entryPrice().doubleValue() * trade.quantity();
+    }
+
+    private static Map<String, List<Double>> closingPrices(Map<String, List<OhlcvCandle>> marketData) {
+        Map<String, List<Double>> prices = new HashMap<>();
+        marketData.forEach((symbol, candles) -> prices.put(symbol, candles.stream()
+                .sorted(Comparator.comparing(OhlcvCandle::date))
+                .map(candle -> candle.close().doubleValue()).toList()));
+        return prices;
+    }
+
+    private static OhlcvCandle candleOn(Map<String, List<OhlcvCandle>> marketData,
+                                         String symbol, LocalDate date) {
+        List<OhlcvCandle> candles = marketData.get(symbol);
+        if (candles == null) return null;
+        return candles.stream().filter(candle -> candle.date().equals(date)).findFirst().orElse(null);
+    }
+
+    private static BacktestTrade managedExit(BacktestTrade original, LocalDate exitDate,
+                                             BigDecimal exitPrice, String reason) {
+        double pnl = original.pnl()
+                + exitPrice.subtract(original.exitPrice()).doubleValue() * original.quantity();
+        ExitReason exitReason = "TRAILING_STOP".equals(reason)
+                ? ExitReason.TRAILING_STOP : ExitReason.BREAKEVEN_STOP;
+        return new BacktestTrade(original.symbol(), original.entryDate(), exitDate, original.entryPrice(),
+                exitPrice, original.stopLoss(), original.target(), original.quantity(), exitReason, pnl,
+                original.entryPrice().signum() == 0 ? 0.0
+                        : pnl / entryNotional(original) * 100.0,
+                (int) (exitDate.toEpochDay() - original.entryDate().toEpochDay()));
+    }
+
+    private static void replaceAccepted(List<BacktestTrade> accepted, BacktestTrade original,
+                                        BacktestTrade replacement) {
+        int index = accepted.indexOf(original);
+        if (index >= 0) accepted.set(index, replacement);
+    }
+
+    private static double marketValue(BacktestTrade trade, LocalDate date,
+                                      Map<String, List<OhlcvCandle>> marketData) {
+        List<OhlcvCandle> candles = marketData.get(trade.symbol());
+        if (candles == null || candles.isEmpty()) {
+            return entryNotional(trade);
+        }
+        return candles.stream().filter(candle -> candle.date().equals(date)).findFirst()
+                .map(candle -> candle.close().doubleValue() * trade.quantity())
+                .orElseGet(() -> entryNotional(trade));
+    }
+
+    private static LocalDate nextSettlementDate(LocalDate exitDate, Map<LocalDate, LocalDate> nextTradingDate) {
+        if (!nextTradingDate.isEmpty()) {
+            return nextTradingDate.getOrDefault(exitDate, exitDate.plusDays(1));
+        }
+        LocalDate settlement = exitDate.plusDays(1);
+        while (settlement.getDayOfWeek() == DayOfWeek.SATURDAY
+                || settlement.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            settlement = settlement.plusDays(1);
+        }
+        return settlement;
+    }
+
+    private static List<LocalDate> observationDates(Map<String, List<OhlcvCandle>> marketData,
+                                                    LocalDate start, LocalDate end) {
+        if (marketData.isEmpty()) {
+            List<LocalDate> dates = new ArrayList<>();
+            for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+                dates.add(date);
             }
-            OpenPosition pos = state.openPositions.get(symbol);
-            MarketContext.View view = contexts.get(symbol).view(idx);
-            state.lastKnownPrice.put(symbol, view.close());
+            return dates;
+        }
+        return marketData.values().stream().flatMap(List::stream)
+                .map(OhlcvCandle::date).filter(date -> !date.isBefore(start) && !date.isAfter(end))
+                .distinct().sorted().toList();
+    }
 
-            BigDecimal[] mm = state.excursions.get(symbol);
-            mm[0] = mm[0].min(view.low().subtract(pos.entryPrice()));
-            mm[1] = mm[1].max(view.high().subtract(pos.entryPrice()));
+    private static Map<LocalDate, LocalDate> nextTradingDates(List<LocalDate> dates) {
+        Map<LocalDate, LocalDate> next = new HashMap<>();
+        for (int i = 0; i + 1 < dates.size(); i++) {
+            next.put(dates.get(i), dates.get(i + 1));
+        }
+        return next;
+    }
 
-            ExitDecision exitDecision = strategy.evaluateExit(contexts.get(symbol), idx, pos, params);
-            if (exitDecision.exit()) {
-                closePosition(symbol, date, idx, pos, exitDecision, mm, state, config, trades);
+    private static double maxDrawdownPct(List<PortfolioEquityPoint> curve) {
+        double peak = curve.getFirst().equity();
+        double maxDrawdown = 0.0;
+        for (PortfolioEquityPoint point : curve) {
+            peak = Math.max(peak, point.equity());
+            if (peak > 0) {
+                maxDrawdown = Math.max(maxDrawdown, (peak - point.equity()) / peak * 100.0);
             }
         }
-    }
-
-    private void closePosition(String symbol, LocalDate date, int idx, OpenPosition pos, ExitDecision exitDecision,
-                                BigDecimal[] mm, SimState state, PortfolioBacktestConfig config,
-                                List<PortfolioTrade> trades) {
-        BigDecimal exitPrice = exitDecision.exitPrice().multiply(BigDecimal.valueOf(1 - config.slippagePct()));
-        BigDecimal costs = config.costModel().roundTripCost(pos.entryPrice(), exitPrice, pos.quantity(),
-            config.brokeragePerTrade());
-        BigDecimal grossPnl = exitPrice.subtract(pos.entryPrice()).multiply(BigDecimal.valueOf(pos.quantity()));
-        BigDecimal netPnl = grossPnl.subtract(costs);
-        double pnlPct = pnlPct(pos, netPnl);
-
-        state.cash = state.cash.add(exitPrice.multiply(BigDecimal.valueOf(pos.quantity()))).subtract(costs);
-
-        trades.add(new PortfolioTrade(symbol, pos.entryDate(), date, pos.entryPrice(), exitPrice,
-            pos.stopLoss(), pos.target(), pos.quantity(), exitDecision.reason(),
-            pos.entryPrice().subtract(pos.stopLoss()), netPnl, pnlPct, idx - pos.entryIndex(),
-            mm[0], mm[1], BigDecimal.ONE));
-
-        state.openPositions.remove(symbol);
-        state.excursions.remove(symbol);
-    }
-
-    private double pnlPct(OpenPosition pos, BigDecimal netPnl) {
-        BigDecimal entryValue = pos.entryPrice().multiply(BigDecimal.valueOf(pos.quantity()));
-        return entryValue.signum() == 0 ? 0.0
-            : netPnl.divide(entryValue, 6, RoundingMode.HALF_UP).doubleValue() * 100.0;
-    }
-
-    /**
-     * Ranks today's BUY candidates by score desc, tiebreak lower ATR% (plan §6.1), and reserves
-     * capacity-limited slots as tomorrow's pending entries.
-     */
-    private void selectCandidates(LocalDate date, SimState state, Map<String, MarketContext> contexts,
-                                   Map<String, Map<LocalDate, Integer>> dateIndex, SignalStrategy strategy,
-                                   StrategyParamsView params, PortfolioBacktestConfig config) {
-        record Candidate(String symbol, StrategyDecision decision, BigDecimal atrPct) {
-        }
-        List<Candidate> candidates = new ArrayList<>();
-        for (Map.Entry<String, MarketContext> e : contexts.entrySet()) {
-            String symbol = e.getKey();
-            if (state.openPositions.containsKey(symbol) || state.pendingEntries.containsKey(symbol)) {
-                continue;
-            }
-            Integer idx = dateIndex.get(symbol).get(date);
-            if (idx == null) {
-                continue;
-            }
-            MarketContext.View view = e.getValue().view(idx);
-            StrategyDecision decision = strategy.evaluateEntry(e.getValue(), idx, params);
-            if (decision.type() == SignalType.BUY) {
-                BigDecimal close = view.close();
-                BigDecimal atrPct = close.signum() == 0 ? BigDecimal.ZERO
-                    : view.atr(config.atrPeriodForRanking()).divide(close, 6, RoundingMode.HALF_UP);
-                candidates.add(new Candidate(symbol, decision, atrPct));
-            }
-        }
-        candidates.sort(Comparator.<Candidate, BigDecimal>comparing(c -> c.decision().score()).reversed()
-            .thenComparing(Candidate::atrPct));
-
-        int capacity = config.maxConcurrentPositions() - state.openPositions.size() - state.pendingEntries.size();
-        for (Candidate c : candidates) {
-            if (capacity <= 0) {
-                break;
-            }
-            state.pendingEntries.put(c.symbol(), c.decision());
-            capacity--;
-        }
-    }
-
-    /** Daily mark-to-market equity (plan §6.1 fix for finding F10). */
-    private DailyEquityPoint markToMarket(LocalDate date, SimState state) {
-        BigDecimal openValue = BigDecimal.ZERO;
-        for (Map.Entry<String, OpenPosition> e : state.openPositions.entrySet()) {
-            BigDecimal price = state.lastKnownPrice.getOrDefault(e.getKey(), e.getValue().entryPrice());
-            openValue = openValue.add(price.multiply(BigDecimal.valueOf(e.getValue().quantity())));
-        }
-        state.equity = state.cash.add(openValue);
-        return new DailyEquityPoint(date, state.equity);
-    }
-
-    /**
-     * Force-closes any still-open positions at the last known price at the end of the run (plan
-     * mirrors the legacy single-symbol engine's tail handling for symmetric treatment).
-     */
-    private void forceCloseRemaining(LocalDate lastDate, SimState state, PortfolioBacktestConfig config,
-                                      List<PortfolioTrade> trades) {
-        for (Map.Entry<String, OpenPosition> e : new HashMap<>(state.openPositions).entrySet()) {
-            String symbol = e.getKey();
-            OpenPosition pos = e.getValue();
-            BigDecimal exitPrice = state.lastKnownPrice.getOrDefault(symbol, pos.entryPrice());
-            BigDecimal costs = config.costModel().roundTripCost(pos.entryPrice(), exitPrice, pos.quantity(),
-                config.brokeragePerTrade());
-            BigDecimal grossPnl = exitPrice.subtract(pos.entryPrice()).multiply(BigDecimal.valueOf(pos.quantity()));
-            BigDecimal netPnl = grossPnl.subtract(costs);
-            double pnlPct = pnlPct(pos, netPnl);
-            BigDecimal[] mm = state.excursions.getOrDefault(symbol, new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO});
-            trades.add(new PortfolioTrade(symbol, pos.entryDate(), lastDate, pos.entryPrice(), exitPrice,
-                pos.stopLoss(), pos.target(), pos.quantity(), ExitReason.TIME_STOP,
-                pos.entryPrice().subtract(pos.stopLoss()), netPnl, pnlPct, 0, mm[0], mm[1], BigDecimal.ONE));
-        }
-    }
-
-    private PortfolioBacktestResult buildResult(List<PortfolioTrade> trades, List<DailyEquityPoint> equityCurve,
-                                                 List<ExcludedSymbol> excluded, double annualRiskFreeRatePct) {
-        PortfolioMetrics metrics = MetricsCalculator.compute(equityCurve, trades, annualRiskFreeRatePct);
-        Map<String, Double> perSymbolContribution = MetricsCalculator.perSymbolPnlContributionPct(trades);
-        boolean concentrationWarning = perSymbolContribution.values().stream()
-            .anyMatch(pct -> Math.abs(pct) > SYMBOL_CONCENTRATION_THRESHOLD_PCT);
-
-        return new PortfolioBacktestResult(trades, equityCurve, excluded, metrics, perSymbolContribution,
-            MetricsCalculator.exitReasonBreakdown(trades), MetricsCalculator.perYearReturnPct(equityCurve),
-            concentrationWarning);
-    }
-
-    /** Mutable per-run simulation state, kept out of instance fields so the engine stays stateless/reusable. */
-    private static final class SimState {
-        private BigDecimal cash;
-        private BigDecimal equity;
-        private final Map<String, OpenPosition> openPositions = new HashMap<>();
-        private final Map<String, BigDecimal[]> excursions = new HashMap<>(); // symbol -> [maeMin, mfeMax]
-        private final Map<String, BigDecimal> lastKnownPrice = new HashMap<>();
-        private Map<String, StrategyDecision> pendingEntries = new HashMap<>();
-
-        private SimState(BigDecimal initialCapital) {
-            this.cash = initialCapital;
-            this.equity = initialCapital;
-        }
+        return maxDrawdown;
     }
 }

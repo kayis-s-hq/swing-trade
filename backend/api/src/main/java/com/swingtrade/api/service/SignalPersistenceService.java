@@ -30,7 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Constructs {@link Signal} records with risk parameters and persists them.
@@ -171,6 +170,23 @@ public class SignalPersistenceService {
     public Signal buildAndSaveWithWarning(String symbol, LocalDate date, Signal.SignalType type,
                                           BigDecimal confidence, String reasoning,
                                           String indicators, BigDecimal atr, String warningFlag, String sentimentScore, String sentimentReasoning) {
+        return buildAndSaveWithWarning(symbol, date, type, confidence, reasoning, indicators, atr,
+            warningFlag, sentimentScore, sentimentReasoning, "PRICE_ACTION");
+    }
+
+    public Signal buildAndSaveWithWarning(String symbol, LocalDate date, Signal.SignalType type,
+                                          BigDecimal confidence, String reasoning,
+                                          String indicators, BigDecimal atr, String warningFlag,
+                                          String sentimentScore, String sentimentReasoning, String strategy) {
+        return buildAndSaveWithWarning(symbol, date, type, confidence, reasoning, indicators, atr,
+            warningFlag, sentimentScore, sentimentReasoning, strategy, 1);
+    }
+
+    public Signal buildAndSaveWithWarning(String symbol, LocalDate date, Signal.SignalType type,
+                                          BigDecimal confidence, String reasoning,
+                                          String indicators, BigDecimal atr, String warningFlag,
+                                          String sentimentScore, String sentimentReasoning,
+                                          String strategy, Integer strategyVersion) {
         Signal baseSignal = Signal.create(symbol, date, type, confidence, reasoning);
 
         OhlcvCandle latestCandle = candleStore.findLatestBySymbol(symbol).orElse(null);
@@ -210,7 +226,7 @@ public class SignalPersistenceService {
             );
         }
 
-        return signalStore.save(toSave, warningFlag);
+        return signalStore.save(toSave, warningFlag, strategy, strategyVersion);
     }
 
     /**
@@ -239,24 +255,6 @@ public class SignalPersistenceService {
 
     public int deleteBySymbolAndDateAndStrategy(String symbol, LocalDate date, String strategy) {
         return signalStore.deleteBySymbolAndDateAndStrategy(symbol, date, strategy);
-    }
-
-    /** Idempotency key for the multi-variant SIGNAL stage fan-out (plan §7.1, replaces F5). */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int deleteBySymbolAndDateAndStrategyAndVersion(String symbol, LocalDate date, String strategy,
-                                                            int strategyVersion) {
-        return signalStore.deleteBySymbolAndDateAndStrategyAndVersion(symbol, date, strategy, strategyVersion);
-    }
-
-    /**
-     * Saves a signal produced by the configurable multi-strategy fan-out (plan §7.1), carrying
-     * the variant's provenance columns (strategy version/score/rule outcomes/gate outcomes).
-     */
-    public Signal saveVariantSignal(Signal baseSignal, String warningFlag, String variantId, int strategyVersion,
-                                     BigDecimal strategyScore, List<Map<String, Object>> ruleOutcomes,
-                                     List<Map<String, Object>> gateOutcomes) {
-        return signalStore.saveVariantSignal(baseSignal, warningFlag, variantId, strategyVersion,
-            strategyScore, ruleOutcomes, gateOutcomes);
     }
 
     /**

@@ -1,6 +1,210 @@
 # Pre-Pilot Status
 
-Last checked: 2026-09-02 (development verification)
+Last checked: 2026-09-17 (holiday-calendar verification)
+
+- [x] GPUHub client/service coverage completed 2026-09-17: deployment, image, container,
+  status, stop, delete, DTO, and API-error paths now have behavior-focused tests. Successful
+  void operations complete without emitting an invalid null Reactor value. GPUHub tests,
+  JaCoCo coverage verification, and `./bin/verify-changes` passed.
+
+- [x] Broker coverage remediation completed 2026-09-17: risk-control orchestration,
+  notification, configuration, and paper-engine behavior now have focused tests; broker
+  JaCoCo verification passed. The full Gradle build then reached the data module, where its
+  aggregate coverage is 80% (3,086/3,856 lines) and now clears the 80% gate; focused
+  WatchlistService, DataIngestionService, TradeLabelService, SignalEntity, PositionEntity,
+  TradeEntity, CandidateScanResultEntity, and the remaining simple entity/domain persistence
+  contracts coverage was added. The data PMD test
+  violation was also removed and the scoped verifier passed.
+
+- [x] Provider limiter delegation coverage extended 2026-09-17: all market-data operations,
+  including price bands, bulk quotes, metadata, symbol search, and connectivity, are now
+  covered through the shared rate-limited decorator. Full data tests and the aggregate report
+  passed; the 80% data coverage gate is clear.
+
+- [x] Signal-store contract coverage extended 2026-09-17: read/filter paths, strategy metadata
+  deduplication, save variants, processed-state updates, and delete operations now have focused
+  tests. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
+
+- [x] Sentiment-store contract coverage extended 2026-09-17: read paths, new-result insertion,
+  existing-result updates, provenance fields, and missing-result behavior now have focused tests.
+  Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
+
+- [x] Trade/position store contract coverage extended 2026-09-17: open/closed/status/date
+  queries, save mappings, counts, and missing-position behavior now have focused tests. Full
+  data tests and the aggregate report passed; the 80% data coverage gate is clear.
+
+- [x] Fyers order-service testability and coverage extended 2026-09-17: SDK access is now
+  injectable for tests while production keeps the singleton constructor; token guards, order
+  payloads, success/failure responses, cancellation, and order-history parsing are covered.
+  Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
+
+- [x] Fyers market-depth parsing hardened 2026-09-17: SDK bid/ask collections are initialized
+  defensively, and quote fields, circuit bands, sides, malformed values, empty responses, and
+  provider failures are covered. Focused and full data tests passed; the 80% data coverage gate is clear.
+
+- [x] Fyers position-service testability and coverage extended 2026-09-17: injectable SDK access
+  covers net-position parsing, position exits, product conversion, malformed payloads, and
+  provider failures while preserving the production singleton constructor. Full data tests and
+  the aggregate report passed; the 80% data coverage gate is clear.
+
+- [x] Fyers profile/holdings coverage extended 2026-09-17: injectable SDK access now covers
+  profile and funds mapping, holdings mapping, optional response containers, and fail-closed
+  provider errors. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
+
+- [x] Fyers trade-book, market-status, and GTT coverage extended 2026-09-17: SDK response
+  parsing, trigger-leg construction, empty responses, and provider failures are covered through
+  injectable test seams. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
+
+- [x] Yahoo quote/search coverage extended 2026-09-17: bulk quote parsing, invalid quote
+  filtering, symbol-search filtering, empty inputs, and HTTP failures are covered by the
+  MockWebServer suite. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
+
+- [x] Application-settings coverage extended 2026-09-17: DB reads and cache hits, defaults,
+  environment overrides, read-only override writes, upserts, and null-value normalization are
+  covered by focused tests. Full data tests and the aggregate report passed; the 80% data coverage gate is clear.
+
+- [x] Data-ingestion coverage extended 2026-09-17: non-trading-day filtering, invalid and empty
+  provider responses, duplicate-safe inserts, price anomalies, trailing gaps, and unavailable
+  history repair are covered by focused tests. Full data tests, the aggregate JaCoCo report, and
+  `./bin/verify-changes` passed; data coverage is now 80% (3,086/3,856 lines), clearing the gate.
+
+- [x] Calendar and persistence-store coverage extended 2026-09-17: holiday/weekend session rules,
+  calendar-year verification, holiday CRUD delegation, candle history queries, stock/watchlist
+  mappings, strategy-config append-only behavior, sentiment-accuracy persistence, and utility
+  value mappings are covered. Full data tests and the scoped verifier passed.
+
+- [x] NSE 2026 equity holiday seed corrected 2026-09-17: V62 aligns the persisted calendar with
+  NSE's published dates, removes stale seeded dates, adds missing full holidays, and records the
+  November 8 Muhurat session as partial. `MarketCalendar` now honors exchange-declared partial
+  sessions even when they fall on a weekend; full data tests and `./bin/verify-changes` passed.
+
+- [x] LLM news filtering and client resilience hardened 2026-09-17: future-dated articles and short, untrusted
+  articles without trading relevance are now rejected fail-closed instead of being admitted by
+  the baseline relevance score, while empty chat choices now complete empty instead of throwing a
+  Reactor null-value error. Backend tests and `./bin/verify-changes` passed; the LLM module's
+  aggregate coverage is now 80.0% (2,499/3,123 lines), clearing its JaCoCo gate after adding
+  deterministic source, ingestion, server-manager, PDF, sentiment, and utility coverage.
+
+- [x] Full backend build and integration verification completed 2026-09-17: `./gradlew
+  :api:integrationTest` passed all API integration tests against PostgreSQL in local Colima with
+  `TESTCONTAINERS_RYUK_DISABLED=true`, and `./bin/verify-changes` passed all change-aware checks.
+  The custom integration task now propagates that Testcontainers setting; the duplicate V41 audit
+  migration is idempotent, and test-only scheduler JPA wiring is excluded from production scans.
+
+- [x] API boundary protection added 2026-09-17: admin routes support constant-time `X-API-Key`
+  authentication with fail-closed behavior when enabled, public API requests have a configurable
+  per-client 100-request/minute budget with `429`/`Retry-After` responses, and rate-limit hits are
+  exported as `api.rate.limit.hits`. Stage enables enforcement through `API_KEY_AUTH_ENABLED=true`
+  and a required `API_KEY` Compose variable; local paper mode remains explicitly opt-in. Focused
+  API security tests and the change-aware verifier passed.
+
+- [x] OpenAPI documentation added 2026-09-17: the API now includes the SpringDoc WebMVC UI,
+  generated schema metadata, an `X-API-Key` security scheme, and Trading/Signals/Positions/
+  Portfolio/Admin groups. `/swagger-ui.html` and `/api-docs` are configured for local use.
+
+- [x] Strategy coverage gate restored 2026-09-17: focused tests now cover the previously
+  uncovered advanced indicator validation and calculations. Strategy tests, JaCoCo verification,
+  and `./bin/verify-changes` passed; aggregate line coverage is now 83.8% (1,452/1,732 lines).
+
+- [x] Local V62 runtime migration verified 2026-09-17: the DevStack PostgreSQL database advanced
+  from schema V61 to V62, read-only queries confirmed the corrected 2026 holiday rows, and the
+  API health endpoint returned 200 with PostgreSQL reported `UP`. No application data was reset.
+
+- [x] Sentiment accuracy confidence normalization corrected 2026-09-17: the aggregate
+  confidence endpoint now returns a normalized 0–1 value (rounded to four decimals) rather
+  than a percentage-scale value. Service edge cases and aggregate mappings are covered by
+  focused tests; data tests and `./bin/verify-changes` passed.
+
+- [x] Exchange price-band ingestion wired 2026-09-17: Fyers `lower_ckt`/`upper_ckt`
+  quote fields now flow through the rate-limited market-data client and are persisted by
+  daily ingestion, including for an already-stored candle. Providers without authoritative
+  circuit data remain fail-closed; data tests, Fyers parsing tests, and `./bin/verify-changes`
+  passed.
+
+- [x] Strategy configuration provenance persisted 2026-09-17: configured signals now retain
+  their variant ID and immutable configuration version; legacy signals are backfilled to version
+  1, and the strategy column accepts the documented 40-character variant limit. Schema v60,
+  focused data/API tests, `./bin/verify-changes`, local Flyway migration, API health, positions,
+  and request/portfolio metrics checks passed.
+
+- [x] Legacy news provenance recovered 2026-09-17: historical sentiment reconstruction now
+  backfills missing `first_seen_at` from the original article `created_at` when available,
+  preserving fail-closed behavior for rows without either timestamp. Schema v61 and the
+  change-aware backend verification passed.
+
+- [x] Historical keyword fallback date corrected 2026-09-17: an LLM outage during analysis of
+  an earlier trading date now persists the keyword result under that requested date instead of
+  silently using the runtime date. LLM tests and `./bin/verify-changes` passed.
+
+- [x] Contextual plain-text sentiment fallback improved 2026-09-17: bullish/bearish, outlook,
+  guidance, earnings, and growth phrases are recognized with negation safeguards; ambiguous
+  mixed language remains neutral/unknown rather than forcing a polarity. LLM tests and
+  `./bin/verify-changes` passed.
+
+- [x] Daily benchmark ingestion wired 2026-09-17: the EOD scheduler now persists the NIFTY50
+  candle alongside active watchlist symbols, including when the watchlist is empty, enabling
+  benchmark and excess-return metrics to accumulate without backtest-time network calls. Data
+  scheduler tests and `./bin/verify-changes` passed.
+
+- [x] NIFTY50 historical benchmark backfill wired 2026-09-18: forward-daily ingestion alone could
+  not benchmark backtests over past date ranges. `EodIngestionScheduler.ensureNiftyBenchmarkHistory`
+  now runs at startup and backfills up to `benchmark.backfill.years` (default 10) of NIFTY50 history
+  via the existing `DataIngestionService` incremental backfill path, a no-op once the stored window
+  is already covered. Portfolio-level NIFTY50 benchmark/excess-return metrics were already wired via
+  `PortfolioBacktestEngine`/`BenchmarkDataAdapter`. NIFTY 500 TRI ingestion remains open — no current
+  provider integration exposes a total-return index series.
+
+- [x] Signal provenance exposed 2026-09-17: signal API responses now include the persisted
+  strategy variant and configuration version through a bulk metadata lookup; `/api/signals/latest`
+  now uses the service's database-level latest-per-symbol path. API/data tests and
+  `./bin/verify-changes` passed.
+
+- [x] Local runtime revalidation 2026-09-17: the API migrated the PostgreSQL-backed schema to
+  v55, reported healthy database/readiness status, and served
+  `GET /api/signals/gate-effectiveness` successfully (empty result set in the current data window).
+
+- [x] Gate-outcome provenance extended 2026-09-17: paper positions now retain their originating
+  signal ID and gate-effectiveness buckets include realized P&L for closed positions with known
+  provenance; v56 migration, broker/API tests, full verifier, and live API checks passed.
+
+- [x] Non-sentiment gate audits extended 2026-09-17: LLM-analysis and live-eligibility outcomes
+  are persisted with strategy attribution and selectable through the gate-effectiveness endpoint;
+  focused API/controller tests passed, and the live `gate=LIVE_ELIGIBILITY` request returned 200
+  against the PostgreSQL-backed API.
+
+- [x] Gate-effectiveness dashboard added 2026-09-17: `/gate-effectiveness` now supports selectable
+  sentiment, LLM-analysis, and live-eligibility reports with decision counts, forward-return
+  horizons, and realized P&L; dashboard typecheck, 286 tests, lint, formatting, and production
+  build passed.
+
+- [x] Data-quality and risk accuracy fixes added 2026-09-17: `/api/admin/data/validate` reports
+  distinct stored sessions and a critical gap rate without losing gap flags when anomalies are
+  empty; daily loss protection now scopes realized P&L to the current India-market date; sentiment
+  accuracy windows average their own horizons. Focused data, accuracy, and broker tests passed.
+
+- [x] Excess-return sentiment labels added 2026-09-17: accuracy records now retain optional
+  persisted-NIFTY excess returns and a `RAW_RETURN`/`EXCESS_RETURN` basis; new labels use the
+  benchmark only when exact dates are available and legacy rows remain compatible. Schema v57,
+  affected data/API tests, local PostgreSQL migration, health, and data-quality API checks passed.
+
+- [x] Yahoo single-candle lookup hardened 2026-09-17: the client now selects the response row
+  matching the requested exchange date, rejects incomplete OHLCV rows with warnings, and retains
+  the bounded one-day request. Yahoo remains development/backfill-only; focused client tests and
+  the full change-aware backend verifier passed.
+
+- [x] Sentiment provenance carried into accuracy 2026-09-17: accuracy rows now retain the
+  originating `LLM`/`KEYWORD`/`DEFAULT` source, and predictive aggregates exclude fallback rows
+  while preserving legacy null-source data. Schema v58, affected data/API tests, local migration,
+  health, `/api/sentiment/accuracy/by-window`, and evaluation-status checks passed.
+
+- [x] Sector position filtering completed 2026-09-17: `/api/positions/sector/{sector}` now uses
+  persisted stock metadata, supports common sector aliases, and no longer returns a silent empty
+  result for valid sector data. Focused PositionService and full change-aware API tests passed.
+
+- [x] Gate strategy attribution corrected 2026-09-17: persisted sentiment audits now retain the
+  producing signal variant, support multiple strategies per symbol/date, and report/filter by the
+  stored strategy; focused API/data tests and `./bin/verify-changes` passed. Realized paper-trade
+  P&L attribution remains a documented follow-up.
 
 Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infra is the deployment/verification path; this checklist (not a CI pipeline) is the Go/No-Go authority.
 
@@ -9,22 +213,191 @@ Self-hosted personal project — no CI gate. `dev-stack.sh` against pi-node infr
 The development database was intentionally reset on 2026-08-29 for a clean verification run, then repopulated the same day: 10 active watchlist symbols, each backfilled with 3yr/738 candles, and one full `/api/backtest/run-all` pass (see Strategy section). The current database is no longer empty: runtime verification on 2026-09-02 loaded 2 open and 8 closed paper positions/trades. The API runs in local paper-trading mode with Yahoo Finance as the active market-data client. Historical verification claims below the Strategy section still describe the earlier reset dataset and are not claims about current state.
 
 **Post-stage follow-ups verification (2026-09-15, commit `e947f7f9`)** — full backend/dashboard check from `docs/plans/2026-09-14-post-stage-follow-ups.md`:
-- Backend: `./gradlew :data:test :api:test --no-daemon` green. `./gradlew :api:integrationTest --tests '*SignalPipelineSellExitIntegrationTest' --no-daemon` green against a local colima Docker daemon (`DOCKER_HOST` pointed at colima's socket for this run only; the shared `pi-node` docker context was left untouched). `./gradlew build` fails on two pre-existing, unrelated issues confirmed present on `main` before this session's changes: `:broker:jacocoTestCoverageVerification` (0.70 actual vs 0.80 required) and `:api:pmdTest` (5 `AvoidAccessibilityAlteration` findings in `JobOrchestratorLlmAnalysisTest`'s reflection-based test setup). Neither blocks this plan's scope.
+- Backend: `./gradlew :data:test :api:test --no-daemon` green. `./gradlew :api:integrationTest --tests '*SignalPipelineSellExitIntegrationTest' --no-daemon` green against a local colima Docker daemon (`DOCKER_HOST` pointed at colima's socket for this run only; the shared `pi-node` docker context was left untouched). The core and GPUHub JaCoCo gates are now green; a fresh full-build result is still pending.
 - Dashboard: `yarn typecheck` and `yarn test:run` (281 tests) green. `yarn build` fails at the `format:check` step on pre-existing Prettier drift in `DashboardView.vue` and `OrchestratorView.vue`, confirmed present on `main` with no dashboard files modified this session.
 - All three follow-up plan items (equity-curve status, Position decomposition, Docker-capable SELL integration test) are implementation-complete; this entry closes the plan's final "full verification recorded" checklist item.
 
 ## Candidate Explorer
 
-- [x] Candidate scan controls and result browsing implemented: pause/resume/cancel, server-side symbol and signal filtering, bounded pagination, settings-backed scan thresholds, worker concurrency, and backfill years.
+- [x] Candidate scan controls and result browsing implemented: pause/resume/cancel, server-side symbol and signal filtering, bounded pagination, settings-backed scan thresholds, worker concurrency, backfill years, minimum-trade and out-of-sample gates, source outcomes, and persisted restart-safe orchestration handoffs.
+- [x] Qualified candidate results are automatically activated on the pilot wishlist; scheduled scans hand off to orchestration only when qualifiers exist.
 - [x] Interrupted RUNNING and PAUSED scans are cancelled during API startup; paused SSE streams remain reconnectable, and work already active when pause is requested still updates run counters.
-- [x] Verified 2026-09-01: `:api:test`, `:data:test`, all 277 dashboard tests, dashboard typecheck, lint, formatting, and production build passed. Dev-stack health, `/api/candidate-scans/settings`, `/api/candidate-scans`, and the dashboard returned HTTP 200. The latest persisted full-universe run completed 2,635 symbols with 5 qualifiers; current development settings are 50% minimum win rate, >0% total return, 8 workers, and 3 backfill years.
+- [x] Verified 2026-09-01: `:api:test`, `:data:test`, all 277 dashboard tests, dashboard typecheck, lint, formatting, and production build passed. Dev-stack health, `/api/candidate-scans/settings`, `/api/candidate-scans`, and the dashboard returned HTTP 200. The latest persisted full-universe run completed 2,635 symbols with 5 qualifiers; settings at that verification were 50% minimum win rate, >0% total return, 8 workers, and 3 backfill years.
 
 ## Data-integrity remediation
+
+- [x] Partial-exit accounting corrected 2026-09-17: broker exits now sell whole shares,
+  retain the actual remainder, reject ratios above 100%, and calculate realized P&L/cash
+  from executed quantity. The targeted broker suite and `./bin/verify-changes` passed.
+
+- [x] Data-quality validation endpoint added 2026-09-17: `POST /api/admin/data/validate`
+  accepts a normalized symbol and inclusive date window, rejects invalid/reversed ranges,
+  and returns the existing gap/anomaly report. Controller tests and `./bin/verify-changes`
+  passed.
+
+- [x] Historical OHLCV export added 2026-09-17: `GET /api/data/export` supports paged
+  CSV/JSON output for selected symbols or the full candle store, bounded date ranges, and
+  attachment download headers without building the complete export in memory. Controller
+  coverage and `./bin/verify-changes` passed.
+
+- [x] Yahoo single-candle observability improved 2026-09-17: empty, null, zero, and
+  non-finite close responses now emit an explicit symbol/date warning before being rejected.
+  `fetchCandle()` now delegates to the inclusive single-day batch range, avoiding a separate
+  parser and keeping single-day validation consistent with range ingestion. The Yahoo client
+  suite and `./bin/verify-changes` passed.
+
+- [x] Runtime API verification extended 2026-09-17: against the existing PostgreSQL
+  development database (schema V62), `/api/health` returned 200, data validation returned
+  200 with persisted TCS gap results, and CSV export returned 200 with attachment headers
+  and candle rows. No data was reset.
+
+- [x] Single-symbol backtest risk-policy wiring added 2026-09-17: configured risk-management
+  policies are now evaluated before fixed exits in the ordinary backtest path, matching the
+  existing portfolio path. Strategy tests and `./bin/verify-changes` passed; paper-monitor
+  policy scheduling and partial-exit execution remain separate follow-ups.
+
+- [x] NIFTY50 Yahoo symbol mapping corrected 2026-09-17: persisted `NIFTY50` requests now
+  resolve to Yahoo's `^NSEI` index ticker, allowing the existing ingestion path to populate
+  the stored index series used by opted-in regime/relative-strength checks. Client tests and
+  `./bin/verify-changes` passed; authoritative TRI and breadth/VIX feeds remain open.
+
+- [x] Local runtime re-verification completed 2026-09-17: AOT processing and the
+  affected backend suite passed; the foreground local API stayed healthy through
+  startup after restoring `backtest.reports.dir` constructor binding. PostgreSQL
+  health, `/api/strategy-configs`, `/api/signals/gate-effectiveness`, and the
+  dashboard root each returned successfully. No database data was reset. The
+  remaining analytics limitations are still listed in the review as partial,
+  including authoritative benchmark/universe ingestion, persistent evaluation,
+  and full portfolio/live wiring.
+
+- [x] Synthesis evaluation persistence verified 2026-09-17: evaluation records and
+  measured outcomes now persist in the V51 `synthesis_evaluations` table and reload
+  after cache misses/API restarts. AOT processing, local schema migration, API boot,
+  affected backend tests, and `./bin/verify-changes` passed. Scheduled outcome
+  collection is now automated by the bounded persisted-candle evaluator; aggregate
+  reporting remains a separate follow-up.
+
+- [x] Portfolio benchmark wiring verified 2026-09-17: shared-capital backtests now
+  attach the persisted NIFTY50 price-series return and excess return when the bounded
+  benchmark adapter has a usable window; missing or malformed benchmark data remains
+  explicitly unavailable. Strategy/API tests and `./bin/verify-changes` passed.
+  Authoritative NIFTY TRI and benchmark attribution remain open.
+
+- [x] Paper-monitor risk management verified 2026-09-17: the optional configured
+  breakeven/trailing policy now runs before fixed stop/target checks, derives the
+  highest completed persisted close, honors locked lower circuits, and uses adverse
+  gap-through fills. Broker tests and `./bin/verify-changes` passed; the feature
+  remains opt-in by default (`paper.trading.risk-management-enabled=false`).
+
+- [x] Synthesis evaluation reporting verified 2026-09-17: durable measured decisions
+  now have a summary API at `GET /api/synthesis/evaluations/summary`, including total,
+  measured, correct, accuracy, and recommendation counts. LLM/API tests and
+  `./bin/verify-changes` passed.
+
+- [x] Partial-target exit management verified 2026-09-17: the shared risk policy
+  takes a bounded 50% leg at 2R, keeps the remainder under trailing/breakeven
+  management, including a configurable 3×ATR chandelier when prior-bar ATR is
+  available, and applies the behavior in both backtest and paper monitoring.
+  Paper state persists `partial_exit_taken` via migration V52, preventing duplicate
+  exits after restart. Strategy/broker tests, full verifier, AOT, and local API boot
+  against PostgreSQL passed.
+
+- [x] Relative-strength wiring verified 2026-09-17: opted-in live/backtest strategies can receive
+  as-of stock and NIFTY50 candles and apply the bounded fail-closed excess-return policy. Strategy/API
+  tests passed; cross-sectional rank and authoritative index ingestion remain open.
+
+- [x] Strategy-policy wiring follow-up verified 2026-09-17: opted-in strategies can apply the
+  fail-closed market-regime gate, live BUY queueing invokes explicit eligibility checks, and an
+  opt-in 3-of-4 price-action strategy supports configurable RSI bounds. Full affected backend tests
+  and `./bin/verify-changes` passed after restoring legacy fixture compatibility. Relative-strength
+  live wiring and data-backed entry variant comparison remain open.
+
+- [x] Configured strategy parameters verified 2026-09-17: live orchestration now resolves persisted
+  `PRICE_ACTION_3_OF_4` RSI bounds per variant with request-scoped strategy instances; invalid
+  parameter maps are rejected fail-closed. Strategy/API tests passed; per-variant portfolio
+  isolation and production data population remain open.
+
+- [x] LLM audit correlation verified 2026-09-17: persisted sentiment results now retain the UUID
+  of the corresponding LLM audit attempt across successful responses and keyword fallbacks, while
+  pre-existing rows remain compatible with a nullable value. Core/data/LLM tests, full verifier,
+  local PostgreSQL migration to v59, API health, and the sentiment-window endpoint checks passed.
+
+- [x] LLM audit telemetry corrected 2026-09-17: audit rows now record the actual `temperature=0.0`
+  request setting and mark failed LLM attempts that lead to keyword fallback as `fallback_used`.
+  LLM/data tests and `./bin/verify-changes` passed.
+
+- [x] Synthesis determinism strengthened 2026-09-17: synthesis now runs at `temperature=0.0`,
+  and its prompt requires source-section labels for drivers/factors and prohibits invented data.
+  LLM tests and `./bin/verify-changes` passed; runtime grounding enforcement remains a follow-up.
+
+- [x] Market-data request throttling verified 2026-09-17: production client resolution now applies
+  a shared provider-aware token bucket (Yahoo retains its configured interval; Fyers/Upstox/default
+  use 60/100/30 requests per minute by default), including bulk and metadata methods. Fyers retries
+  HTTP 429 responses with bounded 1/2/4/8-second backoff, aliased beans share one limiter, and
+  limiter waits are exported as `data_rate_limit_hits{source=...}`. Data/API tests and
+  `./bin/verify-changes` passed.
+
+- [x] Yahoo usage boundary documented 2026-09-17: `docs/yahoo-finance-api.md` now states that
+  Yahoo is limited to local development, paper experiments, and backfills, and documents the
+  single-day `period1`/exclusive-`period2` request and unusable-close warning behavior.
+
+- [x] Portfolio metrics wiring verified 2026-09-17: active positions, total P&L, portfolio value,
+  and return gauges now read from the core `TradingService` instead of a hardcoded zero or an
+  API-to-broker concrete dependency. Metric registration coverage and `./bin/verify-changes` passed.
+
+- [x] API latency metrics verified 2026-09-17: the servlet layer now records
+  `api_request_duration_seconds` with bounded method/status tags, including requests whose handler
+  fails. Filter coverage and `./bin/verify-changes` passed.
+
+- [x] Incremental backfill verified 2026-09-17: `POST /api/data/pull/incremental` now exposes
+  bounded single-symbol pulls, `getExistingDataWindow` reports stored bounds, routine backfills skip
+  an already populated tail, long ranges are split into configurable 30-day provider requests, and
+  watchlist bulk pulls use the incremental path. Data/API tests and `./bin/verify-changes` passed;
+  bounded interior-gap repair remains handled separately.
+
+- [x] Watchlist backfill parallelism verified 2026-09-17: bulk pulls now use a bounded worker pool
+  (configurable with `DATA_BACKFILL_PARALLELISM`, default 5), isolate failures per symbol, and report
+  failed work in completion percentage. Backend tests and `./bin/verify-changes` passed.
+
+- [x] Strategy/risk follow-up verified 2026-09-16: bounded synthesis evaluation, two additional
+  opt-in strategy families, portfolio sector/correlation rejection policies, and walk-forward
+  parameter stability evaluation are implemented with focused coverage. Full affected backend tests
+  and `./bin/verify-changes` passed; production persistence, exact indicator semantics, and live data
+  wiring remain documented follow-ups.
+
+- [x] Strategy/LLM remediation batch verified 2026-09-16: fundamentals are separated behind a
+  fail-closed data source, sentiment prompts request deterministic temperature and enforce article
+  citations, live strategy configs honor CHAMPION/SHADOW/OFF/BACKTEST_ONLY modes, and portfolio
+  simulation supports opt-in trailing/breakeven exits. Full affected backend tests and
+  `./bin/verify-changes` passed; remaining limitations are recorded in the analytics review.
+
+- [x] Analytics follow-up batch verified 2026-09-16: portfolio backtests support candle-close
+  mark-to-market and next-session settlement, production backtests enforce as-of universe membership
+  and immutable corporate-action adjustment, benchmark adapters fail closed on malformed persisted data,
+  and LLM article selection ranks and deduplicates before truncation. Full backend verification and
+  `./bin/verify-changes` passed. Remaining limitations are recorded in the analytics review.
+
+- [x] Analytics remediation slice verified 2026-09-16: historical sentiment uses persisted
+  first-seen-bounded evidence, analytical OHLC normalization is in place, and explicit price-band
+  persistence/policies cover paper and backtest circuit-limit behavior. `./bin/verify-changes` and
+  affected backend module tests passed; portfolio-level backtesting, historical universe snapshots,
+  and exchange-band ingestion/API population remain follow-ups.
+- [x] Extended analytics validation verified 2026-09-16: bounded shared-capital portfolio results,
+  chronological walk-forward folds, adjusted-price gap quarantine, same-window benchmark/excess
+  returns, sentiment gate-effectiveness summaries, and bounded earnings/NSE/BSE filing prompt context.
+  `./bin/verify-changes` passed across the affected backend modules.
+- [x] Local DevStack verification verified 2026-09-16: PostgreSQL migrations applied cleanly through
+  V50, the API health endpoint returned `UP`, and `/api/signals/gate-effectiveness` returned HTTP 200.
+  The local API was run in the foreground for this check because the background launcher terminated
+  during startup under concurrent worker resource pressure; no database data was reset.
+- [x] Strategy expansion verification: pullback and volatility-squeeze beans, market-policy contracts,
+  strategy configuration API/dashboard, and portfolio-backtest endpoint passed focused tests plus the
+  sequential affected-module backend suite. Current default live behavior remains unchanged.
 
 - Active universe contains 14 symbols; HDFC Ltd is retired in development by migration V28 and HDFCBANK remains active.
 - Candle uniqueness, market-session validation, reconciliation, and audit logging are implemented.
 - [x] Flyway checksum incident resolved (`950e785f`) — V1 baseline reverted to its original applied checksum; no `flyway repair` needed. Bad watchlist SQL that was briefly in `86849aac` is gone (HDFC deactivation stays in V28, not the frozen V1 baseline).
-- [x] Manual dev-stack verification on pi-node: API booted cleanly against the current database on 2026-08-30; Flyway reported schema version V34 with no pending migrations.
+- [x] Manual dev-stack verification on pi-node: API booted cleanly against the database on 2026-08-30; that verification reported schema version V34. Migrations V35–V46 were added afterward and require deployment verification before claiming the current schema is clean.
 
 ## Data
 
@@ -118,7 +491,7 @@ Dismissed (not bugs): C1 (param order safe), C3 (.env not in git), C5 (backtest 
 | Finding | Priority | Status | Notes |
 |---------|----------|--------|-------|
 | M1: DailyLossCircuitBreaker timezone | P3 | ✅ Done | `MARKET_ZONE = ZoneId.of("Asia/Kolkata")` added, all 8 unqualified `LocalDate/LocalDateTime.now()` calls fixed, test added |
-| M9: Position god object (23 fields) | P3 | OPEN | Mis-scoped — the 23-field type is `backend/core/domain/Position.java` (not the API DTO, which is already lean `PositionResponse`). A split there is a cross-module refactor touching broker/core/data, not a boundary-layer change — needs its own scoped task. Also found: unused dead-code `api/dto/Position.java`, safe to delete separately. |
+| M9: Position god object (23 fields) | P3 | ✅ Done | `backend/core/domain/Position.java` is grouped into `PositionEntry`, `PositionRisk`, `PositionValuation`, and `PositionExit`, with compatibility accessors for existing callers; the obsolete API DTO is absent. Core position tests pass. |
 | M10: VARCHAR(10) symbols | P3 | ✅ Done | New migration `V36__widen_symbol_column.sql` widens `symbol` to VARCHAR(20) across all 9 tables; V1 untouched |
 | M13: No rate limiting | P3 | ✅ Done | `@RateLimiter` on CandidateScan/Analysis/AnalysisOrchestration/SentimentApi trigger endpoints, 5 req/min fail-fast config, 429 handler added |
 | M28: No pagination on performance | P3 | Dismissed (false positive) | `PerformanceResponse` is scalar-only (returns, Sharpe/Sortino, win rate, streaks) — no unbounded list to paginate |

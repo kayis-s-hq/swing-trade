@@ -227,6 +227,10 @@ public class PaperTradingStateService {
     }
 
     public void savePosition(Position position) {
+        savePosition(position, null);
+    }
+
+    public void savePosition(Position position, Long signalId) {
         try {
             OptimisticLockRetryHelper.execute(() -> {
                 PositionEntity entity = unifiedPositionRepo.findByPositionId(position.positionId()).orElse(null);
@@ -244,6 +248,7 @@ public class PaperTradingStateService {
                             ? position.exitReason() : ExitReason.MANUAL.name());
                     }
                 }
+                if (signalId != null) entity.setSignalId(signalId);
                 unifiedPositionRepo.save(entity);
             }, "PositionEntity");
         } catch (Exception e) {
@@ -279,7 +284,7 @@ public class PaperTradingStateService {
             OptimisticLockRetryHelper.execute(() -> {
                 PaperTradingOrderEntity entity = orderRepo.findByOrderId(order.getOrderId()).orElse(null);
                 if (entity == null) {
-                    entity = new PaperTradingOrderEntity(order, "default");
+                    entity = new PaperTradingOrderEntity(order);
                 } else {
                     entity.setStatus(order.getStatus() != null ? order.getStatus().name() : entity.getStatus());
                     entity.setUpdatedAt(LocalDateTime.now());
@@ -304,7 +309,6 @@ public class PaperTradingStateService {
                 entity.setTotalPnL(engine.getTotalPnL());
                 entity.setReturnPct(engine.getReturnPercentage());
                 entity.setOpenPositions(engine.getOpenPositionCount());
-                entity.setPortfolioId("default");
                 snapshotRepo.save(entity);
                 logger.debug("Saved portfolio snapshot: total={}, cash={}, pnl={}",
                     entity.getTotalValue(), entity.getCashBalance(), entity.getTotalPnL());
