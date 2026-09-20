@@ -5,6 +5,7 @@ import com.swingtrade.strategy.BacktestTrade;
 import com.swingtrade.strategy.PortfolioBacktestResult;
 import com.swingtrade.strategy.PortfolioEquityPoint;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -12,8 +13,8 @@ import java.util.List;
 public record PortfolioBacktestResponse(
         LocalDate evaluationStart,
         LocalDate evaluationEnd,
-        double initialCapital,
-        double finalCapital,
+        BigDecimal initialCapital,
+        BigDecimal finalCapital,
         double totalReturn,
         double maxDrawdownPct,
         double sharpeRatio,
@@ -48,8 +49,8 @@ public record PortfolioBacktestResponse(
             String target,
             int quantity,
             String exitReason,
-            double pnl,
-            double pnlPct,
+            BigDecimal pnl,
+            BigDecimal pnlPct,
             int holdingDays
     ) {
         static PortfolioBacktestTradeResponse from(BacktestTrade trade) {
@@ -62,10 +63,10 @@ public record PortfolioBacktestResponse(
 
     public record PortfolioEquityPointResponse(
             LocalDate date,
-            double equity,
-            double settledCash,
-            double unsettledProceeds,
-            double positionMarketValue
+            BigDecimal equity,
+            BigDecimal settledCash,
+            BigDecimal unsettledProceeds,
+            BigDecimal positionMarketValue
     ) {
         static PortfolioEquityPointResponse from(PortfolioEquityPoint point) {
             return new PortfolioEquityPointResponse(point.date(), point.equity(), point.settledCash(),

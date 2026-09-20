@@ -51,6 +51,11 @@ public class SignalPipeline {
 
     private static final Logger logger = LoggerFactory.getLogger(SignalPipeline.class);
     private static final int MIN_CANDLES = 50;
+    private static final java.math.MathContext CONFIDENCE_MC = java.math.MathContext.DECIMAL64;
+    private static final BigDecimal RSI_CENTER = new BigDecimal("57.5");
+    private static final BigDecimal RSI_HALF_BAND = new BigDecimal("7.5");
+    private static final BigDecimal FIFTY = BigDecimal.valueOf(50);
+    private static final BigDecimal TWENTY = BigDecimal.valueOf(20);
 
     private final CandleStore candleStore;
     private final PriceActionSignalEngine priceActionEngine;
@@ -124,7 +129,7 @@ public class SignalPipeline {
         Signal signal = Signal.create(result.symbol(), result.date(), result.type(),
                 confidence, result.reasoning());
 
-        BigDecimal atr = BigDecimal.valueOf(result.atr());
+        BigDecimal atr = result.atr();
         String indicators = buildPriceActionIndicators(result);
 
         // Sentiment score/reasoning are filled in later by the SENTIMENT stage's own
@@ -170,7 +175,7 @@ public class SignalPipeline {
             ? SignalEntity.WarningFlag.PENDING_SENTIMENT.code() : SignalEntity.WarningFlag.NONE.code();
         Signal saved = persistenceService.buildAndSaveWithWarning(
             symbol, result.date(), result.type(), confidence, result.reasoning(),
-            buildPriceActionIndicators(result), BigDecimal.valueOf(result.atr()), warningFlag,
+            buildPriceActionIndicators(result), result.atr(), warningFlag,
             null, null, config.variantId(), config.version());
         return java.util.Optional.of(saved);
     }
@@ -216,7 +221,7 @@ public class SignalPipeline {
         BigDecimal confidence = deriveConfidence(result);
         Signal baseSignal = Signal.create(result.symbol(), result.date(), result.type(), confidence, result.reasoning());
 
-        BigDecimal atr = BigDecimal.valueOf(result.atr());
+        BigDecimal atr = result.atr();
         String indicators = buildPriceActionIndicators(result);
 
         // Calculate risk params upfront so they are saved in a single DB write
@@ -274,25 +279,27 @@ public class SignalPipeline {
      * signal result itself; the strategy still decides BUY/SELL/HOLD independently.
      */
     private BigDecimal deriveConfidence(SignalResult result) {
-        double rsiCenter = 57.5;
-        double rsiMargin = result.type() == Signal.SignalType.BUY
-            ? clamp(1.0 - Math.abs(result.rsi() - rsiCenter) / 7.5)
-            : clamp((50.0 - result.rsi()) / 20.0);
-        double emaSpread = result.ema50() == 0.0 ? 0.0
-            : (result.type() == Signal.SignalType.BUY
-                ? (result.ema20() - result.ema50()) / Math.abs(result.ema50())
-                : (result.ema50() - result.ema20()) / Math.abs(result.ema50()));
-        double trendMargin = clamp(emaSpread * 20.0);
-        double confidence = switch (result.type()) {
-            case BUY -> 0.55 + 0.25 * rsiMargin + 0.20 * trendMargin;
-            case SELL -> 0.45 + 0.30 * rsiMargin + 0.25 * trendMargin;
-            case HOLD -> 0.20 + 0.10 * trendMargin;
+        boolean buy = result.type() == Signal.SignalType.BUY;
+        BigDecimal rsiMargin = buy
+            ? clamp(BigDecimal.ONE.subtract(
+                result.rsi().subtract(RSI_CENTER).abs().divide(RSI_HALF_BAND, CONFIDENCE_MC)))
+            : clamp(FIFTY.subtract(result.rsi()).divide(TWENTY, CONFIDENCE_MC));
+        BigDecimal emaSpread = result.ema50().signum() == 0 ? BigDecimal.ZERO
+            : (buy ? result.ema20().subtract(result.ema50()) : result.ema50().subtract(result.ema20()))
+                .divide(result.ema50().abs(), CONFIDENCE_MC);
+        BigDecimal trendMargin = clamp(emaSpread.multiply(TWENTY));
+        BigDecimal confidence = switch (result.type()) {
+            case BUY -> new BigDecimal("0.55").add(new BigDecimal("0.25").multiply(rsiMargin))
+                .add(new BigDecimal("0.20").multiply(trendMargin));
+            case SELL -> new BigDecimal("0.45").add(new BigDecimal("0.30").multiply(rsiMargin))
+                .add(new BigDecimal("0.25").multiply(trendMargin));
+            case HOLD -> new BigDecimal("0.20").add(new BigDecimal("0.10").multiply(trendMargin));
         };
-        return BigDecimal.valueOf(clamp(confidence)).setScale(4, java.math.RoundingMode.HALF_UP);
+        return clamp(confidence).setScale(4, java.math.RoundingMode.HALF_UP);
     }
 
-    private double clamp(double value) {
-        return Math.max(0.0, Math.min(1.0, value));
+    private static BigDecimal clamp(BigDecimal value) {
+        return value.max(BigDecimal.ZERO).min(BigDecimal.ONE);
     }
 
 }

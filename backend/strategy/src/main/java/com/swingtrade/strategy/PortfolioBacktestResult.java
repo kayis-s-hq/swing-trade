@@ -2,6 +2,7 @@ package com.swingtrade.strategy;
 
 import com.swingtrade.domain.BenchmarkComparison;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -25,8 +26,8 @@ import java.util.List;
 public record PortfolioBacktestResult(
         LocalDate evaluationStart,
         LocalDate evaluationEnd,
-        double initialCapital,
-        double finalCapital,
+        BigDecimal initialCapital,
+        BigDecimal finalCapital,
         double totalReturn,
         double maxDrawdownPct,
         double sharpeRatio,
@@ -43,8 +44,8 @@ public record PortfolioBacktestResult(
         String strategyVariantId
 ) {
     /** Source-compatible constructor for callers without rejection-reason details. */
-    public PortfolioBacktestResult(LocalDate evaluationStart, LocalDate evaluationEnd, double initialCapital,
-                                   double finalCapital, double totalReturn, double maxDrawdownPct,
+    public PortfolioBacktestResult(LocalDate evaluationStart, LocalDate evaluationEnd, BigDecimal initialCapital,
+                                   BigDecimal finalCapital, double totalReturn, double maxDrawdownPct,
                                    double sharpeRatio, double cagrPct, double sortinoRatio, double calmarRatio,
                                    int totalTrades, int winningTrades, int rejectedTrades,
                                    List<BacktestTrade> trades, List<PortfolioEquityPoint> equityCurve) {
@@ -54,8 +55,8 @@ public record PortfolioBacktestResult(
     }
 
     /** Source-compatible constructor for callers without a strategy-variant attribution. */
-    public PortfolioBacktestResult(LocalDate evaluationStart, LocalDate evaluationEnd, double initialCapital,
-                                   double finalCapital, double totalReturn, double maxDrawdownPct,
+    public PortfolioBacktestResult(LocalDate evaluationStart, LocalDate evaluationEnd, BigDecimal initialCapital,
+                                   BigDecimal finalCapital, double totalReturn, double maxDrawdownPct,
                                    double sharpeRatio, double cagrPct, double sortinoRatio, double calmarRatio,
                                    int totalTrades, int winningTrades, int rejectedTrades,
                                    List<BacktestTrade> trades, List<PortfolioEquityPoint> equityCurve,

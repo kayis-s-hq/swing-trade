@@ -7,7 +7,16 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
-/** Pure calculations for metrics derived from a daily marked-to-market equity curve. */
+/**
+ * Pure calculations for metrics derived from a daily marked-to-market equity curve.
+ *
+ * <p>Inputs are {@link BigDecimal} money amounts. Period returns, total return and drawdown are
+ * computed in {@code BigDecimal} at {@link FinancialScale#RATIO} precision. Sharpe, Sortino and CAGR
+ * need {@code sqrt}/{@code pow}, which {@code BigDecimal} does not provide, so they are the one
+ * documented conversion boundary: the money-derived returns are converted once with
+ * {@link BigDecimal#doubleValue()} and the statistics run in {@code double}. Their results are
+ * dimensionless ratios/percentages, not money, so no monetary precision is lost.</p>
+ */
 final class BacktestMetrics {
 
     private static final double TRADING_DAYS_PER_YEAR = 252.0;
@@ -16,21 +25,58 @@ final class BacktestMetrics {
     private BacktestMetrics() {
     }
 
-    static double cagrPct(double initialCapital, double finalCapital, LocalDate start, LocalDate end) {
-        if (initialCapital <= 0 || finalCapital < 0 || start == null || end == null || !start.isBefore(end)) {
+    static double cagrPct(BigDecimal initialCapital, BigDecimal finalCapital, LocalDate start, LocalDate end) {
+        if (initialCapital.signum() <= 0 || finalCapital.signum() < 0 || start == null || end == null
+                || !start.isBefore(end)) {
             return 0.0;
         }
         double years = ChronoUnit.DAYS.between(start, end) / CALENDAR_DAYS_PER_YEAR;
         if (years <= 0) {
             return 0.0;
         }
-        if (finalCapital == 0) {
+        if (finalCapital.signum() == 0) {
             return -100.0;
         }
-        return (Math.pow(finalCapital / initialCapital, 1.0 / years) - 1.0) * 100.0;
+        double growth = finalCapital.divide(initialCapital, FinancialScale.RATIO).doubleValue();
+        return (Math.pow(growth, 1.0 / years) - 1.0) * 100.0;
     }
 
-    static double sortinoRatio(List<Double> capitalCurve) {
+    /** Total return as a percentage of initial capital. */
+    static double totalReturnPct(BigDecimal initialCapital, BigDecimal finalCapital) {
+        return finalCapital.subtract(initialCapital).multiply(FinancialScale.HUNDRED)
+                .divide(initialCapital, FinancialScale.RATIO).doubleValue();
+    }
+
+    /** Largest peak-to-trough drop of the equity curve, in percent; 0 for an empty curve. */
+    static double maxDrawdownPct(List<BigDecimal> capitalCurve) {
+        if (capitalCurve == null || capitalCurve.isEmpty()) {
+            return 0.0;
+        }
+        BigDecimal peak = capitalCurve.getFirst();
+        BigDecimal maxDrawdown = BigDecimal.ZERO;
+        for (BigDecimal value : capitalCurve) {
+            peak = peak.max(value);
+            if (peak.signum() > 0) {
+                BigDecimal drawdown = peak.subtract(value).multiply(FinancialScale.HUNDRED)
+                        .divide(peak, FinancialScale.RATIO);
+                maxDrawdown = maxDrawdown.max(drawdown);
+            }
+        }
+        return maxDrawdown.doubleValue();
+    }
+
+    /** Period-over-period returns as fractions; a zero previous value yields a zero return. */
+    private static double[] periodReturns(List<BigDecimal> capitalCurve) {
+        double[] returns = new double[capitalCurve.size() - 1];
+        for (int i = 1; i < capitalCurve.size(); i++) {
+            BigDecimal previous = capitalCurve.get(i - 1);
+            returns[i - 1] = previous.signum() == 0 ? 0.0
+                    : capitalCurve.get(i).subtract(previous).divide(previous, FinancialScale.RATIO).doubleValue();
+        }
+        return returns;
+    }
+
+    static double sortinoRatio(List<BigDecimal> capitalCurve) {
         if (capitalCurve == null || capitalCurve.size() < 3) {
             return 0.0;
         }
@@ -38,12 +84,12 @@ final class BacktestMetrics {
         double sumDownsideSquares = 0.0;
         int observations = 0;
         for (int i = 1; i < capitalCurve.size(); i++) {
-            double previous = capitalCurve.get(i - 1);
-            double current = capitalCurve.get(i);
-            if (previous == 0.0) {
+            BigDecimal previous = capitalCurve.get(i - 1);
+            if (previous.signum() == 0) {
                 continue;
             }
-            double dailyReturn = (current - previous) / previous;
+            double dailyReturn = capitalCurve.get(i).subtract(previous)
+                    .divide(previous, FinancialScale.RATIO).doubleValue();
             sumReturns += dailyReturn;
             sumDownsideSquares += Math.pow(Math.min(dailyReturn, 0.0), 2);
             observations++;
@@ -57,19 +103,15 @@ final class BacktestMetrics {
                 : (sumReturns / observations) / downsideDeviation * Math.sqrt(TRADING_DAYS_PER_YEAR);
     }
 
-    static double sharpeRatio(List<Double> capitalCurve) {
+    static double sharpeRatio(List<BigDecimal> capitalCurve) {
         if (capitalCurve == null || capitalCurve.size() < 3) {
             return 0.0;
         }
-        double[] returns = new double[capitalCurve.size() - 1];
-        for (int i = 1; i < capitalCurve.size(); i++) {
-            double previous = capitalCurve.get(i - 1);
-            returns[i - 1] = previous == 0.0 ? 0.0 : (capitalCurve.get(i) - previous) / previous;
-        }
+        double[] returns = periodReturns(capitalCurve);
         double mean = java.util.Arrays.stream(returns).average().orElse(0.0);
         double variance = java.util.Arrays.stream(returns).map(value -> Math.pow(value - mean, 2)).average().orElse(0.0);
         double deviation = Math.sqrt(variance);
-        return deviation == 0.0 ? 0.0 : mean / deviation * Math.sqrt(252.0);
+        return deviation == 0.0 ? 0.0 : mean / deviation * Math.sqrt(TRADING_DAYS_PER_YEAR);
     }
 
     static double calmarRatio(double cagrPct, double maxDrawdownPct) {

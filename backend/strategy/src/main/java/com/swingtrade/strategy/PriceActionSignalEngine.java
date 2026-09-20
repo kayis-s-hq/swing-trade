@@ -264,8 +264,7 @@ public class PriceActionSignalEngine {
         signalMetrics.recordSignalGenerated();
         signalMetrics.recordSignalType(type.name().toLowerCase());
 
-        return new SignalResult(symbol, date, type, rsi.doubleValue(), ema20.doubleValue(),
-            ema50.doubleValue(), atr.doubleValue(), reasoning);
+        return new SignalResult(symbol, date, type, rsi, ema20, ema50, atr, reasoning);
     }
 
     private MarketRegimeAssessment assessMarketRegime() {

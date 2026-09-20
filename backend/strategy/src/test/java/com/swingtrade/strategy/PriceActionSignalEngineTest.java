@@ -166,7 +166,7 @@ class PriceActionSignalEngineTest {
 
             assertThat(result.symbol()).isEqualTo("RELIANCE");
             assertThat(result.type()).isEqualTo(SignalType.BUY);
-            assertThat(result.rsi()).isBetween(50.0, 65.0);
+            assertThat(result.rsi()).isBetween(BigDecimal.valueOf(50), BigDecimal.valueOf(65));
             assertThat(result.reasoning()).startsWith("All entry rules passed");
         }
 
@@ -182,7 +182,7 @@ class PriceActionSignalEngineTest {
             assertThat(result.reasoning()).contains("Volume > 1.5x VolumeMA20");
             // RSI sitting above the entry band (not just outside it) still correctly HOLDs
             // rather than SELLs — exit condition C only fires below 50.
-            assertThat(result.rsi()).isGreaterThan(65.0);
+            assertThat(result.rsi()).isGreaterThan(BigDecimal.valueOf(65));
         }
     }
 
