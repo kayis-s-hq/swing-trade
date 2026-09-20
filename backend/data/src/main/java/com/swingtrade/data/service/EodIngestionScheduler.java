@@ -29,6 +29,8 @@ public class EodIngestionScheduler implements ApplicationRunner {
     private final DataIngestionService dataIngestionService;
     private final WatchlistRepository watchlistRepository;
     private final NseHolidayService holidayService;
+    /** Overridable in tests so weekday-only behaviour does not depend on the day the suite runs. */
+    java.time.Clock clock = java.time.Clock.system(IST);
 
     @Value("${yahoo.finance.rate-limit-ms:500}")
     private long rateLimitMs;
@@ -78,7 +80,7 @@ public class EodIngestionScheduler implements ApplicationRunner {
 
     @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Kolkata")
     public void ingestLatestForAll() {
-        LocalDate today = LocalDate.now(IST);
+        LocalDate today = LocalDate.now(clock);
         LocalDate yesterday = today.minusDays(1);
 
         // Skip weekends (safety net)
