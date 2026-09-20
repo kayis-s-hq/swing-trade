@@ -33,7 +33,7 @@ class PortfolioBacktestEngineTest {
         assertThat(result.totalTrades()).isEqualTo(1);
         assertThat(result.rejectedTrades()).isEqualTo(1);
         assertThat(result.trades()).extracting(BacktestTrade::symbol).containsExactly("AAA");
-        assertThat(result.finalCapital()).isEqualTo(110.0);
+        assertThat(result.finalCapital()).isEqualByComparingTo("110.0");
         assertThat(result.equityCurve()).extracting(PortfolioEquityPoint::date)
                 .containsExactly(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 2),
                         LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 4),
@@ -51,14 +51,14 @@ class PortfolioBacktestEngineTest {
 
         assertThat(result.totalTrades()).isEqualTo(1);
         assertThat(result.rejectedTrades()).isEqualTo(1);
-        assertThat(result.finalCapital()).isEqualTo(110.0);
+        assertThat(result.finalCapital()).isEqualByComparingTo("110.0");
         assertThat(result.equityCurve()).extracting(PortfolioEquityPoint::date)
                 .containsExactly(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 2),
                         LocalDate.of(2024, 1, 3), LocalDate.of(2024, 1, 4),
                         LocalDate.of(2024, 1, 5));
         PortfolioEquityPoint exitDay = result.equityCurve().get(3);
-        assertThat(exitDay.settledCash()).isEqualTo(0.0);
-        assertThat(exitDay.unsettledProceeds()).isEqualTo(110.0);
+        assertThat(exitDay.settledCash()).isEqualByComparingTo("0.0");
+        assertThat(exitDay.unsettledProceeds()).isEqualByComparingTo("110.0");
     }
 
     @Test
@@ -78,9 +78,9 @@ class PortfolioBacktestEngineTest {
                 LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 8));
 
         assertThat(result.equityCurve()).hasSize(5);
-        assertThat(result.equityCurve().get(1).unsettledProceeds()).isEqualTo(110.0);
-        assertThat(result.equityCurve().get(2).settledCash()).isEqualTo(0.0);
-        assertThat(result.equityCurve().get(4).settledCash()).isEqualTo(110.0);
+        assertThat(result.equityCurve().get(1).unsettledProceeds()).isEqualByComparingTo("110.0");
+        assertThat(result.equityCurve().get(2).settledCash()).isEqualByComparingTo("0.0");
+        assertThat(result.equityCurve().get(4).settledCash()).isEqualByComparingTo("110.0");
     }
 
     @Test
@@ -99,10 +99,10 @@ class PortfolioBacktestEngineTest {
         assertThat(result.equityCurve()).extracting(PortfolioEquityPoint::date)
                 .containsExactly(LocalDate.of(2024, 1, 2), LocalDate.of(2024, 1, 3),
                         LocalDate.of(2024, 1, 4), LocalDate.of(2024, 1, 5));
-        assertThat(result.equityCurve().get(1).positionMarketValue()).isEqualTo(120.0);
-        assertThat(result.equityCurve().get(1).equity()).isEqualTo(120.0);
-        assertThat(result.equityCurve().get(2).unsettledProceeds()).isEqualTo(110.0);
-        assertThat(result.equityCurve().get(3).settledCash()).isEqualTo(110.0);
+        assertThat(result.equityCurve().get(1).positionMarketValue()).isEqualByComparingTo("120.0");
+        assertThat(result.equityCurve().get(1).equity()).isEqualByComparingTo("120.0");
+        assertThat(result.equityCurve().get(2).unsettledProceeds()).isEqualByComparingTo("110.0");
+        assertThat(result.equityCurve().get(3).settledCash()).isEqualByComparingTo("110.0");
     }
 
     @Test
@@ -129,7 +129,7 @@ class PortfolioBacktestEngineTest {
     void appliesBreakevenAndTrailingStopBeforeScheduledExit() {
         BacktestTrade candidate = new BacktestTrade("AAA", LocalDate.of(2024, 1, 2),
                 LocalDate.of(2024, 1, 5), BigDecimal.valueOf(100), BigDecimal.valueOf(120),
-                BigDecimal.valueOf(90), BigDecimal.valueOf(125), 1, ExitReason.TIME_STOP, 20, 20, 3);
+                BigDecimal.valueOf(90), BigDecimal.valueOf(125), 1, ExitReason.TIME_STOP, BigDecimal.valueOf(20), BigDecimal.valueOf(20), 3);
         Map<String, List<OhlcvCandle>> candles = Map.of("AAA", List.of(
                 candle("AAA", LocalDate.of(2024, 1, 2), 100),
                 candle("AAA", LocalDate.of(2024, 1, 3), 110),
@@ -147,7 +147,7 @@ class PortfolioBacktestEngineTest {
             assertThat(trade.exitReason()).isEqualTo(ExitReason.TRAILING_STOP);
             assertThat(trade.exitPrice()).isEqualByComparingTo("104.5");
         });
-        assertThat(result.finalCapital()).isEqualTo(104.5);
+        assertThat(result.finalCapital()).isEqualByComparingTo("104.5");
     }
 
     @Test
@@ -217,8 +217,8 @@ class PortfolioBacktestEngineTest {
     }
 
     private static BacktestResult result(String symbol, BacktestTrade trade) {
-        return new BacktestResult(symbol, 1, trade.pnl() > 0 ? 1 : 0, trade.pnl() <= 0 ? 1 : 0,
-                trade.pnl() > 0 ? 100 : 0, 0, 0, 0, 0, 0, 0, List.of(trade));
+        return new BacktestResult(symbol, 1, trade.pnl().signum() > 0 ? 1 : 0, trade.pnl().signum() <= 0 ? 1 : 0,
+                trade.pnl().signum() > 0 ? 100 : 0, 0, 0, 0, 0, 0, 0, List.of(trade));
     }
 
     private static BacktestTrade trade(String symbol, LocalDate entryDate, LocalDate exitDate,
@@ -226,7 +226,7 @@ class PortfolioBacktestEngineTest {
         BigDecimal entry = BigDecimal.valueOf(entryPrice);
         return new BacktestTrade(symbol, entryDate, exitDate, entry, entry,
                 entry.subtract(BigDecimal.ONE), entry.add(BigDecimal.ONE), quantity,
-                ExitReason.TIME_STOP, pnl, pnl, 1);
+                ExitReason.TIME_STOP, BigDecimal.valueOf(pnl), BigDecimal.valueOf(pnl), 1);
     }
 
     private static OhlcvCandle candle(String symbol, LocalDate date, double close) {

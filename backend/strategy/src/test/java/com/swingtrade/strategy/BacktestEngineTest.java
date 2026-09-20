@@ -576,7 +576,9 @@ class BacktestEngineTest {
 
             BacktestTrade trade = result.trades().get(0);
             BigDecimal riskPerShare = trade.entryPrice().subtract(trade.stopLoss());
-            int expectedQuantity = (int) Math.floor((config.initialCapital() * config.riskPerTradePct()) / riskPerShare.doubleValue());
+            int expectedQuantity = BigDecimal.valueOf(config.initialCapital())
+                .multiply(BigDecimal.valueOf(config.riskPerTradePct()))
+                .divide(riskPerShare, 0, java.math.RoundingMode.DOWN).intValue();
 
             assertThat(trade.quantity()).isEqualTo(expectedQuantity);
         }
@@ -620,8 +622,8 @@ class BacktestEngineTest {
             BigDecimal grossPnl = trade.exitPrice().subtract(trade.entryPrice()).multiply(BigDecimal.valueOf(trade.quantity()));
             BigDecimal costs = new ZerodhaDeliveryCostModel().roundTripCost(
                 trade.entryPrice(), trade.exitPrice(), trade.quantity(), BigDecimal.valueOf(20.0));
-            double expectedPnl = grossPnl.doubleValue() - costs.doubleValue();
-            assertThat(trade.pnl()).isCloseTo(expectedPnl, within(0.01));
+            BigDecimal expectedPnl = grossPnl.subtract(costs);
+            assertThat(trade.pnl()).isCloseTo(expectedPnl, within(new BigDecimal("0.01")));
         }
 
         @Test

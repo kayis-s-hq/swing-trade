@@ -13,7 +13,7 @@ class BacktestMetricsTest {
 
     @Test
     void cagrAnnualizesReturnUsingCalendarDates() {
-        double cagr = BacktestMetrics.cagrPct(100.0, 121.0,
+        double cagr = BacktestMetrics.cagrPct(BigDecimal.valueOf(100), BigDecimal.valueOf(121),
                 LocalDate.of(2020, 1, 1), LocalDate.of(2022, 1, 1));
 
         assertEquals(10.0, cagr, 0.02);
@@ -24,12 +24,12 @@ class BacktestMetricsTest {
         double expected = ((0.10 - (5.0 / 110.0) + (10.0 / 105.0)) / 3.0)
                 / Math.sqrt(Math.pow(5.0 / 110.0, 2) / 3.0) * Math.sqrt(252.0);
 
-        assertEquals(expected, BacktestMetrics.sortinoRatio(List.of(100.0, 110.0, 105.0, 115.0)), 1e-9);
+        assertEquals(expected, BacktestMetrics.sortinoRatio(List.of(BigDecimal.valueOf(100), BigDecimal.valueOf(110), BigDecimal.valueOf(105), BigDecimal.valueOf(115))), 1e-9);
     }
 
     @Test
     void sortinoWithNoDownsideReturnsZero() {
-        assertEquals(0.0, BacktestMetrics.sortinoRatio(List.of(100.0, 101.0, 102.0)));
+        assertEquals(0.0, BacktestMetrics.sortinoRatio(List.of(BigDecimal.valueOf(100), BigDecimal.valueOf(101), BigDecimal.valueOf(102))));
     }
 
     @Test

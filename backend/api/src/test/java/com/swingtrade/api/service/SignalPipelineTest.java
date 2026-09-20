@@ -109,7 +109,7 @@ class SignalPipelineTest {
                     + "Volume > 1.5x VolumeMA20 (volume=1000.00, threshold=1500.00)";
             SignalResult holdResult = new SignalResult(
                     SYMBOL, latestDate, Signal.SignalType.HOLD,
-                    74.39, 101.5, 100.2, 2.1, detailedReasoning);
+                    new BigDecimal("74.39"), new BigDecimal("101.5"), new BigDecimal("100.2"), new BigDecimal("2.1"), detailedReasoning);
 
             when(priceActionEngine.analyze(eq(SYMBOL), anyList())).thenReturn(holdResult);
 
@@ -164,7 +164,7 @@ class SignalPipelineTest {
         void sellSignal_symbolNotHeld_persistsSellSignal() {
             SignalResult sellResult = new SignalResult(
                     SYMBOL, latestDate, Signal.SignalType.SELL,
-                    45.0, 98.0, 100.0, 2.1, "Exit rule triggered (1 of 3): RSI < 50 (rsi=45.00)");
+                    new BigDecimal("45.0"), new BigDecimal("98.0"), new BigDecimal("100.0"), new BigDecimal("2.1"), "Exit rule triggered (1 of 3): RSI < 50 (rsi=45.00)");
             when(priceActionEngine.analyze(eq(SYMBOL), anyList())).thenReturn(sellResult);
             when(positionStore.findBySymbol(SYMBOL)).thenReturn(Optional.empty());
             stubSavedSignal(Signal.SignalType.SELL);
@@ -180,7 +180,7 @@ class SignalPipelineTest {
         void sellSignal_symbolHeld_lookupDetectsHeldPosition_stillPersistsSignal() {
             SignalResult sellResult = new SignalResult(
                     SYMBOL, latestDate, Signal.SignalType.SELL,
-                    45.0, 98.0, 100.0, 2.1, "Exit rule triggered (1 of 3): RSI < 50 (rsi=45.00)");
+                    new BigDecimal("45.0"), new BigDecimal("98.0"), new BigDecimal("100.0"), new BigDecimal("2.1"), "Exit rule triggered (1 of 3): RSI < 50 (rsi=45.00)");
             when(priceActionEngine.analyze(eq(SYMBOL), anyList())).thenReturn(sellResult);
             when(positionStore.findBySymbol(SYMBOL)).thenReturn(
                     Optional.of(Position.createWithRisk(SYMBOL, BigDecimal.valueOf(100), latestDate, 10, BigDecimal.valueOf(2.0), "Entry on breakout")));
@@ -197,7 +197,7 @@ class SignalPipelineTest {
         void buySignal_doesNotConsultPositionStore() {
             SignalResult buyResult = new SignalResult(
                     SYMBOL, latestDate, Signal.SignalType.BUY,
-                    58.0, 102.0, 100.0, 2.1, "All entry rules passed: ...");
+                    new BigDecimal("58.0"), new BigDecimal("102.0"), new BigDecimal("100.0"), new BigDecimal("2.1"), "All entry rules passed: ...");
             when(priceActionEngine.analyze(eq(SYMBOL), anyList())).thenReturn(buyResult);
             stubSavedSignal(Signal.SignalType.BUY);
 
@@ -210,7 +210,7 @@ class SignalPipelineTest {
         void holdSignal_doesNotConsultPositionStore() {
             SignalResult holdResult = new SignalResult(
                     SYMBOL, latestDate, Signal.SignalType.HOLD,
-                    58.0, 102.0, 100.0, 2.1, "Entry rules failed (2 of 4 passed): ...");
+                    new BigDecimal("58.0"), new BigDecimal("102.0"), new BigDecimal("100.0"), new BigDecimal("2.1"), "Entry rules failed (2 of 4 passed): ...");
             when(priceActionEngine.analyze(eq(SYMBOL), anyList())).thenReturn(holdResult);
             stubSavedSignal(Signal.SignalType.HOLD);
 
@@ -244,7 +244,7 @@ class SignalPipelineTest {
         private SignalResult sellResult() {
             return new SignalResult(
                     SYMBOL, latestDate, Signal.SignalType.SELL,
-                    45.0, 98.0, 100.0, 2.1, "Exit rule triggered (1 of 3): RSI < 50 (rsi=45.00)");
+                    new BigDecimal("45.0"), new BigDecimal("98.0"), new BigDecimal("100.0"), new BigDecimal("2.1"), "Exit rule triggered (1 of 3): RSI < 50 (rsi=45.00)");
         }
 
         @Test
@@ -295,7 +295,7 @@ class SignalPipelineTest {
         private SignalResult sellResult() {
             return new SignalResult(
                     SYMBOL, today, Signal.SignalType.SELL,
-                    45.0, 98.0, 100.0, 2.1, "Exit rule triggered (1 of 3): RSI < 50 (rsi=45.00)");
+                    new BigDecimal("45.0"), new BigDecimal("98.0"), new BigDecimal("100.0"), new BigDecimal("2.1"), "Exit rule triggered (1 of 3): RSI < 50 (rsi=45.00)");
         }
 
         private void stubSavedSignal() {

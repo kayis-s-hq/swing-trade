@@ -153,8 +153,8 @@ class VolumeThresholdCalibrationExploration {
                 .flatMap(r -> r.trades().stream())
                 .toList();
         double avgPnlPctPerTrade = allTrades.isEmpty() ? 0.0
-                : allTrades.stream().mapToDouble(BacktestTrade::pnlPct).average().orElse(0.0);
-        double totalPnl = allTrades.stream().mapToDouble(BacktestTrade::pnl).sum();
+                : allTrades.stream().mapToDouble(t -> t.pnlPct().doubleValue()).average().orElse(0.0);
+        double totalPnl = allTrades.stream().mapToDouble(t -> t.pnl().doubleValue()).sum();
 
         double aggregateCapital = results.size() * config.initialCapital();
         double portfolioReturnPct = aggregateCapital > 0 ? (totalPnl / aggregateCapital) * 100.0 : 0.0;
@@ -282,7 +282,7 @@ class VolumeThresholdCalibrationExploration {
                     LocalDate exitDate = chronologicalCandles.get(i).date();
                     BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, i, reason, config);
                     trades.add(trade);
-                    capital += trade.pnl();
+                    capital += trade.pnl().doubleValue();
                     open = null;
                 } else {
                     open = new OpenPosition(open.entryIndex(), open.entryDate(), open.entryPrice(),
@@ -302,7 +302,7 @@ class VolumeThresholdCalibrationExploration {
             LocalDate exitDate = chronologicalCandles.get(lastIndex).date();
             BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, lastIndex, ExitReason.TIME_STOP, config);
             trades.add(trade);
-            capital += trade.pnl();
+            capital += trade.pnl().doubleValue();
         }
         capitalCurve.add(capital);
 
@@ -367,19 +367,19 @@ class VolumeThresholdCalibrationExploration {
         int holdingDays = exitIndex - open.entryIndex;
 
         return new BacktestTrade(symbol, open.entryDate, exitDate, open.entryPrice, exitPrice,
-                open.stopLoss, open.target, open.quantity, reason, netPnl, pnlPct, holdingDays);
+                open.stopLoss, open.target, open.quantity, reason, BigDecimal.valueOf(netPnl), BigDecimal.valueOf(pnlPct), holdingDays);
     }
 
     private static BacktestResult buildResult(String symbol, List<BacktestTrade> trades, List<Double> capitalCurve,
                                               double finalCapital, BacktestConfig config) {
         int totalTrades = trades.size();
-        List<BacktestTrade> wins = trades.stream().filter(t -> t.pnl() > 0).toList();
-        List<BacktestTrade> losses = trades.stream().filter(t -> t.pnl() <= 0).toList();
+        List<BacktestTrade> wins = trades.stream().filter(t -> t.pnl().signum() > 0).toList();
+        List<BacktestTrade> losses = trades.stream().filter(t -> t.pnl().signum() <= 0).toList();
 
         double winRate = totalTrades > 0 ? (wins.size() / (double) totalTrades) * 100.0 : 0.0;
-        double avgGainPct = wins.isEmpty() ? 0.0 : wins.stream().mapToDouble(BacktestTrade::pnlPct).average().orElse(0.0);
+        double avgGainPct = wins.isEmpty() ? 0.0 : wins.stream().mapToDouble(t -> t.pnlPct().doubleValue()).average().orElse(0.0);
         double avgLossPct = losses.isEmpty() ? 0.0
-                : Math.abs(losses.stream().mapToDouble(BacktestTrade::pnlPct).average().orElse(0.0));
+                : Math.abs(losses.stream().mapToDouble(t -> t.pnlPct().doubleValue()).average().orElse(0.0));
         double maxDrawdownPct = computeMaxDrawdownPct(capitalCurve);
         double sharpeRatio = computeSharpeRatio(capitalCurve);
         double totalReturn = ((finalCapital - config.initialCapital()) / config.initialCapital()) * 100.0;

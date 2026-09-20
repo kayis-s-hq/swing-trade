@@ -30,14 +30,14 @@ class PortfolioBacktestServiceTest {
         LocalDate start = LocalDate.of(2026, 1, 1);
         LocalDate end = LocalDate.of(2026, 3, 31);
         PortfolioBacktestResult result = new PortfolioBacktestResult(
-                start, end, 500_000, 510_000, 2, -1, 1, 8, 1.2, 2, 2, 1, 0, List.of(), List.of());
+                start, end, java.math.BigDecimal.valueOf(500_000), java.math.BigDecimal.valueOf(510_000), 2, -1, 1, 8, 1.2, 2, 2, 1, 0, List.of(), List.of());
         when(registry.defaultStrategy()).thenReturn(strategy);
         when(engine.runPortfolioBacktest(any(), any(), any(), any(), any(), any())).thenReturn(result);
 
         var response = service.run(new PortfolioBacktestRequest(
                 List.of(" tcs ", "INFY", "TCS"), "", start, end, null, null));
 
-        assertEquals(510_000, response.finalCapital());
+        assertEquals(0, java.math.BigDecimal.valueOf(510_000).compareTo(response.finalCapital()));
         verify(engine).runPortfolioBacktest(eq(List.of("TCS", "INFY")), eq("NSE"),
                 any(BacktestConfig.class), eq(strategy), eq(start), eq(end));
     }

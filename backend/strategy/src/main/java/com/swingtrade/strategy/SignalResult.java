@@ -18,6 +18,7 @@ package com.swingtrade.strategy;
 
 import com.swingtrade.domain.Signal.SignalType;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
@@ -28,7 +29,8 @@ import java.time.LocalDate;
  * @param symbol    the stock symbol analyzed
  * @param date      the date of the latest candle used for analysis
  * @param type      the resulting signal type (BUY, SELL, or HOLD)
- * @param rsi       the 14-period RSI value at the latest candle
+ * @param rsi       the 14-period RSI value at the latest candle (all indicator values are
+ *                  normalized to {@link FinancialScale#INDICATOR_SCALE} decimal places)
  * @param ema20     the 20-period EMA value at the latest candle
  * @param ema50     the 50-period EMA value at the latest candle
  * @param atr       the 14-period ATR value at the latest candle
@@ -38,10 +40,17 @@ public record SignalResult(
     String symbol,
     LocalDate date,
     SignalType type,
-    double rsi,
-    double ema20,
-    double ema50,
-    double atr,
+    BigDecimal rsi,
+    BigDecimal ema20,
+    BigDecimal ema50,
+    BigDecimal atr,
     String reasoning
 ) {
+    /** Normalizes indicator readings to {@link FinancialScale#INDICATOR_SCALE} (HALF_UP). */
+    public SignalResult {
+        rsi = FinancialScale.indicator(rsi);
+        ema20 = FinancialScale.indicator(ema20);
+        ema50 = FinancialScale.indicator(ema50);
+        atr = FinancialScale.indicator(atr);
+    }
 }

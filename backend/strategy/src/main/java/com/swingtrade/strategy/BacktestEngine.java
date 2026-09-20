@@ -524,9 +524,10 @@ public class BacktestEngine {
         int weeklyHighPeriod = Math.min(PriceActionSignalEngine.FIFTY_TWO_WEEK_TRADING_DAYS, barCount);
         HighestValueIndicator weeklyHigh = new HighestValueIndicator(highPrice, weeklyHighPeriod);
 
-        double capital = config.initialCapital();
+        // initialCapital is a configuration double; convert once to an exact decimal money amount.
+        BigDecimal capital = FinancialScale.money(FinancialScale.of(config.initialCapital()));
         List<BacktestTrade> trades = new ArrayList<>();
-        List<Double> capitalCurve = new ArrayList<>();
+        List<BigDecimal> capitalCurve = new ArrayList<>();
         OpenPosition open = null;
 
         int firstEvaluationBar = Math.max(PriceActionSignalEngine.MIN_REQUIRED_CANDLES, evaluationStartIndex);
@@ -552,8 +553,8 @@ public class BacktestEngine {
                                 open.partialExitTaken(), numToBigDecimal(atr.getValue(Math.max(0, i - 1)))));
                 boolean partialExit = false;
                 if (managedDecision.partialExitRatio() != null) {
-                    int partialQuantity = (int) Math.floor(open.quantity()
-                            * managedDecision.partialExitRatio().doubleValue());
+                    int partialQuantity = FinancialScale.wholeShares(
+                            BigDecimal.valueOf(open.quantity()).multiply(managedDecision.partialExitRatio()));
                     if (partialQuantity > 0 && partialQuantity < open.quantity()) {
                         BigDecimal partialPrice = managedDecision.stopPrice();
                         BigDecimal barOpen = openPriceForBar(openPrice, i);
@@ -562,7 +563,7 @@ public class BacktestEngine {
                                 chronologicalCandles.get(i).date(), i, ExitReason.TARGET_HIT, config,
                                 partialQuantity);
                         trades.add(partialTrade);
-                        capital += partialTrade.pnl();
+                        capital = capital.add(partialTrade.pnl());
                         open = new OpenPosition(open.entryIndex(), open.entryDate(), open.entryPrice(),
                                 open.stopLoss(), open.target(), open.quantity() - partialQuantity,
                                 streak, open.highestCloseBeforeBar().max(close), true);
@@ -604,7 +605,7 @@ public class BacktestEngine {
                     LocalDate exitDate = chronologicalCandles.get(i).date();
                     BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, i, reason, config);
                     trades.add(trade);
-                    capital += trade.pnl();
+                    capital = capital.add(trade.pnl());
                     open = null;
                 } else if (!partialExit) {
                     open = new OpenPosition(open.entryIndex(), open.entryDate(), open.entryPrice(),
@@ -631,7 +632,7 @@ public class BacktestEngine {
             if (!PriceBandPolicy.blocksLongExit(finalBand, chronologicalCandles.get(lastIndex))) {
                 BacktestTrade trade = closeTrade(symbol, open, exitPrice, exitDate, lastIndex, ExitReason.TIME_STOP, config);
                 trades.add(trade);
-                capital += trade.pnl();
+                capital = capital.add(trade.pnl());
             } else {
                 // No fill is assumed while the final bar is locked at the lower band.
                 // Return marked-to-market capital and leave the trade absent from closed trades.
@@ -655,7 +656,7 @@ public class BacktestEngine {
                                   ClosePriceIndicator closePrice, OpenPriceIndicator openPrice,
                                   EMAIndicator ema20, EMAIndicator ema50, RSIIndicator rsi, ATRIndicator atr,
                                   VolumeIndicator volume, SMAIndicator volumeMa, HighestValueIndicator weeklyHigh,
-                                  int i, double capital, BacktestConfig config, TradingStrategy strategy,
+                                  int i, BigDecimal capital, BacktestConfig config, TradingStrategy strategy,
                                   PriceBand entryBand) {
         Indicators ind = indicatorsAt(series, closePrice, openPrice, ema20, ema50, rsi, atr, volume, volumeMa,
                 weeklyHigh, i);
@@ -671,17 +672,20 @@ public class BacktestEngine {
         if (PriceBandPolicy.blocksLongEntry(entryBand, nextOpen)) {
             return null;
         }
-        BigDecimal entryPrice = nextOpen.multiply(BigDecimal.valueOf(1 + config.slippagePct()));
+        BigDecimal entryPrice = nextOpen.multiply(BigDecimal.ONE.add(FinancialScale.of(config.slippagePct())));
         BigDecimal atrVal = numToBigDecimal(atr.getValue(i));
-        BigDecimal stopLoss = entryPrice.subtract(atrVal.multiply(BigDecimal.valueOf(config.atrMultiplierStop())));
+        BigDecimal stopLoss = entryPrice.subtract(atrVal.multiply(FinancialScale.of(config.atrMultiplierStop())));
         BigDecimal riskPerShare = entryPrice.subtract(stopLoss);
 
         if (riskPerShare.compareTo(BigDecimal.ZERO) <= 0) {
             return null;
         }
 
-        BigDecimal target = entryPrice.add(riskPerShare.multiply(BigDecimal.valueOf(config.rewardRiskRatio())));
-        int quantity = (int) Math.floor((capital * config.riskPerTradePct()) / riskPerShare.doubleValue());
+        BigDecimal target = entryPrice.add(riskPerShare.multiply(FinancialScale.of(config.rewardRiskRatio())));
+        // Risk budget / risk-per-share, floored to whole shares (RoundingMode.DOWN).
+        int quantity = FinancialScale.wholeShares(
+                capital.multiply(FinancialScale.of(config.riskPerTradePct()))
+                        .divide(riskPerShare, FinancialScale.RATIO));
 
         if (quantity <= 0) {
             return null;
@@ -699,13 +703,16 @@ public class BacktestEngine {
 
     private BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
                                      int exitIndex, ExitReason reason, BacktestConfig config, int quantity) {
-        exitPrice = exitPrice.multiply(BigDecimal.valueOf(1 - config.slippagePct()));
-        double grossPnl = exitPrice.subtract(open.entryPrice).doubleValue() * quantity;
+        exitPrice = exitPrice.multiply(BigDecimal.ONE.subtract(FinancialScale.of(config.slippagePct())));
+        BigDecimal quantityDecimal = BigDecimal.valueOf(quantity);
+        BigDecimal grossPnl = exitPrice.subtract(open.entryPrice).multiply(quantityDecimal);
         BigDecimal costs = DEFAULT_COST_MODEL.roundTripCost(open.entryPrice, exitPrice, quantity,
-            BigDecimal.valueOf(config.brokeragePerTrade()));
-        double netPnl = grossPnl - costs.doubleValue();
-        double entryCost = open.entryPrice.doubleValue() * quantity;
-        double pnlPct = entryCost != 0 ? (netPnl / entryCost) * 100.0 : 0.0;
+            FinancialScale.of(config.brokeragePerTrade()));
+        BigDecimal netPnl = grossPnl.subtract(costs);
+        BigDecimal entryCost = open.entryPrice.multiply(quantityDecimal);
+        // BacktestTrade normalizes pnl/pnlPct to MONEY_SCALE / PERCENT_SCALE (HALF_UP); pnlPct is
+        // derived from the unrounded net P&L so rounding is applied only once.
+        BigDecimal pnlPct = FinancialScale.percentOf(netPnl, entryCost);
         int holdingDays = exitIndex - open.entryIndex;
 
         return new BacktestTrade(symbol, open.entryDate, exitDate, open.entryPrice, exitPrice,
@@ -724,31 +731,37 @@ public class BacktestEngine {
         return numToBigDecimal(openPrice.getValue(index));
     }
 
-    private static double markToMarket(double realizedCapital, OpenPosition open,
-                                       ClosePriceIndicator closePrice, int index) {
+    private static BigDecimal markToMarket(BigDecimal realizedCapital, OpenPosition open,
+                                           ClosePriceIndicator closePrice, int index) {
         if (open == null) {
             return realizedCapital;
         }
-        double unrealized = closePrice.getValue(index).doubleValue() - open.entryPrice.doubleValue();
-        return realizedCapital + unrealized * open.quantity;
+        BigDecimal unrealized = numToBigDecimal(closePrice.getValue(index)).subtract(open.entryPrice)
+                .multiply(BigDecimal.valueOf(open.quantity));
+        return FinancialScale.money(realizedCapital.add(unrealized));
     }
 
-    private BacktestResult buildResult(String symbol, List<BacktestTrade> trades, List<Double> capitalCurve,
-                                       double finalCapital, BacktestConfig config,
+    /**
+     * Aggregates trades and the equity curve into a {@link BacktestResult}. Money (capital, P&amp;L) stays
+     * {@link BigDecimal} until this method; the result's percentages and ratios are dimensionless
+     * statistics exposed as {@code double} (see {@link BacktestMetrics} for the conversion boundary).
+     */
+    private BacktestResult buildResult(String symbol, List<BacktestTrade> trades, List<BigDecimal> capitalCurve,
+                                       BigDecimal finalCapital, BacktestConfig config,
                                        LocalDate evaluationStart, LocalDate evaluationEnd,
                                        BigDecimal benchmarkStartClose, BigDecimal benchmarkEndClose) {
+        BigDecimal initialCapital = FinancialScale.money(FinancialScale.of(config.initialCapital()));
         int totalTrades = trades.size();
-        List<BacktestTrade> wins = trades.stream().filter(t -> t.pnl() > 0).toList();
-        List<BacktestTrade> losses = trades.stream().filter(t -> t.pnl() <= 0).toList();
+        List<BacktestTrade> wins = trades.stream().filter(t -> t.pnl().signum() > 0).toList();
+        List<BacktestTrade> losses = trades.stream().filter(t -> t.pnl().signum() <= 0).toList();
 
         double winRate = totalTrades > 0 ? (wins.size() / (double) totalTrades) * 100.0 : 0.0;
-        double avgGainPct = wins.isEmpty() ? 0.0 : wins.stream().mapToDouble(BacktestTrade::pnlPct).average().orElse(0.0);
-        double avgLossPct = losses.isEmpty() ? 0.0
-                : Math.abs(losses.stream().mapToDouble(BacktestTrade::pnlPct).average().orElse(0.0));
-        double maxDrawdownPct = computeMaxDrawdownPct(capitalCurve);
-        double sharpeRatio = computeSharpeRatio(capitalCurve);
-        double totalReturn = ((finalCapital - config.initialCapital()) / config.initialCapital()) * 100.0;
-        double cagrPct = BacktestMetrics.cagrPct(config.initialCapital(), finalCapital,
+        double avgGainPct = averagePnlPct(wins);
+        double avgLossPct = Math.abs(averagePnlPct(losses));
+        double maxDrawdownPct = BacktestMetrics.maxDrawdownPct(capitalCurve);
+        double sharpeRatio = BacktestMetrics.sharpeRatio(capitalCurve);
+        double totalReturn = BacktestMetrics.totalReturnPct(initialCapital, finalCapital);
+        double cagrPct = BacktestMetrics.cagrPct(initialCapital, finalCapital,
                 evaluationStart, evaluationEnd);
         double sortinoRatio = BacktestMetrics.sortinoRatio(capitalCurve);
         double calmarRatio = BacktestMetrics.calmarRatio(cagrPct, maxDrawdownPct);
@@ -762,39 +775,13 @@ public class BacktestEngine {
                 cagrPct, sortinoRatio, calmarRatio, benchmarkComparison);
     }
 
-    private double computeSharpeRatio(List<Double> capitalCurve) {
-        if (capitalCurve.size() < 3) {
+    /** Mean of the trades' percentage P&amp;L computed in {@code BigDecimal}; 0 for an empty list. */
+    private static double averagePnlPct(List<BacktestTrade> trades) {
+        if (trades.isEmpty()) {
             return 0.0;
         }
-
-        double[] dailyReturns = new double[capitalCurve.size() - 1];
-        for (int i = 1; i < capitalCurve.size(); i++) {
-            double prev = capitalCurve.get(i - 1);
-            double curr = capitalCurve.get(i);
-            dailyReturns[i - 1] = prev != 0 ? (curr - prev) / prev : 0.0;
-        }
-
-        double mean = java.util.Arrays.stream(dailyReturns).average().orElse(0.0);
-        double variance = java.util.Arrays.stream(dailyReturns).map(r -> Math.pow(r - mean, 2)).average().orElse(0.0);
-        double stdDev = Math.sqrt(variance);
-
-        return stdDev == 0 ? 0.0 : (mean / stdDev) * Math.sqrt(252);
-    }
-
-    private double computeMaxDrawdownPct(List<Double> capitalCurve) {
-        if (capitalCurve.isEmpty()) {
-            return 0.0;
-        }
-
-        double peak = capitalCurve.getFirst();
-        double maxDrawdown = 0.0;
-        for (double value : capitalCurve) {
-            peak = Math.max(peak, value);
-            if (peak > 0) {
-                maxDrawdown = Math.max(maxDrawdown, (peak - value) / peak * 100.0);
-            }
-        }
-        return maxDrawdown;
+        BigDecimal sum = trades.stream().map(BacktestTrade::pnlPct).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return sum.divide(BigDecimal.valueOf(trades.size()), FinancialScale.RATIO).doubleValue();
     }
 
     private static BigDecimal numToBigDecimal(Num value) {
@@ -838,14 +825,14 @@ public class BacktestEngine {
                 csv.append(trade.symbol()).append(',')
                         .append(trade.entryDate()).append(',')
                         .append(trade.exitDate()).append(',')
-                        .append(trade.entryPrice()).append(',')
-                        .append(trade.exitPrice()).append(',')
-                        .append(trade.stopLoss()).append(',')
-                        .append(trade.target()).append(',')
+                        .append(trade.entryPrice().toPlainString()).append(',')
+                        .append(trade.exitPrice().toPlainString()).append(',')
+                        .append(trade.stopLoss().toPlainString()).append(',')
+                        .append(trade.target().toPlainString()).append(',')
                         .append(trade.quantity()).append(',')
                         .append(trade.exitReason()).append(',')
-                        .append(trade.pnl()).append(',')
-                        .append(trade.pnlPct()).append(',')
+                        .append(trade.pnl().toPlainString()).append(',')
+                        .append(trade.pnlPct().toPlainString()).append(',')
                         .append(trade.holdingDays())
                         .append('\n');
             }

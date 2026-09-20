@@ -5,6 +5,9 @@ import com.swingtrade.data.entity.WatchlistEntity;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
+import java.math.BigDecimal;
+import java.math.MathContext;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -52,27 +55,30 @@ public class BacktestScorer {
     /**
      * Calculate profit factor from backtest result.
      * profitFactor = abs(winning trades' total pnl) / abs(losing trades' total pnl)
+     *
+     * <p>Sums and the division are done in {@code BigDecimal}; the dimensionless ratio is converted
+     * to {@code double} once because {@code CompositeAnalysis.BacktestScore} is a {@code double} API.</p>
      */
     public static double calculateProfitFactor(BacktestResult result) {
         if (result.trades() == null || result.trades().isEmpty()) {
             return 0;
         }
 
-        double totalWin = 0;
-        double totalLoss = 0;
+        BigDecimal totalWin = BigDecimal.ZERO;
+        BigDecimal totalLoss = BigDecimal.ZERO;
 
         for (var trade : result.trades()) {
-            if (trade.pnl() > 0) {
-                totalWin += trade.pnl();
-            } else if (trade.pnl() < 0) {
-                totalLoss += Math.abs(trade.pnl());
+            if (trade.pnl().signum() > 0) {
+                totalWin = totalWin.add(trade.pnl());
+            } else if (trade.pnl().signum() < 0) {
+                totalLoss = totalLoss.add(trade.pnl().abs());
             }
         }
 
-        if (totalLoss == 0) {
-            return totalWin > 0 ? 100 : 0; // All wins or no trades
+        if (totalLoss.signum() == 0) {
+            return totalWin.signum() > 0 ? 100 : 0; // All wins or no trades
         }
 
-        return totalWin / totalLoss;
+        return totalWin.divide(totalLoss, MathContext.DECIMAL64).doubleValue();
     }
 }
