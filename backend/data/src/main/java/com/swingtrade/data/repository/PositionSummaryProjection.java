@@ -1,6 +1,7 @@
 package com.swingtrade.data.repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * Spring Data interface projection for {@link PositionRepository#findOpenSummaries()}.
@@ -30,4 +31,8 @@ public interface PositionSummaryProjection {
     BigDecimal getTarget();
 
     String getBrokerType();
+
+    LocalDate getEntryDate();
+
+    String getEntryReason();
 }

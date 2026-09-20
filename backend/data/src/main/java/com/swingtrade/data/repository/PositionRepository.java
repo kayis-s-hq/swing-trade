@@ -34,7 +34,7 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
     @Query("SELECT p.id AS id, p.symbol AS symbol, p.status AS status, p.direction AS direction, "
         + "p.entryPrice AS entryPrice, p.quantity AS quantity, p.currentPrice AS currentPrice, "
         + "p.unrealizedPnL AS unrealizedPnL, p.stopLoss AS stopLoss, p.target AS target, "
-        + "p.brokerType AS brokerType "
+        + "p.brokerType AS brokerType, p.entryDate AS entryDate, p.entryReason AS entryReason "
         + "FROM PositionEntity p WHERE p.status = 'OPEN' ORDER BY p.entryDate DESC")
     List<PositionSummaryProjection> findOpenSummaries();
 

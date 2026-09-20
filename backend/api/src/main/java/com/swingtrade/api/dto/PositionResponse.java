@@ -2,6 +2,7 @@ package com.swingtrade.api.dto;
 
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.PositionSummary;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -49,6 +50,31 @@ public class PositionResponse {
         }
 
         // Calculate total value
+        if (currentPrice != null && quantity != null) {
+            this.totalValue = currentPrice.multiply(BigDecimal.valueOf(quantity));
+        }
+
+        this.averagePrice = entryPrice;
+    }
+
+    /** Builds the list-item response from the lightweight projection (no aggregate load). */
+    public PositionResponse(PositionSummary position) {
+        this.id = position.id();
+        this.symbol = position.symbol();
+        this.entryPrice = position.entryPrice();
+        this.entryDate = position.entryDate();
+        this.quantity = position.quantity();
+        this.stopLoss = position.stopLoss();
+        this.target = position.target();
+        this.status = position.status();
+        this.entryReason = position.entryReason();
+        this.currentPrice = position.currentPrice();
+
+        if (currentPrice != null && entryPrice != null) {
+            this.unrealizedPnL = position.calculateUnrealizedPnL(currentPrice);
+            this.unrealizedPnLPercent = position.calculatePnLPercent(currentPrice);
+        }
+
         if (currentPrice != null && quantity != null) {
             this.totalValue = currentPrice.multiply(BigDecimal.valueOf(quantity));
         }
