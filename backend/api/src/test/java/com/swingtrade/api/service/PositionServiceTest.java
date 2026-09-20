@@ -396,7 +396,7 @@ class PositionServiceTest {
             // Regression: getPositionStats() used to hardcode setStoppedOut(0) /
             // setTargetHit(0) despite already fetching positions by exactly these
             // statuses a few lines above - the counts must reflect what was queried.
-            when(positionStore.findAllOpen()).thenReturn(java.util.List.of());
+            when(positionStore.findOpenSummaries()).thenReturn(java.util.List.of());
             when(positionStore.findByStatus(PositionStatus.CLOSED)).thenReturn(java.util.List.of(
                     closedPosition(PositionStatus.CLOSED, new BigDecimal("50"))));
             when(positionStore.findByStatus(PositionStatus.STOPPED)).thenReturn(java.util.List.of(
@@ -423,7 +423,8 @@ class PositionServiceTest {
         private PositionSummary summary(String symbol, String entry, String current, String stop, int qty) {
             return new PositionSummary(1L, symbol, PositionStatus.OPEN, TradeDirection.LONG,
                     new BigDecimal(entry), qty, current == null ? null : new BigDecimal(current),
-                    BigDecimal.ZERO, new BigDecimal(stop), new BigDecimal("500"), "PAPER");
+                    BigDecimal.ZERO, new BigDecimal(stop), new BigDecimal("500"), "PAPER",
+                    LocalDate.of(2026, 1, 15), "Test");
         }
 
         @Test

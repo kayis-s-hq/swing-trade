@@ -4,6 +4,7 @@ import com.swingtrade.api.dto.PositionResponse;
 import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.PositionSummary;
 import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.domain.service.OrderService;
 import com.swingtrade.domain.service.TradingService;
@@ -97,13 +98,23 @@ class PositionListContractTest {
     void closedPositionResponseJsonIsStable() {
         Position closed = PositionListFixtures.closed();
 
-        assertJson(new PositionResponse(closed), fields(
+        assertJson(new PositionResponse(PositionSummary.from(closed)), fields(
                 "id", "4", "symbol", "\"HDFC\"", "entryPrice", "100.0000",
                 "entryDate", "\"2026-01-05\"", "quantity", "10", "stopLoss", "90.00",
                 "target", "120.00", "status", "\"TARGET_HIT\"", "entryReason", "\"Trend\"",
                 "currentPrice", "120.00", "unrealizedPnL", "200.0000",
                 "unrealizedPnLPercent", "20.0000", "averagePrice", "100.0000",
                 "totalValue", "1200.00"));
+    }
+
+    @Test
+    void summaryAndAggregateBuildIdenticalJson() {
+        for (Position p : List.of(PositionListFixtures.longOpen(), PositionListFixtures.shortOpen(),
+                PositionListFixtures.noCurrentPrice(), PositionListFixtures.closed())) {
+            assertThat(MAPPER.writeValueAsString(new PositionResponse(PositionSummary.from(p))))
+                    .as(p.symbol())
+                    .isEqualTo(MAPPER.writeValueAsString(new PositionResponse(p)));
+        }
     }
 
     private static Map<String, String> fields(String... kv) {
@@ -128,7 +139,8 @@ class PositionListContractTest {
         }
 
         static void stubOpen(PositionStore store, Position... positions) {
-            org.mockito.Mockito.when(store.findAllOpen()).thenReturn(List.of(positions));
+            org.mockito.Mockito.when(store.findOpenSummaries())
+                    .thenReturn(java.util.Arrays.stream(positions).map(PositionSummary::from).toList());
         }
 
         static Position longOpen() {

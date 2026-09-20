@@ -93,6 +93,8 @@ class PositionRepositoryTest {
         assertThat(newest.getStopLoss()).isEqualByComparingTo("95.00");
         assertThat(newest.getTarget()).isEqualByComparingTo("110.00");
         assertThat(newest.getBrokerType()).isEqualTo("PAPER");
+        assertThat(newest.getEntryDate()).isEqualTo(LocalDate.of(2026, 2, 10));
+        assertThat(newest.getEntryReason()).isEqualTo("Reason NEW");
     }
 
     @Test
@@ -110,6 +112,25 @@ class PositionRepositoryTest {
         assertThat(summary.entryPrice()).isEqualByComparingTo("100");
         assertThat(summary.quantity()).isEqualTo(10);
         assertThat(summary.brokerType()).isEqualTo("PAPER");
+        assertThat(summary.entryDate()).isEqualTo(LocalDate.of(2026, 1, 10));
+        assertThat(summary.entryReason()).isEqualTo("Reason TCS");
+    }
+
+    @Test
+    void summaryQueryIsAScalarProjectionThatNeverLoadsEntitiesOrOrders() {
+        // Evidence for AD-H6: the list query selects columns only. Rows are projection proxies,
+        // not managed PositionEntity instances, and the projection exposes no order association.
+        tx.executeWithoutResult(status ->
+            repository.save(position("TCS", "OPEN", "LONG", LocalDate.of(2026, 1, 10), "100.0000")));
+
+        tx.executeWithoutResult(status -> {
+            List<PositionSummaryProjection> rows = repository.findOpenSummaries();
+            assertThat(rows).hasSize(1);
+            assertThat(rows.get(0)).isNotInstanceOf(PositionEntity.class);
+            assertThat(java.util.Arrays.stream(PositionSummaryProjection.class.getMethods())
+                .map(java.lang.reflect.Method::getName))
+                .noneMatch(name -> name.toLowerCase().contains("order"));
+        });
     }
 
     @Test
@@ -131,6 +152,7 @@ class PositionRepositoryTest {
         entity.setDirection(direction);
         entity.setCurrentPrice(new BigDecimal("104.00"));
         entity.setUnrealizedPnL(new BigDecimal("40.00"));
+        entity.setEntryReason("Reason " + symbol);
         return entity;
     }
 }

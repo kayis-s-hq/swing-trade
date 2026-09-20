@@ -48,7 +48,9 @@ public class PositionStoreImpl implements PositionStore {
             row.getUnrealizedPnL(),
             row.getStopLoss(),
             row.getTarget(),
-            row.getBrokerType());
+            row.getBrokerType(),
+            row.getEntryDate(),
+            row.getEntryReason());
     }
 
     @Override

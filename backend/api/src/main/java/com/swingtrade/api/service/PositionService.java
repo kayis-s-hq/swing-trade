@@ -85,8 +85,8 @@ public class PositionService {
      * @return List of open paper positions as PositionResponse DTOs
      */
     public List<PositionResponse> getOpenPositions() {
-        return positionStore.findAllOpen().stream()
-                .map(this::convertToResponse)
+        return positionStore.findOpenSummaries().stream()
+                .map(PositionResponse::new)
                 .collect(Collectors.toList());
     }
 
@@ -192,7 +192,7 @@ public class PositionService {
      * @return Position statistics
      */
     public PositionStats getPositionStats() {
-        List<Position> openPositions = positionStore.findAllOpen();
+        List<PositionSummary> openPositions = positionStore.findOpenSummaries();
         List<Position> closedPositions = new ArrayList<>();
         closedPositions.addAll(positionStore.findByStatus(PositionStatus.CLOSED));
         closedPositions.addAll(positionStore.findByStatus(PositionStatus.STOPPED));
@@ -242,7 +242,7 @@ public class PositionService {
         return stats;
     }
 
-    private BigDecimal calculateTodayPnL(List<Position> openPositions, List<Position> closedPositions) {
+    private BigDecimal calculateTodayPnL(List<PositionSummary> openPositions, List<Position> closedPositions) {
         LocalDate today = LocalDate.now();
         BigDecimal openToday = openPositions.stream()
                 .filter(p -> today.equals(p.entryDate()))
