@@ -11,6 +11,7 @@ import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.PositionSummary;
 import com.swingtrade.domain.Trade;
 import com.swingtrade.domain.service.OrderService;
 import com.swingtrade.domain.service.TradingService;
@@ -262,11 +263,11 @@ public class PositionService {
      * @return Sector allocation data
      */
     public SectorAllocation getSectorAllocation() {
-        List<Position> openPositions = positionStore.findAllOpen();
+        List<PositionSummary> openPositions = positionStore.findOpenSummaries();
 
         java.util.Map<String, BigDecimal> exposureBySector = new java.util.LinkedHashMap<>();
         BigDecimal totalExposure = BigDecimal.ZERO;
-        for (Position position : openPositions) {
+        for (PositionSummary position : openPositions) {
             if (position.currentPrice() == null || position.quantity() == null) {
                 continue;
             }
@@ -515,7 +516,7 @@ public class PositionService {
     public RiskSummary getRiskSummary() {
         // Use the DB-backed store (same source as getOpenPositions()) to avoid
         // double-counting exposure from stale/duplicate in-memory engine entries.
-        List<Position> openPositions = positionStore.findAllOpen();
+        List<PositionSummary> openPositions = positionStore.findOpenSummaries();
         RiskSummary summary = new RiskSummary();
 
         BigDecimal totalExposure = openPositions.stream()
@@ -537,7 +538,7 @@ public class PositionService {
         summary.setStopLossExposure(stopLossExposure);
 
         java.util.Map<String, Integer> sectorExposure = new java.util.LinkedHashMap<>();
-        for (Position position : openPositions) {
+        for (PositionSummary position : openPositions) {
             String sector = stockStore.findBySymbol(position.symbol())
                     .map(com.swingtrade.domain.Stock::sector)
                     .map(Enum::name)

@@ -26,6 +26,7 @@ import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.domain.OrderType;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
+import com.swingtrade.domain.PositionSummary;
 import com.swingtrade.domain.Trade;
 import com.swingtrade.domain.TradeDirection;
 import com.swingtrade.domain.Stock;
@@ -130,7 +131,7 @@ class PositionServiceTest {
 
     private Position makeDomainPosition(Long id, String symbol, BigDecimal entryPrice,
                                          BigDecimal currentPrice, String positionId) {
-        return new Position(
+        return Position.of(
                 id, "PAPER", symbol, entryPrice, LocalDate.now(), 10,
                 new BigDecimal("430"), new BigDecimal("500"),
                 PositionStatus.OPEN, "Test", currentPrice,
@@ -380,7 +381,7 @@ class PositionServiceTest {
     class GetPositionStats {
 
         private Position closedPosition(PositionStatus status, BigDecimal realizedPnL) {
-            return new Position(
+            return Position.of(
                     1L, "PAPER", "TEST", new BigDecimal("100"), LocalDate.now(), 10,
                     new BigDecimal("90"), new BigDecimal("120"),
                     status, "Test", new BigDecimal("100"),
@@ -411,6 +412,51 @@ class PositionServiceTest {
             assertThat(stats.getStoppedOut()).isEqualTo(2);
             assertThat(stats.getTargetHit()).isEqualTo(1);
             assertThat(stats.getClosedPositions()).isEqualTo(4);
+        }
+    }
+
+    // ==================== risk summary / sector allocation (summary projection) ====================
+
+    @Nested
+    class SummaryBackedAggregations {
+
+        private PositionSummary summary(String symbol, String entry, String current, String stop, int qty) {
+            return new PositionSummary(1L, symbol, PositionStatus.OPEN, TradeDirection.LONG,
+                    new BigDecimal(entry), qty, current == null ? null : new BigDecimal(current),
+                    BigDecimal.ZERO, new BigDecimal(stop), new BigDecimal("500"), "PAPER");
+        }
+
+        @Test
+        void riskSummaryAggregatesFromSummariesWithoutLoadingFullPositions() {
+            when(positionStore.findOpenSummaries()).thenReturn(List.of(
+                    summary("TCS", "100", "110", "90", 10),
+                    summary("INFY", "200", "190", "180", 5)));
+            when(stockStore.findBySymbol("TCS")).thenReturn(Optional.of(stock("TCS", Stock.Sector.IT)));
+            when(stockStore.findBySymbol("INFY")).thenReturn(Optional.of(stock("INFY", Stock.Sector.IT)));
+            when(tradingService.getCurrentCash()).thenReturn(new BigDecimal("1000"));
+
+            var risk = positionService.getRiskSummary();
+
+            assertThat(risk.getTotalExposure()).isEqualByComparingTo("2050");
+            assertThat(risk.getNumberOfPositions()).isEqualTo(2);
+            assertThat(risk.getStopLossExposure()).isEqualByComparingTo("200");
+            assertThat(risk.getSectorExposure()).containsEntry("IT", 2);
+            verify(positionStore, never()).findAllOpen();
+        }
+
+        @Test
+        void sectorAllocationSkipsSummariesWithoutPrice() {
+            when(positionStore.findOpenSummaries()).thenReturn(List.of(
+                    summary("TCS", "100", "100", "90", 10),
+                    summary("NOPRICE", "100", null, "90", 10)));
+            when(stockStore.findBySymbol("TCS")).thenReturn(Optional.of(stock("TCS", Stock.Sector.IT)));
+
+            var allocation = positionService.getSectorAllocation();
+
+            assertThat(allocation.getTotalExposure()).isEqualByComparingTo("1000");
+            assertThat(allocation.getNumberOfSectors()).isEqualTo(1);
+            assertThat(allocation.getAllocation()).containsEntry("IT", 100.0);
+            verify(positionStore, never()).findAllOpen();
         }
     }
 }

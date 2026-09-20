@@ -24,6 +24,21 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
     List<PositionEntity> findAllOpenPositions();
 
     /**
+     * Finds open positions as lightweight summaries, without loading full entities.
+     * Uses an interface projection (aliases map to {@link PositionSummaryProjection}
+     * properties) so the String {@code status}/{@code direction} columns are not forced
+     * into enum types inside JPQL.
+     *
+     * @return open position summaries, most recently entered first
+     */
+    @Query("SELECT p.id AS id, p.symbol AS symbol, p.status AS status, p.direction AS direction, "
+        + "p.entryPrice AS entryPrice, p.quantity AS quantity, p.currentPrice AS currentPrice, "
+        + "p.unrealizedPnL AS unrealizedPnL, p.stopLoss AS stopLoss, p.target AS target, "
+        + "p.brokerType AS brokerType "
+        + "FROM PositionEntity p WHERE p.status = 'OPEN' ORDER BY p.entryDate DESC")
+    List<PositionSummaryProjection> findOpenSummaries();
+
+    /**
      * Finds an open position by symbol.
      *
      * @param symbol the stock symbol

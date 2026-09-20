@@ -26,7 +26,7 @@ class PortfolioTest {
     private Position makePosition(String symbol, PositionStatus status, BigDecimal entryPrice,
                                    BigDecimal currentPrice, int quantity, TradeDirection direction,
                                    BigDecimal unrealizedPnL) {
-        return new Position(
+        return Position.of(
             1L, "PAPER", symbol, entryPrice, LocalDate.now(), quantity,
             entryPrice.multiply(BigDecimal.valueOf(0.9)), entryPrice.multiply(BigDecimal.valueOf(1.25)),
             status, "Test", currentPrice,
