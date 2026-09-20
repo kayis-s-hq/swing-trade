@@ -37,52 +37,6 @@ public record Position(
         }
     }
 
-    /**
-     * Compatibility constructor for callers being migrated to grouped values.
-     *
-     * @deprecated use {@link #of} for flat adapter data, {@link #openPaper} for new paper
-     *     positions, or the canonical constructor with {@link PositionEntry},
-     *     {@link PositionRisk}, {@link PositionValuation} and {@link PositionExit}.
-     */
-    @Deprecated
-    public Position(
-        Long id,
-        String brokerType,
-        String symbol,
-        BigDecimal entryPrice,
-        LocalDate entryDate,
-        Integer quantity,
-        BigDecimal stopLoss,
-        BigDecimal target,
-        PositionStatus status,
-        String entryReason,
-        BigDecimal currentPrice,
-        String positionId,
-        String brokerPositionId,
-        Exchange exchange,
-        TradeDirection direction,
-        BigDecimal averagePrice,
-        BigDecimal unrealizedPnL,
-        BigDecimal realizedPnL,
-        BigDecimal marginUtilized,
-        LocalDateTime entryTime,
-        LocalDateTime exitTime,
-        String exitReason,
-        List<Order> orders
-    ) {
-        this(
-            id,
-            brokerType,
-            PositionEntry.of(symbol, entryPrice, entryDate, quantity, entryTime, entryReason,
-                positionId, brokerPositionId, exchange, direction, averagePrice),
-            new PositionRisk(stopLoss, target, marginUtilized),
-            new PositionValuation(currentPrice, unrealizedPnL, realizedPnL),
-            status,
-            exitTime == null && exitReason == null ? null : new PositionExit(exitTime, exitReason),
-            orders
-        );
-    }
-
     /** Creates a position from persistence or another external adapter. */
     public static Position of(
         Long id,
