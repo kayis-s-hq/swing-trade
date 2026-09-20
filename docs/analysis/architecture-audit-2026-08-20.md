@@ -1145,6 +1145,12 @@ Each agent scanned the codebase independently. Findings were deduplicated and me
 | AD-C1: Exposed credentials | ⏳ Deferred | |
 | AD-C2: No API authentication | ⏳ Deferred | |
 | AD-H1: ArchUnit enforcement disabled | ✅ Done | Re-enabled `noCircularDependencies()` + added `apiShouldNotImportConcreteBrokerClasses()` rule. Extracted `TradingService` and `OrderService` interfaces to core. Updated PositionService, JobOrchestratorService, SignalFilterService, PerformanceService to use core interfaces. Removed unused build deps (strategy→llm, broker→strategy). |
+| AD-H4: BigDecimal precision loss | ⏳ Open | `BacktestEngine`, `PortfolioBacktestEngine`, `BacktestTrade` and `SignalResult` still use `double`. Being redone against the current engine (partial exits, slippage, cost model) on `refactor/ad-h4-bigdecimal-backtest`. |
+| AD-H5: Circular dependency between broker and data | ◐ Partly | Module-level cycle already gone: `data` depends only on `core`, and `ModuleBoundaryTest` enforces `slices().beFreeOfCycles()`. Remaining: in-module bean cycle `PaperTradingStateService` <-> `PaperTradingEngine` (`@Lazy` + `setStateService`), addressed on `refactor/ad-h5-state-persistence-cycle`. |
+| AD-H6: Position is a 23-field God Object | ◐ Partly | `Position` is already an aggregate of `PositionEntry`/`PositionRisk`/`PositionValuation`/`PositionExit`. Leftover: 23-arg compatibility constructor with ~57 callers, plus a lightweight list projection, on `refactor/ad-h6-position-cleanup`. The Summary/Details/TradeHistory split proposed here was rejected. |
+| AD-H8: KillSwitchService.active not volatile | ✅ Done | `active` is `volatile boolean`. |
+| AD-H10: Trade.close() misclassifies losing trades | ✅ Done | `Trade.resolveStatus(exitReason, totalPnL)` uses the exit reason when it names a trigger and falls back to the P&L sign otherwise. |
+| AD-H11: No read timeouts on WebClients | ➖ Partly obsolete | `UpstoxServiceClient` is fully commented out on main, so nothing to fix there. Yahoo and Fyers clients were not re-verified. |
 
 ### 2026-08-08 Code Audit — 20 Phases Completed
 
