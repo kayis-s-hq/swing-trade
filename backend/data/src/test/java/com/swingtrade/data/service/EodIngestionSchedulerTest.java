@@ -30,6 +30,9 @@ class EodIngestionSchedulerTest {
 
         EodIngestionScheduler scheduler = new EodIngestionScheduler(
                 dataIngestionService, watchlistRepository, holidayService);
+        // Pin a Wednesday: the scheduler deliberately skips weekends.
+        scheduler.clock = java.time.Clock.fixed(
+                java.time.Instant.parse("2026-09-16T11:00:00Z"), java.time.ZoneId.of("Asia/Kolkata"));
         scheduler.ingestLatestForAll();
 
         verify(dataIngestionService).processSingleStock(eq("TCS"), org.mockito.ArgumentMatchers.any());
