@@ -131,7 +131,7 @@ class PositionServiceTest {
 
     private Position makeDomainPosition(Long id, String symbol, BigDecimal entryPrice,
                                          BigDecimal currentPrice, String positionId) {
-        return new Position(
+        return Position.of(
                 id, "PAPER", symbol, entryPrice, LocalDate.now(), 10,
                 new BigDecimal("430"), new BigDecimal("500"),
                 PositionStatus.OPEN, "Test", currentPrice,
@@ -381,7 +381,7 @@ class PositionServiceTest {
     class GetPositionStats {
 
         private Position closedPosition(PositionStatus status, BigDecimal realizedPnL) {
-            return new Position(
+            return Position.of(
                     1L, "PAPER", "TEST", new BigDecimal("100"), LocalDate.now(), 10,
                     new BigDecimal("90"), new BigDecimal("120"),
                     status, "Test", new BigDecimal("100"),

@@ -35,7 +35,7 @@ class CapitalTrackerTest {
 
     // Helper: build a Position for testing
     private Position makePosition(String symbol, int quantity, BigDecimal entryPrice) {
-        return new Position(null, "PAPER", symbol, entryPrice, LocalDate.now(),
+        return Position.of(null, "PAPER", symbol, entryPrice, LocalDate.now(),
                 quantity, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                 "Test", entryPrice, "POS_00000001", null, Exchange.NSE,
                 TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -619,7 +619,7 @@ class CapitalTrackerTest {
         @Test
         void positionWithNullFields() {
             // Given: Position with null entry price and quantity
-            Position pos = new Position(null, "PAPER", "RELIANCE-EQ", null, LocalDate.now(),
+            Position pos = Position.of(null, "PAPER", "RELIANCE-EQ", null, LocalDate.now(),
                     null, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", null, "POS_00000001", null, Exchange.NSE,
                     TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,

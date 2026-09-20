@@ -37,7 +37,14 @@ public record Position(
         }
     }
 
-    /** Compatibility constructor for callers being migrated to grouped values. */
+    /**
+     * Compatibility constructor for callers being migrated to grouped values.
+     *
+     * @deprecated use {@link #of} for flat adapter data, {@link #openPaper} for new paper
+     *     positions, or the canonical constructor with {@link PositionEntry},
+     *     {@link PositionRisk}, {@link PositionValuation} and {@link PositionExit}.
+     */
+    @Deprecated
     public Position(
         Long id,
         String brokerType,
@@ -102,10 +109,17 @@ public record Position(
         String exitReason,
         List<Order> orders
     ) {
-        return new Position(id, brokerType, symbol, entryPrice, entryDate, quantity, stopLoss, target,
-            status, entryReason, currentPrice, positionId, brokerPositionId, exchange, direction,
-            averagePrice, unrealizedPnL, realizedPnL, marginUtilized, entryTime, exitTime, exitReason,
-            orders);
+        return new Position(
+            id,
+            brokerType,
+            PositionEntry.of(symbol, entryPrice, entryDate, quantity, entryTime, entryReason,
+                positionId, brokerPositionId, exchange, direction, averagePrice),
+            new PositionRisk(stopLoss, target, marginUtilized),
+            new PositionValuation(currentPrice, unrealizedPnL, realizedPnL),
+            status,
+            exitTime == null && exitReason == null ? null : new PositionExit(exitTime, exitReason),
+            orders
+        );
     }
 
     /** Creates a paper position with a precomputed risk envelope. */

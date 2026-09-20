@@ -60,7 +60,7 @@ class PaperTradingMonitorServiceTest {
 
     // Helper: build a Position for testing
     private Position makePosition(String symbol, PositionStatus status, BigDecimal currentPrice) {
-        return new Position(
+        return Position.of(
             1L, "PAPER", symbol, new BigDecimal("100.00"), LocalDate.now(), 10,
             new BigDecimal("90.00"), new BigDecimal("125.00"), status, "Test",
             currentPrice, "POS_00000001", null, null, TradeDirection.LONG,
@@ -168,7 +168,7 @@ class PaperTradingMonitorServiceTest {
         @Test
         void monitorPositions_appliesConfiguredTrailingPolicyBeforeFixedTriggers() {
             properties.setRiskManagementEnabled(true);
-            Position position = new Position(
+            Position position = Position.of(
                 1L, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"), LocalDate.now().minusDays(1), 10,
                 new BigDecimal("90.00"), new BigDecimal("125.00"), PositionStatus.OPEN, "Test",
                 new BigDecimal("100.00"), "POS_00000001", null, null, TradeDirection.LONG,
@@ -198,7 +198,7 @@ class PaperTradingMonitorServiceTest {
         @Test
         void monitorPositions_appliesOneTimePartialTargetExit() {
             properties.setRiskManagementEnabled(true);
-            Position position = new Position(
+            Position position = Position.of(
                 1L, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"), LocalDate.now().minusDays(1), 10,
                 new BigDecimal("90.00"), new BigDecimal("125.00"), PositionStatus.OPEN, "Test",
                 new BigDecimal("100.00"), "POS_00000001", null, null, TradeDirection.LONG,

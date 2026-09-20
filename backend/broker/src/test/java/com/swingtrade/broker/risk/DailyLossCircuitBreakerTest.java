@@ -114,7 +114,7 @@ class DailyLossCircuitBreakerTest {
     @Test
     void testCircuitOpensOnExcessiveLoss() {
         // Given - simulate large losses (-2.5% of 1M = -25000)
-        Position lossPosition = new Position(
+        Position lossPosition = Position.of(
             null, "PAPER", "RELIANCE", new BigDecimal("2000"), java.time.LocalDate.now(),
             100, new BigDecimal("1900"), new BigDecimal("2200"),
             PositionStatus.OPEN, "test", new BigDecimal("1975"),
@@ -134,7 +134,7 @@ class DailyLossCircuitBreakerTest {
     @Test
     void testCircuitStaysClosedOnNormalLoss() {
         // Given - simulate normal losses (-0.5% of 1M = -5000)
-        Position lossPosition = new Position(
+        Position lossPosition = Position.of(
             null, "PAPER", "TCS", new BigDecimal("3500"), java.time.LocalDate.now(),
             50, new BigDecimal("3400"), new BigDecimal("3700"),
             PositionStatus.OPEN, "test", new BigDecimal("3490"),
@@ -154,7 +154,7 @@ class DailyLossCircuitBreakerTest {
     @Test
     void historicalRealizedLossDoesNotTripTodaysCircuit() {
         LocalDate yesterday = LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(1);
-        Position historicalLoss = new Position(
+        Position historicalLoss = Position.of(
             null, "PAPER", "TCS", new BigDecimal("100"), yesterday,
             300, new BigDecimal("90"), new BigDecimal("125"),
             PositionStatus.CLOSED, "test", new BigDecimal("50"),

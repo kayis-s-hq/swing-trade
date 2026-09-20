@@ -59,7 +59,7 @@ class PositionStoreImplTest {
     }
 
     private static Position position() {
-        return new Position(4L, "PAPER", "TCS", bd("100"), DATE, 10,
+        return Position.of(4L, "PAPER", "TCS", bd("100"), DATE, 10,
                 bd("95"), bd("110"), PositionStatus.OPEN, "signal", bd("104"), "POS_00000004",
                 null, com.swingtrade.domain.Exchange.NSE, TradeDirection.LONG, bd("100"), bd("40"), BigDecimal.ZERO,
                 bd("1000"), DATE.atStartOfDay(), null, null, List.of());

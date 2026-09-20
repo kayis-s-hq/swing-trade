@@ -52,7 +52,7 @@ class PositionManagerTest {
             BigDecimal unrealizedPnL, BigDecimal realizedPnL, BigDecimal marginUtilized,
             java.time.LocalDateTime entryTime, java.time.LocalDateTime exitTime,
             String exitReason, List<Order> orders) {
-        return new Position(id, brokerType, symbol, entryPrice, entryDate, quantity,
+        return Position.of(id, brokerType, symbol, entryPrice, entryDate, quantity,
                 stopLoss, target, status, entryReason, currentPrice,
                 positionId, brokerPositionId, exchange, direction, averagePrice,
                 unrealizedPnL, realizedPnL, marginUtilized,
@@ -405,7 +405,7 @@ class PositionManagerTest {
             String positionId = "POS_00000001";
             Position pos = positionManager.createPosition(positionId, "RELIANCE-EQ", TradeDirection.LONG, 10, new BigDecimal("100.00"), new BigDecimal("5.00"), "Test");
             // Manually close it
-            Position closed = new Position(
+            Position closed = Position.of(
                     pos.id(), pos.brokerType(), pos.symbol(), pos.entryPrice(), pos.entryDate(),
                     pos.quantity(), pos.stopLoss(), pos.target(), PositionStatus.CLOSED,
                     pos.entryReason(), pos.currentPrice(), pos.positionId(), pos.brokerPositionId(),
