@@ -56,7 +56,7 @@ public class PaperTradingServiceImpl implements BrokerService {
         engineOrder = paperTradingEngine.executePendingOrder(engineOrder.getOrderId(), order.getPrice());
         if (stateService != null) {
             stateService.saveOrder(engineOrder);
-            stateService.savePortfolio();
+            paperTradingEngine.savePortfolio();
         }
         return engineOrder;
     }

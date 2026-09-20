@@ -1,6 +1,6 @@
 package com.swingtrade.broker.scheduler;
 
-import com.swingtrade.broker.service.PaperTradingStateService;
+import com.swingtrade.broker.engine.PaperTradingEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -26,11 +26,11 @@ class PortfolioSnapshotSchedulerTest {
     private PortfolioSnapshotScheduler scheduler;
 
     @Mock
-    private PaperTradingStateService stateService;
+    private PaperTradingEngine engine;
 
     @BeforeEach
     void setUp() {
-        scheduler = new PortfolioSnapshotScheduler(stateService);
+        scheduler = new PortfolioSnapshotScheduler(engine);
     }
 
     // ==================== takeSnapshot ====================
@@ -40,31 +40,31 @@ class PortfolioSnapshotSchedulerTest {
 
         @Test
         void takeSnapshot_success() {
-            // Given: A working stateService
-            doNothing().when(stateService).saveSnapshot();
+            // Given: A working engine
+            doNothing().when(engine).saveSnapshot();
 
             // When
             scheduler.takeSnapshot();
 
             // Then
-            verify(stateService).saveSnapshot();
+            verify(engine).saveSnapshot();
         }
 
         @Test
-        void takeSnapshot_stateServiceThrows_logsWarning() {
-            // Given: stateService throws
-            doThrow(new RuntimeException("DB connection lost")).when(stateService).saveSnapshot();
+        void takeSnapshot_engineThrows_logsWarning() {
+            // Given: engine throws
+            doThrow(new RuntimeException("DB connection lost")).when(engine).saveSnapshot();
 
             // When
             scheduler.takeSnapshot();
 
             // Then: Exception caught internally, no propagation
-            verify(stateService).saveSnapshot();
+            verify(engine).saveSnapshot();
         }
 
         @Test
-        void takeSnapshot_nullStateService_caughtInternally() {
-            // Given: null stateService
+        void takeSnapshot_nullEngine_caughtInternally() {
+            // Given: null engine
             PortfolioSnapshotScheduler nullScheduler = new PortfolioSnapshotScheduler(null);
 
             // When / Then: takeSnapshot catches all exceptions internally, no propagation
@@ -79,8 +79,8 @@ class PortfolioSnapshotSchedulerTest {
 
         @Test
         void takeSnapshot_multipleCalls() {
-            // Given: A working stateService
-            doNothing().when(stateService).saveSnapshot();
+            // Given: A working engine
+            doNothing().when(engine).saveSnapshot();
 
             // When: Call multiple times
             scheduler.takeSnapshot();
@@ -88,19 +88,19 @@ class PortfolioSnapshotSchedulerTest {
             scheduler.takeSnapshot();
 
             // Then: Each call saves snapshot
-            verify(stateService, times(3)).saveSnapshot();
+            verify(engine, times(3)).saveSnapshot();
         }
 
         @Test
-        void takeSnapshot_stateServiceSavePortfolioThrows() {
-            // Given: stateService.saveSnapshot works but savePortfolio throws
-            doThrow(new RuntimeException("Portfolio save failed")).when(stateService).saveSnapshot();
+        void takeSnapshot_engineSavePortfolioThrows() {
+            // Given: engine.saveSnapshot works but savePortfolio throws
+            doThrow(new RuntimeException("Portfolio save failed")).when(engine).saveSnapshot();
 
             // When
             scheduler.takeSnapshot();
 
             // Then: Exception caught, no propagation
-            verify(stateService).saveSnapshot();
+            verify(engine).saveSnapshot();
         }
     }
 
@@ -177,9 +177,9 @@ class PortfolioSnapshotSchedulerTest {
     class EdgeCases {
 
         @Test
-        void takeSnapshot_stateServiceThrows_caughtInternally() {
-            // Given: stateService that throws on saveSnapshot
-            PaperTradingStateService nullService = mock(PaperTradingStateService.class);
+        void takeSnapshot_engineThrows_caughtInternally() {
+            // Given: engine that throws on saveSnapshot
+            PaperTradingEngine nullService = mock(PaperTradingEngine.class);
             doThrow(new NullPointerException("Service null")).when(nullService).saveSnapshot();
 
             PortfolioSnapshotScheduler nullScheduler = new PortfolioSnapshotScheduler(nullService);
@@ -194,8 +194,8 @@ class PortfolioSnapshotSchedulerTest {
 
         @Test
         void takeSnapshot_exceptionDoesNotPropagate() {
-            // Given: stateService throws a checked-style runtime exception
-            PaperTradingStateService flakyService = mock(PaperTradingStateService.class);
+            // Given: engine throws a checked-style runtime exception
+            PaperTradingEngine flakyService = mock(PaperTradingEngine.class);
             doThrow(new IllegalStateException("Snapshot service unavailable"))
                 .when(flakyService).saveSnapshot();
 
@@ -213,29 +213,29 @@ class PortfolioSnapshotSchedulerTest {
         }
 
         @Test
-        void schedulerUsesStateService() {
-            // Given: A scheduler with mocked stateService
-            PaperTradingStateService mockSvc = mock(PaperTradingStateService.class);
+        void schedulerUsesEngine() {
+            // Given: A scheduler with mocked engine
+            PaperTradingEngine mockSvc = mock(PaperTradingEngine.class);
 
             PortfolioSnapshotScheduler testScheduler = new PortfolioSnapshotScheduler(mockSvc);
 
             // When
             testScheduler.takeSnapshot();
 
-            // Then: stateService.saveSnapshot is called
+            // Then: engine.saveSnapshot is called
             verify(mockSvc).saveSnapshot();
         }
 
         @Test
-        void takeSnapshot_stateServiceCalledOncePerInvocation() {
-            // Given: A working stateService
-            doNothing().when(stateService).saveSnapshot();
+        void takeSnapshot_engineCalledOncePerInvocation() {
+            // Given: A working engine
+            doNothing().when(engine).saveSnapshot();
 
             // When
             scheduler.takeSnapshot();
 
             // Then: Exactly one call
-            verify(stateService, times(1)).saveSnapshot();
+            verify(engine, times(1)).saveSnapshot();
         }
 
         @Test
