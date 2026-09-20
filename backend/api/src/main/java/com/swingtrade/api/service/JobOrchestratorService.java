@@ -411,6 +411,7 @@ public class JobOrchestratorService {
                 }
 
                 boolean priorStageBlocked = false;
+                boolean paperTradeBlocked = false;
                 for (StageDef stageDef : stageDefs) {
                     currentStage[0] = stageDef.name();
                     if (cancelledRunIds.contains(runId)) {
@@ -419,7 +420,8 @@ public class JobOrchestratorService {
                         logger.debug("Skipping stage {} for {}: run was cancelled", stageDef.name(), symbol);
                         continue;
                     }
-                    if (priorStageBlocked) {
+                    if (priorStageBlocked
+                            || (paperTradeBlocked && stageDef.name() == JobRunStage.StageName.PAPER_TRADE)) {
                         String reason = "Skipped — an earlier stage did not complete";
                         updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.SKIPPED,
                             null, null, reason);
@@ -430,9 +432,13 @@ public class JobOrchestratorService {
                     boolean succeeded = executeStage(runId, symbol, stageDef.name(),
                         stageDef.executor(), stageDef.timeoutSec());
                     // A timed-out/failed LLM analysis has no persisted verdict, so PAPER_TRADE
-                    // must still run and defer through LlmAnalysisGate.PENDING. Earlier stages
-                    // retain the normal skip-cascade semantics.
-                    if (!succeeded && stageDef.name() != JobRunStage.StageName.LLM_ANALYSIS) {
+                    // must still run and defer through LlmAnalysisGate.PENDING. A SKIPPED backtest
+                    // (e.g. not enough trade history) must not starve NEWS and SENTIMENT, which are
+                    // independent of it, but PAPER_TRADE has no backtest to rely on and stays skipped.
+                    // Earlier stages retain the normal skip-cascade semantics.
+                    if (!succeeded && stageDef.name() == JobRunStage.StageName.BACKTEST) {
+                        paperTradeBlocked = true;
+                    } else if (!succeeded && stageDef.name() != JobRunStage.StageName.LLM_ANALYSIS) {
                         priorStageBlocked = true;
                     }
                 }

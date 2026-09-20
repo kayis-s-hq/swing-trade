@@ -342,8 +342,8 @@ class JobOrchestratorServiceTest {
                 .thenAnswer(invocation -> List.copyOf(stageState.values()));
 
             when(candleStore.findTopBySymbolOrderByDateDesc(SYMBOL, 100)).thenReturn(List.of());
-            // The backtest is deliberately insufficient, so later stages are blocked by the
-            // normal failure gate in this scenario.
+            // The backtest is deliberately insufficient: NEWS and SENTIMENT still run because
+            // they are independent of it, while PAPER_TRADE is blocked.
             lenient().when(newsIngestionService.fetchStockNews(SYMBOL)).thenReturn(List.of());
             lenient().when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
                 .thenReturn(SentimentResult.create(
@@ -366,6 +366,11 @@ class JobOrchestratorServiceTest {
             assertThat(backtestStage.getStatus()).isEqualTo(JobRunStage.Status.SKIPPED.name());
             assertThat(backtestStage.getErrorMessage()).isNull();
             assertThat(backtestStage.getResultSummary()).contains("Insufficient candle history");
+
+            assertThat(stageState.get(JobRunStage.StageName.NEWS.name()).getStatus())
+                .isEqualTo(JobRunStage.Status.COMPLETED.name());
+            assertThat(stageState.get(JobRunStage.StageName.SENTIMENT.name()).getStatus())
+                .isEqualTo(JobRunStage.Status.COMPLETED.name());
 
             JobRunStageEntity paperTradeStage = stageState.get(JobRunStage.StageName.PAPER_TRADE.name());
             assertThat(paperTradeStage.getStatus()).isEqualTo(JobRunStage.Status.SKIPPED.name());
