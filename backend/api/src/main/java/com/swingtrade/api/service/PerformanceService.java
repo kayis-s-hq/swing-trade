@@ -141,19 +141,20 @@ public class PerformanceService {
         if (closed.isEmpty()) return BigDecimal.ZERO;
 
         BigDecimal initialCapital = tradingService.getInitialCapital();
-        double peak = initialCapital.doubleValue();
-        double maxDD = 0.0;
-        double equity = initialCapital.doubleValue();
+        BigDecimal peak = initialCapital;
+        BigDecimal maxDD = BigDecimal.ZERO;
+        BigDecimal equity = initialCapital;
 
         for (PositionEntity e : closed) {
             BigDecimal pnl = e.getRealizedPnL() != null ? e.getRealizedPnL() : BigDecimal.ZERO;
-            equity += pnl.doubleValue();
-            if (equity > peak) peak = equity;
-            double dd = (peak - equity) / peak;
-            if (dd > maxDD) maxDD = dd;
+            equity = equity.add(pnl);
+            if (equity.compareTo(peak) > 0) peak = equity;
+            if (peak.signum() == 0) continue;
+            BigDecimal dd = peak.subtract(equity).divide(peak, java.math.MathContext.DECIMAL64);
+            if (dd.compareTo(maxDD) > 0) maxDD = dd;
         }
 
-        return BigDecimal.valueOf(maxDD * 100).setScale(2, RoundingMode.HALF_UP);
+        return maxDD.multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP);
     }
 
     private int getTotalTrades(List<PositionEntity> closed) {

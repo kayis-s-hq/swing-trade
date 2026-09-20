@@ -1,5 +1,6 @@
 package com.swingtrade.domain;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,9 +30,11 @@ public interface PortfolioExposurePolicy {
             if (sectorHoldings.size() >= sectorLimit.maxPositions()) {
                 return PortfolioExposureDecision.reject(SECTOR_POSITION_LIMIT);
             }
-            double sectorNotional = sectorHoldings.stream().mapToDouble(PortfolioExposureContext.Holding::notional).sum();
-            if ((sectorNotional + context.candidateNotional()) / context.initialCapital()
-                    > sectorLimit.maxCapitalFraction()) {
+            BigDecimal sectorNotional = sectorHoldings.stream().map(PortfolioExposureContext.Holding::notional)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal capitalCap = context.initialCapital()
+                    .multiply(BigDecimal.valueOf(sectorLimit.maxCapitalFraction()));
+            if (sectorNotional.add(context.candidateNotional()).compareTo(capitalCap) > 0) {
                 return PortfolioExposureDecision.reject(SECTOR_CAPITAL_LIMIT);
             }
             for (PortfolioExposureContext.Holding holding : context.openHoldings()) {

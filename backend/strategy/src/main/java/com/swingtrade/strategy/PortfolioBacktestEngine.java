@@ -60,7 +60,7 @@ final class PortfolioBacktestEngine {
             throw new IllegalArgumentException("Portfolio inputs must be non-null and the window must be ordered");
         }
         Map<String, List<OhlcvCandle>> effectiveMarketData = marketData == null ? Map.of() : marketData;
-        if (config.initialCapital() <= 0 || config.maxConcurrentPositions() <= 0) {
+        if (config.initialCapital().signum() <= 0 || config.maxConcurrentPositions() <= 0) {
             throw new IllegalArgumentException("Portfolio capital and max positions must be positive");
         }
 
@@ -89,8 +89,7 @@ final class PortfolioBacktestEngine {
         List<LocalDate> observationDates = observationDates(effectiveMarketData, evaluationStart, evaluationEnd);
         Map<LocalDate, LocalDate> nextTradingDate = effectiveMarketData.isEmpty()
                 ? Map.of() : nextTradingDates(observationDates);
-        // initialCapital is a configuration double; convert once to an exact decimal money amount.
-        BigDecimal initialCapital = FinancialScale.money(FinancialScale.of(config.initialCapital()));
+        BigDecimal initialCapital = FinancialScale.money(config.initialCapital());
         BigDecimal cash = initialCapital;
 
         int rejected = 0;
@@ -143,10 +142,10 @@ final class PortfolioBacktestEngine {
                         : notional.compareTo(cash) > 0 ? "INSUFFICIENT_CAPITAL" : null;
                 PortfolioExposureDecision exposure = baseRejection == null
                         ? config.portfolioExposurePolicy().evaluate(new PortfolioExposureContext(
-                                candidate.symbol(), sectors.get(candidate.symbol()), notional.doubleValue(),
+                                candidate.symbol(), sectors.get(candidate.symbol()), notional,
                                 config.initialCapital(), open.values().stream()
                                 .map(held -> new PortfolioExposureContext.Holding(held.symbol(),
-                                        sectors.get(held.symbol()), entryNotional(held).doubleValue())).toList(),
+                                        sectors.get(held.symbol()), entryNotional(held))).toList(),
                                 closingPrices(effectiveMarketData)))
                         : PortfolioExposureDecision.accept();
                 if (baseRejection != null || !exposure.accepted()) {
@@ -172,13 +171,13 @@ final class PortfolioBacktestEngine {
         BigDecimal finalCapital = equityCurve.getLast().equity();
         List<BigDecimal> equityValues = equityCurve.stream().map(PortfolioEquityPoint::equity).toList();
         int winners = (int) accepted.stream().filter(trade -> trade.pnl().signum() > 0).count();
-        double maxDrawdown = BacktestMetrics.maxDrawdownPct(equityValues);
+        BigDecimal maxDrawdown = BacktestMetrics.maxDrawdownPct(equityValues);
         double cagr = BacktestMetrics.cagrPct(initialCapital, finalCapital,
                 evaluationStart, evaluationEnd);
-        double totalReturn = BacktestMetrics.totalReturnPct(initialCapital, finalCapital);
+        BigDecimal totalReturn = BacktestMetrics.totalReturnPct(initialCapital, finalCapital);
         BenchmarkComparison benchmarkComparison = benchmark.flatMap(PortfolioBacktestEngine::benchmarkComparison)
-                .map(value -> BenchmarkComparison.nifty50Price(totalReturn, value.benchmarkReturnPct()))
-                .orElseGet(() -> BenchmarkComparison.unavailable(totalReturn));
+                .map(value -> BenchmarkComparison.nifty50Price(totalReturn.doubleValue(), value.benchmarkReturnPct()))
+                .orElseGet(() -> BenchmarkComparison.unavailable(totalReturn.doubleValue()));
         return new PortfolioBacktestResult(evaluationStart, evaluationEnd, initialCapital, finalCapital,
                 totalReturn,
                 maxDrawdown, BacktestMetrics.sharpeRatio(equityValues), cagr,

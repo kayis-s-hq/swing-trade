@@ -74,7 +74,7 @@ class WalkForwardStabilityEvaluatorTest {
 
     private static BacktestResult result(boolean preferred, double sharpe, double totalReturn,
                                          double maxDrawdown) {
-        return new BacktestResult("TEST", 20, 12, 8, 60, 2, 1, maxDrawdown, sharpe,
-            totalReturn, 0.5, List.of());
+        return new BacktestResult("TEST", 20, 12, 8, 60, BigDecimal.valueOf(2), BigDecimal.ONE,
+            BigDecimal.valueOf(maxDrawdown), sharpe, BigDecimal.valueOf(totalReturn), 0.5, List.of());
     }
 }

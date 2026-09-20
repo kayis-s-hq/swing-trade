@@ -297,7 +297,7 @@ public class BacktestEngine {
             folds.add(new WalkForwardEvaluation.Fold(startDate, endDate, result));
         }
         double averageWinRate = folds.stream().mapToDouble(f -> f.result().winRate()).average().orElse(0.0);
-        double averageTotalReturn = folds.stream().mapToDouble(f -> f.result().totalReturn()).average().orElse(0.0);
+        double averageTotalReturn = folds.stream().mapToDouble(f -> f.result().totalReturn().doubleValue()).average().orElse(0.0);
         int totalTrades = folds.stream().mapToInt(f -> f.result().totalTrades()).sum();
         return new WalkForwardEvaluation(folds, averageWinRate, averageTotalReturn, totalTrades);
     }
@@ -476,7 +476,7 @@ public class BacktestEngine {
      */
     public BacktestReportSummary generateReport(List<BacktestResult> results) {
         List<BacktestResult> top10ByWinRate = topN(results, Comparator.comparingDouble(BacktestResult::winRate).reversed(), 10);
-        List<BacktestResult> top10ByTotalReturn = topN(results, Comparator.comparingDouble(BacktestResult::totalReturn).reversed(), 10);
+        List<BacktestResult> top10ByTotalReturn = topN(results, Comparator.comparing(BacktestResult::totalReturn).reversed(), 10);
 
         int totalWins = results.stream().mapToInt(BacktestResult::winningTrades).sum();
         int totalTrades = results.stream().mapToInt(BacktestResult::totalTrades).sum();
@@ -525,7 +525,7 @@ public class BacktestEngine {
         HighestValueIndicator weeklyHigh = new HighestValueIndicator(highPrice, weeklyHighPeriod);
 
         // initialCapital is a configuration double; convert once to an exact decimal money amount.
-        BigDecimal capital = FinancialScale.money(FinancialScale.of(config.initialCapital()));
+        BigDecimal capital = FinancialScale.money(config.initialCapital());
         List<BacktestTrade> trades = new ArrayList<>();
         List<BigDecimal> capitalCurve = new ArrayList<>();
         OpenPosition open = null;
@@ -672,7 +672,7 @@ public class BacktestEngine {
         if (PriceBandPolicy.blocksLongEntry(entryBand, nextOpen)) {
             return null;
         }
-        BigDecimal entryPrice = nextOpen.multiply(BigDecimal.ONE.add(FinancialScale.of(config.slippagePct())));
+        BigDecimal entryPrice = nextOpen.multiply(BigDecimal.ONE.add(config.slippagePct()));
         BigDecimal atrVal = numToBigDecimal(atr.getValue(i));
         BigDecimal stopLoss = entryPrice.subtract(atrVal.multiply(FinancialScale.of(config.atrMultiplierStop())));
         BigDecimal riskPerShare = entryPrice.subtract(stopLoss);
@@ -684,7 +684,7 @@ public class BacktestEngine {
         BigDecimal target = entryPrice.add(riskPerShare.multiply(FinancialScale.of(config.rewardRiskRatio())));
         // Risk budget / risk-per-share, floored to whole shares (RoundingMode.DOWN).
         int quantity = FinancialScale.wholeShares(
-                capital.multiply(FinancialScale.of(config.riskPerTradePct()))
+                capital.multiply(config.riskPerTradePct())
                         .divide(riskPerShare, FinancialScale.RATIO));
 
         if (quantity <= 0) {
@@ -703,11 +703,11 @@ public class BacktestEngine {
 
     private BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
                                      int exitIndex, ExitReason reason, BacktestConfig config, int quantity) {
-        exitPrice = exitPrice.multiply(BigDecimal.ONE.subtract(FinancialScale.of(config.slippagePct())));
+        exitPrice = exitPrice.multiply(BigDecimal.ONE.subtract(config.slippagePct()));
         BigDecimal quantityDecimal = BigDecimal.valueOf(quantity);
         BigDecimal grossPnl = exitPrice.subtract(open.entryPrice).multiply(quantityDecimal);
         BigDecimal costs = DEFAULT_COST_MODEL.roundTripCost(open.entryPrice, exitPrice, quantity,
-            FinancialScale.of(config.brokeragePerTrade()));
+            config.brokeragePerTrade());
         BigDecimal netPnl = grossPnl.subtract(costs);
         BigDecimal entryCost = open.entryPrice.multiply(quantityDecimal);
         // BacktestTrade normalizes pnl/pnlPct to MONEY_SCALE / PERCENT_SCALE (HALF_UP); pnlPct is
@@ -750,17 +750,17 @@ public class BacktestEngine {
                                        BigDecimal finalCapital, BacktestConfig config,
                                        LocalDate evaluationStart, LocalDate evaluationEnd,
                                        BigDecimal benchmarkStartClose, BigDecimal benchmarkEndClose) {
-        BigDecimal initialCapital = FinancialScale.money(FinancialScale.of(config.initialCapital()));
+        BigDecimal initialCapital = FinancialScale.money(config.initialCapital());
         int totalTrades = trades.size();
         List<BacktestTrade> wins = trades.stream().filter(t -> t.pnl().signum() > 0).toList();
         List<BacktestTrade> losses = trades.stream().filter(t -> t.pnl().signum() <= 0).toList();
 
         double winRate = totalTrades > 0 ? (wins.size() / (double) totalTrades) * 100.0 : 0.0;
-        double avgGainPct = averagePnlPct(wins);
-        double avgLossPct = Math.abs(averagePnlPct(losses));
-        double maxDrawdownPct = BacktestMetrics.maxDrawdownPct(capitalCurve);
+        BigDecimal avgGainPct = averagePnlPct(wins);
+        BigDecimal avgLossPct = averagePnlPct(losses).abs();
+        BigDecimal maxDrawdownPct = BacktestMetrics.maxDrawdownPct(capitalCurve);
         double sharpeRatio = BacktestMetrics.sharpeRatio(capitalCurve);
-        double totalReturn = BacktestMetrics.totalReturnPct(initialCapital, finalCapital);
+        BigDecimal totalReturn = BacktestMetrics.totalReturnPct(initialCapital, finalCapital);
         double cagrPct = BacktestMetrics.cagrPct(initialCapital, finalCapital,
                 evaluationStart, evaluationEnd);
         double sortinoRatio = BacktestMetrics.sortinoRatio(capitalCurve);
@@ -768,7 +768,7 @@ public class BacktestEngine {
         BenchmarkComparison benchmarkComparison = BacktestMetrics.buyAndHoldComparison(
                 totalReturn, benchmarkStartClose, benchmarkEndClose);
         double winRatio = winRate / 100.0;
-        double expectancy = (winRatio * avgGainPct) - ((1 - winRatio) * avgLossPct);
+        double expectancy = (winRatio * avgGainPct.doubleValue()) - ((1 - winRatio) * avgLossPct.doubleValue());
 
         return new BacktestResult(symbol, totalTrades, wins.size(), losses.size(), winRate, avgGainPct, avgLossPct,
                 maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades,
@@ -776,12 +776,12 @@ public class BacktestEngine {
     }
 
     /** Mean of the trades' percentage P&amp;L computed in {@code BigDecimal}; 0 for an empty list. */
-    private static double averagePnlPct(List<BacktestTrade> trades) {
+    private static BigDecimal averagePnlPct(List<BacktestTrade> trades) {
         if (trades.isEmpty()) {
-            return 0.0;
+            return FinancialScale.percent(BigDecimal.ZERO);
         }
         BigDecimal sum = trades.stream().map(BacktestTrade::pnlPct).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return sum.divide(BigDecimal.valueOf(trades.size()), FinancialScale.RATIO).doubleValue();
+        return FinancialScale.percent(sum.divide(BigDecimal.valueOf(trades.size()), FinancialScale.RATIO));
     }
 
     private static BigDecimal numToBigDecimal(Num value) {

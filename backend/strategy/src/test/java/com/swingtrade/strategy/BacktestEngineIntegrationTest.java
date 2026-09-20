@@ -110,7 +110,7 @@ class BacktestEngineIntegration {
             assertThat(trade.quantity()).isPositive();
             assertThat(result.winRate()).isBetween(0.0, 100.0);
             assertThat(result.sharpeRatio()).isNotNull();
-            assertThat(result.maxDrawdownPct()).isGreaterThanOrEqualTo(0.0);
+            assertThat(result.maxDrawdownPct()).isGreaterThanOrEqualTo(BigDecimal.ZERO);
             assertThat(result.totalReturn()).isNotNull();
         }
     }

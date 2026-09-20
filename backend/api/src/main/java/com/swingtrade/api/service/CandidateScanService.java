@@ -29,6 +29,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.math.BigDecimal;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
@@ -546,8 +547,8 @@ public class CandidateScanService {
         BacktestResult backtest = backtestEngine.runBacktest(symbol, "NSE", BacktestConfig.defaults());
         result.setTotalTrades(backtest.totalTrades());
         result.setWinRate(backtest.winRate());
-        result.setTotalReturn(backtest.totalReturn());
-        result.setMaxDrawdownPct(backtest.maxDrawdownPct());
+        result.setTotalReturn(backtest.totalReturn().doubleValue());
+        result.setMaxDrawdownPct(backtest.maxDrawdownPct().doubleValue());
         publish(runId, "STAGE_COMPLETED", symbol, "INFO",
             "Backtest: " + backtest.totalTrades() + " trades, "
                 + String.format(java.util.Locale.ROOT, "%.1f%% win rate, %.2f%% return.",
@@ -571,8 +572,8 @@ public class CandidateScanService {
         result.setOosEndDate(oosEnd);
         result.setOosTotalTrades(oosBacktest.totalTrades());
         result.setOosWinRate(oosBacktest.winRate());
-        result.setOosTotalReturn(oosBacktest.totalReturn());
-        result.setOosMaxDrawdownPct(oosBacktest.maxDrawdownPct());
+        result.setOosTotalReturn(oosBacktest.totalReturn().doubleValue());
+        result.setOosMaxDrawdownPct(oosBacktest.maxDrawdownPct().doubleValue());
         publish(runId, "STAGE_COMPLETED", symbol, "INFO",
             "Walk-forward OOS: " + oosFolds + " folds, " + walkForward.totalTrades() + " trades, "
                 + String.format(java.util.Locale.ROOT, "%.1f%% average win rate, %.2f%% average return.",
@@ -583,11 +584,11 @@ public class CandidateScanService {
         boolean qualified = signal.type() == com.swingtrade.domain.Signal.SignalType.BUY
             && backtest.totalTrades() >= minTrades
             && backtest.winRate() >= minWinRate
-            && backtest.totalReturn() > minTotalReturn
+            && backtest.totalReturn().compareTo(BigDecimal.valueOf(minTotalReturn)) > 0
             && walkForward.isComplete(oosFolds)
             && walkForward.folds().stream().allMatch(f -> f.result().totalTrades() >= minTrades
                 && f.result().winRate() >= minWinRate
-                && f.result().totalReturn() > minTotalReturn);
+                && f.result().totalReturn().compareTo(BigDecimal.valueOf(minTotalReturn)) > 0);
         result.setQualified(qualified);
         result.setReason(qualified ? "BUY and in-sample/out-of-sample backtest gates passed"
             : qualificationReason(signal, backtest, oosBacktest, walkForward, minTrades, minWinRate, minTotalReturn));
@@ -639,7 +640,7 @@ public class CandidateScanService {
         if (signal.type() != com.swingtrade.domain.Signal.SignalType.BUY) return "Current signal is " + signal.type();
         if (backtest.totalTrades() < minTrades) return "BUY rejected: fewer than " + minTrades + " trades";
         if (backtest.winRate() < minWinRate) return "BUY rejected: win rate below " + minWinRate + "%";
-        if (backtest.totalReturn() <= minTotalReturn) return "BUY rejected: backtest return not above " + minTotalReturn + "%";
+        if (backtest.totalReturn().compareTo(BigDecimal.valueOf(minTotalReturn)) <= 0) return "BUY rejected: backtest return not above " + minTotalReturn + "%";
         return walkForward.folds().stream()
             .filter(f -> f.result().totalTrades() < minTrades)
             .findFirst()

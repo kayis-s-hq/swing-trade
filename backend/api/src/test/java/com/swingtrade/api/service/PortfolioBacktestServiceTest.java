@@ -30,7 +30,7 @@ class PortfolioBacktestServiceTest {
         LocalDate start = LocalDate.of(2026, 1, 1);
         LocalDate end = LocalDate.of(2026, 3, 31);
         PortfolioBacktestResult result = new PortfolioBacktestResult(
-                start, end, java.math.BigDecimal.valueOf(500_000), java.math.BigDecimal.valueOf(510_000), 2, -1, 1, 8, 1.2, 2, 2, 1, 0, List.of(), List.of());
+                start, end, java.math.BigDecimal.valueOf(500_000), java.math.BigDecimal.valueOf(510_000), java.math.BigDecimal.valueOf(2), java.math.BigDecimal.valueOf(-1), 1, 8, 1.2, 2, 2, 1, 0, List.of(), List.of());
         when(registry.defaultStrategy()).thenReturn(strategy);
         when(engine.runPortfolioBacktest(any(), any(), any(), any(), any(), any())).thenReturn(result);
 

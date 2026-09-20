@@ -83,8 +83,8 @@ class DomainValueRecordsTest {
             false, false, false, true, found, absent);
         EligibilityAssessment assessment = new EligibilityAssessment(true,
             List.of(EligibilityAssessment.RejectionReason.RESULTS_TOO_CLOSE));
-        PortfolioExposureContext.Holding holding = new PortfolioExposureContext.Holding("INFY", "IT", 100);
-        PortfolioExposureContext context = new PortfolioExposureContext("TCS", "IT", 200, 10_000,
+        PortfolioExposureContext.Holding holding = new PortfolioExposureContext.Holding("INFY", "IT", BigDecimal.valueOf(100));
+        PortfolioExposureContext context = new PortfolioExposureContext("TCS", "IT", BigDecimal.valueOf(200), BigDecimal.valueOf(10_000),
             List.of(holding), Map.of());
 
         assertThat(found).extracting(EligibilityInputs.EventWindow::known, EligibilityInputs.EventWindow::tradingDaysUntil)

@@ -2,10 +2,16 @@ package com.swingtrade.strategy;
 
 import com.swingtrade.domain.BenchmarkComparison;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
  * Aggregate performance metrics for a single-symbol {@link BacktestEngine} run.
+ *
+ * <p>Percent-of-capital fields ({@code avgGainPct}, {@code avgLossPct}, {@code maxDrawdownPct},
+ * {@code totalReturn}) are {@link BigDecimal} at {@link FinancialScale#PERCENT_SCALE}. Trade-count
+ * {@code winRate}, {@code expectancy} and the statistical ratios (Sharpe, Sortino, Calmar, CAGR) stay
+ * {@code double}; see {@link BacktestMetrics}.</p>
  *
  * @param avgGainPct    average pnlPct across winning trades (0 if none)
  * @param avgLossPct    average absolute pnlPct across losing trades, as a positive number (0 if none)
@@ -24,11 +30,11 @@ public record BacktestResult(
     int winningTrades,
     int losingTrades,
     double winRate,
-    double avgGainPct,
-    double avgLossPct,
-    double maxDrawdownPct,
+    BigDecimal avgGainPct,
+    BigDecimal avgLossPct,
+    BigDecimal maxDrawdownPct,
     double sharpeRatio,
-    double totalReturn,
+    BigDecimal totalReturn,
     double expectancy,
     List<BacktestTrade> trades,
     double cagrPct,
@@ -38,22 +44,22 @@ public record BacktestResult(
 ) {
     /** Source-compatible constructor for callers that do not yet provide risk-adjusted metrics. */
     public BacktestResult(String symbol, int totalTrades, int winningTrades, int losingTrades,
-                          double winRate, double avgGainPct, double avgLossPct, double maxDrawdownPct,
-                          double sharpeRatio, double totalReturn, double expectancy,
+                          double winRate, BigDecimal avgGainPct, BigDecimal avgLossPct, BigDecimal maxDrawdownPct,
+                          double sharpeRatio, BigDecimal totalReturn, double expectancy,
                           List<BacktestTrade> trades) {
         this(symbol, totalTrades, winningTrades, losingTrades, winRate, avgGainPct, avgLossPct,
                 maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades, 0.0, 0.0, 0.0,
-                BenchmarkComparison.unavailable(totalReturn));
+                BenchmarkComparison.unavailable(totalReturn.doubleValue()));
     }
 
     /** Source-compatible constructor for callers that provide risk-adjusted metrics only. */
     public BacktestResult(String symbol, int totalTrades, int winningTrades, int losingTrades,
-                          double winRate, double avgGainPct, double avgLossPct, double maxDrawdownPct,
-                          double sharpeRatio, double totalReturn, double expectancy,
+                          double winRate, BigDecimal avgGainPct, BigDecimal avgLossPct, BigDecimal maxDrawdownPct,
+                          double sharpeRatio, BigDecimal totalReturn, double expectancy,
                           List<BacktestTrade> trades, double cagrPct, double sortinoRatio,
                           double calmarRatio) {
         this(symbol, totalTrades, winningTrades, losingTrades, winRate, avgGainPct, avgLossPct,
                 maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades, cagrPct, sortinoRatio,
-                calmarRatio, BenchmarkComparison.unavailable(totalReturn));
+                calmarRatio, BenchmarkComparison.unavailable(totalReturn.doubleValue()));
     }
 }

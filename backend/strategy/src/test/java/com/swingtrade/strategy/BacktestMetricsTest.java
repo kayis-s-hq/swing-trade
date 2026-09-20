@@ -34,14 +34,14 @@ class BacktestMetricsTest {
 
     @Test
     void calmarDividesCagrByDrawdown() {
-        assertEquals(0.5, BacktestMetrics.calmarRatio(10.0, 20.0));
-        assertEquals(0.0, BacktestMetrics.calmarRatio(10.0, 0.0));
+        assertEquals(0.5, BacktestMetrics.calmarRatio(10.0, BigDecimal.valueOf(20)));
+        assertEquals(0.0, BacktestMetrics.calmarRatio(10.0, BigDecimal.ZERO));
     }
 
     @Test
     void buyAndHoldUsesPriceReturnAndReportsExcessReturn() {
         BenchmarkComparison comparison = BacktestMetrics.buyAndHoldComparison(
-                18.0, BigDecimal.valueOf(100), BigDecimal.valueOf(125));
+                BigDecimal.valueOf(18), BigDecimal.valueOf(100), BigDecimal.valueOf(125));
 
         assertEquals(25.0, comparison.benchmarkReturnPct(), 1e-9);
         assertEquals(-7.0, comparison.excessReturnPct(), 1e-9);
@@ -50,7 +50,7 @@ class BacktestMetricsTest {
     @Test
     void buyAndHoldIsUnavailableForInvalidPrices() {
         BenchmarkComparison comparison = BacktestMetrics.buyAndHoldComparison(
-                18.0, BigDecimal.ZERO, BigDecimal.valueOf(125));
+                BigDecimal.valueOf(18), BigDecimal.ZERO, BigDecimal.valueOf(125));
 
         assertEquals(BenchmarkComparison.BUY_AND_HOLD, comparison.benchmarkName());
         assertEquals(0.0, comparison.benchmarkReturnPct());

@@ -38,8 +38,8 @@ public class BacktestScorer {
                 result.totalTrades(),
                 result.winRate(),
                 calculateProfitFactor(result),
-                result.maxDrawdownPct(),
-                result.totalReturn(),
+                result.maxDrawdownPct().doubleValue(),
+                result.totalReturn().doubleValue(),
                 result.expectancy(),
                 true
             );

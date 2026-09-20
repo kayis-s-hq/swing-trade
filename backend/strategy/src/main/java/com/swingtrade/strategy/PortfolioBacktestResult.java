@@ -28,8 +28,8 @@ public record PortfolioBacktestResult(
         LocalDate evaluationEnd,
         BigDecimal initialCapital,
         BigDecimal finalCapital,
-        double totalReturn,
-        double maxDrawdownPct,
+        BigDecimal totalReturn,
+        BigDecimal maxDrawdownPct,
         double sharpeRatio,
         double cagrPct,
         double sortinoRatio,
@@ -45,18 +45,18 @@ public record PortfolioBacktestResult(
 ) {
     /** Source-compatible constructor for callers without rejection-reason details. */
     public PortfolioBacktestResult(LocalDate evaluationStart, LocalDate evaluationEnd, BigDecimal initialCapital,
-                                   BigDecimal finalCapital, double totalReturn, double maxDrawdownPct,
+                                   BigDecimal finalCapital, BigDecimal totalReturn, BigDecimal maxDrawdownPct,
                                    double sharpeRatio, double cagrPct, double sortinoRatio, double calmarRatio,
                                    int totalTrades, int winningTrades, int rejectedTrades,
                                    List<BacktestTrade> trades, List<PortfolioEquityPoint> equityCurve) {
         this(evaluationStart, evaluationEnd, initialCapital, finalCapital, totalReturn, maxDrawdownPct,
                 sharpeRatio, cagrPct, sortinoRatio, calmarRatio, totalTrades, winningTrades, rejectedTrades,
-                trades, equityCurve, List.of(), BenchmarkComparison.unavailable(totalReturn), null);
+                trades, equityCurve, List.of(), BenchmarkComparison.unavailable(totalReturn.doubleValue()), null);
     }
 
     /** Source-compatible constructor for callers without a strategy-variant attribution. */
     public PortfolioBacktestResult(LocalDate evaluationStart, LocalDate evaluationEnd, BigDecimal initialCapital,
-                                   BigDecimal finalCapital, double totalReturn, double maxDrawdownPct,
+                                   BigDecimal finalCapital, BigDecimal totalReturn, BigDecimal maxDrawdownPct,
                                    double sharpeRatio, double cagrPct, double sortinoRatio, double calmarRatio,
                                    int totalTrades, int winningTrades, int rejectedTrades,
                                    List<BacktestTrade> trades, List<PortfolioEquityPoint> equityCurve,
@@ -71,6 +71,6 @@ public record PortfolioBacktestResult(
         equityCurve = List.copyOf(equityCurve);
         rejectionReasons = List.copyOf(rejectionReasons);
         benchmarkComparison = benchmarkComparison == null
-                ? BenchmarkComparison.unavailable(totalReturn) : benchmarkComparison;
+                ? BenchmarkComparison.unavailable(totalReturn.doubleValue()) : benchmarkComparison;
     }
 }

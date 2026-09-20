@@ -156,12 +156,12 @@ class VolumeThresholdCalibrationExploration {
                 : allTrades.stream().mapToDouble(t -> t.pnlPct().doubleValue()).average().orElse(0.0);
         double totalPnl = allTrades.stream().mapToDouble(t -> t.pnl().doubleValue()).sum();
 
-        double aggregateCapital = results.size() * config.initialCapital();
+        double aggregateCapital = results.size() * config.initialCapital().doubleValue();
         double portfolioReturnPct = aggregateCapital > 0 ? (totalPnl / aggregateCapital) * 100.0 : 0.0;
 
         double avgMaxDrawdown = results.stream()
                 .filter(r -> r.totalTrades() > 0)
-                .mapToDouble(BacktestResult::maxDrawdownPct)
+                .mapToDouble(r -> r.maxDrawdownPct().doubleValue())
                 .average().orElse(0.0);
         double avgSharpe = results.stream()
                 .filter(r -> r.totalTrades() > 0)
@@ -246,7 +246,7 @@ class VolumeThresholdCalibrationExploration {
         int weeklyHighPeriod = Math.min(PriceActionSignalEngine.FIFTY_TWO_WEEK_TRADING_DAYS, barCount);
         HighestValueIndicator weeklyHigh = new HighestValueIndicator(highPrice, weeklyHighPeriod);
 
-        double capital = config.initialCapital();
+        double capital = config.initialCapital().doubleValue();
         List<BacktestTrade> trades = new ArrayList<>();
         List<Double> capitalCurve = new ArrayList<>();
         OpenPosition open = null;
@@ -338,7 +338,7 @@ class VolumeThresholdCalibrationExploration {
 
         int entryIndex = i + 1;
         BigDecimal nextOpen = numToBigDecimal(openPrice.getValue(entryIndex));
-        BigDecimal entryPrice = nextOpen.multiply(BigDecimal.valueOf(1 + config.slippagePct()));
+        BigDecimal entryPrice = nextOpen.multiply(BigDecimal.ONE.add(config.slippagePct()));
         BigDecimal atrVal = numToBigDecimal(atr.getValue(i));
         BigDecimal stopLoss = entryPrice.subtract(atrVal.multiply(BigDecimal.valueOf(config.atrMultiplierStop())));
         BigDecimal riskPerShare = entryPrice.subtract(stopLoss);
@@ -348,7 +348,7 @@ class VolumeThresholdCalibrationExploration {
         }
 
         BigDecimal target = entryPrice.add(riskPerShare.multiply(BigDecimal.valueOf(config.rewardRiskRatio())));
-        int quantity = (int) Math.floor((capital * config.riskPerTradePct()) / riskPerShare.doubleValue());
+        int quantity = (int) Math.floor((capital * config.riskPerTradePct().doubleValue()) / riskPerShare.doubleValue());
 
         if (quantity <= 0) {
             return null;
@@ -361,7 +361,7 @@ class VolumeThresholdCalibrationExploration {
     private static BacktestTrade closeTrade(String symbol, OpenPosition open, BigDecimal exitPrice, LocalDate exitDate,
                                             int exitIndex, ExitReason reason, BacktestConfig config) {
         double grossPnl = exitPrice.subtract(open.entryPrice).doubleValue() * open.quantity;
-        double netPnl = grossPnl - config.brokeragePerTrade();
+        double netPnl = grossPnl - config.brokeragePerTrade().doubleValue();
         double entryCost = open.entryPrice.doubleValue() * open.quantity;
         double pnlPct = entryCost != 0 ? (netPnl / entryCost) * 100.0 : 0.0;
         int holdingDays = exitIndex - open.entryIndex;
@@ -382,12 +382,13 @@ class VolumeThresholdCalibrationExploration {
                 : Math.abs(losses.stream().mapToDouble(t -> t.pnlPct().doubleValue()).average().orElse(0.0));
         double maxDrawdownPct = computeMaxDrawdownPct(capitalCurve);
         double sharpeRatio = computeSharpeRatio(capitalCurve);
-        double totalReturn = ((finalCapital - config.initialCapital()) / config.initialCapital()) * 100.0;
+        double totalReturn = ((finalCapital - config.initialCapital().doubleValue()) / config.initialCapital().doubleValue()) * 100.0;
         double winRatio = winRate / 100.0;
         double expectancy = (winRatio * avgGainPct) - ((1 - winRatio) * avgLossPct);
 
-        return new BacktestResult(symbol, totalTrades, wins.size(), losses.size(), winRate, avgGainPct, avgLossPct,
-                maxDrawdownPct, sharpeRatio, totalReturn, expectancy, trades);
+        return new BacktestResult(symbol, totalTrades, wins.size(), losses.size(), winRate, BigDecimal.valueOf(avgGainPct),
+                BigDecimal.valueOf(avgLossPct), BigDecimal.valueOf(maxDrawdownPct), sharpeRatio,
+                BigDecimal.valueOf(totalReturn), expectancy, trades);
     }
 
     private static double computeSharpeRatio(List<Double> capitalCurve) {
