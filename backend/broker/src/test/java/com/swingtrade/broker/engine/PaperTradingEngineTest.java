@@ -12,7 +12,9 @@ import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.TradeDirection;
-import com.swingtrade.broker.service.PaperTradingStateService;
+import com.swingtrade.domain.service.TradingStatePersistence;
+import com.swingtrade.domain.service.TradingStatePersistence.PersistedState;
+import com.swingtrade.domain.service.TradingStatePersistence.PortfolioState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -57,7 +59,7 @@ class PaperTradingEngineTest {
     @Mock
     private PaperTradingProperties properties;
     @Mock
-    private PaperTradingStateService stateService;
+    private TradingStatePersistence persistence;
 
     private PaperTradingProperties testProperties;
 
@@ -69,8 +71,7 @@ class PaperTradingEngineTest {
         testProperties.setMaxCapitalPerPosition(new BigDecimal("500000"));
 
         engine = new PaperTradingEngine(orderManager, positionManager, testProperties,
-                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class));
-        engine.setStateService(stateService);
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class), persistence);
     }
 
     // ==================== Signal Execution ====================
@@ -109,7 +110,7 @@ class PaperTradingEngineTest {
             lenient().when(positionManager.createPosition(any(), any(), any(), any(), any(), any(), any()))
                     .thenAnswer(inv -> {
                         String posId = inv.getArgument(0);
-                        return new Position(null, "PAPER", "RELIANCE-EQ", currentPrice, LocalDate.now(),
+                        return Position.of(null, "PAPER", "RELIANCE-EQ", currentPrice, LocalDate.now(),
                                 100, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                                 "Golden cross on daily", currentPrice, posId, null, null,
                                 TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -126,9 +127,9 @@ class PaperTradingEngineTest {
             assertThat(result.getStatus()).isEqualTo(OrderStatus.FILLED);
             verify(orderManager).createBuyOrder("RELIANCE-EQ", 100, currentPrice);
             verify(orderManager).executeOrder("ORD_00000001", currentPrice);
-            verify(stateService).saveOrder(filledOrder);
-            verify(stateService).savePosition(any(Position.class));
-            verify(stateService).savePortfolio();
+            verify(persistence).saveOrder(filledOrder);
+            verify(persistence).savePosition(any(Position.class));
+            verify(persistence).savePortfolio(any(PortfolioState.class));
         }
 
         @Test
@@ -211,7 +212,7 @@ class PaperTradingEngineTest {
             lenient().when(positionManager.createPosition(any(), any(), any(), any(), any(), any(), any()))
                     .thenAnswer(inv -> {
                         String posId = inv.getArgument(0);
-                        return new Position(null, "PAPER", "RELIANCE-EQ", currentPrice, LocalDate.now(),
+                        return Position.of(null, "PAPER", "RELIANCE-EQ", currentPrice, LocalDate.now(),
                                 100, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                                 "Strong bullish momentum", currentPrice, posId, null, null,
                                 TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -275,7 +276,7 @@ class PaperTradingEngineTest {
             // Given: Zero portfolio capital
             testProperties.setInitialBalance(BigDecimal.ZERO);
             engine = new PaperTradingEngine(orderManager, positionManager, testProperties,
-                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class));
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class), persistence);
             when(positionManager.hasReachedPositionLimit()).thenReturn(false);
 
             // When
@@ -291,7 +292,7 @@ class PaperTradingEngineTest {
             when(positionManager.hasReachedPositionLimit()).thenReturn(false);
             testProperties.setMaxCapitalPerPosition(new BigDecimal("100"));
             engine = new PaperTradingEngine(orderManager, positionManager, testProperties,
-                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class));
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class), persistence);
 
             // When: 100 * 100 = 10000, ratio = 0.0133
             // maxCapitalPerPositionDiv100 = 100/100 = 1, 0.0133 > 1 => false, passes
@@ -402,7 +403,7 @@ class PaperTradingEngineTest {
             lenient().when(positionManager.createPosition(any(), any(), any(), any(), any(), any(), any()))
                     .thenAnswer(inv -> {
                         String posId = inv.getArgument(0);
-                        return new Position(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
+                        return Position.of(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
                                 100, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                                 "Test", entryPrice, posId, null, null,
                                 TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -438,7 +439,7 @@ class PaperTradingEngineTest {
             lenient().when(positionManager.createPosition(any(), any(), any(), any(), any(), any(), any()))
                     .thenAnswer(inv -> {
                         String posId = inv.getArgument(0);
-                        return new Position(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
+                        return Position.of(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
                                 10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                                 "Test", entryPrice, posId, null, null,
                                 TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -471,7 +472,7 @@ class PaperTradingEngineTest {
             lenient().when(positionManager.createPosition(any(), any(), any(), any(), any(), any(), any()))
                     .thenAnswer(inv -> {
                         String posId = inv.getArgument(0);
-                        return new Position(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
+                        return Position.of(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
                                 100, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                                 "Test", entryPrice, posId, null, null,
                                 TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -482,7 +483,7 @@ class PaperTradingEngineTest {
             engine.executePendingOrder("ORD_00000001", entryPrice);
 
             // Then
-            verify(stateService).savePosition(any(Position.class));
+            verify(persistence).savePosition(any(Position.class));
         }
     }
 
@@ -495,7 +496,7 @@ class PaperTradingEngineTest {
         void closePosition_increasesCapital() {
             // Given: An open position
             BigDecimal entryPrice = new BigDecimal("100.00");
-            Position position = new Position(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
+            Position position = Position.of(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
                     10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", new BigDecimal("105.00"), "POS_00000001", null, null,
                     TradeDirection.LONG, null, new BigDecimal("50.00"), BigDecimal.ZERO, null,
@@ -506,7 +507,7 @@ class PaperTradingEngineTest {
 
             // Simulate position entry to set correct capital state
             BigDecimal exitPrice = new BigDecimal("105.00");
-            Position closedPos = new Position(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
+            Position closedPos = Position.of(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
                     10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", exitPrice, "POS_00000001", null, null,
                     TradeDirection.LONG, null, entryPrice, BigDecimal.ZERO, null,
@@ -530,7 +531,7 @@ class PaperTradingEngineTest {
 
             // Simulate position entry to set correct capital state
             when(positionManager.closePosition("POS_00000001", new BigDecimal("105.00"), "manual_close"))
-                    .thenAnswer(inv -> new Position(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
+                    .thenAnswer(inv -> Position.of(null, "PAPER", "RELIANCE-EQ", entryPrice, LocalDate.now(),
                             10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                             "Test", new BigDecimal("105.00"), "POS_00000001", null, null,
                             TradeDirection.LONG, null, entryPrice, BigDecimal.ZERO, null,
@@ -549,7 +550,7 @@ class PaperTradingEngineTest {
         @Test
         void closePosition_persistsState() {
             // Given: An open position
-            Position position = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position position = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", new BigDecimal("105.00"), "POS_00000001", null, null,
                     TradeDirection.LONG, null, new BigDecimal("50.00"), BigDecimal.ZERO, null,
@@ -562,8 +563,8 @@ class PaperTradingEngineTest {
             engine.closePosition("POS_00000001", new BigDecimal("105.00"), "manual_close");
 
             // Then
-            verify(stateService).closePosition("POS_00000001", position);
-            verify(stateService).savePortfolio();
+            verify(persistence).closePosition("POS_00000001", position);
+            verify(persistence).savePortfolio(any(PortfolioState.class));
         }
     }
 
@@ -575,7 +576,7 @@ class PaperTradingEngineTest {
         @Test
         void longPosition_slHit() {
             // Given: A long position with SL 90
-            Position position = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position position = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, new BigDecimal("90.00"), new BigDecimal("125.00"),
                     PositionStatus.OPEN, "Test", new BigDecimal("100.00"),
                     "POS_00000001", null, Exchange.NSE,
@@ -602,7 +603,7 @@ class PaperTradingEngineTest {
         @Test
         void longPosition_tpHit() {
             // Given: A long position with target 125
-            Position position = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position position = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, new BigDecimal("90.00"), new BigDecimal("125.00"),
                     PositionStatus.OPEN, "Test", new BigDecimal("100.00"),
                     "POS_00000001", null, Exchange.NSE,
@@ -627,7 +628,7 @@ class PaperTradingEngineTest {
         @Test
         void shortPosition_slHit() {
             // Given: A short position with SL 110
-            Position position = new Position(null, "PAPER", "TCS-EQ", new BigDecimal("100.00"),
+            Position position = Position.of(null, "PAPER", "TCS-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, new BigDecimal("110.00"), new BigDecimal("75.00"),
                     PositionStatus.OPEN, "Test", new BigDecimal("100.00"),
                     "POS_00000001", null, Exchange.NSE,
@@ -652,7 +653,7 @@ class PaperTradingEngineTest {
         @Test
         void shortPosition_tpHit() {
             // Given: A short position with target 75
-            Position position = new Position(null, "PAPER", "TCS-EQ", new BigDecimal("100.00"),
+            Position position = Position.of(null, "PAPER", "TCS-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, new BigDecimal("110.00"), new BigDecimal("75.00"),
                     PositionStatus.OPEN, "Test", new BigDecimal("100.00"),
                     "POS_00000001", null, Exchange.NSE,
@@ -677,7 +678,7 @@ class PaperTradingEngineTest {
         @Test
         void noTrigger() {
             // Given: A long position, candle within SL-TP range
-            Position position = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position position = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, new BigDecimal("90.00"), new BigDecimal("125.00"),
                     PositionStatus.OPEN, "Test", new BigDecimal("100.00"),
                     "POS_00000001", null, Exchange.NSE,
@@ -708,7 +709,7 @@ class PaperTradingEngineTest {
         @Test
         void singleUnrealizedPnL() {
             // Given: One open position
-            Position position = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position position = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", new BigDecimal("110.00"), "POS_00000001", null, null,
                     TradeDirection.LONG, null, new BigDecimal("100.00"), BigDecimal.ZERO, null,
@@ -728,12 +729,12 @@ class PaperTradingEngineTest {
         @Test
         void multipleUnrealizedPnL() {
             // Given: Two open positions
-            Position p1 = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position p1 = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", new BigDecimal("110.00"), "POS_00000001", null, null,
                     TradeDirection.LONG, null, new BigDecimal("100.00"), BigDecimal.ZERO, null,
                     java.time.LocalDateTime.now(), null, null, null);
-            Position p2 = new Position(null, "PAPER", "TCS-EQ", new BigDecimal("200.00"),
+            Position p2 = Position.of(null, "PAPER", "TCS-EQ", new BigDecimal("200.00"),
                     LocalDate.now(), 5, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", new BigDecimal("210.00"), "POS_00000002", null, null,
                     TradeDirection.LONG, null, new BigDecimal("50.00"), BigDecimal.ZERO, null,
@@ -794,7 +795,7 @@ class PaperTradingEngineTest {
             // Given: Zero initial capital (override properties)
             testProperties.setInitialBalance(BigDecimal.ZERO);
             engine = new PaperTradingEngine(orderManager, positionManager, testProperties,
-                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class));
+                org.mockito.Mockito.mock(com.swingtrade.core.metrics.TradeMetrics.class), persistence);
 
             // When
             BigDecimal pct = engine.getReturnPercentage();
@@ -812,12 +813,12 @@ class PaperTradingEngineTest {
         @Test
         void getOpenPositions() {
             // Given: Two open positions
-            Position p1 = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position p1 = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", new BigDecimal("105.00"), "POS_00000001", null, null,
                     TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
                     java.time.LocalDateTime.now(), null, null, null);
-            Position p2 = new Position(null, "PAPER", "TCS-EQ", new BigDecimal("200.00"),
+            Position p2 = Position.of(null, "PAPER", "TCS-EQ", new BigDecimal("200.00"),
                     LocalDate.now(), 5, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", new BigDecimal("205.00"), "POS_00000002", null, null,
                     TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -837,12 +838,12 @@ class PaperTradingEngineTest {
         @Test
         void getClosedPositions() {
             // Given: Two closed positions
-            Position c1 = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position c1 = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.CLOSED,
                     "Test", new BigDecimal("105.00"), "POS_00000001", null, null,
                     TradeDirection.LONG, null, BigDecimal.ZERO, new BigDecimal("50.00"), null,
                     java.time.LocalDateTime.now(), java.time.LocalDateTime.now(), "Manual", null);
-            Position c2 = new Position(null, "PAPER", "TCS-EQ", new BigDecimal("200.00"),
+            Position c2 = Position.of(null, "PAPER", "TCS-EQ", new BigDecimal("200.00"),
                     LocalDate.now(), 5, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.TARGET_HIT,
                     "Test", new BigDecimal("210.00"), "POS_00000002", null, null,
                     TradeDirection.LONG, null, BigDecimal.ZERO, new BigDecimal("50.00"), null,
@@ -860,7 +861,7 @@ class PaperTradingEngineTest {
         @Test
         void getPosition() {
             // Given: A position in the manager
-            Position position = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position position = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", new BigDecimal("105.00"), "POS_00000001", null, null,
                     TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -891,7 +892,7 @@ class PaperTradingEngineTest {
         @Test
         void findOpenPositionBySymbol() {
             // Given: A position for RELIANCE-EQ
-            Position position = new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+            Position position = Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                     LocalDate.now(), 10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                     "Test", new BigDecimal("105.00"), "POS_00000001", null, null,
                     TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -984,7 +985,7 @@ class PaperTradingEngineTest {
             lenient().when(positionManager.createPosition(any(), any(), any(), any(), any(), any(), any()))
                     .thenAnswer(inv -> {
                         String posId = inv.getArgument(0);
-                        return new Position(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
+                        return Position.of(null, "PAPER", "RELIANCE-EQ", new BigDecimal("100.00"),
                                 LocalDate.now(), 10, BigDecimal.ZERO, BigDecimal.ZERO, PositionStatus.OPEN,
                                 "Test", new BigDecimal("100.00"), posId, null, null,
                                 TradeDirection.LONG, null, BigDecimal.ZERO, BigDecimal.ZERO, null,
@@ -1246,8 +1247,8 @@ class PaperTradingEngineTest {
 
         @Test
         void closePosition_byDbId_notFound() {
-            // Given: State service returns null for position lookup
-            when(stateService.getPositionById(1L)).thenReturn(null);
+            // Given: persistence has no position for that database id
+            when(persistence.findPositionId(1L)).thenReturn(Optional.empty());
 
             // When / Then
             assertThatThrownBy(() -> engine.closePosition(1L))
@@ -1293,7 +1294,7 @@ class PaperTradingEngineTest {
             assertThat(engine.getCurrentCash()).isEqualByComparingTo("750000");
             assertThat(engine.getTotalValue()).isEqualByComparingTo("750000");
             assertThat(engine.canOpenPosition(BigDecimal.TEN, 100)).isTrue();
-            when(stateService.getSnapshots()).thenReturn(List.of());
+            when(persistence.getSnapshotTotalValues()).thenReturn(List.of());
             assertThat(engine.getPortfolioMaxDrawdown()).isNull();
             when(positionManager.getPosition("p1")).thenReturn(open);
             assertThat(engine.getPosition("p1")).containsSame(open);
@@ -1302,10 +1303,9 @@ class PaperTradingEngineTest {
             assertThat(engine.calculateCommission(commissionOrder)).isEqualByComparingTo("0.50");
             engine.seedPositionCounter(4);
             engine.seedPositionCounter(2);
+            when(persistence.loadState()).thenReturn(PersistedState.empty());
             engine.initState();
-            verify(stateService).loadState();
-            engine.setStateService(null);
-            engine.initState();
+            verify(persistence).loadState();
 
             Order unfilled = new Order();
             unfilled.setOrderId("pending");
@@ -1313,14 +1313,8 @@ class PaperTradingEngineTest {
             when(orderManager.executeOrder("pending", BigDecimal.TEN)).thenReturn(unfilled);
             assertThat(engine.executePendingOrder("pending", BigDecimal.TEN)).isSameAs(unfilled);
 
-            var first = new com.swingtrade.broker.entity.PaperTradingSnapshotEntity();
-            first.setTotalValue(BigDecimal.valueOf(800));
-            var second = new com.swingtrade.broker.entity.PaperTradingSnapshotEntity();
-            second.setTotalValue(BigDecimal.valueOf(900));
-            var third = new com.swingtrade.broker.entity.PaperTradingSnapshotEntity();
-            third.setTotalValue(BigDecimal.valueOf(700));
-            engine.setStateService(stateService);
-            when(stateService.getSnapshots()).thenReturn(List.of(first, second, third));
+            when(persistence.getSnapshotTotalValues()).thenReturn(List.of(
+                BigDecimal.valueOf(800), BigDecimal.valueOf(900), BigDecimal.valueOf(700)));
             assertThat(engine.getPortfolioMaxDrawdown()).isEqualByComparingTo("11.11");
         }
 
@@ -1394,6 +1388,86 @@ class PaperTradingEngineTest {
             engine.updatePositionsFromDomain(candle);
             engine.updatePositionsFromDomain(candle, null);
             verify(positionManager).checkPositionTriggers(matching, candle);
+        }
+    }
+
+    // ==================== Persistence port ====================
+
+    @Nested
+    class PersistencePort {
+
+        @Test
+        void initState_appliesPersistedStateToPortfolioManagersAndCounter() {
+            // Given: persisted capital, one open position and one pending order
+            Position open = mock(Position.class);
+            when(open.positionId()).thenReturn("POS_00000007");
+            java.util.Map<String, Position> positions = new java.util.HashMap<>();
+            when(positionManager.getPositions()).thenReturn(positions);
+            Order pending = new Order();
+            pending.setOrderId("ORD_00000003");
+            java.util.Map<String, Order> orders = new java.util.HashMap<>();
+            when(orderManager.getOrders()).thenReturn(orders);
+            when(persistence.loadState()).thenReturn(new PersistedState(
+                new BigDecimal("640000"), new BigDecimal("800000"), List.of(open), List.of(pending), 41L));
+
+            // When
+            engine.initState();
+
+            // Then
+            assertThat(engine.getPortfolio().getCurrentCapital()).isEqualByComparingTo("640000");
+            assertThat(engine.getPortfolio().getInitialCapital()).isEqualByComparingTo("800000");
+            assertThat(engine.getPortfolio().getPositions()).containsEntry("POS_00000007", open);
+            assertThat(positions).containsEntry("POS_00000007", open);
+            assertThat(orders).containsEntry("ORD_00000003", pending);
+
+            // And: the next generated position id continues after the persisted maximum
+            Order filled = new Order();
+            filled.setStatus(OrderStatus.FILLED);
+            filled.setSymbol("ABC");
+            filled.setDirection(TradeDirection.LONG);
+            filled.setQuantity(BigDecimal.TEN);
+            filled.setPrice(BigDecimal.TEN);
+            engine.createPositionFromOrder(filled);
+            verify(positionManager).createPosition(eq("POS_00000042"), any(), any(), anyInt(), any(), any(), any());
+        }
+
+        @Test
+        void initState_withoutPortfolioRow_keepsConfiguredCapital() {
+            when(persistence.loadState()).thenReturn(PersistedState.empty());
+
+            engine.initState();
+
+            assertThat(engine.getPortfolio().getCurrentCapital()).isEqualByComparingTo("750000");
+            assertThat(engine.getPortfolio().getInitialCapital()).isEqualByComparingTo("750000");
+        }
+
+        @Test
+        void savePortfolio_passesCurrentFiguresToPersistence() {
+            when(positionManager.getTotalRealizedPnL()).thenReturn(BigDecimal.TEN);
+            when(positionManager.getTotalUnrealizedPnL()).thenReturn(BigDecimal.valueOf(-2));
+            when(positionManager.getOpenPositionCount()).thenReturn(3);
+
+            engine.savePortfolio();
+
+            verify(persistence).savePortfolio(new PortfolioState(
+                new BigDecimal("750000"), new BigDecimal("750000"),
+                BigDecimal.TEN, BigDecimal.valueOf(-2), 3));
+        }
+
+        @Test
+        void saveSnapshot_passesValuationToPersistence() {
+            when(positionManager.getTotalRealizedPnL()).thenReturn(BigDecimal.ZERO);
+            when(positionManager.getTotalUnrealizedPnL()).thenReturn(BigDecimal.ZERO);
+            when(positionManager.getOpenPositionCount()).thenReturn(2);
+
+            engine.saveSnapshot();
+
+            verify(persistence).saveSnapshot(org.mockito.ArgumentMatchers.argThat(state ->
+                state.totalValue().compareTo(new BigDecimal("750000")) == 0
+                    && state.cashBalance().compareTo(new BigDecimal("750000")) == 0
+                    && state.marketValue().signum() == 0
+                    && state.totalPnl().signum() == 0
+                    && state.openPositions() == 2));
         }
     }
 }

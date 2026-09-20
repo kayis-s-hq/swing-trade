@@ -34,26 +34,22 @@ public class PaperTradingMonitorService {
     private static final Logger logger = LoggerFactory.getLogger(PaperTradingMonitorService.class);
 
     private final PaperTradingEngine engine;
-    private final PaperTradingStateService stateService;
     private final OhlcvCandleRepository ohlcvCandleRepository;
     private final PaperTradingProperties properties;
     private final PriceBandStore priceBandStore;
 
     public PaperTradingMonitorService(PaperTradingEngine engine,
-                                      PaperTradingStateService stateService,
                                       OhlcvCandleRepository ohlcvCandleRepository,
                                       PaperTradingProperties properties) {
-        this(engine, stateService, ohlcvCandleRepository, properties, null);
+        this(engine, ohlcvCandleRepository, properties, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public PaperTradingMonitorService(PaperTradingEngine engine,
-                                      PaperTradingStateService stateService,
                                       OhlcvCandleRepository ohlcvCandleRepository,
                                       PaperTradingProperties properties,
                                       PriceBandStore priceBandStore) {
         this.engine = engine;
-        this.stateService = stateService;
         this.ohlcvCandleRepository = ohlcvCandleRepository;
         this.properties = properties;
         this.priceBandStore = priceBandStore;
@@ -75,7 +71,7 @@ public class PaperTradingMonitorService {
                 if (candle == null) continue;
 
                 // Update position price and check SL/TP; this already persists the
-                // resulting state (open or closed) via stateService internally.
+                // resulting state (open or closed) via the engine internally.
                 // Do not additionally save `pos` here — it is the pre-update
                 // snapshot captured before this loop and would overwrite whatever
                 // updatePositionsFromDomain just wrote with stale values.
@@ -98,10 +94,8 @@ public class PaperTradingMonitorService {
         }
 
         // Save portfolio snapshot
-        if (stateService != null) {
-            stateService.saveSnapshot();
-            stateService.savePortfolio();
-        }
+        engine.saveSnapshot();
+        engine.savePortfolio();
 
         logger.info("Position monitoring complete");
     }

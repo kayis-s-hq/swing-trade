@@ -1,8 +1,5 @@
 package com.swingtrade.broker.service;
 
-import com.swingtrade.broker.engine.PaperTradingEngine;
-import com.swingtrade.broker.manager.OrderManager;
-import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
 import com.swingtrade.broker.entity.PaperTradingOrderEntity;
@@ -16,10 +13,10 @@ import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.broker.util.OptimisticLockRetryHelper;
+import com.swingtrade.domain.service.TradingStatePersistence;
 import com.swingtrade.strategy.ExitReason;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Lazy;
 
 import java.util.ArrayList;
 import org.springframework.stereotype.Service;
@@ -29,16 +26,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Bridges in-memory PaperTradingEngine with DB persistence.
- * Loads state from DB on startup; persists after every engine mutation.
+ * DB persistence for the in-memory PaperTradingEngine, exposed to it through the
+ * {@link TradingStatePersistence} port. Loads state from the DB on startup and persists
+ * after every engine mutation. It never depends on the engine: the engine passes values
+ * in and applies the {@link PersistedState} this returns.
  * Uses unified positions table with broker_type="PAPER".
  */
 @Service
-public class PaperTradingStateService {
+public class PaperTradingStateService implements TradingStatePersistence {
 
     private static final Logger logger = LoggerFactory.getLogger(PaperTradingStateService.class);
 
@@ -46,60 +46,63 @@ public class PaperTradingStateService {
 
     private static final Pattern POSITION_ID_PATTERN = Pattern.compile("^POS_(\\d+)$");
 
-    private final PaperTradingEngine engine;
-    private final PositionManager positionManager;
-    private final OrderManager orderManager;
     private final PaperTradingPortfolioRepository portfolioRepo;
     private final PositionRepository unifiedPositionRepo;
     private final PaperTradingOrderRepository orderRepo;
     private final PaperTradingSnapshotRepository snapshotRepo;
 
-    public PaperTradingStateService(@Lazy PaperTradingEngine engine,
-                                    PositionManager positionManager,
-                                    OrderManager orderManager,
-                                    PaperTradingPortfolioRepository portfolioRepo,
+    public PaperTradingStateService(PaperTradingPortfolioRepository portfolioRepo,
                                     PositionRepository unifiedPositionRepo,
                                     PaperTradingOrderRepository orderRepo,
                                     PaperTradingSnapshotRepository snapshotRepo) {
-        this.engine = engine;
-        this.positionManager = positionManager;
-        this.orderManager = orderManager;
         this.portfolioRepo = portfolioRepo;
         this.unifiedPositionRepo = unifiedPositionRepo;
         this.orderRepo = orderRepo;
         this.snapshotRepo = snapshotRepo;
     }
 
-    public void loadState() {
+    @Override
+    public PersistedState loadState() {
+        // Declared outside the try so a partial failure still hands back whatever was read
+        // before it, matching the old behaviour of applying each step to the engine as it loaded.
+        BigDecimal currentCapital = null;
+        BigDecimal initialCapital = null;
+        List<Position> openPositions = new ArrayList<>();
+        List<Order> pendingOrders = new ArrayList<>();
         try {
-            loadPortfolio();
-            loadOpenPositions();
+            PaperTradingPortfolioEntity saved = portfolioRepo.findById(1L).orElse(null);
+            if (saved != null) {
+                currentCapital = saved.getCurrentCapital();
+                initialCapital = saved.getInitialCapital();
+                logger.info("Loaded portfolio: capital={}, initial={}", currentCapital, initialCapital);
+            } else {
+                logger.info("No portfolio state found, using defaults");
+            }
+            loadOpenPositions(openPositions);
             loadClosedPositions();
-            loadPendingOrders();
+            loadPendingOrders(pendingOrders);
             logger.info("Paper trading state loaded from DB");
         } catch (Exception e) {
             logger.warn("Failed to load paper trading state from DB, starting fresh: {}", e.getMessage());
-        } finally {
-            // Always attempt to reseed the position ID counter, even if the
-            // loads above partially failed — otherwise a fresh restart would
-            // keep generating IDs from 0 and collide with (and corrupt) an
-            // existing DB row via savePosition()'s upsert-by-positionId.
-            seedPositionCounterFromDb();
         }
+        // Always compute the position ID counter seed, even if the loads above partially
+        // failed - otherwise a fresh restart would keep generating IDs from 0 and collide
+        // with (and corrupt) an existing DB row via savePosition()'s upsert-by-positionId.
+        long maxSuffix = findMaxPositionIdSuffix();
+        return new PersistedState(currentCapital, initialCapital, openPositions, pendingOrders, maxSuffix);
     }
 
     /**
-     * Reseeds {@link PaperTradingEngine}'s in-memory position ID counter from
-     * the historical maximum POS_ suffix found in the database (across ALL
-     * statuses and broker types, not just currently-open positions — closed
-     * positions' IDs are still occupied rows). Without this, the counter
-     * always restarts at 0 after a JVM restart, so newly generated IDs would
-     * collide with old (already CLOSED) position_id rows and silently
-     * corrupt them via the upsert in {@link #savePosition(Position)}.
+     * Finds the historical maximum POS_ suffix in the database (across ALL statuses and
+     * broker types, not just currently-open positions - closed positions' IDs are still
+     * occupied rows). The engine seeds its in-memory position ID counter from this;
+     * without it the counter always restarts at 0 after a JVM restart, so newly generated
+     * IDs would collide with old (already CLOSED) position_id rows and silently corrupt
+     * them via the upsert in {@link #savePosition(Position)}.
      */
-    private void seedPositionCounterFromDb() {
+    private long findMaxPositionIdSuffix() {
+        long maxSuffix = 0L;
         try {
-            long maxSuffix = 0L;
             for (String positionId : unifiedPositionRepo.findAllPositionIds()) {
                 if (positionId == null) {
                     continue;
@@ -117,34 +120,21 @@ public class PaperTradingStateService {
                     logger.warn("Skipping malformed position ID during counter seed: {}", positionId);
                 }
             }
-            engine.seedPositionCounter(maxSuffix);
-            logger.info("Seeded position ID counter to {} (max POS_ suffix found in DB)", maxSuffix);
+            logger.info("Max POS_ suffix found in DB: {}", maxSuffix);
         } catch (Exception e) {
-            logger.warn("Failed to seed position ID counter from DB, starting from 0: {}", e.getMessage());
+            logger.warn("Failed to read position IDs for counter seed, starting from 0: {}", e.getMessage());
         }
+        return maxSuffix;
     }
 
-    private void loadPortfolio() {
-        PaperTradingPortfolioEntity saved = portfolioRepo.findById(1L).orElse(null);
-        if (saved != null) {
-            engine.getPortfolio().setCurrentCapital(saved.getCurrentCapital());
-            engine.getPortfolio().setInitialCapital(saved.getInitialCapital());
-            logger.info("Loaded portfolio: capital={}, initial={}",
-                saved.getCurrentCapital(), saved.getInitialCapital());
-        } else {
-            logger.info("No portfolio state found, using defaults");
-        }
-    }
-
-    private void loadOpenPositions() {
+    private void loadOpenPositions(List<Position> into) {
         List<PositionEntity> openEntities = unifiedPositionRepo.findAllOpenPositions().stream()
             .filter(p -> BROKER_TYPE_PAPER.equals(p.getBrokerType()))
             .toList();
         for (PositionEntity e : openEntities) {
             try {
                 Position pos = e.toDomain();
-                engine.getPortfolio().addPosition(pos);
-                positionManager.getPositions().put(pos.positionId(), pos);
+                into.add(pos);
                 logger.info("Loaded open position: {} for {}", pos.positionId(), pos.symbol());
             } catch (Exception ex) {
                 logger.warn("Failed to load position {}: {}", e.getPositionId(), ex.getMessage());
@@ -176,7 +166,7 @@ public class PaperTradingStateService {
         logger.info("Loaded {} closed positions, total realized P&L: {}", closedEntities.size(), totalRealized);
     }
 
-    private void loadPendingOrders() {
+    private void loadPendingOrders(List<Order> into) {
         orderRepo.findAllByOrderByCreatedAtDesc().stream()
             .filter(entity -> "PENDING".equals(entity.getStatus()) || "ACCEPTED".equals(entity.getStatus()))
             .forEach(entity -> {
@@ -190,7 +180,7 @@ public class PaperTradingStateService {
                     if (entity.getSignalId() != null && !entity.getSignalId().isBlank()) {
                         order.setAdditionalProperties(java.util.Map.of("signalId", entity.getSignalId()));
                     }
-                    orderManager.getOrders().put(order.getOrderId(), order);
+                    into.add(order);
                     logger.info("Loaded pending order: {} for {}", order.getOrderId(), order.getSymbol());
                 } catch (Exception ex) {
                     logger.warn("Failed to load pending order {}: {}", entity.getOrderId(), ex.getMessage());
@@ -204,18 +194,19 @@ public class PaperTradingStateService {
     // portfolioLock only serializes the in-JVM critical section - the version bump it wrote
     // is still uncommitted when the lock releases, so the next thread's read-modify-write
     // still races against it and loses at commit time.
+    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void savePortfolio() {
+    public void savePortfolio(PortfolioState state) {
         try {
             OptimisticLockRetryHelper.execute(() -> {
                 PaperTradingPortfolioEntity entity = portfolioRepo.findById(1L).orElse(new PaperTradingPortfolioEntity());
                 entity.setId(1L);
                 entity.setPortfolioId("default");
-                entity.setCurrentCapital(engine.getPortfolio().getCurrentCapital());
-                entity.setInitialCapital(engine.getPortfolio().getInitialCapital());
-                entity.setTotalRealizedPnl(engine.getTotalRealizedPnL());
-                entity.setTotalUnrealizedPnL(engine.getTotalUnrealizedPnL());
-                entity.setOpenPositionCount(engine.getOpenPositionCount());
+                entity.setCurrentCapital(state.currentCapital());
+                entity.setInitialCapital(state.initialCapital());
+                entity.setTotalRealizedPnl(state.totalRealizedPnl());
+                entity.setTotalUnrealizedPnL(state.totalUnrealizedPnl());
+                entity.setOpenPositionCount(state.openPositionCount());
                 portfolioRepo.save(entity);
             }, "PaperTradingPortfolioEntity");
         } catch (RuntimeException e) {
@@ -226,10 +217,12 @@ public class PaperTradingStateService {
         }
     }
 
+    @Override
     public void savePosition(Position position) {
         savePosition(position, null);
     }
 
+    @Override
     public void savePosition(Position position, Long signalId) {
         try {
             OptimisticLockRetryHelper.execute(() -> {
@@ -258,6 +251,7 @@ public class PaperTradingStateService {
 
     // REQUIRES_NEW for the same reason as savePortfolio() - this must commit before
     // portfolioLock releases, not join the caller's longer-lived ambient transaction.
+    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void closePosition(String positionId, Position closedPos) {
         try {
@@ -279,6 +273,7 @@ public class PaperTradingStateService {
         }
     }
 
+    @Override
     public void saveOrder(Order order) {
         try {
             OptimisticLockRetryHelper.execute(() -> {
@@ -299,16 +294,17 @@ public class PaperTradingStateService {
         }
     }
 
-    public void saveSnapshot() {
+    @Override
+    public void saveSnapshot(SnapshotState state) {
         try {
             OptimisticLockRetryHelper.execute(() -> {
                 PaperTradingSnapshotEntity entity = new PaperTradingSnapshotEntity();
-                entity.setTotalValue(engine.getPortfolio().getTotalValue());
-                entity.setCashBalance(engine.getCurrentCash());
-                entity.setMarketValue(engine.getPortfolio().getTotalValue().subtract(engine.getCurrentCash()));
-                entity.setTotalPnL(engine.getTotalPnL());
-                entity.setReturnPct(engine.getReturnPercentage());
-                entity.setOpenPositions(engine.getOpenPositionCount());
+                entity.setTotalValue(state.totalValue());
+                entity.setCashBalance(state.cashBalance());
+                entity.setMarketValue(state.marketValue());
+                entity.setTotalPnL(state.totalPnl());
+                entity.setReturnPct(state.returnPct());
+                entity.setOpenPositions(state.openPositions());
                 snapshotRepo.save(entity);
                 logger.debug("Saved portfolio snapshot: total={}, cash={}, pnl={}",
                     entity.getTotalValue(), entity.getCashBalance(), entity.getTotalPnL());
@@ -351,15 +347,17 @@ public class PaperTradingStateService {
         return portfolioRepo.findById(1L).orElse(null);
     }
 
-    /**
-     * Looks up a persisted position entity by its database ID.
-     * Used by PaperTradingEngine.closePosition(Long) to resolve the
-     * positionId string when the in-memory counter may have reset.
-     *
-     * @param id the database position ID
-     * @return the position entity, or null if not found
-     */
-    public PositionEntity getPositionById(Long id) {
-        return unifiedPositionRepo.findById(id).orElse(null);
+    @Override
+    public Optional<String> findPositionId(Long databaseId) {
+        return unifiedPositionRepo.findById(databaseId)
+            .map(PositionEntity::getPositionId)
+            .filter(id -> !id.isBlank());
+    }
+
+    @Override
+    public List<BigDecimal> getSnapshotTotalValues() {
+        return snapshotRepo.findAllByOrderBySnapshotTimeDesc().stream()
+            .map(PaperTradingSnapshotEntity::getTotalValue)
+            .toList();
     }
 }

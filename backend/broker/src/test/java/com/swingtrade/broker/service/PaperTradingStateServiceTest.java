@@ -16,9 +16,6 @@
 
 package com.swingtrade.broker.service;
 
-import com.swingtrade.broker.engine.PaperTradingEngine;
-import com.swingtrade.broker.manager.OrderManager;
-import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.broker.entity.PaperTradingOrderEntity;
 import com.swingtrade.broker.entity.PaperTradingPortfolioEntity;
 import com.swingtrade.broker.entity.PaperTradingSnapshotEntity;
@@ -33,6 +30,9 @@ import com.swingtrade.domain.OrderType;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.TradeDirection;
+import com.swingtrade.domain.service.TradingStatePersistence.PersistedState;
+import com.swingtrade.domain.service.TradingStatePersistence.PortfolioState;
+import com.swingtrade.domain.service.TradingStatePersistence.SnapshotState;
 import com.swingtrade.strategy.ExitReason;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -68,15 +68,6 @@ import static org.mockito.ArgumentMatchers.eq;
 class PaperTradingStateServiceTest {
 
     @Mock
-    private PaperTradingEngine engine;
-
-    @Mock
-    private PositionManager positionManager;
-
-    @Mock
-    private OrderManager orderManager;
-
-    @Mock
     private PaperTradingPortfolioRepository portfolioRepo;
 
     @Mock
@@ -89,6 +80,12 @@ class PaperTradingStateServiceTest {
     private PaperTradingSnapshotRepository snapshotRepo;
 
     private PaperTradingStateService stateService;
+
+    private SnapshotState snapshotState() {
+        return new SnapshotState(
+                new BigDecimal("1000000"), new BigDecimal("500000"), new BigDecimal("500000"),
+                new BigDecimal("50000"), new BigDecimal("5.0000"), 3);
+    }
 
     private PaperTradingPortfolioEntity makePortfolioEntity(
             Long id, String portfolioId, BigDecimal initialCapital, BigDecimal currentCapital,
@@ -152,7 +149,7 @@ class PaperTradingStateServiceTest {
 
     @BeforeEach
     void setUp() {
-        stateService = new PaperTradingStateService(engine, positionManager, orderManager,
+        stateService = new PaperTradingStateService(
                 portfolioRepo, unifiedPositionRepo, orderRepo, snapshotRepo);
     }
 
@@ -162,7 +159,7 @@ class PaperTradingStateServiceTest {
     class LoadState {
 
         @Test
-        void success_loadsPortfolioAndPositions() {
+        void success_returnsPersistedCapital() {
             // Given: Portfolio exists with saved state
             PaperTradingPortfolioEntity saved = makePortfolioEntity(
                     1L, "default", new BigDecimal("1000000"), new BigDecimal("950000"),
@@ -170,15 +167,14 @@ class PaperTradingStateServiceTest {
             when(portfolioRepo.findById(1L)).thenReturn(Optional.of(saved));
             when(unifiedPositionRepo.findAllOpenPositions()).thenReturn(List.of());
 
-            // Given: Portfolio getter returns a real portfolio object
-            com.swingtrade.broker.model.Portfolio portfolio = new com.swingtrade.broker.model.Portfolio("default", new BigDecimal("1000000"));
-            when(engine.getPortfolio()).thenReturn(portfolio);
-
             // When
-            stateService.loadState();
+            PersistedState state = stateService.loadState();
 
             // Then
-            verify(portfolioRepo).findById(1L);
+            assertThat(state.currentCapital()).isEqualByComparingTo("950000");
+            assertThat(state.initialCapital()).isEqualByComparingTo("1000000");
+            assertThat(state.openPositions()).isEmpty();
+            assertThat(state.pendingOrders()).isEmpty();
             verify(unifiedPositionRepo).findAllOpenPositions();
             verify(unifiedPositionRepo).findByStatus("CLOSED");
         }
@@ -187,7 +183,6 @@ class PaperTradingStateServiceTest {
         void success_reloadsPendingOrdersForNextSession() {
             when(portfolioRepo.findById(1L)).thenReturn(Optional.empty());
             when(unifiedPositionRepo.findAllOpenPositions()).thenReturn(List.of());
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.ZERO));
 
             PaperTradingOrderEntity entity = new PaperTradingOrderEntity();
             entity.setOrderId("ORD_RESTART");
@@ -198,15 +193,16 @@ class PaperTradingStateServiceTest {
             entity.setPrice(new BigDecimal("100.00"));
             entity.setStatus(OrderStatus.PENDING.name());
             entity.setSignalId("42");
-            when(orderRepo.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(entity));
-            var restoredOrders = new java.util.concurrent.ConcurrentHashMap<String, Order>();
-            when(orderManager.getOrders()).thenReturn(restoredOrders);
+            PaperTradingOrderEntity filled = new PaperTradingOrderEntity();
+            filled.setOrderId("ORD_DONE");
+            filled.setStatus(OrderStatus.FILLED.name());
+            when(orderRepo.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(entity, filled));
 
-            stateService.loadState();
+            PersistedState state = stateService.loadState();
 
-            verify(orderManager).getOrders();
-            assertThat(restoredOrders).containsKey("ORD_RESTART");
-            Order restored = restoredOrders.get("ORD_RESTART");
+            assertThat(state.pendingOrders()).hasSize(1);
+            Order restored = state.pendingOrders().get(0);
+            assertThat(restored.getOrderId()).isEqualTo("ORD_RESTART");
             assertThat(restored.getStatus()).isEqualTo(OrderStatus.PENDING);
             assertThat(restored.getAdditionalProperties()).containsEntry("signalId", "42");
         }
@@ -215,12 +211,13 @@ class PaperTradingStateServiceTest {
         void nullPortfolio_usesDefaults() {
             // Given: No portfolio found in DB
             when(portfolioRepo.findById(1L)).thenReturn(Optional.empty());
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.ZERO));
 
             // When
-            stateService.loadState();
+            PersistedState state = stateService.loadState();
 
-            // Then
+            // Then: null capital tells the engine to keep its configured defaults
+            assertThat(state.currentCapital()).isNull();
+            assertThat(state.initialCapital()).isNull();
             verify(portfolioRepo).findById(1L);
         }
 
@@ -245,14 +242,35 @@ class PaperTradingStateServiceTest {
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                     LocalDateTime.now(), null, null);
             when(unifiedPositionRepo.findAllOpenPositions()).thenReturn(List.of(paperPos, otherPos));
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(1000000)));
-            when(positionManager.getPositions()).thenReturn(new java.util.concurrent.ConcurrentHashMap<>());
 
             // When
-            stateService.loadState();
+            PersistedState state = stateService.loadState();
 
-            // Then: Only PAPER broker positions are loaded into the engine
-            verify(positionManager, times(1)).getPositions();
+            // Then: Only PAPER broker positions are handed back to the engine
+            assertThat(state.openPositions()).extracting(Position::positionId)
+                    .containsExactly("POS_00000001");
+        }
+
+        @Test
+        void seedsPositionCounterFromEveryStatusAndIgnoresMalformedIds() {
+            when(portfolioRepo.findById(1L)).thenReturn(Optional.empty());
+            when(unifiedPositionRepo.findAllPositionIds())
+                    .thenReturn(java.util.Arrays.asList("POS_00000004", null, "BAD", "POS_00000012"));
+
+            PersistedState state = stateService.loadState();
+
+            assertThat(state.maxPositionIdSuffix()).isEqualTo(12L);
+        }
+
+        @Test
+        void seedsPositionCounterEvenWhenLoadFails() {
+            when(portfolioRepo.findById(1L)).thenThrow(new RuntimeException("DB error"));
+            when(unifiedPositionRepo.findAllPositionIds()).thenReturn(List.of("POS_00000009"));
+
+            PersistedState state = stateService.loadState();
+
+            assertThat(state.maxPositionIdSuffix()).isEqualTo(9L);
+            assertThat(state.currentCapital()).isNull();
         }
 
         @Test
@@ -261,7 +279,6 @@ class PaperTradingStateServiceTest {
             when(portfolioRepo.findById(1L)).thenReturn(Optional.of(makePortfolioEntity(
                     1L, "default", BigDecimal.valueOf(1000000), BigDecimal.valueOf(950000),
                     BigDecimal.valueOf(50000), BigDecimal.ZERO, 0)));
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(1000000)));
             when(unifiedPositionRepo.findAllOpenPositions()).thenReturn(List.of());
             when(unifiedPositionRepo.findByStatus("CLOSED")).thenReturn(List.of());
             when(unifiedPositionRepo.findByStatus("STOPPED")).thenReturn(List.of());
@@ -277,19 +294,19 @@ class PaperTradingStateServiceTest {
         }
 
         @Test
-        void failureOnOpenPositions_continues() {
+        void failureOnOpenPositions_continuesWithPortfolioAlreadyRead() {
             // Given: Portfolio loads fine, open positions throw
             when(portfolioRepo.findById(1L)).thenReturn(Optional.of(makePortfolioEntity(
                     1L, "default", BigDecimal.valueOf(1000000), BigDecimal.valueOf(950000),
                     BigDecimal.ZERO, BigDecimal.ZERO, 0)));
             when(unifiedPositionRepo.findAllOpenPositions()).thenThrow(new RuntimeException("DB error"));
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(1000000)));
 
             // When: loadState catches exception and logs warning
-            stateService.loadState();
+            PersistedState state = stateService.loadState();
 
-            // Then: No exception propagates
-            verify(portfolioRepo).findById(1L);
+            // Then: No exception propagates and the capital read before the failure is kept
+            assertThat(state.currentCapital()).isEqualByComparingTo("950000");
+            assertThat(state.openPositions()).isEmpty();
         }
     }
 
@@ -299,59 +316,46 @@ class PaperTradingStateServiceTest {
     class SavePortfolio {
 
         @Test
-        void savesFromEngine_newPortfolio() {
+        void savesState_newPortfolio() {
             // Given: No existing portfolio in DB
             when(portfolioRepo.findById(1L)).thenReturn(Optional.empty());
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(1000000)));
-            when(engine.getTotalRealizedPnL()).thenReturn(BigDecimal.ZERO);
-            when(engine.getTotalUnrealizedPnL()).thenReturn(BigDecimal.ZERO);
-            when(engine.getOpenPositionCount()).thenReturn(2);
             when(portfolioRepo.save(any())).thenAnswer(i -> i.getArgument(0));
 
             // When
-            stateService.savePortfolio();
+            stateService.savePortfolio(new PortfolioState(
+                    new BigDecimal("1000000"), new BigDecimal("1000000"),
+                    BigDecimal.ZERO, BigDecimal.ZERO, 2));
 
             // Then
-            verify(portfolioRepo).save(any(PaperTradingPortfolioEntity.class));
+            verify(portfolioRepo).save(argThat(entity ->
+                    entity.getId() == 1L
+                    && "default".equals(entity.getPortfolioId())
+                    && entity.getCurrentCapital().compareTo(new BigDecimal("1000000")) == 0
+                    && entity.getOpenPositionCount() == 2));
             verify(portfolioRepo).findById(1L);
         }
 
         @Test
-        void savesFromEngine_updatesExisting() {
+        void savesState_updatesExisting() {
             // Given: Existing portfolio in DB
             PaperTradingPortfolioEntity existing = makePortfolioEntity(
                     1L, "default", BigDecimal.valueOf(1000000), BigDecimal.valueOf(900000),
                     BigDecimal.valueOf(100000), BigDecimal.ZERO, 3);
             when(portfolioRepo.findById(1L)).thenReturn(Optional.of(existing));
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(950000)));
-            when(engine.getTotalRealizedPnL()).thenReturn(BigDecimal.valueOf(50000));
-            when(engine.getTotalUnrealizedPnL()).thenReturn(BigDecimal.valueOf(-10000));
-            when(engine.getOpenPositionCount()).thenReturn(2);
             when(portfolioRepo.save(any())).thenAnswer(i -> i.getArgument(0));
 
             // When
-            stateService.savePortfolio();
+            stateService.savePortfolio(new PortfolioState(
+                    BigDecimal.valueOf(950000), BigDecimal.valueOf(1000000),
+                    BigDecimal.valueOf(50000), BigDecimal.valueOf(-10000), 2));
 
             // Then
-            verify(portfolioRepo).save(any(PaperTradingPortfolioEntity.class));
-        }
-
-        @Test
-        void savesFromEngine_createsNewWhenNotFound() {
-            // Given: findById returns empty
-            when(portfolioRepo.findById(1L)).thenReturn(Optional.empty());
-            com.swingtrade.broker.model.Portfolio portfolio = new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(500000));
-            when(engine.getPortfolio()).thenReturn(portfolio);
-            when(engine.getTotalRealizedPnL()).thenReturn(BigDecimal.ZERO);
-            when(engine.getTotalUnrealizedPnL()).thenReturn(BigDecimal.ZERO);
-            when(engine.getOpenPositionCount()).thenReturn(0);
-            when(portfolioRepo.save(any())).thenAnswer(i -> i.getArgument(0));
-
-            // When
-            stateService.savePortfolio();
-
-            // Then
-            verify(portfolioRepo).save(any(PaperTradingPortfolioEntity.class));
+            verify(portfolioRepo).save(argThat(entity ->
+                    entity == existing
+                    && entity.getCurrentCapital().compareTo(BigDecimal.valueOf(950000)) == 0
+                    && entity.getTotalRealizedPnl().compareTo(BigDecimal.valueOf(50000)) == 0
+                    && entity.getTotalUnrealizedPnL().compareTo(BigDecimal.valueOf(-10000)) == 0
+                    && entity.getOpenPositionCount() == 2));
         }
     }
 
@@ -363,7 +367,7 @@ class PaperTradingStateServiceTest {
         @Test
         void newPosition_createsEntity() {
             // Given: Position not found in DB
-            Position position = new Position(
+            Position position = Position.of(
                     null, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),
@@ -395,7 +399,7 @@ class PaperTradingStateServiceTest {
                     LocalDateTime.now(), null, null);
             when(unifiedPositionRepo.findByPositionId("POS_00000001")).thenReturn(Optional.of(existing));
 
-            Position position = new Position(
+            Position position = Position.of(
                     1L, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),
@@ -425,7 +429,7 @@ class PaperTradingStateServiceTest {
                     LocalDateTime.now(), null, null);
             when(unifiedPositionRepo.findByPositionId("POS_00000001")).thenReturn(Optional.of(existing));
 
-            Position position = new Position(
+            Position position = Position.of(
                     1L, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),
@@ -448,7 +452,7 @@ class PaperTradingStateServiceTest {
             when(unifiedPositionRepo.findByPositionId("POS_NONEXIST")).thenReturn(Optional.empty());
             when(unifiedPositionRepo.save(any())).thenThrow(new RuntimeException("DB failure"));
 
-            Position position = new Position(
+            Position position = Position.of(
                     null, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),
@@ -483,7 +487,7 @@ class PaperTradingStateServiceTest {
                     LocalDateTime.now(), null, null);
             when(unifiedPositionRepo.findByPositionId("POS_00000001")).thenReturn(Optional.of(existing));
 
-            Position closedPos = new Position(
+            Position closedPos = Position.of(
                     1L, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),
@@ -513,7 +517,7 @@ class PaperTradingStateServiceTest {
                     LocalDateTime.now(), null, null);
             when(unifiedPositionRepo.findByPositionId("POS_00000001")).thenReturn(Optional.of(existing));
 
-            Position closedPos = new Position(
+            Position closedPos = Position.of(
                     1L, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),
@@ -546,7 +550,7 @@ class PaperTradingStateServiceTest {
                     LocalDateTime.now(), null, null);
             when(unifiedPositionRepo.findByPositionId("POS_00000001")).thenReturn(Optional.of(existing));
 
-            Position closedPos = new Position(
+            Position closedPos = Position.of(
                     1L, "PAPER", "WIPRO",
                     new BigDecimal("450"), LocalDate.now(), 10,
                     new BigDecimal("430"), new BigDecimal("500"),
@@ -570,7 +574,7 @@ class PaperTradingStateServiceTest {
             // Given: Position not found in DB
             when(unifiedPositionRepo.findByPositionId("POS_NONEXIST")).thenReturn(Optional.empty());
 
-            Position closedPos = new Position(
+            Position closedPos = Position.of(
                     null, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),
@@ -601,7 +605,7 @@ class PaperTradingStateServiceTest {
                             LocalDateTime.now(), null, null)));
             when(unifiedPositionRepo.save(any())).thenThrow(new RuntimeException("DB failure"));
 
-            Position closedPos = new Position(
+            Position closedPos = Position.of(
                     1L, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),
@@ -704,15 +708,10 @@ class PaperTradingStateServiceTest {
         @Test
         void savesSnapshotFromEngine() {
             // Given: Portfolio with values
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(1000000)));
-            when(engine.getCurrentCash()).thenReturn(new BigDecimal("500000"));
-            when(engine.getTotalPnL()).thenReturn(new BigDecimal("50000"));
-            when(engine.getReturnPercentage()).thenReturn(new BigDecimal("5.0000"));
-            when(engine.getOpenPositionCount()).thenReturn(3);
             when(snapshotRepo.save(any())).thenAnswer(i -> i.getArgument(0));
 
             // When
-            stateService.saveSnapshot();
+            stateService.saveSnapshot(snapshotState());
 
             // Then
             verify(snapshotRepo).save(any(PaperTradingSnapshotEntity.class));
@@ -721,19 +720,18 @@ class PaperTradingStateServiceTest {
         @Test
         void snapshotContainsCorrectFields() {
             // Given
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(1000000)));
-            when(engine.getCurrentCash()).thenReturn(new BigDecimal("400000"));
-            when(engine.getTotalPnL()).thenReturn(new BigDecimal("100000"));
-            when(engine.getReturnPercentage()).thenReturn(new BigDecimal("10.0000"));
-            when(engine.getOpenPositionCount()).thenReturn(5);
             when(snapshotRepo.save(any())).thenAnswer(i -> i.getArgument(0));
 
             // When
-            stateService.saveSnapshot();
+            stateService.saveSnapshot(new SnapshotState(
+                    new BigDecimal("1000000"), new BigDecimal("400000"), new BigDecimal("600000"),
+                    new BigDecimal("100000"), new BigDecimal("10.0000"), 5));
 
             // Then
             verify(snapshotRepo).save(argThat(entity ->
-                    entity.getCashBalance().equals(new BigDecimal("400000"))
+                    entity.getTotalValue().equals(new BigDecimal("1000000"))
+                    && entity.getMarketValue().equals(new BigDecimal("600000"))
+                    && entity.getCashBalance().equals(new BigDecimal("400000"))
                     && entity.getTotalPnL().equals(new BigDecimal("100000"))
                     && entity.getOpenPositions() == 5
             ));
@@ -745,7 +743,7 @@ class PaperTradingStateServiceTest {
             when(snapshotRepo.save(any())).thenThrow(new RuntimeException("DB failure"));
 
             // When / Then
-            assertThatThrownBy(() -> stateService.saveSnapshot())
+            assertThatThrownBy(() -> stateService.saveSnapshot(snapshotState()))
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("Failed to save portfolio snapshot");
         }
@@ -907,42 +905,52 @@ class PaperTradingStateServiceTest {
         }
     }
 
-    // ==================== getPositionById ====================
+    // ==================== findPositionId ====================
 
     @Nested
-    class GetPositionById {
+    class FindPositionId {
 
         @Test
-        void found_returnsEntity() {
-            // Given
-            PositionEntity entity = makePositionEntity(
-                    1L, "RELIANCE", "PAPER",
-                    new BigDecimal("2500"), LocalDate.now(), 10,
-                    new BigDecimal("2400"), new BigDecimal("2700"), "OPEN",
-                    "Test", new BigDecimal("2500"), "POS_00000001", null,
-                    "NSE", "LONG", new BigDecimal("2500"),
-                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                    LocalDateTime.now(), null, null);
+        void found_returnsPositionId() {
+            PositionEntity entity = new PositionEntity();
+            entity.setPositionId("POS_00000001");
             when(unifiedPositionRepo.findById(1L)).thenReturn(Optional.of(entity));
 
-            // When
-            PositionEntity result = stateService.getPositionById(1L);
-
-            // Then
-            assertThat(result).isNotNull();
-            assertThat(result.getPositionId()).isEqualTo("POS_00000001");
+            assertThat(stateService.findPositionId(1L)).contains("POS_00000001");
         }
 
         @Test
-        void notFound_returnsNull() {
-            // Given
+        void notFound_returnsEmpty() {
             when(unifiedPositionRepo.findById(999L)).thenReturn(Optional.empty());
 
-            // When
-            PositionEntity result = stateService.getPositionById(999L);
+            assertThat(stateService.findPositionId(999L)).isEmpty();
+        }
 
-            // Then
-            assertThat(result).isNull();
+        @Test
+        void rowWithoutPositionId_returnsEmpty() {
+            PositionEntity entity = new PositionEntity();
+            entity.setPositionId(" ");
+            when(unifiedPositionRepo.findById(5L)).thenReturn(Optional.of(entity));
+
+            assertThat(stateService.findPositionId(5L)).isEmpty();
+        }
+    }
+
+    // ==================== getSnapshotTotalValues ====================
+
+    @Nested
+    class GetSnapshotTotalValues {
+
+        @Test
+        void returnsTotalsInRepositoryOrder() {
+            PaperTradingSnapshotEntity newest = new PaperTradingSnapshotEntity();
+            newest.setTotalValue(new BigDecimal("900"));
+            PaperTradingSnapshotEntity oldest = new PaperTradingSnapshotEntity();
+            oldest.setTotalValue(new BigDecimal("800"));
+            when(snapshotRepo.findAllByOrderBySnapshotTimeDesc()).thenReturn(List.of(newest, oldest));
+
+            assertThat(stateService.getSnapshotTotalValues())
+                    .containsExactly(new BigDecimal("900"), new BigDecimal("800"));
         }
     }
 
@@ -992,7 +1000,6 @@ class PaperTradingStateServiceTest {
             entity.setId(1L);
             entity.setPortfolioId("default");
             when(portfolioRepo.findById(1L)).thenReturn(Optional.of(entity));
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.ZERO));
 
             // When
             stateService.loadState();
@@ -1015,7 +1022,7 @@ class PaperTradingStateServiceTest {
             when(unifiedPositionRepo.findByPositionId("POS_00000001")).thenReturn(Optional.of(existing));
             when(unifiedPositionRepo.save(any())).thenAnswer(i -> i.getArgument(0));
 
-            Position position = new Position(
+            Position position = Position.of(
                     1L, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),
@@ -1073,7 +1080,6 @@ class PaperTradingStateServiceTest {
             when(unifiedPositionRepo.findByStatus("CLOSED")).thenReturn(List.of(posWithNullPnl));
             when(unifiedPositionRepo.findByStatus("STOPPED")).thenReturn(List.of());
             when(unifiedPositionRepo.findByStatus("TARGET_HIT")).thenReturn(List.of());
-            when(engine.getPortfolio()).thenReturn(new com.swingtrade.broker.model.Portfolio("default", BigDecimal.valueOf(1000000)));
 
             // When
             stateService.loadState();
@@ -1088,7 +1094,7 @@ class PaperTradingStateServiceTest {
             when(snapshotRepo.save(any())).thenThrow(new IllegalArgumentException("Constraint violation"));
 
             // When / Then
-            assertThatThrownBy(() -> stateService.saveSnapshot())
+            assertThatThrownBy(() -> stateService.saveSnapshot(snapshotState()))
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("Failed to save portfolio snapshot");
         }
@@ -1107,7 +1113,7 @@ class PaperTradingStateServiceTest {
                             LocalDateTime.now(), null, null)));
             when(unifiedPositionRepo.save(any())).thenThrow(new IllegalStateException("Lock timeout"));
 
-            Position closedPos = new Position(
+            Position closedPos = Position.of(
                     1L, "PAPER", "RELIANCE",
                     new BigDecimal("2500"), LocalDate.now(), 10,
                     new BigDecimal("2400"), new BigDecimal("2700"),

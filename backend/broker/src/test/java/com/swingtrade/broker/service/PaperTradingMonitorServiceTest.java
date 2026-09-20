@@ -45,9 +45,6 @@ class PaperTradingMonitorServiceTest {
     private PaperTradingEngine engine;
 
     @Mock
-    private PaperTradingStateService stateService;
-
-    @Mock
     private OhlcvCandleRepository ohlcvCandleRepository;
 
     private PaperTradingProperties properties;
@@ -55,7 +52,7 @@ class PaperTradingMonitorServiceTest {
     @BeforeEach
     void setUp() {
         properties = new PaperTradingProperties();
-        monitorService = new PaperTradingMonitorService(engine, stateService, ohlcvCandleRepository, properties);
+        monitorService = new PaperTradingMonitorService(engine, ohlcvCandleRepository, properties);
     }
 
     // Helper: build a Position for testing
@@ -90,8 +87,8 @@ class PaperTradingMonitorServiceTest {
             // Then
             verify(ohlcvCandleRepository, never()).save(any());
             verify(engine, never()).updatePositionsFromDomain(any());
-            verify(stateService, never()).saveSnapshot();
-            verify(stateService, never()).savePortfolio();
+            verify(engine, never()).saveSnapshot();
+            verify(engine, never()).savePortfolio();
         }
 
         @Test
@@ -112,8 +109,8 @@ class PaperTradingMonitorServiceTest {
             verify(ohlcvCandleRepository).findLatestBySymbol("RELIANCE-EQ");
             verify(ohlcvCandleRepository, never()).save(any(OhlcvCandleEntity.class));
             verify(engine).updatePositionsFromDomain(candle);
-            verify(stateService).saveSnapshot();
-            verify(stateService).savePortfolio();
+            verify(engine).saveSnapshot();
+            verify(engine).savePortfolio();
         }
 
         @Test
@@ -141,8 +138,8 @@ class PaperTradingMonitorServiceTest {
             verify(ohlcvCandleRepository, times(2)).findLatestBySymbol(anyString());
             verify(ohlcvCandleRepository, never()).save(any(OhlcvCandleEntity.class));
             verify(engine, times(2)).updatePositionsFromDomain(any(OhlcvCandle.class));
-            verify(stateService).saveSnapshot();
-            verify(stateService).savePortfolio();
+            verify(engine).saveSnapshot();
+            verify(engine).savePortfolio();
         }
 
         @Test
@@ -160,8 +157,8 @@ class PaperTradingMonitorServiceTest {
             monitorService.monitorPositions();
 
             // Then
-            verify(stateService).saveSnapshot();
-            verify(stateService).savePortfolio();
+            verify(engine).saveSnapshot();
+            verify(engine).savePortfolio();
         }
     }
 
@@ -236,7 +233,7 @@ class PaperTradingMonitorServiceTest {
         PriceBandStore bands = mock(PriceBandStore.class);
         PriceBand band = new PriceBand("RELIANCE-EQ", candle.date(), new BigDecimal("90.00"), new BigDecimal("110.00"));
         when(bands.findBySymbolAndDate("RELIANCE-EQ", candle.date())).thenReturn(Optional.of(band));
-        PaperTradingMonitorService service = new PaperTradingMonitorService(engine, stateService,
+        PaperTradingMonitorService service = new PaperTradingMonitorService(engine,
             ohlcvCandleRepository, properties, bands);
 
         service.monitorPositions();
@@ -289,7 +286,7 @@ class PaperTradingMonitorServiceTest {
         void doesNotDuplicatePersistence_delegatesSolelyToEngine() {
             // Given: An open position. engine.updatePositionsFromDomain() is responsible
             // for persisting the resulting state (open or closed) internally; the monitor
-            // must not additionally call stateService.savePosition() with its own
+            // must not additionally persist the position itself with its own
             // pre-update snapshot, which would overwrite whatever the engine just wrote.
             Position position = makePosition("SBIN-EQ", PositionStatus.OPEN, new BigDecimal("700.00"));
             when(engine.getOpenPositions()).thenReturn(List.of(position));
@@ -304,8 +301,7 @@ class PaperTradingMonitorServiceTest {
 
             // Then
             verify(engine).updatePositionsFromDomain(candle);
-            verify(stateService, never()).savePosition(any());
-        }
+                    }
 
         @Test
         void noTrigger_candleWithinSlTpRange() {
@@ -354,8 +350,8 @@ class PaperTradingMonitorServiceTest {
             verify(ohlcvCandleRepository, times(2)).findLatestBySymbol(anyString());
             verify(ohlcvCandleRepository, never()).save(any(OhlcvCandleEntity.class));
             verify(engine, times(1)).updatePositionsFromDomain(any(OhlcvCandle.class));
-            verify(stateService).saveSnapshot();
-            verify(stateService).savePortfolio();
+            verify(engine).saveSnapshot();
+            verify(engine).savePortfolio();
         }
 
         @Test
@@ -381,15 +377,15 @@ class PaperTradingMonitorServiceTest {
 
             // Then: First position fails, second continues, snapshot still saved
             verify(engine, times(2)).updatePositionsFromDomain(any(OhlcvCandle.class));
-            verify(stateService).saveSnapshot();
-            verify(stateService).savePortfolio();
+            verify(engine).saveSnapshot();
+            verify(engine).savePortfolio();
         }
 
         @Test
         void enginePersistenceThrows_continuesToSnapshot() {
             // Given: One open position, the engine's own persistence step fails
             // (engine.updatePositionsFromDomain is responsible for calling
-            // stateService internally; the monitor no longer calls it directly)
+            // the engine internally; the monitor no longer calls it directly)
             Position position = makePosition("RELIANCE-EQ", PositionStatus.OPEN, new BigDecimal("100.00"));
             when(engine.getOpenPositions()).thenReturn(List.of(position));
 
@@ -403,8 +399,8 @@ class PaperTradingMonitorServiceTest {
             monitorService.monitorPositions();
 
             // Then: Exception caught, best-effort continues to snapshot
-            verify(stateService).saveSnapshot();
-            verify(stateService).savePortfolio();
+            verify(engine).saveSnapshot();
+            verify(engine).savePortfolio();
         }
     }
 
@@ -426,29 +422,8 @@ class PaperTradingMonitorServiceTest {
             // Then: Position skipped, no save/update calls for it
             verify(ohlcvCandleRepository, never()).save(any());
             verify(engine, never()).updatePositionsFromDomain(any());
-            verify(stateService, never()).savePosition(any());
-            verify(stateService).saveSnapshot();
-            verify(stateService).savePortfolio();
-        }
-
-        @Test
-        void nullStateService_skipsPersist() {
-            // Given: Open positions, null stateService
-            Position position = makePosition("RELIANCE-EQ", PositionStatus.OPEN, new BigDecimal("100.00"));
-            when(engine.getOpenPositions()).thenReturn(List.of(position));
-
-            OhlcvCandle candle = makeCandle("RELIANCE-EQ", new BigDecimal("103.00"));
-            OhlcvCandleEntity entity = mock(OhlcvCandleEntity.class);
-            when(entity.toDomain()).thenReturn(candle);
-            when(ohlcvCandleRepository.findLatestBySymbol("RELIANCE-EQ")).thenReturn(Optional.of(entity));
-
-            PaperTradingMonitorService service = new PaperTradingMonitorService(engine, null, ohlcvCandleRepository, properties);
-
-            // When
-            service.monitorPositions();
-
-            // Then: No stateService calls
-            verify(engine).updatePositionsFromDomain(candle);
+                        verify(engine).saveSnapshot();
+            verify(engine).savePortfolio();
         }
 
         @Test

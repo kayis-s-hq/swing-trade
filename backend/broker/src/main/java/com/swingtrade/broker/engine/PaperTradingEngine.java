@@ -6,14 +6,16 @@ import com.swingtrade.broker.manager.PositionManager;
 import com.swingtrade.core.metrics.TradeMetrics;
 import com.swingtrade.domain.Order;
 import com.swingtrade.domain.OrderStatus;
-import com.swingtrade.broker.service.PaperTradingStateService;
 import com.swingtrade.domain.service.TradingService;
+import com.swingtrade.domain.service.TradingStatePersistence;
+import com.swingtrade.domain.service.TradingStatePersistence.PersistedState;
+import com.swingtrade.domain.service.TradingStatePersistence.PortfolioState;
+import com.swingtrade.domain.service.TradingStatePersistence.SnapshotState;
 import com.swingtrade.domain.OhlcvCandle;
 import com.swingtrade.domain.PriceBand;
 import com.swingtrade.domain.Position;
 import com.swingtrade.domain.PositionStatus;
 import com.swingtrade.domain.Signal;
-import com.swingtrade.data.entity.PositionEntity;
 import com.swingtrade.broker.model.Portfolio;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,19 +69,67 @@ public class PaperTradingEngine implements TradingService {
     // Metrics
     private final TradeMetrics tradeMetrics;
 
-    // DB persistence bridge (setter-injected to avoid circular dependency)
-    private PaperTradingStateService stateService;
+    // DB persistence port (implemented by PaperTradingStateService, which does not depend on the engine)
+    private final TradingStatePersistence persistence;
 
-    @Autowired
-    public void setStateService(PaperTradingStateService stateService) {
-        this.stateService = stateService;
-    }
-
+    /**
+     * Restores persisted state (capital, open positions, pending orders, position ID
+     * counter) once the application is ready.
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void initState() {
-        if (stateService != null) {
-            stateService.loadState();
+        restoreState(persistence.loadState());
+    }
+
+    private void restoreState(PersistedState state) {
+        if (state.currentCapital() != null) {
+            portfolio.setCurrentCapital(state.currentCapital());
         }
+        if (state.initialCapital() != null) {
+            portfolio.setInitialCapital(state.initialCapital());
+        }
+        for (Position position : state.openPositions()) {
+            portfolio.addPosition(position);
+            positionManager.getPositions().put(position.positionId(), position);
+        }
+        for (Order order : state.pendingOrders()) {
+            orderManager.getOrders().put(order.getOrderId(), order);
+        }
+        seedPositionCounter(state.maxPositionIdSuffix());
+        logger.info("Seeded position ID counter to {} (max POS_ suffix found in DB)", state.maxPositionIdSuffix());
+    }
+
+    /** Persists the current portfolio figures (cash, realized/unrealized P&L, open count). */
+    public void savePortfolio() {
+        persistence.savePortfolio(new PortfolioState(
+            portfolio.getCurrentCapital(),
+            portfolio.getInitialCapital(),
+            getTotalRealizedPnL(),
+            getTotalUnrealizedPnL(),
+            getOpenPositionCount()));
+    }
+
+    /** Appends a point-in-time portfolio valuation to the snapshot history. */
+    public void saveSnapshot() {
+        BigDecimal totalValue = portfolio.getTotalValue();
+        BigDecimal cash = getCurrentCash();
+        persistence.saveSnapshot(new SnapshotState(
+            totalValue,
+            cash,
+            totalValue.subtract(cash),
+            getTotalPnL(),
+            getReturnPercentage(),
+            getOpenPositionCount()));
+    }
+
+    private Position findInMemoryPosition(Long databaseId) {
+        String positionId = persistence.findPositionId(databaseId)
+            .orElseThrow(() -> new IllegalArgumentException("Position not found: " + databaseId));
+        Position position = positionManager.getPosition(positionId);
+        if (position == null) {
+            throw new IllegalArgumentException("Position not found in memory: " + positionId);
+        }
+        return position;
     }
 
     /**
@@ -87,13 +137,16 @@ public class PaperTradingEngine implements TradingService {
      *
      * @param orderManager the order manager
      * @param positionManager the position manager
-     * @param initialCapital the initial capital
+     * @param properties the paper trading configuration
+     * @param tradeMetrics the trade metrics recorder
+     * @param persistence the persistence port used to save and restore engine state
      */
     @Autowired
     public PaperTradingEngine(OrderManager orderManager,
                               PositionManager positionManager,
                               PaperTradingProperties properties,
-                              TradeMetrics tradeMetrics) {
+                              TradeMetrics tradeMetrics,
+                              TradingStatePersistence persistence) {
         this.orderManager = orderManager;
         this.positionManager = positionManager;
         this.properties = properties;
@@ -103,6 +156,7 @@ public class PaperTradingEngine implements TradingService {
         this.positionCounter = new AtomicLong(0);
         this.orderCounter = new AtomicLong(0);
         this.tradeMetrics = tradeMetrics;
+        this.persistence = persistence;
     }
 
     /**
@@ -168,9 +222,7 @@ public class PaperTradingEngine implements TradingService {
 
         // Persist before the orchestrator marks the source signal processed so a restart cannot
         // lose a queued trade between those two operations.
-        if (stateService != null) {
-            stateService.saveOrder(order);
-        }
+        persistence.saveOrder(order);
 
         logger.info("Queued BUY order for {} using reference price {}: signal confidence={}, SL={}, Target={}",
             signal.symbol(), referencePrice, signal.confidence(), signal.stopLoss(), signal.target());
@@ -290,13 +342,11 @@ public class PaperTradingEngine implements TradingService {
                     position.positionId(), orderId, executionPrice);
 
                 // Persist
-                if (stateService != null) {
-                    stateService.saveOrder(order);
-                    Long signalId = signalId(order);
-                    if (signalId == null) stateService.savePosition(position);
-                    else stateService.savePosition(position, signalId);
-                    stateService.savePortfolio();
-                }
+                persistence.saveOrder(order);
+                Long signalId = signalId(order);
+                if (signalId == null) persistence.savePosition(position);
+                else persistence.savePosition(position, signalId);
+                savePortfolio();
             }
         }
 
@@ -489,10 +539,8 @@ public class PaperTradingEngine implements TradingService {
                 positionId, exitedQuantity, position.quantity());
 
             // Persist
-            if (stateService != null) {
-                stateService.savePosition(position);
-                stateService.savePortfolio();
-            }
+            persistence.savePosition(position);
+            savePortfolio();
 
             return position;
         }
@@ -519,25 +567,12 @@ public class PaperTradingEngine implements TradingService {
      */
     public Position closePosition(Long positionId) {
         // Load position from DB to get its positionId (counter may have reset)
-        PositionEntity entity = stateService.getPositionById(positionId);
-        if (entity == null) {
-            throw new IllegalArgumentException("Position not found: " + positionId);
-        }
-        String posId = entity.getPositionId();
-        if (posId == null || posId.isBlank()) {
-            throw new IllegalArgumentException(
-                "Position " + positionId + " has no linked in-memory positionId "
-                    + "(was persisted without engine linkage); cannot close via engine");
-        }
-        Position position = positionManager.getPosition(posId);
-        if (position == null) {
-            throw new IllegalArgumentException("Position not found in memory: " + posId);
-        }
+        Position position = findInMemoryPosition(positionId);
 
         BigDecimal exitPrice = position.currentPrice();
         String reason = "manual_close";
 
-        closePosition(posId, exitPrice, reason);
+        closePosition(position.positionId(), exitPrice, reason);
         return position;
     }
 
@@ -556,22 +591,9 @@ public class PaperTradingEngine implements TradingService {
      */
     @Override
     public Position closePosition(Long positionId, BigDecimal exitPrice, String reason) {
-        PositionEntity entity = stateService.getPositionById(positionId);
-        if (entity == null) {
-            throw new IllegalArgumentException("Position not found: " + positionId);
-        }
-        String posId = entity.getPositionId();
-        if (posId == null || posId.isBlank()) {
-            throw new IllegalArgumentException(
-                "Position " + positionId + " has no linked in-memory positionId "
-                    + "(was persisted without engine linkage); cannot close via engine");
-        }
-        Position position = positionManager.getPosition(posId);
-        if (position == null) {
-            throw new IllegalArgumentException("Position not found in memory: " + posId);
-        }
+        Position position = findInMemoryPosition(positionId);
 
-        closePosition(posId, exitPrice, reason);
+        closePosition(position.positionId(), exitPrice, reason);
         return position;
     }
 
@@ -608,10 +630,8 @@ public class PaperTradingEngine implements TradingService {
                 positionId, position.realizedPnL(), reason);
 
             // Persist
-            if (stateService != null) {
-                stateService.closePosition(positionId, position);
-                stateService.savePortfolio();
-            }
+            persistence.closePosition(positionId, position);
+            savePortfolio();
         }
     }
 
@@ -642,8 +662,8 @@ public class PaperTradingEngine implements TradingService {
      * state), so without this seeding step every restart would reissue IDs
      * from POS_00000001 and silently overwrite unrelated historical rows via
      * {@code PaperTradingStateService.savePosition()}'s upsert-by-positionId
-     * logic. Called once by {@code PaperTradingStateService.loadState()}
-     * during {@link #initState()}, before any new position can be created.
+     * logic. Called once from {@link #initState()} with the
+     * maximum suffix reported by {@code TradingStatePersistence.loadState()}, before any new position can be created.
      *
      * <p>Only raises the counter — never lowers it — so repeated or
      * out-of-order calls are safe.
@@ -759,12 +779,11 @@ public class PaperTradingEngine implements TradingService {
 
     @Override
     public BigDecimal getPortfolioMaxDrawdown() {
-        if (stateService == null) return null;
         BigDecimal peak = null;
         BigDecimal maxDrawdown = BigDecimal.ZERO;
-        List<com.swingtrade.broker.entity.PaperTradingSnapshotEntity> snapshots = stateService.getSnapshots();
+        List<BigDecimal> snapshots = persistence.getSnapshotTotalValues();
         for (int i = snapshots.size() - 1; i >= 0; i--) {
-            BigDecimal value = snapshots.get(i).getTotalValue();
+            BigDecimal value = snapshots.get(i);
             if (value == null || value.signum() <= 0) continue;
             if (peak == null || value.compareTo(peak) > 0) peak = value;
             BigDecimal drawdown = peak.subtract(value)
@@ -849,9 +868,7 @@ public class PaperTradingEngine implements TradingService {
         for (Position position : updated) {
             if (position.status() == PositionStatus.OPEN) {
                 // Persist updated price/P&L
-                if (stateService != null) {
-                    stateService.savePosition(position);
-                }
+                persistence.savePosition(position);
                 continue;
             }
 
@@ -860,10 +877,8 @@ public class PaperTradingEngine implements TradingService {
 
             // Persist closed position
             synchronized (portfolioLock) {
-                if (stateService != null) {
-                    stateService.closePosition(position.positionId(), position);
-                    stateService.savePortfolio();
-                }
+                persistence.closePosition(position.positionId(), position);
+                savePortfolio();
             }
             tradeMetrics.recordTradeClose(position.status().name().toLowerCase());
         }
