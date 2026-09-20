@@ -576,8 +576,8 @@ class BacktestEngineTest {
 
             BacktestTrade trade = result.trades().get(0);
             BigDecimal riskPerShare = trade.entryPrice().subtract(trade.stopLoss());
-            int expectedQuantity = BigDecimal.valueOf(config.initialCapital())
-                .multiply(BigDecimal.valueOf(config.riskPerTradePct()))
+            int expectedQuantity = config.initialCapital()
+                .multiply(config.riskPerTradePct())
                 .divide(riskPerShare, 0, java.math.RoundingMode.DOWN).intValue();
 
             assertThat(trade.quantity()).isEqualTo(expectedQuantity);
@@ -696,7 +696,12 @@ class BacktestEngineTest {
 
             assertThat(result.totalTrades()).isGreaterThan(2);
             assertThat(result.sharpeRatio()).isGreaterThan(0.0);
-            assertThat(result.maxDrawdownPct()).isGreaterThan(0.0);
+            assertThat(result.maxDrawdownPct()).isGreaterThan(BigDecimal.ZERO);
+            // AD-H4 regression: values captured on the double-based implementation (4 dp tolerance).
+            assertThat(result.totalReturn()).isEqualByComparingTo("3.5555");
+            assertThat(result.maxDrawdownPct()).isEqualByComparingTo("1.1463");
+            assertThat(result.totalTrades()).isEqualTo(3);
+            assertThat(result.winningTrades()).isEqualTo(2);
             assertThat(result.expectancy()).isNotEqualTo(0.0);
         }
 

@@ -88,7 +88,7 @@ public final class WalkForwardStabilityEvaluator {
                 .map(w -> runner.run(config, backtestConfig, w.validationStart(), w.validationEnd())).toList();
             candidates.add(new CandidateResult(config, train, validation,
                 average(train, BacktestResult::sharpeRatio), average(validation, BacktestResult::sharpeRatio),
-                average(validation, BacktestResult::totalReturn)));
+                average(validation, r -> r.totalReturn().doubleValue())));
         }
 
         List<FoldResult> folds = new ArrayList<>();
@@ -96,7 +96,7 @@ public final class WalkForwardStabilityEvaluator {
             int foldIndex = i;
             CandidateResult winner = candidates.stream().max(Comparator
                 .comparingDouble((CandidateResult c) -> c.trainResults().get(foldIndex).sharpeRatio())
-                .thenComparingDouble(c -> c.trainResults().get(foldIndex).totalReturn())
+                .thenComparingDouble(c -> c.trainResults().get(foldIndex).totalReturn().doubleValue())
                 .thenComparing(c -> c.config().paramsHash())).orElseThrow();
             folds.add(new FoldResult(windows.get(i), winner.config().params(),
                 winner.trainResults().get(i), winner.validationResults().get(i)));
@@ -106,7 +106,7 @@ public final class WalkForwardStabilityEvaluator {
             .thenComparingDouble(CandidateResult::averageValidationReturn)
             .thenComparing(c -> c.config().paramsHash())).orElseThrow();
         double[] sharpes = folds.stream().mapToDouble(f -> f.validation().sharpeRatio()).toArray();
-        double[] drawdowns = folds.stream().mapToDouble(f -> f.validation().maxDrawdownPct()).sorted().toArray();
+        double[] drawdowns = folds.stream().mapToDouble(f -> f.validation().maxDrawdownPct().doubleValue()).sorted().toArray();
         double stdDev = standardDeviation(sharpes);
         double medianDrawdown = median(drawdowns);
         double dsr = deflatedSharpe(selected.averageValidationSharpe(), candidates.size(), windows.size());
@@ -134,7 +134,7 @@ public final class WalkForwardStabilityEvaluator {
         boolean spiky = selected.averageTrainSharpe() > 1.0
             && selected.averageValidationSharpe() < selected.averageTrainSharpe() * 0.5;
         boolean unstable = stdDev > 1.0 || (medianDrawdown > 0
-            && folds.stream().anyMatch(f -> f.validation().maxDrawdownPct() > 2 * medianDrawdown));
+            && folds.stream().anyMatch(f -> f.validation().maxDrawdownPct().doubleValue() > 2 * medianDrawdown));
         if (spiky) return Decision.REJECT_SPIKY_OPTIMUM;
         if (unstable) return Decision.REJECT_UNSTABLE;
         if (selected.averageValidationSharpe() <= 0 || pValue > 0.1) return Decision.REJECT_OVERFIT;

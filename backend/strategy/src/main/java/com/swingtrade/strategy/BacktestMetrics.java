@@ -11,11 +11,19 @@ import java.util.List;
  * Pure calculations for metrics derived from a daily marked-to-market equity curve.
  *
  * <p>Inputs are {@link BigDecimal} money amounts. Period returns, total return and drawdown are
- * computed in {@code BigDecimal} at {@link FinancialScale#RATIO} precision. Sharpe, Sortino and CAGR
+ * computed in {@code BigDecimal} at {@link FinancialScale#RATIO} precision and rounded to
+ * {@link FinancialScale#PERCENT_SCALE}; total return and max drawdown are therefore exact
+ * {@code BigDecimal} percentages. Sharpe, Sortino and CAGR
  * need {@code sqrt}/{@code pow}, which {@code BigDecimal} does not provide, so they are the one
  * documented conversion boundary: the money-derived returns are converted once with
  * {@link BigDecimal#doubleValue()} and the statistics run in {@code double}. Their results are
  * dimensionless ratios/percentages, not money, so no monetary precision is lost.</p>
+ *
+ * <p><b>Deliberately {@code double}</b> (statistical, unitless, need sqrt/pow or are annualised
+ * estimates): Sharpe, Sortino, Calmar, CAGR, the trade-count win rate and the per-trade expectancy
+ * (a win-rate-weighted blend of those). Percent-of-capital results (total return, max drawdown,
+ * average gain/loss) are {@code BigDecimal}. The buy-and-hold benchmark comparison in {@code core}
+ * remains {@code double} because it is a reporting value derived from a market index.</p>
  */
 final class BacktestMetrics {
 
@@ -42,15 +50,14 @@ final class BacktestMetrics {
     }
 
     /** Total return as a percentage of initial capital. */
-    static double totalReturnPct(BigDecimal initialCapital, BigDecimal finalCapital) {
-        return finalCapital.subtract(initialCapital).multiply(FinancialScale.HUNDRED)
-                .divide(initialCapital, FinancialScale.RATIO).doubleValue();
+    static BigDecimal totalReturnPct(BigDecimal initialCapital, BigDecimal finalCapital) {
+        return FinancialScale.percentOf(finalCapital.subtract(initialCapital), initialCapital);
     }
 
     /** Largest peak-to-trough drop of the equity curve, in percent; 0 for an empty curve. */
-    static double maxDrawdownPct(List<BigDecimal> capitalCurve) {
+    static BigDecimal maxDrawdownPct(List<BigDecimal> capitalCurve) {
         if (capitalCurve == null || capitalCurve.isEmpty()) {
-            return 0.0;
+            return FinancialScale.percent(BigDecimal.ZERO);
         }
         BigDecimal peak = capitalCurve.getFirst();
         BigDecimal maxDrawdown = BigDecimal.ZERO;
@@ -62,7 +69,7 @@ final class BacktestMetrics {
                 maxDrawdown = maxDrawdown.max(drawdown);
             }
         }
-        return maxDrawdown.doubleValue();
+        return FinancialScale.percent(maxDrawdown);
     }
 
     /** Period-over-period returns as fractions; a zero previous value yields a zero return. */
@@ -114,20 +121,20 @@ final class BacktestMetrics {
         return deviation == 0.0 ? 0.0 : mean / deviation * Math.sqrt(TRADING_DAYS_PER_YEAR);
     }
 
-    static double calmarRatio(double cagrPct, double maxDrawdownPct) {
-        return maxDrawdownPct == 0.0 ? 0.0 : cagrPct / maxDrawdownPct;
+    static double calmarRatio(double cagrPct, BigDecimal maxDrawdownPct) {
+        return maxDrawdownPct.signum() == 0 ? 0.0 : cagrPct / maxDrawdownPct.doubleValue();
     }
 
-    static BenchmarkComparison buyAndHoldComparison(double strategyReturnPct,
+    static BenchmarkComparison buyAndHoldComparison(BigDecimal strategyReturnPct,
                                                     BigDecimal startingClose,
                                                     BigDecimal endingClose) {
         if (startingClose == null || endingClose == null || startingClose.signum() <= 0
                 || endingClose.signum() < 0) {
-            return BenchmarkComparison.unavailable(strategyReturnPct);
+            return BenchmarkComparison.unavailable(strategyReturnPct.doubleValue());
         }
         double benchmarkReturnPct = endingClose.subtract(startingClose)
                 .divide(startingClose, java.math.MathContext.DECIMAL128)
                 .doubleValue() * 100.0;
-        return BenchmarkComparison.buyAndHold(strategyReturnPct, benchmarkReturnPct);
+        return BenchmarkComparison.buyAndHold(strategyReturnPct.doubleValue(), benchmarkReturnPct);
     }
 }

@@ -154,25 +154,28 @@ public class MonthlyReportService {
     }
 
     private double calculateAvgWinAmount(List<PositionEntity> positions) {
-        return positions.stream()
+        return averageOf(positions.stream()
             .filter(p -> p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) > 0)
-            .mapToDouble(p -> p.getRealizedPnL().doubleValue())
-            .average()
-            .orElse(0.0);
+            .map(PositionEntity::getRealizedPnL).toList());
     }
 
     private double calculateAvgLossAmount(List<PositionEntity> positions) {
-        return positions.stream()
+        return averageOf(positions.stream()
             .filter(p -> p.getRealizedPnL() != null && p.getRealizedPnL().compareTo(BigDecimal.ZERO) < 0)
-            .mapToDouble(p -> Math.abs(p.getRealizedPnL().doubleValue()))
-            .average()
-            .orElse(0.0);
+            .map(p -> p.getRealizedPnL().abs()).toList());
+    }
+
+    /** Mean of exact money amounts, converted to {@code double} once for the report map. */
+    private static double averageOf(List<BigDecimal> amounts) {
+        if (amounts.isEmpty()) return 0.0;
+        return amounts.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+            .divide(BigDecimal.valueOf(amounts.size()), java.math.MathContext.DECIMAL64).doubleValue();
     }
 
     private double calculateTotalPnL(List<PositionEntity> positions) {
         return positions.stream()
-            .mapToDouble(p -> p.getRealizedPnL() != null ? p.getRealizedPnL().doubleValue() : 0.0)
-            .sum();
+            .map(p -> p.getRealizedPnL() != null ? p.getRealizedPnL() : BigDecimal.ZERO)
+            .reduce(BigDecimal.ZERO, BigDecimal::add).doubleValue();
     }
 
     private double calculateProfitFactor(List<PositionEntity> positions) {

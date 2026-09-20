@@ -636,8 +636,8 @@ public class JobOrchestratorService {
             LocalDate date = LocalDate.now(IST);
             if (backtestResultStore != null) backtestResultStore.saveOrUpdate(new com.swingtrade.domain.BacktestResult(null, symbol, date,
                 result.totalTrades(), result.winningTrades(), result.losingTrades(), result.winRate(),
-                result.avgGainPct(), result.avgLossPct(), result.maxDrawdownPct(), result.sharpeRatio(),
-                result.totalReturn(), result.expectancy(), BacktestScorer.calculateProfitFactor(result), true));
+                result.avgGainPct().doubleValue(), result.avgLossPct().doubleValue(), result.maxDrawdownPct().doubleValue(), result.sharpeRatio(),
+                result.totalReturn().doubleValue(), result.expectancy(), BacktestScorer.calculateProfitFactor(result), true));
             String summary = result.totalTrades() + " trades, "
                 + String.format("%.0f", result.winRate()) + "% win, "
                 + String.format("%.1f", result.totalReturn()) + "% return";

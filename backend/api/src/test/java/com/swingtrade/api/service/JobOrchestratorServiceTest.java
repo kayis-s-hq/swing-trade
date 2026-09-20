@@ -425,7 +425,8 @@ class JobOrchestratorServiceTest {
                     "No news", "", 0.0));
             when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.empty());
             when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
-                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                    java.math.BigDecimal.ZERO, 0, java.math.BigDecimal.ZERO, 0, List.of()));
 
             service.startRun(JobRun.TriggerType.SCHEDULED);
 
@@ -661,7 +662,8 @@ class JobOrchestratorServiceTest {
         @DisplayName("Stage order: LLM_ANALYSIS runs strictly between SENTIMENT and PAPER_TRADE")
         void shouldRunLlmAnalysisBetweenSentimentAndPaperTrade() throws InterruptedException {
             when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
-                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                    java.math.BigDecimal.ZERO, 0, java.math.BigDecimal.ZERO, 0, List.of()));
             when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
                 .thenReturn(SentimentResult.create(
                     SYMBOL, LocalDate.now(), SentimentResult.SentimentScore.NEUTRAL, "No news", "", 0.0));
@@ -710,7 +712,8 @@ class JobOrchestratorServiceTest {
         @DisplayName("Skip-cascade: SENTIMENT error skips both LLM_ANALYSIS and PAPER_TRADE")
         void shouldSkipLlmAnalysisAndPaperTradeWhenSentimentErrors() throws InterruptedException {
             when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
-                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                    java.math.BigDecimal.ZERO, 0, java.math.BigDecimal.ZERO, 0, List.of()));
             when(sentimentService.analyzeStockSentiment(eq(SYMBOL), any(LocalDate.class)))
                 .thenThrow(new RuntimeException("sentiment provider unavailable"));
 
@@ -802,7 +805,8 @@ class JobOrchestratorServiceTest {
                     "No news", "", 0.0));
             when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.empty());
             when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
-                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                    java.math.BigDecimal.ZERO, 0, java.math.BigDecimal.ZERO, 0, List.of()));
             // buySignal simulates a stale unprocessed BUY left over from an earlier run; its
             // paper-trade sentiment lookup must use whatever verdict was persisted for its date.
             when(sentimentGate.evaluatePersisted(eq(SYMBOL), eq(buySignal.date())))
@@ -1262,7 +1266,8 @@ class JobOrchestratorServiceTest {
             // BACKTEST now runs before NEWS/SENTIMENT - must not error, or priorStageBlocked
             // would skip the rest of the stage loop before SENTIMENT ever starts.
             when(backtestEngine.runBacktest(eq(SYMBOL), eq(EXCHANGE), any(BacktestConfig.class)))
-                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+                .thenReturn(new BacktestResult(SYMBOL, 0, 0, 0, 0, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                    java.math.BigDecimal.ZERO, 0, java.math.BigDecimal.ZERO, 0, List.of()));
             // The cancellation tests use a BUY so SENTIMENT actually blocks and gives
             // cancelRun() something in-flight to interrupt.
             when(signalPipeline.generatePrimarySignal(SYMBOL)).thenReturn(Optional.of(
@@ -1495,7 +1500,8 @@ class JobOrchestratorServiceTest {
             // BACKTEST now runs before NEWS/SENTIMENT - must not error, or priorStageBlocked
             // would skip the rest of the stage loop before SENTIMENT ever starts.
             when(backtestEngine.runBacktest(anyString(), eq(EXCHANGE), any(BacktestConfig.class)))
-                .thenReturn(new BacktestResult("X", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of()));
+                .thenReturn(new BacktestResult("X", 0, 0, 0, 0, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                    java.math.BigDecimal.ZERO, 0, java.math.BigDecimal.ZERO, 0, List.of()));
             // Both symbols use BUY here so SENTIMENT actually starts for the active symbol and
             // B is left genuinely queued behind it.
             when(signalPipeline.generatePrimarySignal(anyString())).thenAnswer(invocation -> {

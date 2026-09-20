@@ -218,7 +218,8 @@ class PortfolioBacktestEngineTest {
 
     private static BacktestResult result(String symbol, BacktestTrade trade) {
         return new BacktestResult(symbol, 1, trade.pnl().signum() > 0 ? 1 : 0, trade.pnl().signum() <= 0 ? 1 : 0,
-                trade.pnl().signum() > 0 ? 100 : 0, 0, 0, 0, 0, 0, 0, List.of(trade));
+                trade.pnl().signum() > 0 ? 100 : 0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0,
+                BigDecimal.ZERO, 0, List.of(trade));
     }
 
     private static BacktestTrade trade(String symbol, LocalDate entryDate, LocalDate exitDate,

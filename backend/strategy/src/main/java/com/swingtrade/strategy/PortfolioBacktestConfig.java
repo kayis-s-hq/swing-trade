@@ -26,7 +26,7 @@ public record PortfolioBacktestConfig(
     int maxConcurrentPositions,
     BigDecimal maxCapitalPerPositionPct,
     BigDecimal riskPerTradePct,
-    double slippagePct,
+    BigDecimal slippagePct,
     BacktestCostModel costModel,
     int atrPeriodForRanking,
     BigDecimal brokeragePerTrade
@@ -46,6 +46,9 @@ public record PortfolioBacktestConfig(
             || riskPerTradePct.compareTo(BigDecimal.ONE) > 0) {
             throw new IllegalArgumentException("riskPerTradePct must be in (0,1]");
         }
+        if (slippagePct == null) {
+            slippagePct = BigDecimal.ZERO;
+        }
         if (costModel == null) {
             costModel = new ZerodhaDeliveryCostModel();
         }
@@ -60,6 +63,6 @@ public record PortfolioBacktestConfig(
     /** Convenience default mirroring typical paper_trading_portfolio settings. */
     public static PortfolioBacktestConfig defaults(BigDecimal initialCapital) {
         return new PortfolioBacktestConfig(initialCapital, 12, BigDecimal.valueOf(0.10),
-            BigDecimal.valueOf(0.01), 0.001, new ZerodhaDeliveryCostModel(), 14, BigDecimal.valueOf(20));
+            BigDecimal.valueOf(0.01), new BigDecimal("0.001"), new ZerodhaDeliveryCostModel(), 14, BigDecimal.valueOf(20));
     }
 }
