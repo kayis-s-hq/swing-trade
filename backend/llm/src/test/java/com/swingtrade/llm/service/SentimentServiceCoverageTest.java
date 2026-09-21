@@ -114,7 +114,8 @@ class SentimentServiceCoverageTest {
         SentimentResult result = service.analyzeStockSentiment("RELIANCE", decisionDate);
 
         assertThat(result.score()).isEqualTo(SentimentResult.SentimentScore.NEUTRAL);
-        assertThat(result.source()).isEqualTo("KEYWORD");
+        assertThat(result.source()).isEqualTo("KEYWORD_FALLBACK");
+        assertThat(result.degradedReason()).contains("provider unavailable");
         assertThat(result.redFlags()).containsExactly("Regulatory/legal investigation");
         assertThat(result.catalysts()).contains("M&A/Partnership catalyst", "Analyst positive action");
         verify(sentimentStore).saveOrUpdate(any());

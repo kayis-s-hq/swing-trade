@@ -229,7 +229,8 @@ public class LlmConfig {
 
     @Bean
     public SpringAiLlmClient springAiLlmClient(ChatClient chatClient,
-                                               @Value("${llm.cot.enabled:false}") boolean enableCoT) {
-        return new SpringAiLlmClient(chatClient, enableCoT);
+                                               @Value("${llm.cot.enabled:false}") boolean enableCoT,
+                                               @Value("${llm.reasoning-effort:}") String reasoningEffort) {
+        return new SpringAiLlmClient(chatClient, enableCoT, reasoningEffort);
     }
 }

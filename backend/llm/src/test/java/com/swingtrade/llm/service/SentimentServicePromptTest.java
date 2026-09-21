@@ -234,7 +234,7 @@ class SentimentServicePromptTest {
         service.analyzeStockSentiment("TCS", decisionDate);
 
         verify(sentimentStore).saveOrUpdate(argThat(result ->
-                decisionDate.equals(result.date()) && "KEYWORD".equals(result.source())));
+                decisionDate.equals(result.date()) && "KEYWORD_FALLBACK".equals(result.source())));
     }
 
     @Test
@@ -254,7 +254,7 @@ class SentimentServicePromptTest {
 
         service.analyzeStockSentiment("TCS", decisionDate);
 
-        verify(sentimentStore).saveOrUpdate(argThat(result -> "KEYWORD".equals(result.source())));
+        verify(sentimentStore).saveOrUpdate(argThat(result -> "KEYWORD_FALLBACK".equals(result.source())));
     }
 
     private static ZonedDateTime todayNoon() {

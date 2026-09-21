@@ -17,6 +17,12 @@ public class LlmProperties {
     private final Providers providers = new Providers();
     private final LlamaCpp llamaCpp = new LlamaCpp();
     private final Pdf pdf = new Pdf();
+    /**
+     * Outer deadline for one LLM stage call (sentiment, synthesis). Default matches the
+     * historical 2880s ceiling sized for CPU-bound llama.cpp; lower it for fast backends
+     * so a hung local model cannot hold a run for hours.
+     */
+    private java.time.Duration stageTimeout = java.time.Duration.ofSeconds(2880);
 
     public URI getBaseUrl() {
         return baseUrl;
@@ -40,6 +46,14 @@ public class LlmProperties {
 
     public LlamaCpp getLlamaCpp() {
         return llamaCpp;
+    }
+
+    public java.time.Duration getStageTimeout() {
+        return stageTimeout;
+    }
+
+    public void setStageTimeout(java.time.Duration stageTimeout) {
+        this.stageTimeout = stageTimeout;
     }
 
     public Pdf getPdf() {

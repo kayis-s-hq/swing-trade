@@ -33,16 +33,25 @@ public class SynthesisService {
     private final SynthesisPromptLoader promptLoader;
     private final LlmServerManagerProvider serverManagerProvider;
     private final SynthesisEvaluationService evaluationService;
+    private final com.swingtrade.llm.config.LlmProperties llmProperties;
 
     public SynthesisService(LlmClientProvider clientProvider, SynthesisPromptLoader promptLoader,
                             LlmServerManagerProvider serverManagerProvider) {
         this(clientProvider, promptLoader, serverManagerProvider, new SynthesisEvaluationService());
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public SynthesisService(LlmClientProvider clientProvider, SynthesisPromptLoader promptLoader,
                             LlmServerManagerProvider serverManagerProvider,
                             SynthesisEvaluationService evaluationService) {
+        this(clientProvider, promptLoader, serverManagerProvider, evaluationService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SynthesisService(LlmClientProvider clientProvider, SynthesisPromptLoader promptLoader,
+                            LlmServerManagerProvider serverManagerProvider,
+                            SynthesisEvaluationService evaluationService,
+                            com.swingtrade.llm.config.LlmProperties llmProperties) {
+        this.llmProperties = llmProperties;
         this.clientProvider = clientProvider;
         this.promptLoader = promptLoader;
         this.serverManagerProvider = serverManagerProvider;
@@ -74,7 +83,8 @@ public class SynthesisService {
             try {
                 llmResponse = clientProvider.getClient()
                     .generateChatCompletion(messages, MAX_TOKENS, TEMPERATURE)
-                    .block(Duration.ofSeconds(TIMEOUT_SECONDS));
+                    .block(llmProperties != null && llmProperties.getStageTimeout() != null
+                        ? llmProperties.getStageTimeout() : Duration.ofSeconds(TIMEOUT_SECONDS));
             } finally {
                 if (manager != null) {
                     manager.endRequest();

@@ -26,13 +26,32 @@ public class LlmClientProvider {
     private final OpenAiChatModel piSshModel;
     private final OpenAiChatModel openAiModel;
     private final OpenAiChatModel ollamaModel;
+    private final String ollamaReasoningEffort;
 
+    public LlmClientProvider(LlmBackendSelector selector,
+                             LlamaCppClient llamaCppClient,
+                             OpenAiChatModel localModel,
+                             OpenAiChatModel piSshModel,
+                             OpenAiChatModel openAiModel,
+                             OpenAiChatModel ollamaModel) {
+        this(selector, llamaCppClient, localModel, piSshModel, openAiModel, ollamaModel, null);
+    }
+
+    /**
+     * @param ollamaReasoningEffort {@code reasoning_effort} sent only to the Ollama backend.
+     *        Measured against qwen3.5:4b: with default thinking the answer can land in
+     *        {@code reasoning} with empty {@code content}; {@code none} disables thinking
+     *        (the {@code think:false} flag is ignored on the OpenAI-compatible endpoint).
+     */
+    @org.springframework.beans.factory.annotation.Autowired
     public LlmClientProvider(LlmBackendSelector selector,
                              LlamaCppClient llamaCppClient,
                              @Qualifier("localChatModel") OpenAiChatModel localModel,
                              @Qualifier("piSshChatModel") OpenAiChatModel piSshModel,
                              @Qualifier("openAiChatModel") OpenAiChatModel openAiModel,
-                             @Qualifier("ollamaChatModel") OpenAiChatModel ollamaModel) {
+                             @Qualifier("ollamaChatModel") OpenAiChatModel ollamaModel,
+                             @org.springframework.beans.factory.annotation.Value("${llm.providers.ollama.reasoning-effort:none}") String ollamaReasoningEffort) {
+        this.ollamaReasoningEffort = ollamaReasoningEffort;
         this.selector = selector;
         this.llamaCppClient = llamaCppClient;
         this.localModel = localModel;
@@ -61,7 +80,9 @@ public class LlmClientProvider {
                     model.getOptions().getModel(), model.getOptions().getBaseUrl());
         }
         ChatClient chatClient = ChatClient.create(model);
-        return new SpringAiLlmClient(chatClient, false);
+        String effort = selector.resolve() == LlmBackendSelector.Backend.OLLAMA
+                ? ollamaReasoningEffort : null;
+        return new SpringAiLlmClient(chatClient, false, effort);
     }
 
     public LlmBackendSelector.Backend getBackend() {
