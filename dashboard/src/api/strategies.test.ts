@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchPromotionEligibility, getStrategies } from './strategies'
+import {
+  changeStrategyMode,
+  fetchPromotionEligibility,
+  getStrategies,
+  getStrategyTypes,
+  saveStrategyConfig,
+} from './strategies'
 
 const apiRequestMock = vi.hoisted(() => vi.fn())
 vi.mock('./shared', () => ({ apiRequest: apiRequestMock }))
@@ -71,6 +77,65 @@ describe('fetchPromotionEligibility', () => {
         signal,
         validate: expect.any(Function),
       }
+    )
+  })
+})
+
+describe('strategy types and mutations', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('loads strategy types from the envelope endpoint', async () => {
+    const types = [
+      {
+        type: 'RSI',
+        paramSchema: { params: [{ name: 'period', type: 'INT', min: 2, max: 50 }] },
+        warmupBars: 20,
+        requiredIndicators: ['RSI'],
+      },
+    ]
+    apiRequestMock.mockResolvedValue(types)
+    await expect(getStrategyTypes()).resolves.toEqual(types)
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      '/strategy-types',
+      expect.objectContaining({ method: 'GET', responseContract: 'envelope' })
+    )
+  })
+
+  it('rejects a malformed strategy-types payload', async () => {
+    apiRequestMock.mockImplementation(
+      async (_p: string, o: { validate: (v: unknown) => boolean }) => {
+        if (!o.validate([{ type: 1 }])) throw new Error('invalid')
+      }
+    )
+    await expect(getStrategyTypes()).rejects.toThrow('invalid')
+  })
+
+  it('changes mode with PUT /mode and encodes the variant id', async () => {
+    apiRequestMock.mockResolvedValue(strategy)
+    await changeStrategyMode('A/B', 'SHADOW')
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      '/strategy-configs/A%2FB/mode',
+      expect.objectContaining({
+        method: 'PUT',
+        responseContract: 'envelope',
+        body: JSON.stringify({ mode: 'SHADOW' }),
+      })
+    )
+  })
+
+  it('saves a new immutable version with PUT', async () => {
+    apiRequestMock.mockResolvedValue(strategy)
+    const request = {
+      variantId: 'DEFAULT',
+      strategyType: 'PRICE_ACTION',
+      params: { period: 14 },
+      mode: 'SHADOW' as const,
+      paperCapital: 500000,
+    }
+    await saveStrategyConfig(request)
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      '/strategy-configs/DEFAULT',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify(request) })
     )
   })
 })

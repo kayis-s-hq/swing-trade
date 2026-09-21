@@ -4,7 +4,9 @@ import type {
   PromotionEligibilityResponse,
   PromotionEligibilityStatus,
   StrategyConfig,
+  StrategyConfigRequest,
   StrategyMode,
+  StrategyTypeInfo,
 } from './types'
 
 const MODES = new Set<StrategyMode>(['OFF', 'BACKTEST_ONLY', 'SHADOW', 'CHAMPION'])
@@ -96,4 +98,49 @@ export function fetchPromotionEligibility(
       validate: isPromotionEligibilityResponse,
     }
   )
+}
+
+function isStrategyTypeInfo(value: unknown): value is StrategyTypeInfo {
+  if (!isRecord(value) || typeof value.type !== 'string') return false
+  const schema = value.paramSchema
+  if (!isRecord(schema) || !Array.isArray(schema.params)) return false
+  return schema.params.every(
+    (param) => isRecord(param) && typeof param.name === 'string' && typeof param.type === 'string'
+  )
+}
+
+function validateStrategyTypes(value: unknown): value is StrategyTypeInfo[] {
+  return Array.isArray(value) && value.every(isStrategyTypeInfo)
+}
+
+export function getStrategyTypes(signal?: AbortSignal): Promise<StrategyTypeInfo[]> {
+  return apiRequest<StrategyTypeInfo[]>('/strategy-types', {
+    method: 'GET',
+    responseContract: 'envelope',
+    signal,
+    validate: validateStrategyTypes,
+  })
+}
+
+function validateSingleStrategy(value: unknown): value is StrategyConfig {
+  return isStrategyConfig(value)
+}
+
+export function changeStrategyMode(variantId: string, mode: StrategyMode): Promise<StrategyConfig> {
+  return apiRequest<StrategyConfig>(`/strategy-configs/${encodeURIComponent(variantId)}/mode`, {
+    method: 'PUT',
+    responseContract: 'envelope',
+    body: JSON.stringify({ mode }),
+    validate: validateSingleStrategy,
+  })
+}
+
+/** Creates a new immutable version of the variant (the backend never edits in place). */
+export function saveStrategyConfig(request: StrategyConfigRequest): Promise<StrategyConfig> {
+  return apiRequest<StrategyConfig>(`/strategy-configs/${encodeURIComponent(request.variantId)}`, {
+    method: 'PUT',
+    responseContract: 'envelope',
+    body: JSON.stringify(request),
+    validate: validateSingleStrategy,
+  })
 }

@@ -46,6 +46,23 @@ describe('job API — mutation contract', () => {
     )
   })
 
+  it('sends the scoped/dry-run options as a JSON body only when provided', async () => {
+    sharedMocks.apiRequest.mockResolvedValue(response)
+    const request = { symbols: ['TCS'], variantIds: ['A'], skipLlm: true, dryRun: true }
+
+    await startJobRun('MANUAL', request)
+    expect(sharedMocks.apiRequest).toHaveBeenCalledWith(
+      '/job/runs/start?triggerType=MANUAL',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(request) })
+    )
+    const init = sharedMocks.apiRequest.mock.calls[0][1] as { body?: string }
+    expect(init.body).toBeDefined()
+
+    sharedMocks.apiRequest.mockClear()
+    await startJobRun()
+    expect((sharedMocks.apiRequest.mock.calls[0][1] as { body?: string }).body).toBeUndefined()
+  })
+
   it('passes an explicit scheduled trigger without changing the confirmed payload', async () => {
     const scheduled = { ...response, triggerType: 'SCHEDULED' as const }
     sharedMocks.apiRequest.mockResolvedValue(scheduled)
