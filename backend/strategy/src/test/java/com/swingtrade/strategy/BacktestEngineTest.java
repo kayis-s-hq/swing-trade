@@ -21,6 +21,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -80,6 +82,38 @@ class BacktestEngineTest {
         assertThatThrownBy(() -> enforcedEngine.runBacktest(SYMBOL, EXCHANGE, BacktestConfig.defaults()))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("No included historical universe membership");
+    }
+
+    @Test
+    @DisplayName("configured signal strategy backtest uses its entry and exit decisions")
+    void configuredSignalStrategyBacktestUsesSignalStrategy() {
+        List<OhlcvCandle> candles = buildTrendingCandles(80, 100.0, 0.0, 1_000_000L);
+        stub(candles);
+        SignalStrategy strategy = new SignalStrategy() {
+            @Override public String type() { return "TEST_SIGNAL"; }
+            @Override public ParamSchema paramSchema() { return new ParamSchema(List.of()); }
+            @Override public Set<IndicatorKey> requiredIndicators(StrategyParamsView params) { return Set.of(); }
+            @Override public int warmupBars(StrategyParamsView params) { return 1; }
+            @Override public StrategyDecision evaluateEntry(MarketContext ctx, int barIndex, StrategyParamsView params) {
+                boolean buy = barIndex == 60;
+                return new StrategyDecision(buy ? com.swingtrade.domain.Signal.SignalType.BUY
+                    : com.swingtrade.domain.Signal.SignalType.HOLD, BigDecimal.ONE, List.of(),
+                    buy ? ctx.view(barIndex).close().subtract(BigDecimal.ONE) : null,
+                    buy ? ctx.view(barIndex).close().add(BigDecimal.TWO) : null, "test");
+            }
+            @Override public ExitDecision evaluateExit(MarketContext ctx, int barIndex,
+                                                        OpenPosition position, StrategyParamsView params) {
+                return barIndex > position.entryIndex()
+                    ? ExitDecision.exit(ExitReason.SIGNAL_EXIT, ctx.view(barIndex).close(), "test")
+                    : ExitDecision.hold();
+            }
+        };
+
+        BacktestResult result = engine.runBacktest(SYMBOL, EXCHANGE, BacktestConfig.defaults(), strategy,
+            StrategyParamsView.of(Map.of()));
+
+        assertThat(result.totalTrades()).isEqualTo(1);
+        assertThat(result.trades().getFirst().exitReason()).isEqualTo(ExitReason.SIGNAL_EXIT);
     }
 
     @Test

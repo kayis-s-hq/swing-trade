@@ -1,7 +1,10 @@
 package com.swingtrade.api.service;
 
 import com.swingtrade.data.entity.SignalSelectionEntity;
+import com.swingtrade.data.entity.StrategyConfigEntity;
+import com.swingtrade.data.repository.PositionRepository;
 import com.swingtrade.data.repository.SignalSelectionRepository;
+import com.swingtrade.data.repository.StrategyConfigRepository;
 import com.swingtrade.domain.ShadowClosedTrade;
 import com.swingtrade.domain.Signal;
 import com.swingtrade.domain.service.PortfolioQueryService;
@@ -21,12 +24,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
- * Signal tournament: for each symbol/day, picks the single BUY signal (highest confidence across
- * all active variants) that the rest of the pipeline - sentiment, LLM analysis and the
- * dedicated "selected" paper portfolio - follows. Every variant still trades its own shadow book
- * independently; this only decides which signal drives the selected book.
+ * Signal tournament: for each symbol/day, picks the single BUY signal that the rest of the
+ * pipeline - sentiment, LLM analysis and the dedicated "selected" paper portfolio - follows.
+ * Existing variant positions take precedence so their strategy owns the next decision, followed by
+ * the configured champion and finally the configured arbitration rule. Every variant still trades
+ * its own shadow book independently; this only decides which signal drives the selected book.
  */
 @Service
 public class SignalArbiter {
@@ -39,15 +45,21 @@ public class SignalArbiter {
     private final SignalSelectionRepository repository;
     private final SignalStore signalStore;
     private final PortfolioQueryService paperPortfolioService;
+    private final PositionRepository positionRepository;
+    private final StrategyConfigRepository strategyConfigRepository;
     private final ArbitrationRule rule;
 
     @Autowired
     public SignalArbiter(SignalSelectionRepository repository, SignalStore signalStore,
                          PortfolioQueryService paperPortfolioService,
+                         PositionRepository positionRepository,
+                         StrategyConfigRepository strategyConfigRepository,
                          @Value("${strategy.arbitration.rule:HIGHEST_CONFIDENCE}") String ruleName) {
         this.repository = repository;
         this.signalStore = signalStore;
         this.paperPortfolioService = paperPortfolioService;
+        this.positionRepository = positionRepository;
+        this.strategyConfigRepository = strategyConfigRepository;
         this.rule = ArbitrationRule.valueOf(ruleName.trim().toUpperCase());
     }
 
@@ -109,9 +121,38 @@ public class SignalArbiter {
     static Optional<VariantSignalOutcome> pick(List<VariantSignalOutcome> outcomes,
                                                               ArbitrationRule rule,
                                                               Map<String, Double> evidenceByVariant) {
+        return pick(outcomes, rule, evidenceByVariant, Set.of(), Optional.empty());
+    }
+
+    /**
+     * Selects a BUY for the selected paper book using the live strategy preference order:
+     * an existing variant position first (so the position's strategy owns its exit), then the
+     * configured champion, then the normal arbitration rule. The final comparator remains
+     * deterministic, including when more than one variant has an open position.
+     */
+    static Optional<VariantSignalOutcome> pick(List<VariantSignalOutcome> outcomes,
+                                               ArbitrationRule rule,
+                                               Map<String, Double> evidenceByVariant,
+                                               Set<String> openPositionVariants,
+                                               Optional<String> championVariant) {
         List<VariantSignalOutcome> eligible = outcomes.stream()
             .filter(o -> o.type() == Signal.SignalType.BUY && o.persisted() && o.confidence() != null)
             .toList();
+        Optional<VariantSignalOutcome> openPositionWinner = eligible.stream()
+            .filter(o -> openPositionVariants.contains(o.variantId()))
+            .sorted(Comparator.comparing(VariantSignalOutcome::variantId))
+            .findFirst();
+        if (openPositionWinner.isPresent()) {
+            return openPositionWinner;
+        }
+        if (championVariant.isPresent()) {
+            Optional<VariantSignalOutcome> championWinner = eligible.stream()
+                .filter(o -> championVariant.get().equals(o.variantId()))
+                .findFirst();
+            if (championWinner.isPresent()) {
+                return championWinner;
+            }
+        }
         return pickVariant(eligible.stream().map(o -> new Candidate(o.variantId(), o.confidence())).toList(),
                 rule, evidenceByVariant)
             .flatMap(id -> eligible.stream().filter(o -> o.variantId().equals(id)).findFirst());
@@ -125,7 +166,8 @@ public class SignalArbiter {
     public Optional<SignalSelectionEntity> arbitrate(String symbol, LocalDate date,
                                                      List<VariantSignalOutcome> outcomes) {
         Optional<VariantSignalOutcome> winner = pick(outcomes, rule,
-            rule == ArbitrationRule.EVIDENCE_RANKED ? currentEvidence(outcomes) : Map.of());
+            rule == ArbitrationRule.EVIDENCE_RANKED ? currentEvidence(outcomes) : Map.of(),
+            openPositionVariants(symbol), currentChampionVariant());
         if (winner.isEmpty()) {
             return Optional.empty();
         }
@@ -162,6 +204,27 @@ public class SignalArbiter {
         SignalSelectionEntity saved = repository.save(entity);
         logger.info("Signal tournament for {} on {}: {} wins ({})", symbol, date, w.variantId(), reason);
         return Optional.of(saved);
+    }
+
+    private Set<String> openPositionVariants(String symbol) {
+        if (positionRepository == null || symbol == null) return Set.of();
+        return positionRepository.findOpenBySymbolAndPortfolioIdIsNotNull(symbol).stream()
+            .map(p -> p.getPortfolioId())
+            .filter(id -> id != null && !id.isBlank())
+            .collect(java.util.stream.Collectors.toCollection(HashSet::new));
+    }
+
+    /** Returns a champion only when the current configuration is unambiguous. */
+    private Optional<String> currentChampionVariant() {
+        if (strategyConfigRepository == null) return Optional.empty();
+        List<String> champions = strategyConfigRepository.findAll().stream()
+            .map(StrategyConfigEntity::toDomain)
+            .filter(c -> c.current() && c.mode() == com.swingtrade.domain.StrategyConfig.Mode.CHAMPION)
+            .map(com.swingtrade.domain.StrategyConfig::variantId)
+            .distinct()
+            .sorted()
+            .toList();
+        return champions.size() == 1 ? Optional.of(champions.getFirst()) : Optional.empty();
     }
 
     /** The most recent selection for {@code symbol} in the given status (PENDING/EXECUTED/BLOCKED). */

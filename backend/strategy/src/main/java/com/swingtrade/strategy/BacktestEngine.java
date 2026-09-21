@@ -205,6 +205,22 @@ public class BacktestEngine {
     }
 
     /**
+     * Runs the same historical simulation using a configured SignalStrategy.  This overload is
+     * deliberately separate from the legacy TradingStrategy API: configured variants are
+     * evaluated through their bounded MarketContext and therefore cannot accidentally fall back
+     * to the legacy price-action rules.
+     */
+    public BacktestResult runBacktest(String symbol, String exchange, BacktestConfig config,
+                                      SignalStrategy strategy, StrategyParamsView params) {
+        if (symbol == null || symbol.isBlank()) throw new IllegalArgumentException("Symbol cannot be null or blank");
+        if (config == null || strategy == null || params == null) throw new IllegalArgumentException("Config, strategy and params cannot be null");
+        List<OhlcvCandle> chronological = historicalCandles(symbol, exchange,
+            getDescendingCandles(symbol, candleStore, MIN_CANDLES_FOR_BACKTEST));
+        return simulateSignal(symbol, qualityChecked(symbol, chronological), config, strategy, params, 0,
+            chronological.size() - 1);
+    }
+
+    /**
      * Runs a backtest whose metrics include only trades and equity observations inside the given
      * evaluation window. Indicator warm-up candles before {@code evaluationStart} are retained,
      * but no position may be opened before the boundary.
@@ -295,6 +311,43 @@ public class BacktestEngine {
             LocalDate endDate = candles.get(endIndex).date();
             BacktestResult result = runBacktestWindow(symbol, exchange, config, strategy, startDate, endDate);
             folds.add(new WalkForwardEvaluation.Fold(startDate, endDate, result));
+        }
+        double averageWinRate = folds.stream().mapToDouble(f -> f.result().winRate()).average().orElse(0.0);
+        double averageTotalReturn = folds.stream().mapToDouble(f -> f.result().totalReturn().doubleValue()).average().orElse(0.0);
+        int totalTrades = folds.stream().mapToInt(f -> f.result().totalTrades()).sum();
+        return new WalkForwardEvaluation(folds, averageWinRate, averageTotalReturn, totalTrades);
+    }
+
+    /** Walk-forward counterpart for a configured SignalStrategy variant. */
+    public WalkForwardEvaluation runWalkForward(String symbol, String exchange, BacktestConfig config,
+                                                 SignalStrategy strategy, StrategyParamsView params,
+                                                 int oosDays, int requestedFolds) {
+        if (strategy == null || params == null) throw new IllegalArgumentException("Strategy and params cannot be null");
+        if (oosDays < 60 || oosDays > 1000) throw new IllegalArgumentException("oosDays must be between 60 and 1000");
+        if (requestedFolds < 1 || requestedFolds > 8) throw new IllegalArgumentException("requestedFolds must be between 1 and 8");
+        List<OhlcvCandle> candles = new ArrayList<>(candleStore.findAllBySymbolOrderByDateDesc(symbol));
+        candles.sort(Comparator.comparing(OhlcvCandle::date));
+        if (candles.size() < oosDays * requestedFolds) {
+            throw new IllegalStateException("Insufficient candle history for " + requestedFolds
+                + " OOS folds: need at least " + (oosDays * requestedFolds) + " candles, found " + candles.size());
+        }
+        List<WalkForwardEvaluation.Fold> folds = new ArrayList<>(requestedFolds);
+        for (int fold = requestedFolds - 1; fold >= 0; fold--) {
+            int startIndex = candles.size() - ((fold + 1) * oosDays);
+            int endIndex = startIndex + oosDays - 1;
+            LocalDate startDate = candles.get(startIndex).date();
+            LocalDate endDate = candles.get(endIndex).date();
+            List<OhlcvCandle> window = new ArrayList<>(candleStore.findBySymbolAndDateRange(
+                symbol, startDate.minusDays(400), endDate));
+            window.sort(Comparator.comparing(OhlcvCandle::date));
+            window = qualityChecked(symbol, historicalCandles(symbol, exchange, window));
+            int start = 0;
+            while (start < window.size() && window.get(start).date().isBefore(startDate)) start++;
+            int end = window.size() - 1;
+            while (end >= 0 && window.get(end).date().isAfter(endDate)) end--;
+            if (start > end) throw new IllegalStateException("Evaluation window contains insufficient candles");
+            folds.add(new WalkForwardEvaluation.Fold(startDate, endDate,
+                simulateSignal(symbol, window, config, strategy, params, start, end)));
         }
         double averageWinRate = folds.stream().mapToDouble(f -> f.result().winRate()).average().orElse(0.0);
         double averageTotalReturn = folds.stream().mapToDouble(f -> f.result().totalReturn().doubleValue()).average().orElse(0.0);
@@ -499,6 +552,88 @@ public class BacktestEngine {
     // -----------------------------------------------------------------------
     // Simulation
     // -----------------------------------------------------------------------
+
+    private BacktestResult simulateSignal(String symbol, List<OhlcvCandle> candles, BacktestConfig config,
+                                          SignalStrategy strategy, StrategyParamsView params,
+                                          int evaluationStartIndex, int evaluationEndIndex) {
+        MarketContext context = MarketContext.of(symbol, candles);
+        int first = Math.max(strategy.warmupBars(params), evaluationStartIndex);
+        int last = Math.min(evaluationEndIndex, candles.size() - 1);
+        if (first >= last) throw new IllegalStateException("Insufficient candles for strategy warm-up");
+
+        BigDecimal capital = FinancialScale.money(config.initialCapital());
+        List<BacktestTrade> trades = new ArrayList<>();
+        List<BigDecimal> curve = new ArrayList<>();
+        com.swingtrade.strategy.OpenPosition open = null;
+        for (int i = first; i <= last; i++) {
+            MarketContext.View view = context.view(i);
+            BigDecimal close = view.close();
+            if (open != null) {
+                com.swingtrade.strategy.OpenPosition current = open.advanceHighWaterMark(close);
+                ExitDecision exit = strategy.evaluateExit(context, i, current, params);
+                if (exit.exit()) {
+                    BacktestTrade trade = closeSignalTrade(symbol, current, exit.exitPrice(),
+                        candles.get(i).date(), i, exit.reason(), config);
+                    trades.add(trade);
+                    capital = capital.add(trade.pnl());
+                    open = null;
+                } else {
+                    open = current;
+                }
+            }
+            curve.add(markToMarketSignal(capital, open, close));
+            if (open == null && i < last) {
+                StrategyDecision decision = strategy.evaluateEntry(context, i, params);
+                if (decision.type() == com.swingtrade.domain.Signal.SignalType.BUY
+                    && decision.suggestedStop() != null && decision.suggestedTarget() != null) {
+                    BigDecimal nextOpen = context.view(i + 1).open();
+                    BigDecimal entry = nextOpen.multiply(BigDecimal.ONE.add(config.slippagePct()));
+                    BigDecimal stop = decision.suggestedStop();
+                    BigDecimal target = decision.suggestedTarget();
+                    BigDecimal risk = entry.subtract(stop);
+                    if (risk.signum() > 0 && target.compareTo(entry) > 0) {
+                        int quantity = FinancialScale.wholeShares(capital.multiply(config.riskPerTradePct())
+                            .divide(risk, FinancialScale.RATIO));
+                        if (quantity > 0) {
+                            open = com.swingtrade.strategy.OpenPosition.open(i + 1, candles.get(i + 1).date(), entry, stop, target, quantity);
+                        }
+                    }
+                }
+            }
+        }
+        if (open != null) {
+            int index = last;
+            BacktestTrade trade = closeSignalTrade(symbol, open, candles.get(index).adjustedForAnalysis().close(),
+                candles.get(index).date(), index, ExitReason.TIME_STOP, config);
+            trades.add(trade);
+            capital = capital.add(trade.pnl());
+        }
+        curve.add(capital);
+        return buildResult(symbol, trades, curve, capital, config,
+            candles.get(first).date(), candles.get(last).date(),
+            candles.get(first).adjustedForAnalysis().close(), candles.get(last).adjustedForAnalysis().close());
+    }
+
+    private BacktestTrade closeSignalTrade(String symbol, com.swingtrade.strategy.OpenPosition open, BigDecimal exitPrice,
+                                           LocalDate exitDate, int exitIndex, ExitReason reason,
+                                           BacktestConfig config) {
+        BigDecimal filledExit = exitPrice.multiply(BigDecimal.ONE.subtract(config.slippagePct()));
+        BigDecimal quantity = BigDecimal.valueOf(open.quantity());
+        BigDecimal grossPnl = filledExit.subtract(open.entryPrice()).multiply(quantity);
+        BigDecimal costs = DEFAULT_COST_MODEL.roundTripCost(open.entryPrice(), filledExit, open.quantity(),
+            config.brokeragePerTrade());
+        BigDecimal netPnl = grossPnl.subtract(costs);
+        BigDecimal entryCost = open.entryPrice().multiply(quantity);
+        return new BacktestTrade(symbol, open.entryDate(), exitDate, open.entryPrice(), filledExit,
+            open.stopLoss(), open.target(), open.quantity(), reason, netPnl,
+            FinancialScale.percentOf(netPnl, entryCost), exitIndex - open.entryIndex());
+    }
+
+    private static BigDecimal markToMarketSignal(BigDecimal capital, com.swingtrade.strategy.OpenPosition open, BigDecimal close) {
+        if (open == null) return capital;
+        return FinancialScale.money(capital.add(close.subtract(open.entryPrice())
+            .multiply(BigDecimal.valueOf(open.quantity()))));
+    }
 
     private BacktestResult simulate(String symbol, List<OhlcvCandle> chronologicalCandles, BacktestConfig config,
                                     TradingStrategy strategy) {
