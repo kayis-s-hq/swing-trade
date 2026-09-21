@@ -83,6 +83,20 @@ class StrategyConfigServiceTest {
     }
 
     @Test
+    void rejectsPromotingAnotherCurrentVariantWhenChampionAlreadyExists() {
+        StrategyConfig champion = config("BREAKOUT", 1, StrategyConfig.Mode.CHAMPION, true);
+        StrategyConfig shadow = config("PULLBACK", 1, StrategyConfig.Mode.SHADOW, true);
+        when(repository.findAll()).thenReturn(List.of(
+            StrategyConfigEntity.fromDomain(champion), StrategyConfigEntity.fromDomain(shadow)));
+        when(store.findCurrentByVariantId("PULLBACK")).thenReturn(Optional.of(shadow));
+
+        assertThatThrownBy(() -> service.changeMode("PULLBACK",
+            new StrategyModeRequest(StrategyConfig.Mode.CHAMPION, null)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("one current CHAMPION");
+    }
+
+    @Test
     void rejectsThirteenthActiveVariant() {
         List<StrategyConfigEntity> active = java.util.stream.IntStream.range(0, 12)
             .mapToObj(i -> StrategyConfigEntity.fromDomain(

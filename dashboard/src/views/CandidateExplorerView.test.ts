@@ -51,6 +51,8 @@ describe('CandidateExplorerView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Find the next pilot symbol')
+    expect(wrapper.text()).toContain('Scan active watchlist')
+    expect(wrapper.text()).toContain('active watchlist symbols')
     await wrapper.get('button[data-test="scan-toggle"]').trigger('click')
     await flushPromises()
 

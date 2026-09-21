@@ -570,8 +570,11 @@ public class CandidateScanService {
         // Keeps compatibility with lightweight callers that provide the pre-performance evaluator
         // contract (notably isolated data-quality tests). Spring production always supplies the
         // non-null performance-aware result.
-        if (strategyOutcomes == null || strategyOutcomes.isEmpty()) {
+        if (candidateStrategyEvaluator != null && (strategyOutcomes == null || strategyOutcomes.isEmpty())) {
             strategyOutcomes = candidateStrategyEvaluator.evaluate(symbol, availableCandles);
+        }
+        if (strategyOutcomes == null) {
+            strategyOutcomes = List.of();
         }
         int strategyBuys = (int) strategyOutcomes.stream().filter(CandidateStrategyEvaluator.Outcome::buy).count();
         int evaluatedStrategies = (int) strategyOutcomes.stream().filter(o -> !"SKIPPED".equals(o.signalType())).count();
