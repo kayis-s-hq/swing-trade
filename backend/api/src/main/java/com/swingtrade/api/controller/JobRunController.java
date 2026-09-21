@@ -3,7 +3,9 @@ package com.swingtrade.api.controller;
 import com.swingtrade.api.dto.ErrorResponse;
 import com.swingtrade.api.dto.JobRunResponse;
 import com.swingtrade.api.dto.JobRunStageResponse;
+import com.swingtrade.api.service.InvalidRunRequestException;
 import com.swingtrade.api.service.JobOrchestratorService;
+import com.swingtrade.api.service.RunRequest;
 import com.swingtrade.domain.JobRun;
 import com.swingtrade.data.entity.JobRunEntity;
 import org.slf4j.Logger;
@@ -13,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,11 +39,23 @@ public class JobRunController {
 
     /**
      * POST /api/job/runs/start — Start a new run (manual trigger).
-     * Returns 409 CONFLICT if a run is already in progress.
+     * Returns 409 CONFLICT if a run is already in progress and 400 for unknown symbols, variant
+     * ids or stages.
+     *
+     * <p>Optional scoping ({@link RunRequest}) may be sent as a JSON body and/or as query
+     * parameters ({@code symbols}, {@code variantIds}, {@code stages} comma-separated;
+     * {@code skipLlm}, {@code dryRun}); body fields win. With no scoping the run is unchanged.</p>
      */
     @PostMapping("/start")
     public ResponseEntity<?> startRun(
-            @RequestParam(defaultValue = "MANUAL") String triggerType) {
+            @RequestParam(defaultValue = "MANUAL") String triggerType,
+            @RequestParam(required = false) List<String> symbols,
+            @RequestParam(required = false) List<String> variantIds,
+            @RequestParam(required = false) List<String> stages,
+            @RequestParam(required = false) Boolean skipLlm,
+            @RequestParam(required = false) Boolean dryRun,
+            @RequestBody(required = false) RunRequest body) {
+        RunRequest request = merge(body, symbols, variantIds, stages, skipLlm, dryRun);
         Optional<JobRun> activeRun = orchestratorService.findActiveRun();
         if (activeRun.isPresent()) {
             logger.info("Rejecting {} job run trigger — run {} is already in progress",
@@ -60,7 +75,11 @@ public class JobRunController {
             // The pre-check above is a fast path only; startRun() itself is the
             // atomic guard against a run that started in the window between that
             // check and this call (e.g. the scheduled cron firing concurrently).
-            run = orchestratorService.startRun(type);
+            run = request.isEmpty() ? orchestratorService.startRun(type)
+                : orchestratorService.startRun(type, request);
+        } catch (InvalidRunRequestException e) {
+            logger.info("Rejecting job run trigger — invalid request: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(ErrorResponse.badRequest(e.getMessage()));
         } catch (JobOrchestratorService.ConcurrentRunException e) {
             logger.info("Rejecting {} job run trigger — {}", triggerType, e.getMessage());
             return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -77,6 +96,17 @@ public class JobRunController {
         entity.setFailedCount(run.failedCount());
         entity.setErrorMessage(run.errorMessage());
         return ResponseEntity.ok(JobRunResponse.from(entity));
+    }
+
+    private static RunRequest merge(RunRequest body, List<String> symbols, List<String> variantIds,
+                                    List<String> stages, Boolean skipLlm, Boolean dryRun) {
+        RunRequest b = body == null ? RunRequest.NONE : body;
+        return new RunRequest(
+            b.symbols() != null ? b.symbols() : symbols,
+            b.variantIds() != null ? b.variantIds() : variantIds,
+            b.stages() != null ? b.stages() : stages,
+            b.skipLlm() != null ? b.skipLlm() : skipLlm,
+            b.dryRun() != null ? b.dryRun() : dryRun);
     }
 
     /**

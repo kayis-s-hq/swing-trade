@@ -165,19 +165,33 @@ public class SignalPipeline {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public ConfiguredEvaluation generateConfiguredSignal(String symbol, StrategyConfig config,
                                                          ResolvedStrategy resolved, boolean champion) {
+        return generateConfiguredSignal(symbol, config, resolved, champion, false);
+    }
+
+    /**
+     * As {@link #generateConfiguredSignal(String, StrategyConfig, ResolvedStrategy, boolean)}; with
+     * {@code dryRun} the strategy is evaluated and the outcome reported, but nothing is persisted
+     * (the returned signal, if any, is transient with a {@code null} id) and no positions are closed.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public ConfiguredEvaluation generateConfiguredSignal(String symbol, StrategyConfig config,
+                                                         ResolvedStrategy resolved, boolean champion,
+                                                         boolean dryRun) {
         if (config == null || resolved == null) {
             throw new IllegalArgumentException("Configured signal requires a config and resolved strategy");
         }
         return switch (resolved) {
             case ResolvedStrategy.Unresolved unresolved -> ConfiguredEvaluation.skipped(unresolved.reason());
-            case ResolvedStrategy.Legacy legacy -> generateLegacyConfiguredSignal(symbol, config, legacy, champion);
-            case ResolvedStrategy.Signal signalStrategy -> generateSignalStrategySignal(symbol, config, signalStrategy);
+            case ResolvedStrategy.Legacy legacy ->
+                generateLegacyConfiguredSignal(symbol, config, legacy, champion, dryRun);
+            case ResolvedStrategy.Signal signalStrategy ->
+                generateSignalStrategySignal(symbol, config, signalStrategy, dryRun);
         };
     }
 
     private ConfiguredEvaluation generateLegacyConfiguredSignal(String symbol, StrategyConfig config,
                                                                 ResolvedStrategy.Legacy legacy,
-                                                                boolean champion) {
+                                                                boolean champion, boolean dryRun) {
         SignalResult result;
         try {
             result = priceActionEngine.generateSignal(symbol, legacy.strategy());
@@ -186,10 +200,15 @@ public class SignalPipeline {
             return ConfiguredEvaluation.skipped("insufficient candle history: " + e.getMessage());
         }
 
-        if (champion && result.type() == Signal.SignalType.SELL) {
+        if (champion && !dryRun && result.type() == Signal.SignalType.SELL) {
             closeHeldPositionOnSell(symbol, result.date());
         }
         BigDecimal confidence = deriveConfidence(result);
+        if (dryRun) {
+            return ConfiguredEvaluation.evaluated(
+                Signal.create(symbol, result.date(), result.type(), confidence, result.reasoning()),
+                confidence, result.reasoning());
+        }
         String warningFlag = result.type() == Signal.SignalType.BUY
             ? SignalEntity.WarningFlag.PENDING_SENTIMENT.code() : SignalEntity.WarningFlag.NONE.code();
         Signal saved = persistenceService.buildAndSaveWithWarning(
@@ -200,7 +219,8 @@ public class SignalPipeline {
     }
 
     private ConfiguredEvaluation generateSignalStrategySignal(String symbol, StrategyConfig config,
-                                                              ResolvedStrategy.Signal resolved) {
+                                                              ResolvedStrategy.Signal resolved,
+                                                              boolean dryRun) {
         List<OhlcvCandle> descending = candleStore.findTopBySymbolOrderByDateDesc(symbol, LIVE_CANDLE_WINDOW);
         List<OhlcvCandle> chronological = new ArrayList<>(descending);
         Collections.reverse(chronological);
@@ -221,6 +241,10 @@ public class SignalPipeline {
         BigDecimal riskReward = stop != null && target != null
             ? RiskCalculator.calculateRiskReward(stop, target, entry) : null;
         BigDecimal confidence = clamp(decision.score()).setScale(4, java.math.RoundingMode.HALF_UP);
+        if (dryRun) {
+            return ConfiguredEvaluation.evaluated(Signal.create(symbol, evaluation.get().date(),
+                Signal.SignalType.BUY, confidence, decision.reasoning()), decision.score(), decision.reasoning());
+        }
         Signal saved = persistenceService.saveConfiguredSignal(symbol, evaluation.get().date(),
             Signal.SignalType.BUY, confidence, decision.reasoning(), describeRules(decision), entry, stop,
             target, riskReward, SignalEntity.WarningFlag.PENDING_SENTIMENT.code(), config.variantId(),

@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -63,6 +64,52 @@ class JobRunControllerTest {
                 .andExpect(jsonPath("$.symbolsCount").value(5));
 
             verify(orchestratorService).startRun(JobRun.TriggerType.MANUAL);
+        }
+
+        @Test
+        @DisplayName("Passes a JSON body's scoping to the orchestrator")
+        void shouldPassBodyScoping() throws Exception {
+            JobRun run = runningRun(JobRun.TriggerType.MANUAL);
+            when(orchestratorService.startRun(any(JobRun.TriggerType.class),
+                any(com.swingtrade.api.service.RunRequest.class))).thenReturn(run);
+
+            mockMvc.perform(post("/api/job/runs/start").contentType("application/json")
+                    .content("{\"symbols\":[\"TCS\"],\"variantIds\":[\"breakout-v1\"],\"skipLlm\":true,\"dryRun\":true}"))
+                .andExpect(status().isOk());
+
+            var captor = org.mockito.ArgumentCaptor.forClass(com.swingtrade.api.service.RunRequest.class);
+            verify(orchestratorService).startRun(any(JobRun.TriggerType.class), captor.capture());
+            org.assertj.core.api.Assertions.assertThat(captor.getValue()).isEqualTo(
+                new com.swingtrade.api.service.RunRequest(List.of("TCS"), List.of("breakout-v1"), null, true, true));
+        }
+
+        @Test
+        @DisplayName("Accepts comma-separated scoping query parameters (dev-stack.sh run)")
+        void shouldPassQueryScoping() throws Exception {
+            JobRun run = runningRun(JobRun.TriggerType.MANUAL);
+            when(orchestratorService.startRun(any(JobRun.TriggerType.class),
+                any(com.swingtrade.api.service.RunRequest.class))).thenReturn(run);
+
+            mockMvc.perform(post("/api/job/runs/start").contentType("application/json").content("{}")
+                    .param("symbols", "TCS,INFY").param("variantIds", "a-v1,b-v1").param("skipLlm", "true"))
+                .andExpect(status().isOk());
+
+            var captor = org.mockito.ArgumentCaptor.forClass(com.swingtrade.api.service.RunRequest.class);
+            verify(orchestratorService).startRun(any(JobRun.TriggerType.class), captor.capture());
+            org.assertj.core.api.Assertions.assertThat(captor.getValue()).isEqualTo(
+                new com.swingtrade.api.service.RunRequest(List.of("TCS", "INFY"), List.of("a-v1", "b-v1"), null,
+                    true, null));
+        }
+
+        @Test
+        @DisplayName("Returns 400 for unknown symbols, variants or stages")
+        void shouldReturn400ForUnknownIds() throws Exception {
+            when(orchestratorService.startRun(any(JobRun.TriggerType.class),
+                any(com.swingtrade.api.service.RunRequest.class)))
+                .thenThrow(new com.swingtrade.api.service.InvalidRunRequestException("unknown variantIds: [ghost]"));
+
+            mockMvc.perform(post("/api/job/runs/start").param("variantIds", "ghost"))
+                .andExpect(status().isBadRequest());
         }
 
         @Test

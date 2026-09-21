@@ -22,6 +22,12 @@ final class ConfiguredSignalTally {
     private int errors;
     private final List<String> problems = new ArrayList<>();
     private final List<VariantOutcome> outcomes = new ArrayList<>();
+    private final List<String> warnings = new ArrayList<>();
+
+    /** A non-degrading warning surfaced in the stage details (e.g. the champion guard). */
+    void warn(String warning) {
+        warnings.add(warning);
+    }
 
     void evaluated(String variantId, int version, boolean producedSignal, BigDecimal score) {
         evaluated++;
@@ -86,7 +92,11 @@ final class ConfiguredSignalTally {
         details.put("strategies", strategies);
         if (degraded()) {
             details.put("reason", reasonCode());
-            details.put("warnings", problems);
+        }
+        List<String> allWarnings = new ArrayList<>(problems);
+        allWarnings.addAll(warnings);
+        if (!allWarnings.isEmpty()) {
+            details.put("warnings", allWarnings);
         }
         return StageDetails.toJson(details);
     }

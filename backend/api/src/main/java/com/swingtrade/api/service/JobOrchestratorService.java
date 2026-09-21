@@ -91,9 +91,11 @@ public class JobOrchestratorService {
     private static final long STALE_RUN_SAFETY_MULTIPLIER = 6L;
 
     private final long pollIntervalMs;
-    private final int maxConcurrent;
+    private int maxConcurrent;
     private final boolean reaperEnabled;
-    private final Semaphore semaphore;
+    private Semaphore semaphore;
+    /** Bounds concurrent LLM-backed stages (SENTIMENT, LLM_ANALYSIS) to the backend's capacity. */
+    private Semaphore llmSemaphore = new Semaphore(1);
     private final ExecutorService asyncExecutor;
 
     /**
@@ -168,6 +170,20 @@ public class JobOrchestratorService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSignalArbiter(SignalArbiter signalArbiter) {
         this.signalArbiter = signalArbiter;
+    }
+
+    /** Symbol-level parallelism; when unset (0) the existing {@code job.orchestrator.max-concurrent} applies. */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setParallelism(@Value("${orchestrator.parallelism:0}") int parallelism) {
+        if (parallelism > 0) {
+            this.maxConcurrent = parallelism;
+            this.semaphore = new Semaphore(parallelism);
+        }
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setLlmConcurrency(@Value("${orchestrator.llm-concurrency:1}") int llmConcurrency) {
+        this.llmSemaphore = new Semaphore(Math.max(1, llmConcurrency));
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -284,11 +300,26 @@ public class JobOrchestratorService {
      *     before either has persisted its RUNNING row.
      */
     public JobRun startRun(JobRun.TriggerType triggerType) {
-        return startRun(triggerType, null);
+        return startRun(triggerType, (UUID) null);
     }
 
     /** Starts a run with an internal link to the scheduled candidate scan that selected it. */
     public JobRun startRun(JobRun.TriggerType triggerType, UUID candidateScanRunId) {
+        return startRun(triggerType, candidateScanRunId, RunRequest.NONE);
+    }
+
+    /** Starts a run scoped by {@code request}; see {@link RunRequest}. */
+    public JobRun startRun(JobRun.TriggerType triggerType, RunRequest request) {
+        return startRun(triggerType, null, request);
+    }
+
+    /**
+     * @throws InvalidRunRequestException if {@code request} names unknown symbols, variants or stages
+     */
+    public JobRun startRun(JobRun.TriggerType triggerType, UUID candidateScanRunId, RunRequest request) {
+        RunScope scope = request == null || request.isEmpty() ? RunScope.FULL
+            : RunScope.resolve(request, watchlistStore.getActiveWatchlistSymbols(),
+                liveConfigs().stream().map(StrategyConfig::variantId).collect(java.util.stream.Collectors.toSet()));
         LocalDate today = LocalDate.now(IST);
         JobRun run;
         synchronized (runStartLock) {
@@ -306,11 +337,13 @@ public class JobOrchestratorService {
             );
             JobRunEntity entity = JobRunEntity.fromDomain(run);
             entity.setCandidateScanRunId(candidateScanRunId);
+            entity.setTriggerOptions(scope.requestJson());
             jobRunRepository.save(entity);
         }
         jobMetrics.recordRunStarted();
 
-        List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
+        List<String> symbols = scope.symbols() != null ? scope.symbols() : watchlistStore.getActiveWatchlistSymbols();
+        warnOnChampionCount();
         if (symbols.isEmpty()) {
             logger.info("No watchlist symbols — completing run with zero symbols");
             completeRun(run.runId(), JobRun.Status.COMPLETED, null);
@@ -342,7 +375,7 @@ public class JobOrchestratorService {
 
         // Process symbols in parallel with semaphore throttle
         List<CompletableFuture<Void>> futures = symbols.stream().map(symbol ->
-            CompletableFuture.runAsync(() -> processSymbol(finalRun.runId(), symbol, today), asyncExecutor)
+            CompletableFuture.runAsync(() -> processSymbol(finalRun.runId(), symbol, today, scope), asyncExecutor)
                 .exceptionally(ex -> {
                     logUnattributedPipelineError(symbol, ex);
                     return null;
@@ -397,7 +430,7 @@ public class JobOrchestratorService {
         return run;
     }
 
-    private void processSymbol(UUID runId, String symbol, LocalDate today) {
+    private void processSymbol(UUID runId, String symbol, LocalDate today, RunScope scope) {
         JobRunStage.StageName[] currentStage = {JobRunStage.StageName.DATA_FETCH};
         try {
             acquireSlot(symbol);
@@ -414,16 +447,16 @@ public class JobOrchestratorService {
                     new StageDef(JobRunStage.StageName.DATA_FETCH,
                         () -> StageExecutionResult.completed(stageDataFetch(symbol)), TIMEOUT_DATA_FETCH),
                     new StageDef(JobRunStage.StageName.SIGNAL,
-                        () -> stageSignal(symbol, signalType, tradeableSignalIds, configuredLiveRun, evaluatedVariantIds),
+                        () -> stageSignal(symbol, signalType, tradeableSignalIds, configuredLiveRun, evaluatedVariantIds, scope),
                         TIMEOUT_SIGNAL),
-                    new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol), TIMEOUT_BACKTEST),
+                    new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol, scope), TIMEOUT_BACKTEST),
                     new StageDef(JobRunStage.StageName.NEWS,
                         () -> StageExecutionResult.completed(stageNews(symbol)), TIMEOUT_NEWS),
                     new StageDef(JobRunStage.StageName.SENTIMENT,
                         () -> stageSentiment(symbol, today), TIMEOUT_SENTIMENT),
                     new StageDef(JobRunStage.StageName.PAPER_TRADE,
                         () -> StageExecutionResult.completed(stagePaperTrade(symbol, tradeableSignalIds,
-                            configuredLiveRun[0], evaluatedVariantIds)), TIMEOUT_PAPER_TRADE)
+                            configuredLiveRun[0], evaluatedVariantIds, scope)), TIMEOUT_PAPER_TRADE)
                 ));
                 if (llmAnalysisEnabled) {
                     stageDefs.add(stageDefs.size() - 1, new StageDef(JobRunStage.StageName.LLM_ANALYSIS,
@@ -443,6 +476,12 @@ public class JobOrchestratorService {
                         logger.debug("Skipping stage {} for {}: run was cancelled", stageDef.name(), symbol);
                         continue;
                     }
+                    String scopeSkip = scope.skipReason(stageDef.name());
+                    if (scopeSkip != null) {
+                        updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.SKIPPED,
+                            null, null, "Skipped — " + scopeSkip);
+                        continue;
+                    }
                     if (priorStageBlocked
                             || (paperTradeBlocked && stageDef.name() == JobRunStage.StageName.PAPER_TRADE)) {
                         String reason = "Skipped — an earlier stage did not complete";
@@ -452,8 +491,20 @@ public class JobOrchestratorService {
                             stageDef.name(), symbol);
                         continue;
                     }
-                    boolean succeeded = executeStage(runId, symbol, stageDef.name(),
-                        stageDef.executor(), stageDef.timeoutSec());
+                    boolean llmStage = stageDef.name() == JobRunStage.StageName.SENTIMENT
+                        || stageDef.name() == JobRunStage.StageName.LLM_ANALYSIS;
+                    if (llmStage && !acquireLlmSlot(runId)) {
+                        updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.CANCELLED,
+                            null, "Run cancelled by user request", null);
+                        continue;
+                    }
+                    boolean succeeded;
+                    try {
+                        succeeded = executeStage(runId, symbol, stageDef.name(),
+                            stageDef.executor(), stageDef.timeoutSec());
+                    } finally {
+                        if (llmStage) llmSemaphore.release();
+                    }
                     // A timed-out/failed LLM analysis has no persisted verdict, so PAPER_TRADE
                     // must still run and defer through LlmAnalysisGate.PENDING. A SKIPPED backtest
                     // (e.g. not enough trade history) must not starve NEWS and SENTIMENT, which are
@@ -487,6 +538,14 @@ public class JobOrchestratorService {
         while (!semaphore.tryAcquire(pollIntervalMs, TimeUnit.MILLISECONDS)) {
             logger.debug("Waiting for a processing slot for {} (poll interval {}ms)", symbol, pollIntervalMs);
         }
+    }
+
+    /** Waits for an LLM slot, giving up (false) if the run is cancelled while queued. */
+    private boolean acquireLlmSlot(UUID runId) throws InterruptedException {
+        while (!llmSemaphore.tryAcquire(pollIntervalMs, TimeUnit.MILLISECONDS)) {
+            if (cancelledRunIds.contains(runId)) return false;
+        }
+        return true;
     }
 
     private static String inFlightKey(UUID runId, String symbol) {
@@ -558,20 +617,10 @@ public class JobOrchestratorService {
     }
 
     /**
-     * Same as {@link #updateStageStatus} but swallows (logs, does not rethrow) a failure to
-     * write the stage's own terminal status. This write can lose a benign race with
-     * {@code cancelRun()}'s "belt-and-suspenders" loop, which independently writes a terminal
-     * CANCELLED status directly to any RUNNING row for the run being cancelled — both writers
-     * can target the exact same row concurrently (one via {@code saveAll()} on the cancelling
-     * thread, this one via {@code save()} on the just-interrupted stage's own thread as it
-     * unwinds). Optimistic locking (the entity's {@code @Version} column) correctly rejects
-     * whichever write loses that race — but before this method existed, a lost race propagated
-     * an uncaught exception out of {@code executeStage()}, which (a) let {@code processSymbol()}'s
-     * outer catch overwrite the row's already-correct CANCELLED status with ERROR, and (b) aborted
-     * the rest of that symbol's stage loop entirely, leaving its remaining stages stuck at PENDING
-     * forever. Confirmed live against the real Postgres/Hibernate stack (not just a theoretical
-     * race): {@code ObjectOptimisticLockingFailureException} / "Row was already updated or deleted
-     * by another transaction" / "Unexpected row count (expected row count 1 but was 0)".
+     * Same as {@link #updateStageStatus} but swallows (logs) a failure to write the stage's own
+     * terminal status: it can lose a benign optimistic-lock race with cancelRun()'s own CANCELLED
+     * write to the same row, and letting that propagate would overwrite CANCELLED with ERROR and
+     * abort the symbol's remaining stages.
      */
     private void updateStageStatusTolerantly(UUID runId, String symbol, JobRunStage.StageName stage,
                                     JobRunStage.Status status, Long durationMs,
@@ -623,24 +672,39 @@ public class JobOrchestratorService {
     StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
                                      Set<Long> tradeableSignalIds,
                                      boolean[] configuredLiveRun) {
-        return stageSignal(symbol, signalTypeOut, tradeableSignalIds, configuredLiveRun, new HashSet<>());
+        return stageSignal(symbol, signalTypeOut, tradeableSignalIds, configuredLiveRun, new HashSet<>(),
+            RunScope.FULL);
     }
 
     StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
                                      Set<Long> tradeableSignalIds,
                                      boolean[] configuredLiveRun, Set<String> evaluatedVariantIds) {
-        List<StrategyConfig> configs = liveConfigs();
+        return stageSignal(symbol, signalTypeOut, tradeableSignalIds, configuredLiveRun, evaluatedVariantIds,
+            RunScope.FULL);
+    }
+
+    StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
+                                     Set<Long> tradeableSignalIds, boolean[] configuredLiveRun,
+                                     Set<String> evaluatedVariantIds, RunScope scope) {
+        List<StrategyConfig> configs = liveConfigs(scope);
         if (!configs.isEmpty()) {
             configuredLiveRun[0] = true;
-            boolean championSeen = configs.stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count() == 1;
+            long champions = liveConfigs().stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count();
+            boolean championSeen = champions == 1;
             ConfiguredSignalTally tally = new ConfiguredSignalTally();
+            if (!championSeen) {
+                tally.warn(championWarning(champions));
+            }
             List<VariantSignalOutcome> outcomes = new java.util.ArrayList<>();
             for (StrategyConfig config : configs) {
                 boolean champion = championSeen && config.mode() == StrategyConfig.Mode.CHAMPION;
                 ConfiguredEvaluation evaluation;
                 try {
-                    evaluation = signalPipeline.generateConfiguredSignal(symbol, config,
-                        strategyResolver.resolve(config), champion);
+                    evaluation = scope.dryRun()
+                        ? signalPipeline.generateConfiguredSignal(symbol, config,
+                            strategyResolver.resolve(config), champion, true)
+                        : signalPipeline.generateConfiguredSignal(symbol, config,
+                            strategyResolver.resolve(config), champion);
                 } catch (RuntimeException e) {
                     logger.warn("Configured strategy {} failed for {} (fail-closed): {}",
                         config.variantId(), symbol, e.getMessage());
@@ -674,7 +738,7 @@ public class JobOrchestratorService {
                 }
             }
             String summary = tally.summary();
-            Optional<SignalSelectionEntity> winner = arbitrate(symbol, outcomes);
+            Optional<SignalSelectionEntity> winner = scope.dryRun() ? Optional.empty() : arbitrate(symbol, outcomes);
             if (winner.isPresent()) {
                 summary += "; winner " + winner.get().getWinnerVariantId()
                     + " (" + winner.get().getWinnerConfidence().toPlainString() + ")";
@@ -696,25 +760,8 @@ public class JobOrchestratorService {
         return StageExecutionResult.completed(summary);
     }
 
-    private StageExecutionResult stageBacktest(String symbol) {
-        try {
-            BacktestConfig config = BacktestConfig.defaults();
-            BacktestResult result = backtestEngine.runBacktest(symbol, "NSE", config);
-            LocalDate date = LocalDate.now(IST);
-            if (backtestResultStore != null) backtestResultStore.saveOrUpdate(new com.swingtrade.domain.BacktestResult(null, symbol, date,
-                result.totalTrades(), result.winningTrades(), result.losingTrades(), result.winRate(),
-                result.avgGainPct().doubleValue(), result.avgLossPct().doubleValue(), result.maxDrawdownPct().doubleValue(), result.sharpeRatio(),
-                result.totalReturn().doubleValue(), result.expectancy(), BacktestScorer.calculateProfitFactor(result), true));
-            String summary = result.totalTrades() + " trades, "
-                + String.format("%.0f", result.winRate()) + "% win, "
-                + String.format("%.1f", result.totalReturn()) + "% return";
-            return StageExecutionResult.completed(summary);
-        } catch (IllegalStateException e) {
-            logger.info("Backtest skipped for {}: {}", symbol, e.getMessage());
-            if (backtestResultStore != null) backtestResultStore.saveOrUpdate(new com.swingtrade.domain.BacktestResult(null, symbol, LocalDate.now(IST),
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false));
-            return StageExecutionResult.skipped(e.getMessage());
-        }
+    private StageExecutionResult stageBacktest(String symbol, RunScope scope) {
+        return new BacktestStage(backtestEngine, backtestResultStore).run(symbol, !scope.dryRun());
     }
 
     StageExecutionResult stageLlmAnalysis(UUID runId, String symbol, LocalDate date) {
@@ -755,14 +802,14 @@ public class JobOrchestratorService {
     }
 
     String stagePaperTrade(String symbol) {
-        return stagePaperTrade(symbol, Set.of(), false, Set.of());
+        return stagePaperTrade(symbol, Set.of(), false, Set.of(), RunScope.FULL);
     }
 
     private String stagePaperTrade(String symbol, Set<Long> tradeableSignalIds, boolean configuredLiveRun,
-                                   Set<String> evaluatedVariantIds) {
+                                   Set<String> evaluatedVariantIds, RunScope scope) {
         String selectedSummary = null;
         if (configuredLiveRun) {
-            stageVariantPaperTrade(symbol);
+            variantStage().runVariants(symbol, liveConfigs(scope));
             selectedSummary = variantStage().selectedTrade(symbol, SELECTED_PORTFOLIO_ID,
                 SELECTED_PORTFOLIO_CAPITAL, SELECTION_EXPIRY_DAYS, evaluatedVariantIds);
         }
@@ -909,6 +956,24 @@ public class JobOrchestratorService {
         return new VariantPaperTradeStage(variantTradingService, candleStore, signalStore, strategyResolver,
             signalArbiter, sentimentGate, llmAnalysisGate, liveEligibilityService, llmAnalysisEnabled,
             llmAnalysisAdvisoryOnly);
+    }
+
+    private List<StrategyConfig> liveConfigs(RunScope scope) {
+        return liveConfigs().stream().filter(c -> scope.includesVariant(c.variantId())).toList();
+    }
+
+    private static String championWarning(long champions) {
+        return "Expected exactly 1 CHAMPION variant but found " + champions
+            + "; no variant is trade-authoritative for this run";
+    }
+
+    /** Logs a run-level warning when the live configs do not have exactly one CHAMPION. */
+    private void warnOnChampionCount() {
+        List<StrategyConfig> configs = liveConfigs();
+        long champions = configs.stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count();
+        if (!configs.isEmpty() && champions != 1) {
+            logger.warn("Champion guard: {}", championWarning(champions));
+        }
     }
 
     private List<StrategyConfig> liveConfigs() {
@@ -1134,26 +1199,7 @@ public class JobOrchestratorService {
     }
 
     private void reapRun(JobRunEntity run, String reason) {
-        logger.warn("Reaping orphaned run {}: startedAt={}, symbolsCount={}, reason={}",
-            run.getRunId(), run.getStartedAt(), run.getSymbolsCount(), reason);
-
-        run.setStatus(JobRun.Status.FAILED.name());
-        run.setCompletedAt(java.time.LocalDateTime.now(IST));
-        run.setErrorMessage(reason);
-        jobRunRepository.save(run);
-        jobMetrics.recordRunReaped();
-
-        List<JobRunStageEntity> runningStages = jobRunStageRepository
-            .findByRunIdOrderBySymbolAscStageNameAsc(run.getRunId()).stream()
-            .filter(e -> JobRunStage.Status.RUNNING.name().equals(e.getStatus()))
-            .toList();
-        for (JobRunStageEntity stage : runningStages) {
-            stage.setStatus(JobRunStage.Status.ERROR.name());
-            stage.setCompletedAt(java.time.LocalDateTime.now(IST));
-            stage.setErrorMessage(
-                "Reaped as orphaned — run was force-failed while this stage was RUNNING");
-        }
-        jobRunStageRepository.saveAll(runningStages);
+        new OrphanedRunReaper(jobRunRepository, jobRunStageRepository, jobMetrics).reap(run, reason);
     }
 
     /**

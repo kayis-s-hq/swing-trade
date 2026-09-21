@@ -8,11 +8,12 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * Looks up registered {@link SignalStrategy} beans by {@link SignalStrategy#type()} - backs
- * {@code GET /api/strategy-types} and param validation (plan §4.4). Phase 2 has exactly one
- * registered type ({@code BREAKOUT}, via {@link LegacyPriceActionAdapter}); PULLBACK/SQUEEZE/
- * RS_NIFTY are added as {@link SignalStrategy} beans in a later phase with no change needed
- * here.
+ * Looks up registered {@link SignalStrategy} beans by {@link SignalStrategy#type()}. Backs
+ * {@code GET /api/strategy-types} ({@code StrategyTypeController}: type, param schema, warmup
+ * bars, required indicators), param validation and {@link StrategyResolver}. Registered types
+ * today: {@code BREAKOUT} ({@link LegacyPriceActionAdapter}), {@code PULLBACK}
+ * ({@link PullbackStrategy}) and {@code SQUEEZE} ({@link SqueezeStrategy}); a new type is just a
+ * new {@link SignalStrategy} bean, with no change needed here.
  */
 @Component
 public class StrategyTypeRegistry {
