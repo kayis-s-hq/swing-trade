@@ -96,3 +96,7 @@ dashboard/test-results/
 
 # Test results
 */test-results/
+
+# Lavish Editor review workspace + local runtime pid file (never push)
+.lavish/
+.swing-trade-pids
