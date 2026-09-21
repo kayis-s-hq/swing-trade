@@ -4,6 +4,8 @@ Status: **Approved design, ready for implementation**
 Supersedes/extends: `2026-09-03-strategy-and-platform-roadmap.md` (Phases 1–3)
 Primary goal: **quality and statistical trustworthiness of analytics**, not feature count.
 
+> **Gap found 2026-09-21:** the live orchestrator still resolves configs through the legacy `TradingStrategy` registry, so `BREAKOUT`/`PULLBACK`/`SQUEEZE` variants are skipped (principle 6 below is not yet true for live runs). Remediation, validation plan and follow-ups: `2026-09-21-multi-strategy-orchestration-remediation.md`.
+
 ---
 
 ## 0. Decisions locked with the owner
