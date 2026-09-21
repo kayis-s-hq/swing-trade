@@ -140,6 +140,10 @@ Views: `OrchestratorView`, `StrategiesView`, `SignalsView`, `SymbolDetailView`, 
 | Parallelism vs. single local LLM | Default parallelism 1; semaphore for LLM stages |
 | **Owner decisions needed:** (a) status name `DEGRADED` vs `COMPLETED_WITH_WARNINGS` only; (b) should any strategy skip **fail the run** in stage/prod (recommend: fail in stage, warn in dev); (c) keep legacy `TradingStrategy` types (`PRICE_ACTION_3_OF_4`, `RS_NIFTY_MOMENTUM`) resolvable long-term or migrate them to `SignalStrategy` (recommend: migrate, then delete the legacy registry in a follow-up) | Decide before Step 3 / Step 1 respectively |
 
+## 6.5. Decisions logged
+
+- **Authentication skipped.** Adding Spring Security API-key auth (audit finding AD-P0-2, and `docs/issues/014`) is deferred for now. Not in scope for the remediation plan; revisit in a dedicated auth effort.
+
 ## 7. Findings log (fill during execution)
 - Step 0.2 Ollama raw response analysis: _pending_
 - Step 0.3 baseline snapshot path: _pending_
