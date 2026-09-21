@@ -58,6 +58,34 @@ class PiLlamaServerManagerDeepCoverageTest {
     }
 
     @Test
+    void adoptsAHealthyServerThatIsBusyWithAnotherRequestWithoutPolling() throws Exception {
+        PiLlamaServerManager spy = org.mockito.Mockito.spy(manager());
+        doReturn(true).when(spy).healthCheck();
+        doReturn(PiLlamaServerManager.InferenceProbe.BUSY).when(spy).probeInference();
+
+        spy.ensureRunning();
+
+        assertThat(spy.isRunning()).isTrue();
+        assertThat(spy.lifecycleStatus()).containsEntry("state", "READY")
+                .containsEntry("failureReason", "");
+        // A busy server must not trigger the multi-second readiness polling loop.
+        org.mockito.Mockito.verify(spy, org.mockito.Mockito.never()).awaitServerReady(45);
+    }
+
+    @Test
+    void pollsForReadinessWhenAHealthyServerFailsTheProbeOutright() throws Exception {
+        PiLlamaServerManager spy = org.mockito.Mockito.spy(manager());
+        doReturn(true).when(spy).healthCheck();
+        doReturn(PiLlamaServerManager.InferenceProbe.NOT_READY).when(spy).probeInference();
+        doReturn(true).when(spy).awaitServerReady(45);
+
+        spy.ensureRunning();
+
+        assertThat(spy.isRunning()).isTrue();
+        org.mockito.Mockito.verify(spy).awaitServerReady(45);
+    }
+
+    @Test
     void rejectsAHealthyButNotInferenceReadyServer() throws Exception {
         PiLlamaServerManager manager = manager();
         PiLlamaServerManager spy = org.mockito.Mockito.spy(manager);

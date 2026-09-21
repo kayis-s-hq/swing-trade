@@ -107,14 +107,21 @@ public class PiLlamaServerManager implements LlmServerManager {
         // after found the pre-existing server healthy anyway — wasted, noisy
         // "Starting llama-server..." + bind-failure log churn on every restart.
         if (healthCheck()) {
-            if (!awaitServerReady(STARTUP_TIMEOUT_SECONDS)) {
+            // A server already running before this JVM started may be mid-generation for
+            // another request, so it cannot answer the readiness probe within its call
+            // timeout. That is "busy", not "not ready": requests queue on the server, and
+            // polling for the full startup window would block this request thread for minutes
+            // and then fail it even though the server is healthy.
+            InferenceProbe probe = probeInference();
+            if (probe == InferenceProbe.NOT_READY && !awaitServerReady(STARTUP_TIMEOUT_SECONDS)) {
                 String reason = "llama-server is listening on " + sshHost + ":" + port
                         + " but did not become inference-ready within " + STARTUP_TIMEOUT_SECONDS + "s";
                 lifecycleState = "FAILED";
                 lastFailureReason = reason;
                 throw new IllegalStateException(reason);
             }
-            logger.info("llama-server on Pi already inference-ready on {}:{} (adopting existing process)",
+            logger.info("llama-server on Pi already {} on {}:{} (adopting existing process)",
+                    probe == InferenceProbe.BUSY ? "busy serving a request" : "inference-ready",
                     sshHost, port);
             running = true;
             lifecycleState = "READY";
@@ -366,6 +373,18 @@ public class PiLlamaServerManager implements LlmServerManager {
     }
 
     private boolean inferenceReadyCheck() {
+        return probeInference() == InferenceProbe.READY;
+    }
+
+    /** Outcome of the small completion used to tell a usable server from one that only answers /health. */
+    enum InferenceProbe { READY, BUSY, NOT_READY }
+
+    /**
+     * Sends a tiny completion. A timeout is reported as {@link InferenceProbe#BUSY}, not
+     * {@link InferenceProbe#NOT_READY}: callers only probe after /health succeeded, so the
+     * server is reachable and a timeout means it is occupied with another request.
+     */
+    InferenceProbe probeInference() {
         try {
             String payload = "{\"model\":\"" + getModelPath()
                     + "\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: OK\"}]"
@@ -379,11 +398,15 @@ public class PiLlamaServerManager implements LlmServerManager {
                     .build();
             try (Response response = client.newCall(request).execute()) {
                 String body = response.body() == null ? "" : response.body().string();
-                return response.isSuccessful() && body.contains("\"choices\"");
+                return response.isSuccessful() && body.contains("\"choices\"")
+                        ? InferenceProbe.READY : InferenceProbe.NOT_READY;
             }
+        } catch (java.io.InterruptedIOException e) {
+            logger.debug("Pi llama-server inference probe timed out (server busy): {}", e.getMessage());
+            return InferenceProbe.BUSY;
         } catch (Exception e) {
             logger.debug("Pi llama-server inference readiness check failed: {}", e.getMessage());
-            return false;
+            return InferenceProbe.NOT_READY;
         }
     }
 
