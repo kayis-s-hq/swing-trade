@@ -83,4 +83,40 @@ class JobOrchestratorMetricsTest {
             assertThat(counter("job.runs.completed")).isZero();
         }
     }
+
+    @Nested
+    @DisplayName("degradation counters")
+    class DegradationCounters {
+
+        @Test
+        @DisplayName("Counts skipped strategies per variant and reason")
+        void shouldCountSkippedStrategiesByVariantAndReason() {
+            metrics.recordStrategySkipped("pullback-v1", "UNSUPPORTED_TYPE");
+            metrics.recordStrategySkipped("pullback-v1", "UNSUPPORTED_TYPE");
+            metrics.recordStrategySkipped("squeeze-v1", "INSUFFICIENT_HISTORY");
+
+            assertThat(registry.get("strategy.skipped")
+                .tags("variant", "pullback-v1", "reason", "UNSUPPORTED_TYPE").counter().count()).isEqualTo(2.0);
+            assertThat(registry.get("strategy.skipped")
+                .tags("variant", "squeeze-v1", "reason", "INSUFFICIENT_HISTORY").counter().count()).isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("Counts degraded stages per stage and reason")
+        void shouldCountDegradedStagesByStageAndReason() {
+            metrics.recordStageDegraded("SENTIMENT", "KEYWORD_FALLBACK");
+
+            assertThat(registry.get("stage.degraded")
+                .tags("stage", "SENTIMENT", "reason", "KEYWORD_FALLBACK").counter().count()).isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("Counts a run completed with warnings as completed, not failed")
+        void shouldCountRunWithWarningsAsCompleted() {
+            metrics.recordRunStarted();
+            metrics.recordRunCompleted(10L);
+
+            assertThat(counter("job.runs.completed")).isEqualTo(1.0);
+        }
+    }
 }

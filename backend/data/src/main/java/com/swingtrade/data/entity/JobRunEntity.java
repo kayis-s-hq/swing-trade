@@ -36,7 +36,7 @@ public class JobRunEntity {
     @Column(name = "trigger_type", nullable = false, length = 16)
     private String triggerType;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "started_at")

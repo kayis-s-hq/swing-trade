@@ -113,15 +113,19 @@ public class JobRunController {
             return ResponseEntity.notFound().build();
         }
 
-        return ResponseEntity.ok(Map.of(
-            "runId", summary.runId().toString(),
-            "status", summary.status(),
-            "totalSymbols", summary.totalSymbols(),
-            "completedSymbols", summary.completedSymbols(),
-            "failedSymbols", summary.failedSymbols(),
-            "totalDurationMs", summary.totalDurationMs(),
-            "stageStats", summary.stageStats(),
-            "symbolDetails", summary.symbolDetails()
+        return ResponseEntity.ok(Map.ofEntries(
+            Map.entry("runId", summary.runId().toString()),
+            Map.entry("status", summary.status()),
+            Map.entry("totalSymbols", summary.totalSymbols()),
+            Map.entry("completedSymbols", summary.completedSymbols()),
+            Map.entry("failedSymbols", summary.failedSymbols()),
+            Map.entry("totalDurationMs", summary.totalDurationMs()),
+            Map.entry("stageStats", summary.stageStats()),
+            Map.entry("symbolDetails", summary.symbolDetails()),
+            Map.entry("degradedStages", summary.degradedStages()),
+            Map.entry("skippedStrategies", summary.skippedStrategies()),
+            Map.entry("degradedStageBreakdown", summary.degradedStageBreakdown()),
+            Map.entry("skippedStrategyBreakdown", summary.skippedStrategyBreakdown())
         ));
     }
 

@@ -18,5 +18,5 @@ public record JobRun(
     String errorMessage
 ) {
     public enum TriggerType { MANUAL, SCHEDULED }
-    public enum Status { RUNNING, COMPLETED, FAILED, CANCELLED }
+    public enum Status { RUNNING, COMPLETED, COMPLETED_WITH_WARNINGS, FAILED, CANCELLED }
 }

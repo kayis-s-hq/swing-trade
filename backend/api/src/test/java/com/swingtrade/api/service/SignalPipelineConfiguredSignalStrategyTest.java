@@ -63,7 +63,7 @@ class SignalPipelineConfiguredSignalStrategyTest {
         when(candleStore.findTopBySymbolOrderByDateDesc(eq(SYMBOL), any(Integer.class))).thenReturn(descending(40));
         Signal saved = mock(Signal.class);
         when(persistence.saveConfiguredSignal(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-            any(), anyString(), any(Integer.class))).thenReturn(saved);
+            any(), anyString(), any(Integer.class), any())).thenReturn(saved);
 
         ConfiguredEvaluation result = pipeline.generateConfiguredSignal(SYMBOL, config("pullback-v1", 3),
             resolved(StubStrategy.buying()), false);
@@ -73,7 +73,8 @@ class SignalPipelineConfiguredSignalStrategyTest {
         assertThat(result.score()).isEqualByComparingTo("0.80");
         verify(persistence).saveConfiguredSignal(eq(SYMBOL), any(LocalDate.class), eq(Signal.SignalType.BUY),
             eq(new BigDecimal("0.8000")), any(), any(), any(), eq(new BigDecimal("90.0")),
-            eq(new BigDecimal("120.0")), any(), eq("PENDING_SENTIMENT"), eq("pullback-v1"), eq(3));
+            eq(new BigDecimal("120.0")), any(), eq("PENDING_SENTIMENT"), eq("pullback-v1"), eq(3),
+            eq(config("pullback-v1", 3).paramsHash()));
     }
 
     @Test

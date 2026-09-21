@@ -20,8 +20,10 @@ public class JobOrchestratorMetrics {
     private final Counter runsFailed;
     private final Timer runDuration;
     private final AtomicInteger activeRuns;
+    private final MeterRegistry meterRegistry;
 
     public JobOrchestratorMetrics(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
         this.activeRuns = new AtomicInteger(0);
 
         this.runsCompleted = Counter.builder("job.runs.completed")
@@ -78,5 +80,22 @@ public class JobOrchestratorMetrics {
      */
     public void recordRunCancelled() {
         activeRuns.decrementAndGet();
+    }
+
+    /**
+     * Records a configured strategy variant that was skipped (unresolvable type, insufficient
+     * history) or errored for a symbol. Exposed to Prometheus as {@code strategy_skipped_total}.
+     * {@code reason} must be a low-cardinality code, not free text.
+     */
+    public void recordStrategySkipped(String variant, String reason) {
+        meterRegistry.counter("strategy.skipped", "variant", variant, "reason", reason).increment();
+    }
+
+    /**
+     * Records a stage that finished DEGRADED (fallback used or work skipped). Exposed to
+     * Prometheus as {@code stage_degraded_total}; {@code reason} is a low-cardinality code.
+     */
+    public void recordStageDegraded(String stage, String reason) {
+        meterRegistry.counter("stage.degraded", "stage", stage, "reason", reason).increment();
     }
 }

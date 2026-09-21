@@ -79,6 +79,10 @@ public class SignalEntity {
     @Column(name = "strategy_version", nullable = false)
     private Integer strategyVersion = 1;
 
+    /** SHA-256 of the strategy config params that produced this signal; null for older rows. */
+    @Column(name = "params_hash", length = 64)
+    private String paramsHash;
+
     // Warning flag constants
     public static final String WARNING_NONE = "";
     public static final String WARNING_NEUTRAL_SENTIMENT = "NEUTRAL_SENTIMENT";
@@ -341,6 +345,14 @@ public class SignalEntity {
 
     public Integer getStrategyVersion() {
         return strategyVersion;
+    }
+
+    public String getParamsHash() {
+        return paramsHash;
+    }
+
+    public void setParamsHash(String paramsHash) {
+        this.paramsHash = paramsHash;
     }
 
     public void setStrategyVersion(Integer strategyVersion) {

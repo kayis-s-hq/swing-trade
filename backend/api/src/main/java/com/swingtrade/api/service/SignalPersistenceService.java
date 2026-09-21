@@ -182,11 +182,11 @@ public class SignalPersistenceService {
                                        BigDecimal confidence, String reasoning, String indicators,
                                        BigDecimal entryPrice, BigDecimal stopLoss, BigDecimal target,
                                        BigDecimal riskReward, String warningFlag, String variantId,
-                                       Integer strategyVersion) {
+                                       Integer strategyVersion, String paramsHash) {
         Signal base = Signal.create(symbol, date, type, confidence, reasoning);
         Signal toSave = new Signal(base.id(), symbol, date, type, confidence, reasoning, entryPrice,
             stopLoss, target, riskReward, indicators, base.generatedAt(), null, null);
-        return signalStore.save(toSave, warningFlag, variantId, strategyVersion);
+        return signalStore.save(toSave, warningFlag, variantId, strategyVersion, paramsHash);
     }
 
     public Signal buildAndSaveWithWarning(String symbol, LocalDate date, Signal.SignalType type,

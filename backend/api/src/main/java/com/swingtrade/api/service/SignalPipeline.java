@@ -224,7 +224,7 @@ public class SignalPipeline {
         Signal saved = persistenceService.saveConfiguredSignal(symbol, evaluation.get().date(),
             Signal.SignalType.BUY, confidence, decision.reasoning(), describeRules(decision), entry, stop,
             target, riskReward, SignalEntity.WarningFlag.PENDING_SENTIMENT.code(), config.variantId(),
-            config.version());
+            config.version(), config.paramsHash());
         return ConfiguredEvaluation.evaluated(saved, decision.score(), decision.reasoning());
     }
 
