@@ -7,35 +7,37 @@
         <p class="mt-1 text-sm text-text-muted">7-stage pipeline for all watchlist symbols</p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button
-          type="button"
-          aria-label="Run job orchestrator"
-          :disabled="runButtonDisabled"
-          class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
-          @click="startRun"
-        >
-          <svg
-            v-if="isStarting || isRunning"
-            class="h-4 w-4 animate-spin"
-            viewBox="0 0 24 24"
-            fill="none"
+        <span data-testid="run-button-wrap" :title="runDisabledReason">
+          <button
+            type="button"
+            aria-label="Run job orchestrator"
+            :disabled="runButtonDisabled"
+            class="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:opacity-50"
+            @click="startRun"
           >
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            />
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
-          </svg>
-          {{ isStarting ? 'Starting...' : isRunning ? 'Running...' : 'Run' }}
-        </button>
+            <svg
+              v-if="isStarting || isRunning"
+              class="h-4 w-4 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              />
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+            {{ isStarting ? 'Starting...' : isRunning ? 'Running...' : 'Run' }}
+          </button>
+        </span>
         <button
           v-if="currentRunId"
           :disabled="!isRunning"
@@ -103,6 +105,13 @@
       </div>
 
       <template v-else>
+        <StartRunPanel
+          v-model="runOptions"
+          :strategies="strategyConfigs"
+          :disabled="isRunning || isStarting"
+          :disabled-reason="runDisabledReason"
+        />
+
         <!-- Execution order is shared with JobRunStage.StageName and the backend stage loop. -->
         <div class="mb-6 card-panel overflow-hidden p-5" aria-label="Execution sequence">
           <div class="mb-3 flex items-center justify-between">
@@ -236,6 +245,7 @@
                           v-for="stage in stages"
                           :key="stage"
                           class="rounded-md border border-border-subtle bg-bg-surface p-3"
+                          :data-testid="`stage-card-${stage}`"
                         >
                           <div class="mb-1 flex items-center justify-between">
                             <span class="text-xs font-medium text-text-muted">{{
@@ -246,6 +256,32 @@
                           <div class="text-xs text-text-primary">
                             <div v-if="getStageResult(symbol, stage)" class="text-text-primary">
                               {{ getStageResult(symbol, stage) }}
+                            </div>
+                            <div
+                              v-if="getStageDetails(symbol, stage)?.source"
+                              class="mt-1 text-text-muted"
+                            >
+                              Source:
+                              {{
+                                getStageDetails(symbol, stage)?.source === 'LLM'
+                                  ? 'LLM'
+                                  : 'Keyword fallback'
+                              }}
+                              <span
+                                v-if="getStageDetails(symbol, stage)?.reason"
+                                class="text-warning"
+                              >
+                                — {{ getStageDetails(symbol, stage)?.reason }}
+                              </span>
+                            </div>
+                            <div
+                              v-else-if="
+                                getStageStatus(symbol, stage) === 'DEGRADED' &&
+                                getStageDetails(symbol, stage)?.reason
+                              "
+                              class="mt-1 text-warning"
+                            >
+                              Degraded: {{ getStageDetails(symbol, stage)?.reason }}
                             </div>
                             <div v-if="getStageError(symbol, stage)" class="text-danger mt-1">
                               {{ getStageError(symbol, stage) }}
@@ -266,6 +302,8 @@
             </table>
           </div>
 
+          <RunWarningsBanner v-if="!isRunning" :rows="stageRows" :summary="runSummary" />
+
           <!-- Error Summary -->
           <div
             v-if="currentRun.errorMessage"
@@ -276,6 +314,8 @@
             </p>
           </div>
         </div>
+
+        <StrategyRunMatrix v-if="currentRun && hasMatrix" :rows="stageRows" />
 
         <!-- No active run -->
         <div v-else-if="!currentRunId" class="py-12 text-center">
@@ -367,9 +407,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { startJobRun, getJobRunProgress, listJobRuns, cancelJobRun } from '../api/job'
-import type { JobRunResponse, JobRunStageResponse } from '../api/types'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import {
+  startJobRun,
+  getJobRunProgress,
+  getJobRunSummary,
+  listJobRuns,
+  cancelJobRun,
+} from '../api/job'
+import { getStrategies } from '../api/strategies'
+import type {
+  JobRunResponse,
+  JobRunStageResponse,
+  JobRunSummaryResponse,
+  JobStageDetails,
+  StrategyConfig,
+} from '../api/types'
+import StartRunPanel from '../components/StartRunPanel.vue'
+import StrategyRunMatrix from '../components/StrategyRunMatrix.vue'
+import RunWarningsBanner from '../components/RunWarningsBanner.vue'
+import { emptyRunOptions, toStartRequest, type RunOptions } from '../utils/runOptions'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import StageIcon from '../components/StageIcon.vue'
@@ -419,11 +476,23 @@ const isStarting = ref(false)
 const isRunning = ref(false)
 const operationNotice = ref<OperationNotice | null>(null)
 const staleStatusWarning = ref('')
+const runOptions = ref<RunOptions>(emptyRunOptions())
+const strategyConfigs = ref<StrategyConfig[] | null>(null)
+const runSummary = ref<JobRunSummaryResponse | null>(null)
+let summaryRequestId = 0
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const stages = STAGES
 const stageLabel = (stage: (typeof STAGES)[number]) => STAGE_LABELS[stage]
+const hasMatrix = computed(() =>
+  stageRows.value.some((row) => row.stageName === 'SIGNAL' && row.details?.strategies?.length)
+)
+const runDisabledReason = computed(() =>
+  isRunning.value || isStarting.value
+    ? 'A run is already active. Wait for it to finish or cancel it before starting another.'
+    : ''
+)
 const runButtonDisabled = computed(
   () => isStarting.value || isRunning.value || (loading.value && !currentRun.value)
 )
@@ -447,6 +516,7 @@ const stageLookup: Record<
     resultSummary: string | null
     errorMessage: string | null
     durationMs: number | null
+    details: JobStageDetails | null
   }
 > = {}
 
@@ -459,6 +529,7 @@ function rebuildLookup() {
       resultSummary: row.resultSummary || null,
       errorMessage: row.errorMessage || null,
       durationMs: row.durationMs ?? null,
+      details: row.details ?? null,
     }
   }
 }
@@ -482,6 +553,39 @@ function getStageDuration(symbol: string, stageName: string): number | null {
   const cell = stageLookup[`${symbol}::${stageName}`]
   return cell?.durationMs ?? null
 }
+
+function getStageDetails(symbol: string, stageName: string): JobStageDetails | null {
+  return stageLookup[`${symbol}::${stageName}`]?.details ?? null
+}
+
+async function loadStrategyConfigs() {
+  try {
+    strategyConfigs.value = await getStrategies()
+  } catch {
+    strategyConfigs.value = null
+  }
+}
+
+async function loadSummary(runId: string) {
+  const requestId = ++summaryRequestId
+  try {
+    const summary = await getJobRunSummary(runId)
+    if (requestId === summaryRequestId) runSummary.value = summary
+  } catch {
+    if (requestId === summaryRequestId) runSummary.value = null
+  }
+}
+
+watch(
+  () => [currentRun.value?.runId, currentRun.value?.status] as const,
+  ([runId, status]) => {
+    if (runId && status && status !== 'RUNNING') void loadSummary(runId)
+    else {
+      summaryRequestId += 1
+      runSummary.value = null
+    }
+  }
+)
 
 function toggleSymbol(symbol: string) {
   expandedSymbol.value = expandedSymbol.value === symbol ? null : symbol
@@ -515,6 +619,15 @@ function hasUnknownOutcome(errorLike: unknown): boolean {
   )
 }
 
+function isConflict(errorLike: unknown): boolean {
+  return (
+    typeof errorLike === 'object' &&
+    errorLike !== null &&
+    (('status' in errorLike && errorLike.status === 409) ||
+      ('kind' in errorLike && errorLike.kind === 'conflict'))
+  )
+}
+
 function safeErrorMessage(errorLike: unknown, fallback: string): string {
   return safeHumanMessage(errorLike instanceof Error ? errorLike.message : undefined, fallback)
 }
@@ -528,7 +641,7 @@ async function startRun() {
   operationNotice.value = null
   staleStatusWarning.value = ''
   try {
-    const run = await startJobRun()
+    const run = await startJobRun('MANUAL', toStartRequest(runOptions.value))
     currentRunId.value = run.runId
     currentRun.value = run
     syncRunState(run.status)
@@ -537,6 +650,16 @@ async function startRun() {
     logEntries.value = []
     addLogEntry('Pipeline run started')
   } catch (err: unknown) {
+    if (isConflict(err)) {
+      operationNotice.value = {
+        message: 'A run is already active. Showing its current status.',
+        tone: 'warning',
+        refreshStatus: true,
+      }
+      isStarting.value = false
+      await refresh()
+      return
+    }
     operationNotice.value = hasUnknownOutcome(err)
       ? {
           message:
@@ -764,6 +887,7 @@ function formatDuration(start: string, end: string): string {
 
 onMounted(() => {
   refresh()
+  void loadStrategyConfigs()
 })
 
 onUnmounted(() => {
