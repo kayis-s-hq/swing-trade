@@ -116,6 +116,9 @@ export interface CandidateScanResult {
   dataStatus: 'READY' | 'INSUFFICIENT' | 'ERROR'
   candleCount: number
   signalType?: 'BUY' | 'SELL' | 'HOLD'
+  strategyBuyCount?: number
+  strategyEvaluationCount?: number
+  strategyOutcomes?: CandidateStrategyOutcome[]
   totalTrades?: number
   winRate?: number
   totalReturn?: number
@@ -142,6 +145,20 @@ export interface CandidateScanResult {
   oosTotalReturn?: number
 }
 
+export interface CandidateStrategyOutcome {
+  variantId: string
+  signalType: 'BUY' | 'SELL' | 'HOLD' | 'SKIPPED'
+  score?: number
+  detail?: string
+  backtestTotalTrades?: number
+  backtestWinRate?: number
+  backtestTotalReturn?: number
+  oosTotalTrades?: number
+  oosWinRate?: number
+  oosTotalReturn?: number
+  performanceStatus?: 'EVALUATED' | 'SKIPPED' | 'ERROR' | 'NOT_RUN'
+}
+
 export interface CandidateScanSettings {
   'candidate-scan.min-win-rate': string
   'candidate-scan.min-total-return': string
@@ -149,6 +166,7 @@ export interface CandidateScanSettings {
   'candidate-scan.backfill-years': string
   'candidate-scan.min-trades': string
   'candidate-scan.out-of-sample-days': string
+  'candidate-scan.min-strategy-buys': string
 }
 
 export interface CandidateScanResultPage {

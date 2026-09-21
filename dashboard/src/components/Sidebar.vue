@@ -42,31 +42,37 @@
 
     <!-- Navigation -->
     <nav class="flex-1 space-y-1 overflow-y-auto px-2 py-3">
-      <router-link
-        v-for="item in navItems"
-        :key="item.path"
-        :to="item.path"
-        class="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all"
-        :class="
-          $route.path === item.path
-            ? 'bg-brand-subtle text-brand'
-            : 'text-text-muted hover:bg-bg-hover hover:text-text-primary'
-        "
-        :title="collapsed ? item.label : undefined"
-        @click="$emit('close')"
-      >
-        <!-- iconPaths is a static, internal SVG path map; no user input reaches v-html. -->
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" v-html="item.icon" />
-        <template v-if="!collapsed">
-          <span class="flex-1">{{ item.label }}</span>
-          <span
-            v-if="item.badge"
-            class="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand/10 px-1.5 text-[10px] font-semibold text-brand"
-            >{{ item.badge }}</span
-          >
-        </template>
-      </router-link>
+      <template v-for="item in navItems" :key="item.path">
+        <p
+          v-if="!collapsed && item.group"
+          class="px-3 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted"
+        >
+          {{ item.group }}
+        </p>
+        <router-link
+          :to="item.path"
+          class="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all"
+          :class="
+            $route.path === item.path
+              ? 'bg-brand-subtle text-brand'
+              : 'text-text-muted hover:bg-bg-hover hover:text-text-primary'
+          "
+          :title="collapsed ? item.label : undefined"
+          @click="$emit('close')"
+        >
+          <!-- iconPaths is a static, internal SVG path map; no user input reaches v-html. -->
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" v-html="item.icon" />
+          <template v-if="!collapsed">
+            <span class="flex-1">{{ item.label }}</span>
+            <span
+              v-if="item.badge"
+              class="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand/10 px-1.5 text-[10px] font-semibold text-brand"
+              >{{ item.badge }}</span
+            >
+          </template>
+        </router-link>
+      </template>
     </nav>
 
     <!-- Footer -->
@@ -192,14 +198,29 @@ const refreshBuySignalCount = async () => {
 }
 
 const navItems = computed(() => [
-  { path: '/', label: 'Dashboard', icon: iconPaths.dashboard, badge: undefined },
+  {
+    path: '/',
+    label: 'Dashboard',
+    icon: iconPaths.dashboard,
+    badge: undefined,
+    group: 'Workspace',
+  },
   { path: '/data', label: 'Data', icon: iconPaths.data, badge: undefined },
+  {
+    path: '/strategies',
+    label: 'Strategies',
+    icon: iconPaths.settings,
+    badge: undefined,
+    group: 'Research flow',
+  },
   {
     path: '/candidate-explorer',
     label: 'Candidate Explorer',
     icon: iconPaths.search,
     badge: undefined,
   },
+  { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
+  { path: '/orchestrator', label: 'Orchestrator', icon: iconPaths.dashboard, badge: undefined },
   {
     path: '/signals',
     label: 'Signals',
@@ -212,21 +233,30 @@ const navItems = computed(() => [
     icon: iconPaths.intelligence,
     badge: undefined,
   },
-  { path: '/backtest', label: 'Backtest', icon: iconPaths.backtest, badge: undefined },
-  { path: '/strategies', label: 'Strategies', icon: iconPaths.settings, badge: undefined },
   {
     path: '/strategy-report',
     label: 'Strategy report',
     icon: iconPaths.strategies,
     badge: undefined,
   },
-  { path: '/news', label: 'News', icon: iconPaths.intelligence, badge: undefined },
-  { path: '/sentiment', label: 'Sentiment', icon: iconPaths.intelligence, badge: undefined },
-  { path: '/watchlist', label: 'Watchlist', icon: iconPaths.watchlist, badge: undefined },
+  {
+    path: '/watchlist',
+    label: 'Watchlist',
+    icon: iconPaths.watchlist,
+    badge: undefined,
+    group: 'Portfolio',
+  },
   { path: '/portfolio', label: 'Portfolio', icon: iconPaths.portfolio, badge: undefined },
   { path: '/positions', label: 'Positions', icon: iconPaths.positions, badge: undefined },
+  {
+    path: '/news',
+    label: 'News',
+    icon: iconPaths.intelligence,
+    badge: undefined,
+    group: 'Intelligence & operations',
+  },
+  { path: '/sentiment', label: 'Sentiment', icon: iconPaths.intelligence, badge: undefined },
   { path: '/monitoring', label: 'Monitoring', icon: iconPaths.intelligence, badge: undefined },
-  { path: '/orchestrator', label: 'Orchestrator', icon: iconPaths.dashboard, badge: undefined },
   { path: '/settings', label: 'Settings', icon: iconPaths.settings, badge: undefined },
 ])
 

@@ -9,9 +9,9 @@
           Candidate Explorer
         </h1>
         <p class="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
-          Scan the NSE universe for technical BUY signals with a profitable backtest. Review raw
-          technical signals, in-sample and out-of-sample gates. Qualified symbols are automatically
-          activated on the pilot wishlist.
+          Scan the NSE universe for strategy-consensus BUY signals with a profitable backtest.
+          Candidates need agreement from at least two active strategies before they join the pilot
+          wishlist.
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -61,6 +61,17 @@
       </div>
       <div v-if="settingsError" class="px-5 pt-4 text-sm text-error">{{ settingsError }}</div>
       <div class="grid gap-4 px-5 py-5 sm:grid-cols-2 xl:grid-cols-4">
+        <label class="flex flex-col gap-1.5 text-sm">
+          <span class="font-medium text-text-secondary">Strategies required to BUY</span>
+          <input
+            v-model.number="settingsForm.minStrategyBuys"
+            type="number"
+            min="1"
+            max="12"
+            step="1"
+            class="h-10 rounded-lg border border-border-subtle bg-bg-surface/60 px-3 text-text-primary outline-none focus:border-brand"
+          />
+        </label>
         <label class="flex flex-col gap-1.5 text-sm">
           <span class="font-medium text-text-secondary">Min win rate (%)</span>
           <input
@@ -199,7 +210,7 @@
         </div>
         <div class="flex items-center gap-2 text-xs text-text-muted">
           <span class="rounded-full bg-brand/10 px-2.5 py-1 font-semibold text-brand"
-            >BUY + ≥45% win rate + positive return</span
+            >≥2 strategy BUYs + performance gates</span
           >
           <span v-if="run">Updated {{ updatedAt }}</span>
         </div>
@@ -275,6 +286,7 @@
               <th class="px-5 py-3 font-semibold">Symbol</th>
               <th class="px-3 py-3 font-semibold">Data</th>
               <th class="px-3 py-3 font-semibold">Signal</th>
+              <th class="px-3 py-3 font-semibold">Strategy votes</th>
               <th class="px-3 py-3 font-semibold">Trades</th>
               <th class="px-3 py-3 font-semibold">Win rate</th>
               <th class="px-3 py-3 font-semibold">Return</th>
@@ -294,6 +306,18 @@
               </td>
               <td class="px-3 py-3.5">
                 <span :class="signalClass(item.signalType)">{{ item.signalType ?? '—' }}</span>
+              </td>
+              <td class="px-3 py-3.5 text-text-muted">
+                {{ item.strategyBuyCount ?? 0 }}/{{ item.strategyEvaluationCount ?? 0 }} BUY
+                <div v-if="item.strategyOutcomes?.length" class="mt-1 space-y-0.5 text-[11px]">
+                  <div v-for="outcome in item.strategyOutcomes" :key="outcome.variantId">
+                    <span :class="signalClass(outcome.signalType)">{{ outcome.signalType }}</span>
+                    <span class="ml-1 text-text-muted">{{ outcome.variantId }}</span>
+                    <span v-if="outcome.score != null" class="ml-1 text-text-muted">
+                      ({{ outcome.score.toFixed(2) }})
+                    </span>
+                  </div>
+                </div>
               </td>
               <td class="px-3 py-3.5 text-text-muted">{{ item.totalTrades ?? '—' }}</td>
               <td class="px-3 py-3.5 text-text-primary">{{ percent(item.winRate) }}</td>
@@ -408,6 +432,7 @@ const settingsForm = ref({
   backfillYears: 3,
   minTrades: 15,
   oosDays: 252,
+  minStrategyBuys: 2,
 })
 const settingsSaving = ref(false)
 const settingsSaved = ref(false)
@@ -423,6 +448,7 @@ async function loadSettings() {
       backfillYears: Number(settings['candidate-scan.backfill-years']),
       minTrades: Number(settings['candidate-scan.min-trades'] ?? 15),
       oosDays: Number(settings['candidate-scan.out-of-sample-days'] ?? 252),
+      minStrategyBuys: Number(settings['candidate-scan.min-strategy-buys'] ?? 2),
     }
   } catch (e) {
     settingsError.value = asAppError(e).message
@@ -441,6 +467,7 @@ async function saveSettings() {
       'candidate-scan.backfill-years': String(settingsForm.value.backfillYears),
       'candidate-scan.min-trades': String(settingsForm.value.minTrades),
       'candidate-scan.out-of-sample-days': String(settingsForm.value.oosDays),
+      'candidate-scan.min-strategy-buys': String(settingsForm.value.minStrategyBuys),
     })
     settingsSaved.value = true
   } catch (e) {

@@ -23,6 +23,7 @@ describe('CandidateExplorerView', () => {
     'candidate-scan.min-total-return': '0',
     'candidate-scan.max-concurrent': '3',
     'candidate-scan.backfill-years': '3',
+    'candidate-scan.min-strategy-buys': '2',
   }
 
   beforeEach(() => {
@@ -87,6 +88,17 @@ describe('CandidateExplorerView', () => {
           dataStatus: 'READY',
           candleCount: 738,
           signalType: 'BUY',
+          strategyBuyCount: 2,
+          strategyEvaluationCount: 3,
+          strategyOutcomes: [
+            { variantId: 'breakout-v1', signalType: 'BUY', score: 0.82 },
+            { variantId: 'pullback-v1', signalType: 'BUY', score: 0.71 },
+            {
+              variantId: 'squeeze-v1',
+              signalType: 'SKIPPED',
+              detail: 'Insufficient warm-up history',
+            },
+          ],
           totalTrades: 10,
           winRate: 50,
           totalReturn: 4.2,
@@ -108,6 +120,8 @@ describe('CandidateExplorerView', () => {
     expect(wrapper.text()).toContain('JSWSTEEL')
     expect(wrapper.text()).toContain('Activated')
     expect(wrapper.text()).toContain('50.0%')
+    expect(wrapper.text()).toContain('breakout-v1')
+    expect(wrapper.text()).toContain('SKIPPED')
   })
 
   it('pauses and resumes an active scan', async () => {
@@ -157,7 +171,7 @@ describe('CandidateExplorerView', () => {
       .findAll('button')
       .find((button) => button.text() === 'Configure')
     await configureButton!.trigger('click')
-    await wrapper.findAll('input')[2].setValue('6')
+    await wrapper.findAll('input')[3].setValue('6')
     const saveButton = wrapper.findAll('button').find((button) => button.text() === 'Save settings')
     await saveButton!.trigger('click')
     await flushPromises()
@@ -165,6 +179,7 @@ describe('CandidateExplorerView', () => {
     expect(api.updateCandidateScanSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         'candidate-scan.max-concurrent': '6',
+        'candidate-scan.min-strategy-buys': '2',
       })
     )
     expect(wrapper.text()).toContain('Saved.')
