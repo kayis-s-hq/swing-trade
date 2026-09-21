@@ -19,6 +19,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Guard (plan E8): scripts must never flip the global Docker context. Use
+# `docker --context pi-node ...` or a command-scoped DOCKER_CONTEXT instead.
+# Always runs, independent of changed paths. This file is excluded from the scan.
+context_pattern='docker[[:space:]]+context[[:space:]]+use'
+context_offenders="$(
+  grep -rInE "${context_pattern}" \
+    --include='*.sh' --include='swingdev' --include='verify-changes' \
+    dev-stack.sh bin infra scripts 2>/dev/null \
+    | grep -v '^bin/verify-changes:' || true
+)"
+if [[ -n "${context_offenders}" ]]; then
+  printf 'ERROR: scripts must not run "docker context use" (use `docker --context pi-node` or a scoped DOCKER_CONTEXT):\n%s\n' "${context_offenders}" >&2
+  exit 1
+fi
+
 changed_paths="$(
   {
     git diff --name-only HEAD
