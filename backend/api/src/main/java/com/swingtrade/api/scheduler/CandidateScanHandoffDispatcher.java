@@ -2,7 +2,9 @@ package com.swingtrade.api.scheduler;
 
 import com.swingtrade.api.service.JobOrchestratorService;
 import com.swingtrade.data.entity.CandidateScanRunEntity;
+import com.swingtrade.data.repository.CandidateScanResultRepository;
 import com.swingtrade.data.repository.CandidateScanRunRepository;
+import com.swingtrade.api.service.RunRequest;
 import com.swingtrade.data.repository.JobRunRepository;
 import com.swingtrade.domain.JobRun;
 import org.slf4j.Logger;
@@ -17,12 +19,15 @@ public class CandidateScanHandoffDispatcher {
     private static final Logger logger = LoggerFactory.getLogger(CandidateScanHandoffDispatcher.class);
     private final CandidateScanRunRepository runs;
     private final JobRunRepository jobRuns;
+    private final CandidateScanResultRepository results;
     private final JobOrchestratorService orchestrator;
     private final Object dispatchLock = new Object();
     public CandidateScanHandoffDispatcher(CandidateScanRunRepository runs, JobRunRepository jobRuns,
+                                          CandidateScanResultRepository results,
                                           JobOrchestratorService orchestrator) {
         this.runs = runs;
         this.jobRuns = jobRuns;
+        this.results = results;
         this.orchestrator = orchestrator;
     }
     @Scheduled(fixedDelayString = "${candidate-scan.handoff-dispatch-ms:60000}")
@@ -59,7 +64,15 @@ public class CandidateScanHandoffDispatcher {
                 }
                 if (orchestrator.findActiveRun().isPresent()) return;
                 try {
-                    JobRun job = orchestrator.startRun(JobRun.TriggerType.SCHEDULED, scan.getRunId());
+                    var symbols = results.findByRunIdOrderBySymbolAsc(scan.getRunId()).stream()
+                        .filter(result -> result.isQualified() && result.isActivated())
+                        .map(result -> result.getSymbol()).toList();
+                    if (symbols.isEmpty()) {
+                        markNotRequired(scan);
+                        continue;
+                    }
+                    JobRun job = orchestrator.startRun(JobRun.TriggerType.SCHEDULED, scan.getRunId(),
+                        new RunRequest(symbols, null, null, null, null));
                     scan.setOrchestrationJobRunId(job.runId());
                     scan.setOrchestrationStatus("STARTED");
                     scan.setOrchestrationError(null);

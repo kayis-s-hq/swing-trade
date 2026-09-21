@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -39,6 +42,34 @@ class SignalArbiterTest {
             outcome("zeta", SignalType.BUY, "0.70", true),
             outcome("alpha", SignalType.BUY, "0.70", true)));
         assertThat(winner).get().extracting(VariantSignalOutcome::variantId).isEqualTo("alpha");
+    }
+
+    @Test
+    void existingOpenPositionVariantWinsBeforeConfiguredChampion() {
+        var winner = SignalArbiter.pick(List.of(
+            outcome("champion", SignalType.BUY, "0.60", true),
+            outcome("open-position", SignalType.BUY, "0.40", true),
+            outcome("flashy", SignalType.BUY, "0.99", true)),
+            ArbitrationRule.HIGHEST_CONFIDENCE, Map.of(), Set.of("open-position"), Optional.of("champion"));
+        assertThat(winner).get().extracting(VariantSignalOutcome::variantId).isEqualTo("open-position");
+    }
+
+    @Test
+    void configuredChampionWinsWhenNoCandidateHasAnOpenPosition() {
+        var winner = SignalArbiter.pick(List.of(
+            outcome("champion", SignalType.BUY, "0.60", true),
+            outcome("flashy", SignalType.BUY, "0.99", true)),
+            ArbitrationRule.HIGHEST_CONFIDENCE, Map.of(), Set.of(), Optional.of("champion"));
+        assertThat(winner).get().extracting(VariantSignalOutcome::variantId).isEqualTo("champion");
+    }
+
+    @Test
+    void fallsBackToConfiguredArbitrationWhenPreferredVariantsDidNotBuy() {
+        var winner = SignalArbiter.pick(List.of(
+            outcome("champion", SignalType.HOLD, "0.99", true),
+            outcome("flashy", SignalType.BUY, "0.75", true)),
+            ArbitrationRule.HIGHEST_CONFIDENCE, Map.of(), Set.of("open-position"), Optional.of("champion"));
+        assertThat(winner).get().extracting(VariantSignalOutcome::variantId).isEqualTo("flashy");
     }
 
     @Test

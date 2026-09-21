@@ -153,4 +153,9 @@ public interface PositionRepository extends JpaRepository<PositionEntity, Long> 
 
     /** Every portfolio-tagged position (i.e. not a real "default"-book position) on a symbol. */
     List<PositionEntity> findBySymbolAndPortfolioIdIsNotNullOrderByEntryDateDescIdDesc(String symbol);
+
+    /** Open portfolio-tagged positions used to keep arbitration with the owning variant. */
+    @Query("SELECT p FROM PositionEntity p WHERE p.symbol = :symbol AND p.portfolioId IS NOT NULL "
+        + "AND p.status = 'OPEN' ORDER BY p.entryDate DESC, p.id DESC")
+    List<PositionEntity> findOpenBySymbolAndPortfolioIdIsNotNull(@Param("symbol") String symbol);
 }

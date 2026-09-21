@@ -1,6 +1,8 @@
 package com.swingtrade.data.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Embeddable;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -11,6 +13,9 @@ import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "candidate_scan_results")
@@ -30,6 +35,14 @@ public class CandidateScanResultEntity {
     private int candleCount;
     @Column(name = "signal_type", length = 16)
     private String signalType;
+    @Column(name = "strategy_buy_count", nullable = false)
+    private int strategyBuyCount;
+    @Column(name = "strategy_evaluation_count", nullable = false)
+    private int strategyEvaluationCount;
+    @ElementCollection
+    @jakarta.persistence.CollectionTable(name = "candidate_scan_strategy_outcomes",
+        joinColumns = @jakarta.persistence.JoinColumn(name = "candidate_scan_result_id"))
+    private List<StrategyOutcome> strategyOutcomes = new ArrayList<>();
     @Column(name = "total_trades")
     private Integer totalTrades;
     @Column(name = "win_rate")
@@ -77,6 +90,14 @@ public class CandidateScanResultEntity {
     public void setCandleCount(int value) { this.candleCount = value; }
     public String getSignalType() { return signalType; }
     public void setSignalType(String value) { this.signalType = value; }
+    public int getStrategyBuyCount() { return strategyBuyCount; }
+    public void setStrategyBuyCount(int value) { strategyBuyCount = value; }
+    public int getStrategyEvaluationCount() { return strategyEvaluationCount; }
+    public void setStrategyEvaluationCount(int value) { strategyEvaluationCount = value; }
+    public List<StrategyOutcome> getStrategyOutcomes() { return strategyOutcomes; }
+    public void setStrategyOutcomes(List<StrategyOutcome> value) {
+        strategyOutcomes = value == null ? new ArrayList<>() : new ArrayList<>(value);
+    }
     public Integer getTotalTrades() { return totalTrades; }
     public void setTotalTrades(Integer value) { this.totalTrades = value; }
     public Double getWinRate() { return winRate; }
@@ -117,4 +138,58 @@ public class CandidateScanResultEntity {
     public void setRetryAfter(LocalDate value) { retryAfter = value; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime value) { this.createdAt = value; }
+
+    @Embeddable
+    public static class StrategyOutcome {
+        @Column(name = "variant_id", nullable = false, length = 128)
+        private String variantId;
+        @Column(name = "signal_type", nullable = false, length = 16)
+        private String signalType;
+        @Column(precision = 18, scale = 8)
+        private BigDecimal score;
+        @Column(columnDefinition = "TEXT")
+        private String detail;
+        @Column(name = "backtest_total_trades") private Integer backtestTotalTrades;
+        @Column(name = "backtest_win_rate") private Double backtestWinRate;
+        @Column(name = "backtest_total_return") private Double backtestTotalReturn;
+        @Column(name = "oos_total_trades") private Integer oosTotalTrades;
+        @Column(name = "oos_win_rate") private Double oosWinRate;
+        @Column(name = "oos_total_return") private Double oosTotalReturn;
+        @Column(name = "performance_status", nullable = false, length = 16) private String performanceStatus = "NOT_RUN";
+
+        protected StrategyOutcome() { }
+
+        public StrategyOutcome(String variantId, String signalType, BigDecimal score, String detail) {
+            this.variantId = variantId;
+            this.signalType = signalType;
+            this.score = score;
+            this.detail = detail;
+        }
+
+        public StrategyOutcome(String variantId, String signalType, BigDecimal score, String detail,
+                               Integer backtestTotalTrades, Double backtestWinRate, Double backtestTotalReturn,
+                               Integer oosTotalTrades, Double oosWinRate, Double oosTotalReturn,
+                               String performanceStatus) {
+            this(variantId, signalType, score, detail);
+            this.backtestTotalTrades = backtestTotalTrades;
+            this.backtestWinRate = backtestWinRate;
+            this.backtestTotalReturn = backtestTotalReturn;
+            this.oosTotalTrades = oosTotalTrades;
+            this.oosWinRate = oosWinRate;
+            this.oosTotalReturn = oosTotalReturn;
+            this.performanceStatus = performanceStatus == null ? "NOT_RUN" : performanceStatus;
+        }
+
+        public String getVariantId() { return variantId; }
+        public String getSignalType() { return signalType; }
+        public BigDecimal getScore() { return score; }
+        public String getDetail() { return detail; }
+        public Integer getBacktestTotalTrades() { return backtestTotalTrades; }
+        public Double getBacktestWinRate() { return backtestWinRate; }
+        public Double getBacktestTotalReturn() { return backtestTotalReturn; }
+        public Integer getOosTotalTrades() { return oosTotalTrades; }
+        public Double getOosWinRate() { return oosWinRate; }
+        public Double getOosTotalReturn() { return oosTotalReturn; }
+        public String getPerformanceStatus() { return performanceStatus; }
+    }
 }

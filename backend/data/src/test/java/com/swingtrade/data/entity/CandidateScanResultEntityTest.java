@@ -3,6 +3,7 @@ package com.swingtrade.data.entity;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,6 +24,9 @@ class CandidateScanResultEntityTest {
         entity.setErrorMessage(null); entity.setSourceOutcome("DATA_RECEIVED"); entity.setInvalidRows(2);
         entity.setFirstAvailableDate(start); entity.setLastAvailableDate(end);
         entity.setRetryAfter(end.plusDays(1));
+        entity.setStrategyOutcomes(java.util.List.of(
+            new CandidateScanResultEntity.StrategyOutcome("breakout-v1", "BUY", BigDecimal.valueOf(.82), "breakout confirmed"),
+            new CandidateScanResultEntity.StrategyOutcome("pullback-v1", "SKIPPED", null, "Insufficient warm-up history")));
         LocalDateTime created = LocalDateTime.now();
         entity.setCreatedAt(created);
 
@@ -39,5 +43,9 @@ class CandidateScanResultEntityTest {
         assertThat(entity.getInvalidRows()).isEqualTo(2); assertThat(entity.getFirstAvailableDate()).isEqualTo(start);
         assertThat(entity.getLastAvailableDate()).isEqualTo(end); assertThat(entity.getRetryAfter()).isEqualTo(end.plusDays(1));
         assertThat(entity.getCreatedAt()).isEqualTo(created);
+        assertThat(entity.getStrategyOutcomes()).extracting(CandidateScanResultEntity.StrategyOutcome::getVariantId)
+            .containsExactly("breakout-v1", "pullback-v1");
+        assertThat(entity.getStrategyOutcomes().getFirst().getSignalType()).isEqualTo("BUY");
+        assertThat(entity.getStrategyOutcomes().getFirst().getScore()).isEqualByComparingTo("0.82");
     }
 }

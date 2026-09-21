@@ -63,11 +63,13 @@ public class CandidateScanService {
     private static final String KEY_MIN_TRADES = "candidate-scan.min-trades";
     private static final String KEY_OOS_DAYS = "candidate-scan.out-of-sample-days";
     private static final String KEY_OOS_FOLDS = "candidate-scan.out-of-sample-folds";
+    private static final String KEY_MIN_STRATEGY_BUYS = "candidate-scan.min-strategy-buys";
     private static final double DEFAULT_MIN_WIN_RATE = 45.0;
     private static final double DEFAULT_MIN_TOTAL_RETURN = 0.0;
     private static final int DEFAULT_MIN_TRADES = 15;
     private static final int DEFAULT_OOS_DAYS = 252;
     private static final int DEFAULT_OOS_FOLDS = 3;
+    private static final int DEFAULT_MIN_STRATEGY_BUYS = 2;
 
     private final FyersSymbolRepository symbolRepository;
     private final CandidateScanRunRepository runRepository;
@@ -78,6 +80,7 @@ public class CandidateScanService {
     private final CandleStore candleStore;
     private final PriceActionSignalEngine signalEngine;
     private final BacktestEngine backtestEngine;
+    private final CandidateStrategyEvaluator candidateStrategyEvaluator;
     private final int defaultBackfillYears;
     private final long delayMs;
     private final AppSettingsService appSettingsService;
@@ -103,6 +106,7 @@ public class CandidateScanService {
                                 CandleStore candleStore,
                                 PriceActionSignalEngine signalEngine,
                                 BacktestEngine backtestEngine,
+                                CandidateStrategyEvaluator candidateStrategyEvaluator,
                                 @Value("${candidate-scan.backfill-years:3}") int backfillYears,
                                 @Value("${candidate-scan.delay-ms:1000}") long delayMs,
                                 @Value("${candidate-scan.max-concurrent:3}") int maxConcurrent) {
@@ -116,6 +120,7 @@ public class CandidateScanService {
         this.candleStore = candleStore;
         this.signalEngine = signalEngine;
         this.backtestEngine = backtestEngine;
+        this.candidateStrategyEvaluator = candidateStrategyEvaluator;
         this.defaultBackfillYears = backfillYears;
         this.delayMs = Math.max(0, delayMs);
         this.maxConcurrent = Math.max(1, Math.min(maxConcurrent, 12));
@@ -135,6 +140,7 @@ public class CandidateScanService {
                                 int backfillYears, long delayMs, int maxConcurrent) {
         this(symbolRepository, runRepository, resultRepository, null, ingestionService, null,
             appSettingsService, candleStore, signalEngine, backtestEngine,
+            null,
             backfillYears, delayMs, maxConcurrent);
     }
 
@@ -155,9 +161,10 @@ public class CandidateScanService {
     }
 
     @Transactional
-    public CandidateScanRunEntity start() { return start(false); }
+    /** Manual scans hand qualified candidates to the orchestrator just like scheduled scans. */
+    public CandidateScanRunEntity start() { return start(true); }
 
-    /** Scheduled scans persist a handoff request; manual scans intentionally remain scan-only. */
+    /** Scheduled scans persist a handoff request for their qualified candidates. */
     @Transactional
     public CandidateScanRunEntity startScheduled() {
         CandidateScanRunEntity run = start(true);
@@ -284,6 +291,15 @@ public class CandidateScanService {
         }
     }
 
+    private int configuredMinStrategyBuys() {
+        try {
+            return Math.max(1, Math.min(12, Integer.parseInt(appSettingsService.get(KEY_MIN_STRATEGY_BUYS,
+                String.valueOf(DEFAULT_MIN_STRATEGY_BUYS)))));
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_MIN_STRATEGY_BUYS;
+        }
+    }
+
     public Map<String, String> getScanSettings() {
         Map<String, String> settings = new LinkedHashMap<>();
         settings.put(KEY_MIN_WIN_RATE, String.valueOf(configuredMinWinRate()));
@@ -293,6 +309,7 @@ public class CandidateScanService {
         settings.put(KEY_MIN_TRADES, String.valueOf(configuredMinTrades()));
         settings.put(KEY_OOS_DAYS, String.valueOf(configuredOosDays()));
         settings.put(KEY_OOS_FOLDS, String.valueOf(configuredOosFolds()));
+        settings.put(KEY_MIN_STRATEGY_BUYS, String.valueOf(configuredMinStrategyBuys()));
         return settings;
     }
 
@@ -329,6 +346,11 @@ public class CandidateScanService {
             int value = Integer.parseInt(updates.get(KEY_OOS_FOLDS));
             if (value < 1 || value > 8) throw new IllegalArgumentException("out-of-sample-folds must be between 1 and 8");
             appSettingsService.set(KEY_OOS_FOLDS, String.valueOf(value));
+        }
+        if (updates.containsKey(KEY_MIN_STRATEGY_BUYS)) {
+            int value = Integer.parseInt(updates.get(KEY_MIN_STRATEGY_BUYS));
+            if (value < 1 || value > 12) throw new IllegalArgumentException("min-strategy-buys must be between 1 and 12");
+            appSettingsService.set(KEY_MIN_STRATEGY_BUYS, String.valueOf(value));
         }
         return getScanSettings();
     }
@@ -540,11 +562,61 @@ public class CandidateScanService {
         result.setDataStatus("READY");
         publish(runId, "STAGE_STARTED", symbol, "INFO", "Signal: generating technical signal.");
         SignalResult signal = signalEngine.generateSignal(symbol);
-        result.setSignalType(signal.type().name());
-        publish(runId, "STAGE_COMPLETED", symbol, signal.type().name().equals("BUY") ? "SUCCESS" : "INFO",
-            "Signal: " + signal.type() + " generated.");
-        publish(runId, "STAGE_STARTED", symbol, "INFO", "Backtest: running default strategy.");
-        BacktestResult backtest = backtestEngine.runBacktest(symbol, "NSE", BacktestConfig.defaults());
+        List<CandidateStrategyEvaluator.Outcome> strategyOutcomes = candidateStrategyEvaluator == null
+            ? List.of() : candidateStrategyEvaluator.evaluateWithPerformance(symbol, availableCandles, "NSE",
+                BacktestConfig.defaults(), configuredOosDays(), configuredOosFolds());
+        // Keeps compatibility with lightweight callers that provide the pre-performance evaluator
+        // contract (notably isolated data-quality tests). Spring production always supplies the
+        // non-null performance-aware result.
+        if (strategyOutcomes == null || strategyOutcomes.isEmpty()) {
+            strategyOutcomes = candidateStrategyEvaluator.evaluate(symbol, availableCandles);
+        }
+        int strategyBuys = (int) strategyOutcomes.stream().filter(CandidateStrategyEvaluator.Outcome::buy).count();
+        int evaluatedStrategies = (int) strategyOutcomes.stream().filter(o -> !"SKIPPED".equals(o.signalType())).count();
+        int minStrategyBuys = configuredMinStrategyBuys();
+        boolean consensusBuy = candidateStrategyEvaluator == null ? signal.type() == com.swingtrade.domain.Signal.SignalType.BUY
+            : strategyBuys >= minStrategyBuys;
+        result.setStrategyBuyCount(strategyBuys);
+        result.setStrategyEvaluationCount(evaluatedStrategies);
+        result.setStrategyOutcomes(strategyOutcomes.stream()
+            .map(strategyOutcome -> new CandidateScanResultEntity.StrategyOutcome(
+                strategyOutcome.variantId(), strategyOutcome.signalType(), strategyOutcome.score(),
+                strategyOutcome.detail(),
+                strategyOutcome.backtestTotalTrades(), strategyOutcome.backtestWinRate(),
+                strategyOutcome.backtestTotalReturn(), strategyOutcome.oosTotalTrades(),
+                strategyOutcome.oosWinRate(), strategyOutcome.oosTotalReturn(),
+                strategyOutcome.performanceStatus()))
+            .toList());
+        result.setSignalType(consensusBuy ? "BUY" : "HOLD");
+        String votes = strategyOutcomes.isEmpty() ? signal.type().name()
+            : strategyBuys + "/" + evaluatedStrategies + " strategies BUY (need " + minStrategyBuys + ")";
+        publish(runId, "STAGE_COMPLETED", symbol, consensusBuy ? "SUCCESS" : "INFO",
+            "Signal consensus: " + votes + ".");
+        // Do not run a historical simulation for a symbol that already failed
+        // the strategy gate. This keeps scan work bounded and avoids turning a
+        // non-candidate into a misleading backtest/data-quality failure.
+        if (!consensusBuy) {
+            result.setQualified(false);
+            result.setActivated(false);
+            result.setReason(consensusReason(strategyBuys, evaluatedStrategies, minStrategyBuys, signal,
+                null, null, null, 0, 0.0, 0.0));
+            resultRepository.save(result);
+            return false;
+        }
+        // Per-strategy performance was recorded above using each configured SignalStrategy.
+        // Keep the established common gates for candidate qualification until the policy for
+        // requiring every participating strategy to pass independently is explicitly chosen.
+        publish(runId, "STAGE_STARTED", symbol, "INFO",
+            "Backtest: running common default strategy (consensus signals evaluated separately).");
+        BacktestResult backtest;
+        try {
+            backtest = backtestEngine.runBacktest(symbol, "NSE", BacktestConfig.defaults());
+        } catch (IllegalStateException e) {
+            if (isHistoricalMembershipFailure(e)) {
+                return saveHistoricalMembershipSkip(runId, result, e.getMessage());
+            }
+            throw e;
+        }
         result.setTotalTrades(backtest.totalTrades());
         result.setWinRate(backtest.winRate());
         result.setTotalReturn(backtest.totalReturn().doubleValue());
@@ -559,6 +631,9 @@ public class CandidateScanService {
         try {
             walkForward = backtestEngine.runWalkForward(symbol, "NSE", BacktestConfig.defaults(), oosDays, oosFolds);
         } catch (IllegalStateException e) {
+            if (isHistoricalMembershipFailure(e)) {
+                return saveHistoricalMembershipSkip(runId, result, e.getMessage());
+            }
             result.setQualified(false);
             result.setReason("BUY rejected: " + e.getMessage());
             resultRepository.save(result);
@@ -581,7 +656,7 @@ public class CandidateScanService {
         double minWinRate = configuredMinWinRate();
         double minTotalReturn = configuredMinTotalReturn();
         int minTrades = configuredMinTrades();
-        boolean qualified = signal.type() == com.swingtrade.domain.Signal.SignalType.BUY
+        boolean qualified = consensusBuy
             && backtest.totalTrades() >= minTrades
             && backtest.winRate() >= minWinRate
             && backtest.totalReturn().compareTo(BigDecimal.valueOf(minTotalReturn)) > 0
@@ -590,8 +665,9 @@ public class CandidateScanService {
                 && f.result().winRate() >= minWinRate
                 && f.result().totalReturn().compareTo(BigDecimal.valueOf(minTotalReturn)) > 0);
         result.setQualified(qualified);
-        result.setReason(qualified ? "BUY and in-sample/out-of-sample backtest gates passed"
-            : qualificationReason(signal, backtest, oosBacktest, walkForward, minTrades, minWinRate, minTotalReturn));
+        result.setReason(qualified ? "At least " + minStrategyBuys + " strategies BUY and in-sample/out-of-sample backtest gates passed"
+            : consensusReason(strategyBuys, evaluatedStrategies, minStrategyBuys, signal, backtest, oosBacktest,
+                walkForward, minTrades, minWinRate, minTotalReturn));
         if (qualified && watchlistService != null) {
             watchlistService.addToWatchlist(symbol, symbol, "NSE");
             result.setActivated(true);
@@ -650,6 +726,35 @@ public class CandidateScanService {
                 .findFirst()
                 .map(f -> "BUY rejected: OOS fold " + f.startDate() + " win rate below " + minWinRate + "%")
                 .orElse("BUY rejected: an OOS fold return is not above " + minTotalReturn + "%"));
+    }
+
+    private boolean isHistoricalMembershipFailure(IllegalStateException error) {
+        return error.getMessage() != null && error.getMessage().contains("No included historical universe membership");
+    }
+
+    private boolean saveHistoricalMembershipSkip(UUID runId, CandidateScanResultEntity result, String detail) {
+        result.setDataStatus("INSUFFICIENT");
+        result.setQualified(false);
+        result.setActivated(false);
+        result.setReason("Skipped: historical universe membership is unavailable for the backtest period");
+        result.setErrorMessage(detail);
+        resultRepository.save(result);
+        publish(runId, "STAGE_COMPLETED", result.getSymbol(), "WARN", result.getReason());
+        return false;
+    }
+
+    private String consensusReason(int buys, int evaluated, int required, SignalResult legacySignal,
+                                   BacktestResult backtest, BacktestResult oosBacktest,
+                                   WalkForwardEvaluation walkForward, int minTrades,
+                                   double minWinRate, double minTotalReturn) {
+        if (buys < required && candidateStrategyEvaluator != null) {
+            return "BUY rejected: " + buys + "/" + evaluated + " strategies BUY; require " + required;
+        }
+        if (backtest == null || oosBacktest == null || walkForward == null) {
+            return "BUY rejected: strategy consensus not reached";
+        }
+        return qualificationReason(legacySignal, backtest, oosBacktest, walkForward, minTrades, minWinRate,
+            minTotalReturn);
     }
 
     private void saveFailure(UUID runId, String symbol, Exception error) {
