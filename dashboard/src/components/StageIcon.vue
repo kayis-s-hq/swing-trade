@@ -10,6 +10,23 @@
     >
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
     </svg>
+    <!-- DEGRADED: warning triangle -->
+    <svg
+      v-else-if="status === 'DEGRADED'"
+      class="h-4 w-4 text-warning"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label="Degraded"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M12 9v4m0 4h.01M10.3 4.3L2.5 18a2 2 0 001.7 3h15.6a2 2 0 001.7-3L13.7 4.3a2 2 0 00-3.4 0z"
+      />
+    </svg>
     <!-- ERROR: X -->
     <svg
       v-else-if="status === 'ERROR'"

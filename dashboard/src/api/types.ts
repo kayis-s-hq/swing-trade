@@ -509,10 +509,43 @@ export interface PromotionEligibilityResponse {
 // Job Orchestrator
 // ---------------------------------------------------------------------------
 
+export type JobRunStatus =
+  'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_WARNINGS' | 'FAILED' | 'CANCELLED'
+
+export type JobStageStatus =
+  'PENDING' | 'RUNNING' | 'COMPLETED' | 'DEGRADED' | 'SKIPPED' | 'ERROR' | 'CANCELLED'
+
+export type StrategyOutcome = 'EVALUATED' | 'SKIPPED' | 'ERROR'
+
+export interface JobStageStrategyResult {
+  variantId: string
+  version: number
+  outcome: StrategyOutcome
+  reason?: string | null
+  score?: number | null
+  signal?: string | null
+}
+
+export interface JobStageDetails {
+  source?: 'LLM' | 'KEYWORD_FALLBACK' | null
+  reason?: string | null
+  warnings?: string[] | null
+  /** Only present on the SIGNAL stage. */
+  strategies?: JobStageStrategyResult[] | null
+}
+
+export interface StartJobRunRequest {
+  symbols?: string[]
+  variantIds?: string[]
+  stages?: string[]
+  skipLlm?: boolean
+  dryRun?: boolean
+}
+
 export interface JobRunResponse {
   runId: string
   triggerType: 'MANUAL' | 'SCHEDULED'
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+  status: JobRunStatus
   startedAt: string
   completedAt: string | null
   symbolsCount: number
@@ -525,12 +558,13 @@ export interface JobRunStageResponse {
   symbol: string
   stageName:
     'DATA_FETCH' | 'NEWS' | 'SENTIMENT' | 'LLM_ANALYSIS' | 'SIGNAL' | 'BACKTEST' | 'PAPER_TRADE'
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'SKIPPED' | 'ERROR'
+  status: JobStageStatus
   startedAt: string
   completedAt: string | null
   durationMs: number | null
   errorMessage: string | null
   resultSummary: string | null
+  details?: JobStageDetails | null
 }
 
 export interface JobRunProgressResponse {
@@ -553,8 +587,17 @@ export interface JobRunSummaryResponse {
   totalDurationMs: number
   stageStats: Record<
     string,
-    { total: number; completed: number; errors: number; totalDurationMs: number }
+    { total: number; completed: number; degraded?: number; errors: number; totalDurationMs: number }
   >
+  degradedStages?: number
+  skippedStrategies?: number
+  degradedStageBreakdown?: Array<{ stage: string; reason: string; count: number }>
+  skippedStrategyBreakdown?: Array<{
+    variantId: string
+    outcome: string
+    reason: string
+    symbols: number
+  }>
   symbolDetails: Array<{
     symbol: string
     stageStatuses: Record<string, string>
@@ -564,4 +607,35 @@ export interface JobRunSummaryResponse {
     backtestReturn: number
     tradesExecuted: number
   }>
+}
+
+// ---------------------------------------------------------------------------
+// Strategy types (params schema)
+// ---------------------------------------------------------------------------
+
+export interface StrategyParamSpec {
+  name: string
+  type: string
+  min?: number | null
+  max?: number | null
+  defaultValue?: unknown
+  description?: string | null
+  group?: string | null
+}
+
+export interface StrategyTypeInfo {
+  type: string
+  paramSchema: { params: StrategyParamSpec[] }
+  warmupBars: number
+  requiredIndicators: string[]
+}
+
+export interface StrategyConfigRequest {
+  variantId: string
+  strategyType: string
+  params: Record<string, unknown>
+  overlays?: Record<string, unknown>
+  mode: StrategyMode
+  paperCapital: number
+  notes?: string | null
 }

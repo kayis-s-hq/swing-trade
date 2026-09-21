@@ -57,6 +57,14 @@
       >
         Showing the last successful configuration. Refresh failed: {{ errorMessage }}
       </p>
+      <p
+        v-if="championWarning"
+        class="mb-4 rounded-lg border border-warning/30 bg-warning-bg px-4 py-3 text-sm text-warning"
+        role="alert"
+        data-testid="champion-warning"
+      >
+        {{ championWarning }}
+      </p>
       <div class="grid gap-4 lg:grid-cols-2">
         <article
           v-for="strategy in strategies"
@@ -97,6 +105,71 @@
           <p v-if="strategy.notes" class="mt-4 text-sm leading-6 text-text-muted">
             {{ strategy.notes }}
           </p>
+
+          <div v-if="strategy.current" class="mt-4 border-t border-border-subtle pt-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs text-text-muted">Mode</span>
+              <template v-for="mode in TOGGLE_MODES" :key="mode">
+                <button
+                  type="button"
+                  :data-testid="`mode-${strategy.variantId}-${mode}`"
+                  :aria-pressed="strategy.mode === mode"
+                  :disabled="strategy.mode === mode || pendingVariant === strategy.variantId"
+                  class="rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60"
+                  :class="
+                    strategy.mode === mode
+                      ? 'border-brand bg-brand-subtle text-brand'
+                      : 'border-border-subtle text-text-muted hover:text-text-primary'
+                  "
+                  @click="requestMode(strategy, mode)"
+                >
+                  {{ modeLabel(mode) }}
+                </button>
+              </template>
+              <button
+                type="button"
+                :data-testid="`edit-params-${strategy.variantId}`"
+                class="ml-auto rounded-md border border-border-subtle px-2.5 py-1 text-xs font-medium text-text-muted hover:text-text-primary"
+                @click="openEditor(strategy)"
+              >
+                Edit params
+              </button>
+            </div>
+            <div
+              v-if="confirmVariant === strategy.variantId"
+              class="mt-2 flex flex-wrap items-center gap-2 text-xs text-warning"
+            >
+              <span>Promoting to CHAMPION makes this variant drive live decisions.</span>
+              <button
+                type="button"
+                class="rounded-md bg-brand px-2.5 py-1 font-semibold text-brand-text"
+                @click="applyMode(strategy.variantId, 'CHAMPION')"
+              >
+                Confirm promote
+              </button>
+              <button type="button" class="text-text-muted" @click="confirmVariant = null">
+                Cancel
+              </button>
+            </div>
+            <p
+              v-if="modeErrors[strategy.variantId]"
+              class="mt-2 text-xs text-danger"
+              role="alert"
+              :data-testid="`mode-error-${strategy.variantId}`"
+            >
+              {{ modeErrors[strategy.variantId] }}
+            </p>
+            <StrategyParamsEditor
+              v-if="editingVariant === strategy.variantId"
+              :key="`${strategy.variantId}-${strategy.version}`"
+              :strategy="strategy"
+              :type-info="typeInfoFor(strategy.strategyType)"
+              :saving="saving"
+              :error="editError"
+              @save="saveParams(strategy, $event)"
+              @cancel="closeEditor"
+            />
+          </div>
         </article>
       </div>
 
@@ -199,9 +272,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import StrategyParamsEditor from '../components/StrategyParamsEditor.vue'
 import { useStrategiesStore } from '../stores/strategies'
-import type { PromotionEligibilityStatus, StrategyConfig, StrategyMode } from '../api/types'
+import type {
+  PromotionEligibilityStatus,
+  StrategyConfig,
+  StrategyMode,
+  StrategyTypeInfo,
+} from '../api/types'
 
 const store = useStrategiesStore()
 const strategies = computed(() => store.strategies)
@@ -224,6 +303,85 @@ const shadowVariantIds = computed<string[]>(() => {
     .map((strategy: StrategyConfig) => strategy.variantId)
     .filter((variantId: string) => variantId !== champion)
 })
+
+const TOGGLE_MODES: StrategyMode[] = ['SHADOW', 'CHAMPION']
+
+const championWarning = computed<string>(() => {
+  const list = strategies.value
+  if (!list || list.length === 0) return ''
+  const count = list.filter((s) => s.current && s.mode === 'CHAMPION').length
+  if (count === 0) {
+    return 'No CHAMPION strategy is set. Live decisions have no champion until one is promoted.'
+  }
+  if (count > 1) {
+    return `${count} champions are set. Only one variant should be CHAMPION; extras are silently downgraded.`
+  }
+  return ''
+})
+
+const pendingVariant = ref<string | null>(null)
+const confirmVariant = ref<string | null>(null)
+const modeErrors = ref<Record<string, string>>({})
+const editingVariant = ref<string | null>(null)
+const editError = ref('')
+const saving = ref(false)
+
+const typeInfoFor = (type: string): StrategyTypeInfo | null =>
+  store.strategyTypes?.find((t) => t.type === type) ?? null
+
+function requestMode(strategy: StrategyConfig, mode: StrategyMode): void {
+  modeErrors.value = { ...modeErrors.value, [strategy.variantId]: '' }
+  if (mode === 'CHAMPION') {
+    confirmVariant.value = strategy.variantId
+    return
+  }
+  void applyMode(strategy.variantId, mode)
+}
+
+async function applyMode(variantId: string, mode: StrategyMode): Promise<void> {
+  confirmVariant.value = null
+  pendingVariant.value = variantId
+  const result = await store.changeMode(variantId, mode)
+  pendingVariant.value = null
+  if (!result.ok) {
+    const hint = result.outcomeUnknown
+      ? ' The change could not be confirmed; refresh to see the current mode.'
+      : ''
+    modeErrors.value = { ...modeErrors.value, [variantId]: result.message + hint }
+  }
+}
+
+function openEditor(strategy: StrategyConfig): void {
+  editError.value = ''
+  editingVariant.value = strategy.variantId
+  if (!store.strategyTypes) void store.loadStrategyTypes()
+}
+
+function closeEditor(): void {
+  editingVariant.value = null
+  editError.value = ''
+}
+
+async function saveParams(strategy: StrategyConfig, params: Record<string, unknown>) {
+  saving.value = true
+  editError.value = ''
+  const result = await store.saveConfig({
+    variantId: strategy.variantId,
+    strategyType: strategy.strategyType,
+    params,
+    overlays: strategy.overlays,
+    mode: strategy.mode,
+    paperCapital: strategy.paperCapital,
+    notes: strategy.notes,
+  })
+  saving.value = false
+  if (result.ok) closeEditor()
+  else {
+    editError.value =
+      result.message +
+      (result.outcomeUnknown ? ' The save could not be confirmed; refresh before retrying.' : '')
+  }
+}
 
 const promotionState = (variantId: string) => store.promotionEligibility[variantId]
 
@@ -262,6 +420,7 @@ function loadPromotionEligibilityForShadows(): void {
 watch(shadowVariantIds, loadPromotionEligibilityForShadows)
 
 onMounted(() => {
+  void store.loadStrategyTypes()
   if (!store.strategies) void store.load()
   else loadPromotionEligibilityForShadows()
 })

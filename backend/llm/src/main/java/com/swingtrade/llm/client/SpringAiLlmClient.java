@@ -26,13 +26,30 @@ public class SpringAiLlmClient implements LlmClient {
     private static final Logger logger = LoggerFactory.getLogger(SpringAiLlmClient.class);
     private static final Duration READ_TIMEOUT = Duration.ofMinutes(10);
 
+    private static final List<String> REASONING_METADATA_KEYS =
+            List.of("reasoningContent", "reasoning", "reasoning_content");
+
     private final ChatClient chatClient;
     private final boolean enableCoT;
+    private final String reasoningEffort;
 
+    public SpringAiLlmClient(ChatClient chatClient, boolean enableCoT) {
+        this(chatClient, enableCoT, null);
+    }
+
+    /**
+     * @param reasoningEffort optional {@code reasoning_effort} sent to the backend
+     *                        (for example {@code none} to stop Ollama thinking models
+     *                        spending the whole token budget on reasoning); blank to omit
+     */
+    @org.springframework.beans.factory.annotation.Autowired
     public SpringAiLlmClient(ChatClient chatClient,
-                             @org.springframework.beans.factory.annotation.Value("${llm.cot.enabled:false}") boolean enableCoT) {
+                             @org.springframework.beans.factory.annotation.Value("${llm.cot.enabled:false}") boolean enableCoT,
+                             @org.springframework.beans.factory.annotation.Value("${llm.reasoning-effort:}") String reasoningEffort) {
         this.chatClient = chatClient;
         this.enableCoT = enableCoT;
+        this.reasoningEffort = reasoningEffort == null || reasoningEffort.isBlank()
+                ? null : reasoningEffort.trim();
     }
 
     @Override
@@ -50,29 +67,51 @@ public class SpringAiLlmClient implements LlmClient {
         logger.debug("Generating chat completion (CoT: {}, maxTokens: {}, temperature: {})",
                 enableCoT, maxTokens, temperature);
 
+        // 0 chars after reasoning recovery is a failure, not an answer: one bounded
+        // retry with double the token budget (a thinking model that ran out of tokens
+        // mid-reasoning is the usual cause), then LlmUnavailableException so callers
+        // take their explicit degraded path instead of parsing "".
+        String result = attempt(effectiveSystemPrompt, userPrompt, maxTokens, temperature);
+        if (result.isBlank()) {
+            int retryTokens = maxTokens >= Integer.MAX_VALUE / 2 ? maxTokens : maxTokens * 2;
+            logger.warn("LLM returned no usable text (maxTokens {}); retrying once with maxTokens {}",
+                    maxTokens, retryTokens);
+            result = attempt(effectiveSystemPrompt, userPrompt, retryTokens, temperature);
+        }
+        if (result.isBlank()) {
+            return Mono.error(new LlmUnavailableException(
+                    "LLM returned an empty response after one retry"));
+        }
+        return Mono.just(result);
+    }
+
+    private String attempt(String systemPrompt, String userPrompt, int maxTokens, double temperature) {
         // maxTokens/temperature must be set per-call via .options(), not just logged:
         // without this, no max_tokens is sent at all and llama-server falls back to
         // its own (effectively unbounded) default, so generation only stops at EOS
         // or by running the KV cache into the context ceiling — indistinguishable
         // from a genuine "prompt too long" 400 once the prompt leaves little headroom.
-        var promptBuilder = chatClient.prompt()
-                .system(effectiveSystemPrompt)
-                .user(userPrompt)
-                .options(OpenAiChatOptions.builder()
-                        .maxTokens(maxTokens)
-                        .temperature(temperature));
+        OpenAiChatOptions.Builder options = OpenAiChatOptions.builder()
+                .maxTokens(maxTokens)
+                .temperature(temperature);
+        if (reasoningEffort != null) {
+            options.reasoningEffort(reasoningEffort);
+        }
 
-        // Get the full ChatResponse to handle vLLM reasoning field quirk
-        var response = promptBuilder
+        // Get the full ChatResponse to handle the reasoning-field quirk
+        var response = chatClient.prompt()
+                .system(systemPrompt)
+                .user(userPrompt)
+                .options(options)
                 .call()
                 .chatResponse();
 
         String result = response.getResult().getOutput().getText();
 
-        // vLLM reasoning field fix: if content is empty, extract JSON from reasoning metadata
+        // Thinking models (vLLM, Ollama qwen3.5) can leave content empty and put text in
+        // a reasoning field; recover a JSON object from it when present.
         if (result == null || result.isBlank()) {
-            Object reasoningObj = response.getResult().getOutput().getMetadata().get("reasoningContent");
-            String reasoning = (reasoningObj != null) ? reasoningObj.toString() : null;
+            String reasoning = readReasoning(response.getResult().getOutput().getMetadata());
             if (reasoning != null && !reasoning.isBlank()) {
                 result = extractJsonFromReasoning(reasoning);
                 if (result != null) {
@@ -83,8 +122,20 @@ public class SpringAiLlmClient implements LlmClient {
 
         logger.debug("Chat completion complete, received {} chars",
                 result != null ? result.length() : 0);
+        return result != null ? result : "";
+    }
 
-        return Mono.just(result != null ? result : "");
+    private static String readReasoning(Map<String, Object> metadata) {
+        if (metadata == null) {
+            return null;
+        }
+        for (String key : REASONING_METADATA_KEYS) {
+            Object value = metadata.get(key);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString();
+            }
+        }
+        return null;
     }
 
     /**

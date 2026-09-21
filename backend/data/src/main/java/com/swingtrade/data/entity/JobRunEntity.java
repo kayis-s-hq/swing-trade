@@ -36,7 +36,7 @@ public class JobRunEntity {
     @Column(name = "trigger_type", nullable = false, length = 16)
     private String triggerType;
 
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private String status;
 
     @Column(name = "started_at")
@@ -57,6 +57,10 @@ public class JobRunEntity {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
     @Column(name = "candidate_scan_run_id") private UUID candidateScanRunId;
+
+    /** JSON of the scoped-run request (symbols/variantIds/stages/skipLlm/dryRun); null for full runs. */
+    @Column(name = "trigger_options", columnDefinition = "TEXT")
+    private String triggerOptions;
 
     public JobRunEntity() {}
 
@@ -108,6 +112,8 @@ public class JobRunEntity {
     public void setFailedCount(int failedCount) { this.failedCount = failedCount; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public String getTriggerOptions() { return triggerOptions; }
+    public void setTriggerOptions(String triggerOptions) { this.triggerOptions = triggerOptions; }
     public UUID getCandidateScanRunId() { return candidateScanRunId; }
     public void setCandidateScanRunId(UUID candidateScanRunId) { this.candidateScanRunId = candidateScanRunId; }
 }

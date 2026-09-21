@@ -57,6 +57,12 @@ public interface VariantTradingService {
      */
     int evaluateOpenPositions(String variantId, String symbol, OhlcvCandle candle);
 
+    /**
+     * {@code variantId}'s currently open positions for {@code symbol}, so strategy-driven exit
+     * rules ({@code SignalStrategy.evaluateExit}) can be evaluated against them.
+     */
+    List<Position> findOpenPositions(String variantId, String symbol);
+
     /** All closed trades booked against {@code variantId}'s own portfolio. */
     List<Position> findClosedTrades(String variantId);
 }

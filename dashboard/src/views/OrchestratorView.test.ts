@@ -8,9 +8,12 @@ const apiMocks = vi.hoisted(() => ({
   getJobRunProgress: vi.fn(),
   listJobRuns: vi.fn(),
   cancelJobRun: vi.fn(),
+  getJobRunSummary: vi.fn().mockRejectedValue(new Error('no summary')),
 }))
+const strategyMocks = vi.hoisted(() => ({ getStrategies: vi.fn() }))
 
 vi.mock('../api/job', () => apiMocks)
+vi.mock('../api/strategies', () => strategyMocks)
 vi.mock('../api/selections', () => ({
   listSignalSelections: vi.fn().mockResolvedValue([]),
   latestTournament: (rows: unknown[]) => rows,
@@ -103,6 +106,8 @@ beforeEach(() => {
   apiMocks.listJobRuns.mockResolvedValue(confirmed<JobRunResponse[]>([]))
   apiMocks.getJobRunProgress.mockResolvedValue(confirmed(runningProgress))
   apiMocks.cancelJobRun.mockResolvedValue({ success: true })
+  apiMocks.getJobRunSummary.mockRejectedValue(new Error('no summary'))
+  strategyMocks.getStrategies.mockResolvedValue([])
 })
 
 afterEach(() => {

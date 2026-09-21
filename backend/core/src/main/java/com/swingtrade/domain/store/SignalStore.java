@@ -46,6 +46,15 @@ public interface SignalStore {
     /** Saves a signal with its strategy variant and immutable configuration version. */
     Signal save(Signal signal, String warningFlag, String strategy, Integer strategyVersion);
 
+    /**
+     * Saves a signal with strategy provenance including the config's params hash. Defaults to
+     * the hash-less save so stores that predate the column keep working.
+     */
+    default Signal save(Signal signal, String warningFlag, String strategy, Integer strategyVersion,
+                        String paramsHash) {
+        return save(signal, warningFlag, strategy, strategyVersion);
+    }
+
     void markProcessed(Long signalId);
 
     Optional<Signal> findLatestBySymbol(String symbol);

@@ -32,6 +32,13 @@ docker_compose() {
     fi
 }
 
+# Run compose against pi-node WITHOUT flipping the global Docker context.
+# Never switch the global context (docker context "use") here: it mutates shared state for every other
+# shell/tool on this machine (plan E8). DOCKER_CONTEXT is scoped to the command.
+pi_compose() {
+    DOCKER_CONTEXT=pi-node docker_compose "$@"
+}
+
 echo "=========================================="
 echo "  Swing Trade - Dev Stack Manager"
 echo "=========================================="
@@ -58,10 +65,8 @@ do_stage_monitoring() {
 
 do_stage_infra() {
     local cmd="${2:-up}"
-    docker context use pi-node
     cd "$INFRA_DIR"
-    docker_compose -f docker-compose.infra-stage.yml "$cmd"
-    docker context use desktop-linux
+    pi_compose -f docker-compose.infra-stage.yml "$cmd"
 }
 
 case "${1:-help}" in
@@ -71,19 +76,16 @@ case "${1:-help}" in
 
     # Start infrastructure on pi-node
     echo "📦 Starting infrastructure on pi-node..."
-    docker context use pi-node
     cd "$INFRA_DIR"
-    docker_compose -f docker-compose.infra-dev.yml up -d
+    pi_compose -f docker-compose.infra-dev.yml up -d
     echo ""
 
     # Wait for services to be healthy
     echo "⏳ Waiting for services to be ready..."
     sleep 15
-    docker_compose -f docker-compose.infra-dev.yml ps
+    pi_compose -f docker-compose.infra-dev.yml ps
     echo ""
 
-    # Switch back to local context
-    docker context use desktop-linux
     echo ""
 
     # Start Spring Boot locally
@@ -150,35 +152,29 @@ case "${1:-help}" in
 
     # Stop infrastructure on pi-node
     echo "📦 Stopping infrastructure on pi-node..."
-    docker context use pi-node
     cd "$INFRA_DIR"
-    docker_compose -f docker-compose.infra-dev.yml down
+    pi_compose -f docker-compose.infra-dev.yml down
     echo ""
 
-    # Switch back to local context
-    docker context use desktop-linux
     echo ""
     echo "✓ Dev Stack stopped"
     ;;
 
   infra)
     echo "📦 Managing infrastructure on pi-node..."
-    docker context use pi-node
     cd "$INFRA_DIR"
-    docker_compose -f docker-compose.infra-dev.yml "${@:2}"
+    pi_compose -f docker-compose.infra-dev.yml "${@:2}"
     ;;
 
   status)
     echo "📊 Dev Stack Status"
     echo ""
     echo "Infrastructure (pi-node):"
-    docker context use pi-node
     cd "$INFRA_DIR"
-    docker_compose -f docker-compose.infra-dev.yml ps
+    pi_compose -f docker-compose.infra-dev.yml ps
     echo ""
 
     echo "Local Spring Boot:"
-    docker context use desktop-linux
     lsof -nP -iTCP:8080 -sTCP:LISTEN > /dev/null 2>&1 \
       && echo "✓ Running" || echo "✗ Not running"
     echo ""
@@ -196,19 +192,16 @@ case "${1:-help}" in
     echo "📋 Dev Stack Logs"
     echo ""
     echo "=== Infrastructure Logs ==="
-    docker context use pi-node
     cd "$INFRA_DIR"
-    docker_compose -f docker-compose.infra-dev.yml logs "${@:2}"
+    pi_compose -f docker-compose.infra-dev.yml logs "${@:2}"
     ;;
 
   live-logs)
     echo "📡 Following live dev-stack logs (Ctrl-C to stop)..."
     echo ""
 
-    # Keep the remote Compose context selected while its stream is active.
-    docker context use pi-node >/dev/null
     cd "$INFRA_DIR"
-    docker_compose -f docker-compose.infra-dev.yml logs -f --tail=100 &
+    pi_compose -f docker-compose.infra-dev.yml logs -f --tail=100 &
     INFRA_LOG_PID=$!
 
     cd "$PROJECT_ROOT"
@@ -471,8 +464,114 @@ case "${1:-help}" in
     $0 stage
     ;;
 
+  run)
+    # Trigger a job run against the local API, poll to completion, print stages.
+    # Usage: run [--symbols=A,B] [--strategies=x,y] [--no-llm]
+    API_URL="${API_URL:-http://localhost:8080}"
+    RUN_SYMBOLS=""
+    RUN_STRATEGIES=""
+    RUN_NO_LLM=false
+    RUN_POLL_SECS="${RUN_POLL_SECS:-5}"
+    RUN_TIMEOUT_SECS="${RUN_TIMEOUT_SECS:-3600}"
+    for arg in "${@:2}"; do
+      case "$arg" in
+        --symbols=*)    RUN_SYMBOLS="${arg#*=}" ;;
+        --strategies=*) RUN_STRATEGIES="${arg#*=}" ;;
+        --no-llm)       RUN_NO_LLM=true ;;
+        *) echo "Unknown option: $arg"
+           echo "Usage: $0 run [--symbols=A,B] [--strategies=x,y] [--no-llm]"
+           exit 2 ;;
+      esac
+    done
+    command -v jq >/dev/null 2>&1 || { echo "✗ jq is required for '$0 run'"; exit 1; }
+
+    # Filters are best-effort: the API currently accepts only triggerType.
+    # Plan Step 4 adds symbols[] / variantIds[] / skipLlm; older servers ignore them.
+    START_QUERY="triggerType=MANUAL"
+    BODY_JSON="{}"
+    FILTERS_REQUESTED=false
+    if [ -n "$RUN_SYMBOLS" ]; then
+      FILTERS_REQUESTED=true
+      START_QUERY="$START_QUERY&symbols=$RUN_SYMBOLS"
+      BODY_JSON=$(echo "$BODY_JSON" | jq -c --arg v "$RUN_SYMBOLS" '. + {symbols: ($v|split(","))}')
+    fi
+    if [ -n "$RUN_STRATEGIES" ]; then
+      FILTERS_REQUESTED=true
+      START_QUERY="$START_QUERY&variantIds=$RUN_STRATEGIES"
+      BODY_JSON=$(echo "$BODY_JSON" | jq -c --arg v "$RUN_STRATEGIES" '. + {variantIds: ($v|split(","))}')
+    fi
+    if [ "$RUN_NO_LLM" = true ]; then
+      FILTERS_REQUESTED=true
+      START_QUERY="$START_QUERY&skipLlm=true"
+      BODY_JSON=$(echo "$BODY_JSON" | jq -c '. + {skipLlm: true}')
+    fi
+    if [ "$FILTERS_REQUESTED" = true ]; then
+      echo "ℹ Note: run filters (--symbols/--strategies/--no-llm) are sent as best-effort"
+      echo "  query/body fields. They only take effect once the API supports them"
+      echo "  (remediation plan Step 4); until then the server runs the full default run."
+      echo ""
+    fi
+
+    echo "🚀 POST $API_URL/api/job/runs/start?$START_QUERY"
+    START_RESP=$(curl -sS -w '\n%{http_code}' -X POST \
+      -H 'Content-Type: application/json' -d "$BODY_JSON" \
+      "$API_URL/api/job/runs/start?$START_QUERY") || { echo "✗ API not reachable at $API_URL"; exit 1; }
+    START_CODE=$(echo "$START_RESP" | tail -n1)
+    START_BODY=$(echo "$START_RESP" | sed '$d')
+    if [ "$START_CODE" != "200" ]; then
+      echo "✗ Start failed (HTTP $START_CODE): $START_BODY"
+      [ "$START_CODE" = "409" ] && echo "  A run is already active."
+      exit 1
+    fi
+    RUN_ID=$(echo "$START_BODY" | jq -r '.runId // .id // empty')
+    if [ -z "$RUN_ID" ]; then
+      echo "✗ No runId in response: $START_BODY"
+      exit 1
+    fi
+    echo "✓ Run started: $RUN_ID"
+
+    ELAPSED=0
+    RUN_STATUS="RUNNING"
+    PROGRESS="{}"
+    while [ "$ELAPSED" -lt "$RUN_TIMEOUT_SECS" ]; do
+      PROGRESS=$(curl -sf "$API_URL/api/job/runs/$RUN_ID/progress" 2>/dev/null || true)
+      if [ -n "$PROGRESS" ]; then
+        RUN_STATUS=$(echo "$PROGRESS" | jq -r '.status // "UNKNOWN"')
+        echo "  [${ELAPSED}s] status=$RUN_STATUS completed=$(echo "$PROGRESS" | jq -r '.completedSymbols // 0')/$(echo "$PROGRESS" | jq -r '.totalSymbols // 0') failed=$(echo "$PROGRESS" | jq -r '.failedSymbols // 0')"
+        case "$RUN_STATUS" in
+          RUNNING|PENDING|QUEUED|STARTED|UNKNOWN) ;;
+          *) break ;;
+        esac
+      else
+        echo "  [${ELAPSED}s] progress endpoint not reachable, retrying..."
+      fi
+      sleep "$RUN_POLL_SECS"
+      ELAPSED=$((ELAPSED + RUN_POLL_SECS))
+    done
+
+    echo ""
+    echo "=========================================="
+    echo "  Run $RUN_ID: $RUN_STATUS"
+    echo "=========================================="
+    echo "Stages (symbol, stage, status, durationMs, detail):"
+    echo "$PROGRESS" | jq -r '(.stages // [])[] |
+      [(.symbol // "-"), (.stageName // "-"), (.status // "-"),
+       ((.durationMs // "-")|tostring), (.errorMessage // .resultSummary // "")] | @tsv' \
+      | column -t -s "$(printf '\t')"
+    echo ""
+    echo "Stage status counts:"
+    echo "$PROGRESS" | jq -r '(.stages // []) | group_by(.stageName)[] |
+      "  \(.[0].stageName): " + (group_by(.status) | map("\(.[0].status)=\(length)") | join(" "))'
+
+    case "$RUN_STATUS" in
+      RUNNING|PENDING|QUEUED|STARTED|UNKNOWN)
+        echo "✗ Timed out after ${RUN_TIMEOUT_SECS}s waiting for run to finish"; exit 1 ;;
+      FAILED|CANCELLED) exit 1 ;;
+    esac
+    ;;
+
   *)
-    echo "Usage: $0 {start|stage|stage-down|stage-logs|stage-restart|stop|infra|status|logs|live-logs|logs-json|stage-monitoring|frontend|frontend-logs}"
+    echo "Usage: $0 {start|stage|stage-down|stage-logs|stage-restart|stop|infra|status|logs|live-logs|logs-json|stage-monitoring|frontend|frontend-logs|run}"
     echo ""
     echo "Commands:"
     echo "  start            - Start dev infra on pi-node + Spring Boot + Vue locally"
@@ -489,6 +588,8 @@ case "${1:-help}" in
     echo "  stage-monitoring - Start/stop local Grafana (scrapes pi-node Prometheus)"
     echo "  frontend         - Manage Vue dev server (start|stop|logs)"
     echo "  frontend-logs    - View Vue dev server logs"
+    echo "  run              - Trigger a job run, poll to completion, print stages"
+    echo "                     [--symbols=A,B] [--strategies=x,y] [--no-llm]"
     echo ""
     echo "Stage stack:"
     echo "  API:         http://piworm.local:8081"

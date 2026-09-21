@@ -19,6 +19,8 @@ import java.util.List;
  * @param source      provenance: LLM, KEYWORD, or DEFAULT
  * @param articleIds  persisted news evidence used for this result
  * @param auditRequestId request ID linking this result to the LLM audit attempt
+ * @param degradedReason why a non-LLM fallback produced this result, or null when not degraded.
+ *                       Transient metadata: not persisted; {@code source} carries the durable signal.
  */
 public record SentimentResult(
     Long id,
@@ -36,8 +38,19 @@ public record SentimentResult(
     int articleCount,
     String source,
     List<Long> articleIds,
-    String auditRequestId
+    String auditRequestId,
+    String degradedReason
 ) {
+    /** Compatibility constructor for callers that do not report a degradation reason. */
+    public SentimentResult(Long id, String symbol, LocalDate date, SentimentScore score,
+                           String summary, String rawContent, Double confidence,
+                           LocalDate analyzedAt, List<String> redFlags, List<String> catalysts,
+                           String promptHash, String modelVersion, int articleCount,
+                           String source, List<Long> articleIds, String auditRequestId) {
+        this(id, symbol, date, score, summary, rawContent, confidence, analyzedAt,
+            redFlags, catalysts, promptHash, modelVersion, articleCount, source, articleIds,
+            auditRequestId, null);
+    }
     /** Compatibility constructor for callers predating LLM audit correlation. */
     public SentimentResult(Long id, String symbol, LocalDate date, SentimentScore score,
                            String summary, String rawContent, Double confidence,

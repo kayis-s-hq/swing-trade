@@ -27,6 +27,8 @@ const badgeClass = computed(() => {
     case 'ERROR':
       return 'bg-danger-subtle text-danger'
     case 'CANCELLED':
+    case 'DEGRADED':
+    case 'COMPLETED_WITH_WARNINGS':
       return 'bg-warning-subtle text-warning'
     case 'PENDING':
       return 'bg-bg-primary text-text-muted'
@@ -48,6 +50,8 @@ const dotClass = computed(() => {
     case 'ERROR':
       return 'bg-danger'
     case 'CANCELLED':
+    case 'DEGRADED':
+    case 'COMPLETED_WITH_WARNINGS':
       return 'bg-warning'
     default:
       return 'bg-text-muted'

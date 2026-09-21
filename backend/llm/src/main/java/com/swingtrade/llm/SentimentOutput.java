@@ -1,5 +1,6 @@
 package com.swingtrade.llm;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,9 @@ public class SentimentOutput {
     @JsonProperty("catalysts")
     private List<String> catalysts = new ArrayList<>();
     private String source;
+    /** Why a non-LLM fallback produced this output; excluded from the model-facing schema. */
+    @JsonIgnore
+    private String degradedReason;
 
     /**
      * No-arg constructor required by Jackson/Spring AI's BeanOutputConverter.
@@ -93,6 +97,16 @@ public class SentimentOutput {
     }
 
     public String getSource() { return source; }
+
+    @JsonIgnore
+    public String getDegradedReason() {
+        return degradedReason;
+    }
+
+    @JsonIgnore
+    public void setDegradedReason(String degradedReason) {
+        this.degradedReason = degradedReason;
+    }
 
     @Override
     public String toString() {

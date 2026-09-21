@@ -459,6 +459,40 @@ class VariantPaperTradingServiceTest {
         }
     }
 
+    // ==================== findOpenPositions ====================
+
+    @Nested
+    class FindOpenPositions {
+
+        @Test
+        void nullArgs_returnEmpty() {
+            assertThat(service.findOpenPositions(null, "TCS")).isEmpty();
+            assertThat(service.findOpenPositions("v1", null)).isEmpty();
+        }
+
+        @Test
+        void returnsVariantsOpenPositionsAsDomainPositions() {
+            PositionEntity pos = new PositionEntity();
+            pos.setId(10L);
+            pos.setSymbol("TCS");
+            pos.setPortfolioId("v1");
+            pos.setQuantity(5);
+            pos.setEntryPrice(BigDecimal.valueOf(100));
+            pos.setEntryDate(LocalDate.of(2024, 1, 2));
+            pos.setStatus("OPEN");
+            pos.setStopLoss(BigDecimal.valueOf(90));
+            pos.setTarget(BigDecimal.valueOf(130));
+            when(positionRepo.findOpenByPortfolioIdAndSymbol("v1", "TCS")).thenReturn(List.of(pos));
+
+            List<Position> open = service.findOpenPositions("v1", "TCS");
+
+            assertThat(open).hasSize(1);
+            assertThat(open.get(0).symbol()).isEqualTo("TCS");
+            assertThat(open.get(0).stopLoss()).isEqualByComparingTo("90");
+            assertThat(open.get(0).entryDate()).isEqualTo(LocalDate.of(2024, 1, 2));
+        }
+    }
+
     // ==================== evaluateOpenPositions ====================
 
     @Nested

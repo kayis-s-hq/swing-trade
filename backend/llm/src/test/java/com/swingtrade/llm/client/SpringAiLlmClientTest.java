@@ -141,7 +141,100 @@ class SpringAiLlmClientTest {
 
             // Assert
             assertThat(result).isNotNull();
-            assertThat(result.block()).isEqualTo("");
+            org.assertj.core.api.Assertions.assertThatThrownBy(result::block)
+                    .isInstanceOf(LlmUnavailableException.class);
+        }
+    }
+
+    // ===== Empty-response handling (RC2) =====
+
+    @Nested
+    @DisplayName("Empty response handling")
+    class EmptyResponseHandling {
+
+        private final List<Map<String, String>> messages = List.of(
+                Map.of("role", "system", "content", "sys"),
+                Map.of("role", "user", "content", "Test"));
+
+        @Test
+        void recoversJsonFromOllamaReasoningField() {
+            when(assistantMessage.getText()).thenReturn("");
+            var metadata = new java.util.HashMap<String, Object>();
+            metadata.put("reasoning", "Thinking...\n{\"score\": \"POSITIVE\"}");
+            when(assistantMessage.getMetadata()).thenReturn(metadata);
+
+            assertThat(client.generateChatCompletion(messages, 512, 0.0).block())
+                    .contains("POSITIVE");
+        }
+
+        @Test
+        void retriesOnceWithLargerBudgetThenSucceeds() {
+            when(assistantMessage.getText()).thenReturn("", "{\"score\": \"NEGATIVE\"}");
+            var captor = org.mockito.ArgumentCaptor
+                    .forClass(org.springframework.ai.chat.prompt.ChatOptions.Builder.class);
+
+            String result = client.generateChatCompletion(messages, 512, 0.0).block();
+
+            assertThat(result).contains("NEGATIVE");
+            org.mockito.Mockito.verify(callSpec, org.mockito.Mockito.times(2)).chatResponse();
+            org.mockito.Mockito.verify(requestSpec, org.mockito.Mockito.times(2))
+                    .options(captor.capture());
+            var built = captor.getAllValues().stream()
+                    .map(b -> (org.springframework.ai.chat.prompt.ChatOptions) b.build()).toList();
+            assertThat(built.get(0).getMaxTokens()).isEqualTo(512);
+            assertThat(built.get(1).getMaxTokens()).isEqualTo(1024);
+        }
+
+        @Test
+        void failsWithLlmUnavailableAfterOneBoundedRetry() {
+            when(assistantMessage.getText()).thenReturn("");
+
+            var mono = client.generateChatCompletion(messages, 512, 0.0);
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(mono::block)
+                    .isInstanceOf(LlmUnavailableException.class)
+                    .hasMessageContaining("empty");
+            org.mockito.Mockito.verify(callSpec, org.mockito.Mockito.times(2)).chatResponse();
+        }
+
+        @Test
+        void reasoningOnlyWithoutJsonCountsAsEmpty() {
+            when(assistantMessage.getText()).thenReturn("");
+            var metadata = new java.util.HashMap<String, Object>();
+            metadata.put("reasoning", "just musing, no json");
+            when(assistantMessage.getMetadata()).thenReturn(metadata);
+
+            var mono = client.generateChatCompletion(messages, 512, 0.0);
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(mono::block)
+                    .isInstanceOf(LlmUnavailableException.class);
+        }
+
+        @Test
+        void sendsConfiguredReasoningEffort() {
+            var effortClient = new SpringAiLlmClient(chatClient, false, "none");
+            when(assistantMessage.getText()).thenReturn("{\"score\": \"POSITIVE\"}");
+            var captor = org.mockito.ArgumentCaptor
+                    .forClass(org.springframework.ai.chat.prompt.ChatOptions.Builder.class);
+
+            effortClient.generateChatCompletion(messages, 512, 0.0).block();
+
+            org.mockito.Mockito.verify(requestSpec).options(captor.capture());
+            var opts = (org.springframework.ai.openai.OpenAiChatOptions) captor.getValue().build();
+            assertThat(opts.getReasoningEffort()).isEqualTo("none");
+        }
+
+        @Test
+        void omitsReasoningEffortWhenBlank() {
+            when(assistantMessage.getText()).thenReturn("{\"score\": \"POSITIVE\"}");
+            var captor = org.mockito.ArgumentCaptor
+                    .forClass(org.springframework.ai.chat.prompt.ChatOptions.Builder.class);
+
+            client.generateChatCompletion(messages, 512, 0.0).block();
+
+            org.mockito.Mockito.verify(requestSpec).options(captor.capture());
+            var opts = (org.springframework.ai.openai.OpenAiChatOptions) captor.getValue().build();
+            assertThat(opts.getReasoningEffort()).isNull();
         }
     }
 

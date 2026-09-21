@@ -61,6 +61,10 @@ public class JobRunStageEntity {
     @Column(name = "result_summary", columnDefinition = "TEXT")
     private String resultSummary;
 
+    /** Structured stage details (JSON text); nullable, absent on rows written before DEGRADED existed. */
+    @Column(name = "details", columnDefinition = "TEXT")
+    private String details;
+
     public JobRunStageEntity() {}
 
     public static JobRunStageEntity fromDomain(JobRunStage jrs) {
@@ -75,6 +79,7 @@ public class JobRunStageEntity {
         e.setErrorMessage(jrs.errorMessage());
         e.setLogDetails(jrs.logDetails());
         e.setResultSummary(jrs.resultSummary());
+        e.setDetails(jrs.details());
         return e;
     }
 
@@ -89,7 +94,8 @@ public class JobRunStageEntity {
             durationMs,
             errorMessage,
             logDetails,
-            resultSummary
+            resultSummary,
+            details
         );
     }
 
@@ -115,4 +121,6 @@ public class JobRunStageEntity {
     public void setLogDetails(String logDetails) { this.logDetails = logDetails; }
     public String getResultSummary() { return resultSummary; }
     public void setResultSummary(String resultSummary) { this.resultSummary = resultSummary; }
+    public String getDetails() { return details; }
+    public void setDetails(String details) { this.details = details; }
 }

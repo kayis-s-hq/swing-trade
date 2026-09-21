@@ -1,0 +1,25 @@
+groups:
+  - name: swing-trade-orchestration
+    rules:
+      # A configured strategy variant was skipped or errored during a job run (fail-closed skip).
+      # Counter labels: variant, reason (UNSUPPORTED_TYPE, INSUFFICIENT_HISTORY, INVALID_PARAMS, ERROR, OTHER).
+      - alert: StrategySkipped
+        expr: increase(strategy_skipped_total[30m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          application: swing-trade-stage
+        annotations:
+          summary: "Strategy {{ $labels.variant }} skipped ({{ $labels.reason }})"
+          description: "strategy_skipped_total rose for variant {{ $labels.variant }}, reason {{ $labels.reason }}. A configured strategy was not evaluated in a job run."
+
+      # A stage finished on a fallback or with skipped work (keyword sentiment, empty LLM analysis, skipped strategy).
+      - alert: StageDegraded
+        expr: increase(stage_degraded_total[30m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          application: swing-trade-stage
+        annotations:
+          summary: "Stage {{ $labels.stage }} degraded ({{ $labels.reason }})"
+          description: "stage_degraded_total rose for stage {{ $labels.stage }}, reason {{ $labels.reason }}."

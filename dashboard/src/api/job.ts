@@ -1,11 +1,20 @@
 import { apiRequest } from './shared'
-import type { JobRunResponse, JobRunProgressResponse, JobRunSummaryResponse } from './types'
+import type {
+  JobRunResponse,
+  JobRunProgressResponse,
+  JobRunSummaryResponse,
+  StartJobRunRequest,
+} from './types'
 
-export async function startJobRun(triggerType = 'MANUAL'): Promise<JobRunResponse> {
+export async function startJobRun(
+  triggerType = 'MANUAL',
+  request?: StartJobRunRequest
+): Promise<JobRunResponse> {
   const params = new URLSearchParams({ triggerType })
   return apiRequest<JobRunResponse>(`/job/runs/start?${params}`, {
     method: 'POST',
     responseContract: 'direct',
+    ...(request ? { body: JSON.stringify(request) } : {}),
   })
 }
 

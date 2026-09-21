@@ -27,7 +27,9 @@ import com.swingtrade.llm.service.SentimentService;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
-import com.swingtrade.strategy.StrategyRegistry;
+import com.swingtrade.strategy.LiveSignalEvaluator;
+import com.swingtrade.strategy.ResolvedStrategy;
+import com.swingtrade.strategy.StrategyResolver;
 import com.swingtrade.domain.StrategyConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +44,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -88,9 +91,11 @@ public class JobOrchestratorService {
     private static final long STALE_RUN_SAFETY_MULTIPLIER = 6L;
 
     private final long pollIntervalMs;
-    private final int maxConcurrent;
+    private int maxConcurrent;
     private final boolean reaperEnabled;
-    private final Semaphore semaphore;
+    private Semaphore semaphore;
+    /** Bounds concurrent LLM-backed stages (SENTIMENT, LLM_ANALYSIS) to the backend's capacity. */
+    private Semaphore llmSemaphore = new Semaphore(1);
     private final ExecutorService asyncExecutor;
 
     /**
@@ -146,10 +151,13 @@ public class JobOrchestratorService {
     private final boolean llmAnalysisEnabled;
     private final boolean llmAnalysisAdvisoryOnly;
     private final StrategyConfigRepository strategyConfigRepository;
-    private final StrategyRegistry strategyRegistry;
+    private final StrategyResolver strategyResolver;
     private final LiveEligibilityService liveEligibilityService;
     private final VariantTradingService variantTradingService;
     private GateEffectivenessAuditService gateEffectivenessAuditService;
+    /** When true a skipped/errored strategy variant fails the SIGNAL stage instead of degrading it. */
+    private boolean failOnStrategySkip;
+    private RunSummaryNotifier runSummaryNotifier;
 
     private SignalArbiter signalArbiter;
 
@@ -162,6 +170,30 @@ public class JobOrchestratorService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSignalArbiter(SignalArbiter signalArbiter) {
         this.signalArbiter = signalArbiter;
+    }
+
+    /** Symbol-level parallelism; when unset (0) the existing {@code job.orchestrator.max-concurrent} applies. */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setParallelism(@Value("${orchestrator.parallelism:0}") int parallelism) {
+        if (parallelism > 0) {
+            this.maxConcurrent = parallelism;
+            this.semaphore = new Semaphore(parallelism);
+        }
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setLlmConcurrency(@Value("${orchestrator.llm-concurrency:1}") int llmConcurrency) {
+        this.llmSemaphore = new Semaphore(Math.max(1, llmConcurrency));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setFailOnStrategySkip(@Value("${orchestrator.fail-on-strategy-skip:false}") boolean failOnStrategySkip) {
+        this.failOnStrategySkip = failOnStrategySkip;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setRunSummaryNotifier(RunSummaryNotifier runSummaryNotifier) {
+        this.runSummaryNotifier = runSummaryNotifier;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -193,7 +225,7 @@ public class JobOrchestratorService {
             LlmAnalysisGate llmAnalysisGate,
             SentimentStore sentimentStore,
             StrategyConfigRepository strategyConfigRepository,
-            StrategyRegistry strategyRegistry,
+            StrategyResolver strategyResolver,
             LiveEligibilityService liveEligibilityService,
             VariantTradingService variantTradingService,
             @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
@@ -231,7 +263,7 @@ public class JobOrchestratorService {
         this.llmAnalysisEnabled = llmAnalysisEnabled;
         this.llmAnalysisAdvisoryOnly = llmAnalysisAdvisoryOnly;
         this.strategyConfigRepository = strategyConfigRepository;
-        this.strategyRegistry = strategyRegistry;
+        this.strategyResolver = strategyResolver;
         this.liveEligibilityService = liveEligibilityService;
         this.variantTradingService = variantTradingService;
     }
@@ -268,11 +300,26 @@ public class JobOrchestratorService {
      *     before either has persisted its RUNNING row.
      */
     public JobRun startRun(JobRun.TriggerType triggerType) {
-        return startRun(triggerType, null);
+        return startRun(triggerType, (UUID) null);
     }
 
     /** Starts a run with an internal link to the scheduled candidate scan that selected it. */
     public JobRun startRun(JobRun.TriggerType triggerType, UUID candidateScanRunId) {
+        return startRun(triggerType, candidateScanRunId, RunRequest.NONE);
+    }
+
+    /** Starts a run scoped by {@code request}; see {@link RunRequest}. */
+    public JobRun startRun(JobRun.TriggerType triggerType, RunRequest request) {
+        return startRun(triggerType, null, request);
+    }
+
+    /**
+     * @throws InvalidRunRequestException if {@code request} names unknown symbols, variants or stages
+     */
+    public JobRun startRun(JobRun.TriggerType triggerType, UUID candidateScanRunId, RunRequest request) {
+        RunScope scope = request == null || request.isEmpty() ? RunScope.FULL
+            : RunScope.resolve(request, watchlistStore.getActiveWatchlistSymbols(),
+                liveConfigs().stream().map(StrategyConfig::variantId).collect(java.util.stream.Collectors.toSet()));
         LocalDate today = LocalDate.now(IST);
         JobRun run;
         synchronized (runStartLock) {
@@ -290,11 +337,13 @@ public class JobOrchestratorService {
             );
             JobRunEntity entity = JobRunEntity.fromDomain(run);
             entity.setCandidateScanRunId(candidateScanRunId);
+            entity.setTriggerOptions(scope.requestJson());
             jobRunRepository.save(entity);
         }
         jobMetrics.recordRunStarted();
 
-        List<String> symbols = watchlistStore.getActiveWatchlistSymbols();
+        List<String> symbols = scope.symbols() != null ? scope.symbols() : watchlistStore.getActiveWatchlistSymbols();
+        warnOnChampionCount();
         if (symbols.isEmpty()) {
             logger.info("No watchlist symbols — completing run with zero symbols");
             completeRun(run.runId(), JobRun.Status.COMPLETED, null);
@@ -326,7 +375,7 @@ public class JobOrchestratorService {
 
         // Process symbols in parallel with semaphore throttle
         List<CompletableFuture<Void>> futures = symbols.stream().map(symbol ->
-            CompletableFuture.runAsync(() -> processSymbol(finalRun.runId(), symbol, today), asyncExecutor)
+            CompletableFuture.runAsync(() -> processSymbol(finalRun.runId(), symbol, today, scope), asyncExecutor)
                 .exceptionally(ex -> {
                     logUnattributedPipelineError(symbol, ex);
                     return null;
@@ -361,7 +410,11 @@ public class JobOrchestratorService {
                         completeRun(finalRun.runId(), JobRun.Status.FAILED,
                             symbolsWithErrors.size() + " symbols failed");
                     } else {
-                        completeRun(finalRun.runId(), JobRun.Status.COMPLETED, null);
+                        boolean degraded = jobRunStageRepository
+                            .findByRunIdOrderBySymbolAscStageNameAsc(finalRun.runId()).stream()
+                            .anyMatch(e -> JobRunStage.Status.DEGRADED.name().equals(e.getStatus()));
+                        completeRun(finalRun.runId(), degraded
+                            ? JobRun.Status.COMPLETED_WITH_WARNINGS : JobRun.Status.COMPLETED, null);
                     }
                 } catch (Exception completionEx) {
                     // Never let a failure here vanish silently and leave the JobRun row
@@ -377,7 +430,7 @@ public class JobOrchestratorService {
         return run;
     }
 
-    private void processSymbol(UUID runId, String symbol, LocalDate today) {
+    private void processSymbol(UUID runId, String symbol, LocalDate today, RunScope scope) {
         JobRunStage.StageName[] currentStage = {JobRunStage.StageName.DATA_FETCH};
         try {
             acquireSlot(symbol);
@@ -388,19 +441,22 @@ public class JobOrchestratorService {
                 Signal.SignalType[] signalType = {null};
                 Set<Long> tradeableSignalIds = ConcurrentHashMap.newKeySet();
                 boolean[] configuredLiveRun = {false};
+                Set<String> evaluatedVariantIds = ConcurrentHashMap.newKeySet();
 
                 List<StageDef> stageDefs = new java.util.ArrayList<>(List.of(
                     new StageDef(JobRunStage.StageName.DATA_FETCH,
                         () -> StageExecutionResult.completed(stageDataFetch(symbol)), TIMEOUT_DATA_FETCH),
                     new StageDef(JobRunStage.StageName.SIGNAL,
-                        () -> stageSignal(symbol, signalType, tradeableSignalIds, configuredLiveRun), TIMEOUT_SIGNAL),
-                    new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol), TIMEOUT_BACKTEST),
+                        () -> stageSignal(symbol, signalType, tradeableSignalIds, configuredLiveRun, evaluatedVariantIds, scope),
+                        TIMEOUT_SIGNAL),
+                    new StageDef(JobRunStage.StageName.BACKTEST, () -> stageBacktest(symbol, scope), TIMEOUT_BACKTEST),
                     new StageDef(JobRunStage.StageName.NEWS,
                         () -> StageExecutionResult.completed(stageNews(symbol)), TIMEOUT_NEWS),
                     new StageDef(JobRunStage.StageName.SENTIMENT,
-                        () -> StageExecutionResult.completed(stageSentiment(symbol, today)), TIMEOUT_SENTIMENT),
+                        () -> stageSentiment(symbol, today), TIMEOUT_SENTIMENT),
                     new StageDef(JobRunStage.StageName.PAPER_TRADE,
-                        () -> StageExecutionResult.completed(stagePaperTrade(symbol, tradeableSignalIds, configuredLiveRun[0])), TIMEOUT_PAPER_TRADE)
+                        () -> StageExecutionResult.completed(stagePaperTrade(symbol, tradeableSignalIds,
+                            configuredLiveRun[0], evaluatedVariantIds, scope)), TIMEOUT_PAPER_TRADE)
                 ));
                 if (llmAnalysisEnabled) {
                     stageDefs.add(stageDefs.size() - 1, new StageDef(JobRunStage.StageName.LLM_ANALYSIS,
@@ -420,6 +476,12 @@ public class JobOrchestratorService {
                         logger.debug("Skipping stage {} for {}: run was cancelled", stageDef.name(), symbol);
                         continue;
                     }
+                    String scopeSkip = scope.skipReason(stageDef.name());
+                    if (scopeSkip != null) {
+                        updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.SKIPPED,
+                            null, null, "Skipped — " + scopeSkip);
+                        continue;
+                    }
                     if (priorStageBlocked
                             || (paperTradeBlocked && stageDef.name() == JobRunStage.StageName.PAPER_TRADE)) {
                         String reason = "Skipped — an earlier stage did not complete";
@@ -429,8 +491,20 @@ public class JobOrchestratorService {
                             stageDef.name(), symbol);
                         continue;
                     }
-                    boolean succeeded = executeStage(runId, symbol, stageDef.name(),
-                        stageDef.executor(), stageDef.timeoutSec());
+                    boolean llmStage = stageDef.name() == JobRunStage.StageName.SENTIMENT
+                        || stageDef.name() == JobRunStage.StageName.LLM_ANALYSIS;
+                    if (llmStage && !acquireLlmSlot(runId)) {
+                        updateStageStatus(runId, symbol, stageDef.name(), JobRunStage.Status.CANCELLED,
+                            null, "Run cancelled by user request", null);
+                        continue;
+                    }
+                    boolean succeeded;
+                    try {
+                        succeeded = executeStage(runId, symbol, stageDef.name(),
+                            stageDef.executor(), stageDef.timeoutSec());
+                    } finally {
+                        if (llmStage) llmSemaphore.release();
+                    }
                     // A timed-out/failed LLM analysis has no persisted verdict, so PAPER_TRADE
                     // must still run and defer through LlmAnalysisGate.PENDING. A SKIPPED backtest
                     // (e.g. not enough trade history) must not starve NEWS and SENTIMENT, which are
@@ -466,6 +540,14 @@ public class JobOrchestratorService {
         }
     }
 
+    /** Waits for an LLM slot, giving up (false) if the run is cancelled while queued. */
+    private boolean acquireLlmSlot(UUID runId) throws InterruptedException {
+        while (!llmSemaphore.tryAcquire(pollIntervalMs, TimeUnit.MILLISECONDS)) {
+            if (cancelledRunIds.contains(runId)) return false;
+        }
+        return true;
+    }
+
     private static String inFlightKey(UUID runId, String symbol) {
         return runId + "::" + symbol;
     }
@@ -497,11 +579,17 @@ public class JobOrchestratorService {
         try {
             StageExecutionResult result = future.get(timeoutSec, TimeUnit.SECONDS);
             long duration = System.currentTimeMillis() - start;
-            updateStageStatusTolerantly(runId, symbol, stage, result.status(),
-                duration, null, result.summary());
+            boolean errored = result.status() == JobRunStage.Status.ERROR;
+            updateStageStatusTolerantly(runId, symbol, stage, result.status(), duration,
+                errored ? result.summary() : null, errored ? null : result.summary(), result.details());
+            if (result.status() == JobRunStage.Status.DEGRADED) {
+                jobMetrics.recordStageDegraded(stage.name(),
+                    result.reasonCode() == null ? "UNKNOWN" : result.reasonCode());
+            }
             logger.debug("Stage {} finished with status {} for {} in {}ms",
                 stage, result.status(), symbol, duration);
-            return result.status() == JobRunStage.Status.COMPLETED;
+            return result.status() == JobRunStage.Status.COMPLETED
+                || result.status() == JobRunStage.Status.DEGRADED;
         } catch (CancellationException e) {
             long duration = System.currentTimeMillis() - start;
             String msg = "Cancelled by user request";
@@ -529,26 +617,22 @@ public class JobOrchestratorService {
     }
 
     /**
-     * Same as {@link #updateStageStatus} but swallows (logs, does not rethrow) a failure to
-     * write the stage's own terminal status. This write can lose a benign race with
-     * {@code cancelRun()}'s "belt-and-suspenders" loop, which independently writes a terminal
-     * CANCELLED status directly to any RUNNING row for the run being cancelled — both writers
-     * can target the exact same row concurrently (one via {@code saveAll()} on the cancelling
-     * thread, this one via {@code save()} on the just-interrupted stage's own thread as it
-     * unwinds). Optimistic locking (the entity's {@code @Version} column) correctly rejects
-     * whichever write loses that race — but before this method existed, a lost race propagated
-     * an uncaught exception out of {@code executeStage()}, which (a) let {@code processSymbol()}'s
-     * outer catch overwrite the row's already-correct CANCELLED status with ERROR, and (b) aborted
-     * the rest of that symbol's stage loop entirely, leaving its remaining stages stuck at PENDING
-     * forever. Confirmed live against the real Postgres/Hibernate stack (not just a theoretical
-     * race): {@code ObjectOptimisticLockingFailureException} / "Row was already updated or deleted
-     * by another transaction" / "Unexpected row count (expected row count 1 but was 0)".
+     * Same as {@link #updateStageStatus} but swallows (logs) a failure to write the stage's own
+     * terminal status: it can lose a benign optimistic-lock race with cancelRun()'s own CANCELLED
+     * write to the same row, and letting that propagate would overwrite CANCELLED with ERROR and
+     * abort the symbol's remaining stages.
      */
     private void updateStageStatusTolerantly(UUID runId, String symbol, JobRunStage.StageName stage,
                                     JobRunStage.Status status, Long durationMs,
                                     String errorMessage, String resultSummary) {
+        updateStageStatusTolerantly(runId, symbol, stage, status, durationMs, errorMessage, resultSummary, null);
+    }
+
+    private void updateStageStatusTolerantly(UUID runId, String symbol, JobRunStage.StageName stage,
+                                    JobRunStage.Status status, Long durationMs,
+                                    String errorMessage, String resultSummary, String details) {
         try {
-            updateStageStatus(runId, symbol, stage, status, durationMs, errorMessage, resultSummary);
+            updateStageStatus(runId, symbol, stage, status, durationMs, errorMessage, resultSummary, details);
         } catch (Exception e) {
             logger.debug("Stage {} status write for {} (-> {}) lost a race — most likely "
                 + "cancelRun() already wrote an equivalent terminal status for this row "
@@ -570,56 +654,103 @@ public class JobOrchestratorService {
         return articles.size() + " articles fetched";
     }
 
-    private String stageSentiment(String symbol, LocalDate date) {
+    /**
+     * A keyword-fallback sentiment (LLM unavailable/empty, wave-1 Step 2) is reported DEGRADED
+     * with the source and reason instead of a silent COMPLETED.
+     */
+    StageExecutionResult stageSentiment(String symbol, LocalDate date) {
         var result = sentimentService.analyzeStockSentiment(symbol, date);
-        return result.score() + ", confidence " + result.confidence();
+        String summary = result.score() + ", confidence " + result.confidence();
+        if ("KEYWORD_FALLBACK".equals(result.source())) {
+            String reason = result.degradedReason() == null ? "LLM unavailable" : result.degradedReason();
+            return StageExecutionResult.degraded(summary + " (keyword fallback: " + reason + ")",
+                StageDetails.sentiment("KEYWORD_FALLBACK", reason), "KEYWORD_FALLBACK");
+        }
+        return StageExecutionResult.completed(summary, StageDetails.sentiment("LLM", null));
     }
 
-    private StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
-                                             Set<Long> tradeableSignalIds,
-                                             boolean[] configuredLiveRun) {
-        List<StrategyConfig> configs = liveConfigs();
+    StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
+                                     Set<Long> tradeableSignalIds,
+                                     boolean[] configuredLiveRun) {
+        return stageSignal(symbol, signalTypeOut, tradeableSignalIds, configuredLiveRun, new HashSet<>(),
+            RunScope.FULL);
+    }
+
+    StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
+                                     Set<Long> tradeableSignalIds,
+                                     boolean[] configuredLiveRun, Set<String> evaluatedVariantIds) {
+        return stageSignal(symbol, signalTypeOut, tradeableSignalIds, configuredLiveRun, evaluatedVariantIds,
+            RunScope.FULL);
+    }
+
+    StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
+                                     Set<Long> tradeableSignalIds, boolean[] configuredLiveRun,
+                                     Set<String> evaluatedVariantIds, RunScope scope) {
+        List<StrategyConfig> configs = liveConfigs(scope);
         if (!configs.isEmpty()) {
             configuredLiveRun[0] = true;
-            boolean championSeen = configs.stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count() == 1;
-            int generated = 0;
+            long champions = liveConfigs().stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count();
+            boolean championSeen = champions == 1;
+            ConfiguredSignalTally tally = new ConfiguredSignalTally();
+            if (!championSeen) {
+                tally.warn(championWarning(champions));
+            }
             List<VariantSignalOutcome> outcomes = new java.util.ArrayList<>();
             for (StrategyConfig config : configs) {
-                java.util.Optional<com.swingtrade.strategy.TradingStrategy> selected;
-                try {
-                    selected = strategyRegistry.resolve(config);
-                } catch (IllegalArgumentException e) {
-                    logger.warn("Skipping configured strategy {}: invalid parameters: {}",
-                        config.variantId(), e.getMessage());
-                    continue;
-                }
-                if (selected.isEmpty()) {
-                    logger.warn("Skipping configured strategy {}: unsupported strategy type {} (fail-closed)",
-                        config.variantId(), config.strategyType());
-                    continue;
-                }
                 boolean champion = championSeen && config.mode() == StrategyConfig.Mode.CHAMPION;
+                ConfiguredEvaluation evaluation;
                 try {
-                    var signal = signalPipeline.generateConfiguredSignal(symbol, config, selected.get(), champion);
-                    if (signal.isPresent()) {
-                        generated++;
-                        signalTypeOut[0] = signal.get().type();
-                        outcomes.add(new VariantSignalOutcome(config.variantId(), config.version(),
-                            signal.get().type(), false, true, signal.get().confidence()));
-                        if (champion && signal.get().id() != null) tradeableSignalIds.add(signal.get().id());
-                    }
+                    evaluation = scope.dryRun()
+                        ? signalPipeline.generateConfiguredSignal(symbol, config,
+                            strategyResolver.resolve(config), champion, true)
+                        : signalPipeline.generateConfiguredSignal(symbol, config,
+                            strategyResolver.resolve(config), champion);
                 } catch (RuntimeException e) {
                     logger.warn("Configured strategy {} failed for {} (fail-closed): {}",
                         config.variantId(), symbol, e.getMessage());
+                    tally.error(config.variantId(), config.version(), e.getMessage());
+                    jobMetrics.recordStrategySkipped(config.variantId(), "ERROR");
+                    continue;
+                }
+                var signal = evaluation.signal();
+                switch (evaluation.kind()) {
+                    case SKIPPED -> {
+                        logger.warn("Skipping configured strategy {} for {}: {}", config.variantId(), symbol,
+                            evaluation.detail());
+                        tally.skipped(config.variantId(), config.version(), evaluation.detail());
+                        jobMetrics.recordStrategySkipped(config.variantId(),
+                            ConfiguredSignalTally.skipReasonCode(evaluation.detail()));
+                    }
+                    case ERROR -> {
+                        tally.error(config.variantId(), config.version(), evaluation.detail());
+                        jobMetrics.recordStrategySkipped(config.variantId(), "ERROR");
+                    }
+                    case EVALUATED -> {
+                        tally.evaluated(config.variantId(), config.version(), signal != null, evaluation.score());
+                        evaluatedVariantIds.add(config.variantId());
+                        if (signal != null) {
+                            signalTypeOut[0] = signal.type();
+                            outcomes.add(new VariantSignalOutcome(config.variantId(), config.version(),
+                                signal.type(), false, true, signal.confidence()));
+                            if (champion && signal.id() != null) tradeableSignalIds.add(signal.id());
+                        }
+                    }
                 }
             }
-            String summary = generated + " configured signal(s) generated";
-            Optional<SignalSelectionEntity> winner = arbitrate(symbol, outcomes);
+            String summary = tally.summary();
+            Optional<SignalSelectionEntity> winner = scope.dryRun() ? Optional.empty() : arbitrate(symbol, outcomes);
             if (winner.isPresent()) {
                 summary += "; winner " + winner.get().getWinnerVariantId()
                     + " (" + winner.get().getWinnerConfidence().toPlainString() + ")";
             }
-            return StageExecutionResult.completed(summary);
+            if (!tally.degraded()) {
+                return StageExecutionResult.completed(summary, tally.detailsJson());
+            }
+            if (failOnStrategySkip) {
+                return new StageExecutionResult(JobRunStage.Status.ERROR, summary, tally.detailsJson(),
+                    tally.reasonCode());
+            }
+            return StageExecutionResult.degraded(summary, tally.detailsJson(), tally.reasonCode());
         }
 
         var signal = signalPipeline.generatePrimarySignal(symbol);
@@ -629,25 +760,8 @@ public class JobOrchestratorService {
         return StageExecutionResult.completed(summary);
     }
 
-    private StageExecutionResult stageBacktest(String symbol) {
-        try {
-            BacktestConfig config = BacktestConfig.defaults();
-            BacktestResult result = backtestEngine.runBacktest(symbol, "NSE", config);
-            LocalDate date = LocalDate.now(IST);
-            if (backtestResultStore != null) backtestResultStore.saveOrUpdate(new com.swingtrade.domain.BacktestResult(null, symbol, date,
-                result.totalTrades(), result.winningTrades(), result.losingTrades(), result.winRate(),
-                result.avgGainPct().doubleValue(), result.avgLossPct().doubleValue(), result.maxDrawdownPct().doubleValue(), result.sharpeRatio(),
-                result.totalReturn().doubleValue(), result.expectancy(), BacktestScorer.calculateProfitFactor(result), true));
-            String summary = result.totalTrades() + " trades, "
-                + String.format("%.0f", result.winRate()) + "% win, "
-                + String.format("%.1f", result.totalReturn()) + "% return";
-            return StageExecutionResult.completed(summary);
-        } catch (IllegalStateException e) {
-            logger.info("Backtest skipped for {}: {}", symbol, e.getMessage());
-            if (backtestResultStore != null) backtestResultStore.saveOrUpdate(new com.swingtrade.domain.BacktestResult(null, symbol, LocalDate.now(IST),
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false));
-            return StageExecutionResult.skipped(e.getMessage());
-        }
+    private StageExecutionResult stageBacktest(String symbol, RunScope scope) {
+        return new BacktestStage(backtestEngine, backtestResultStore).run(symbol, !scope.dryRun());
     }
 
     StageExecutionResult stageLlmAnalysis(UUID runId, String symbol, LocalDate date) {
@@ -679,18 +793,25 @@ public class JobOrchestratorService {
             composite.compositeSignal(), synthesis.success(), !synthesis.success() || inputFallback,
             inputFallback ? "One or more analysis inputs were unavailable" : null));
         String summary = "recommendation=" + synthesis.recommendation() + ", confidence=" + synthesis.confidence();
+        if (synthesis.recommendation() == null || synthesis.recommendation().isBlank()) {
+            return StageExecutionResult.degraded(summary,
+                StageDetails.degraded("NO_RECOMMENDATION", "LLM analysis produced no recommendation"),
+                "NO_RECOMMENDATION");
+        }
         return StageExecutionResult.completed(summary);
     }
 
     String stagePaperTrade(String symbol) {
-        return stagePaperTrade(symbol, Set.of(), false);
+        return stagePaperTrade(symbol, Set.of(), false, Set.of(), RunScope.FULL);
     }
 
-    private String stagePaperTrade(String symbol, Set<Long> tradeableSignalIds, boolean configuredLiveRun) {
+    private String stagePaperTrade(String symbol, Set<Long> tradeableSignalIds, boolean configuredLiveRun,
+                                   Set<String> evaluatedVariantIds, RunScope scope) {
         String selectedSummary = null;
         if (configuredLiveRun) {
-            stageVariantPaperTrade(symbol);
-            selectedSummary = stageSelectedTrade(symbol);
+            variantStage().runVariants(symbol, liveConfigs(scope));
+            selectedSummary = variantStage().selectedTrade(symbol, SELECTED_PORTFOLIO_ID,
+                SELECTED_PORTFOLIO_CAPITAL, SELECTION_EXPIRY_DAYS, evaluatedVariantIds);
         }
         List<Signal> unprocessed = signalStore.findUnprocessed()
             .stream()
@@ -826,131 +947,37 @@ public class JobOrchestratorService {
         }
     }
 
-    /**
-     * Drives the dedicated "selected" paper book: evaluates exits on its open position for
-     * {@code symbol}, then executes the tournament winner if it is still PENDING and clears the
-     * same sentiment / LLM / live-eligibility gates as the champion's BUYs. The winner's own
-     * variant book is unaffected - this only adds a follow-the-winner book.
-     *
-     * @return a short summary, or {@code null} when there is nothing selected to act on
-     */
-    private String stageSelectedTrade(String symbol) {
-        if (signalArbiter == null || variantTradingService == null) {
-            return null;
-        }
-        try {
-            variantTradingService.ensurePortfolio(SELECTED_PORTFOLIO_ID, SELECTED_PORTFOLIO_CAPITAL);
-            OhlcvCandle latest = candleStore.findLatestBySymbol(symbol).orElse(null);
-            if (latest == null || latest.close() == null) {
-                return null;
-            }
-            variantTradingService.evaluateOpenPositions(SELECTED_PORTFOLIO_ID, symbol, latest);
-
-            Optional<SignalSelectionEntity> pending =
-                signalArbiter.findLatest(symbol, SignalSelectionEntity.PENDING);
-            if (pending.isEmpty()) {
-                return null;
-            }
-            SignalSelectionEntity selection = pending.get();
-            String winner = selection.getWinnerVariantId();
-            if (selection.getSelectionDate().isBefore(LocalDate.now(IST).minusDays(SELECTION_EXPIRY_DAYS))) {
-                signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, "expired before gates cleared");
-                return "expired " + winner;
-            }
-            Optional<Signal> signal = signalStore.findLatestBySymbolAndStrategy(symbol, winner)
-                .filter(s -> selection.getWinnerSignalId() == null || selection.getWinnerSignalId().equals(s.id()));
-            if (signal.isEmpty() || signal.get().type() != Signal.SignalType.BUY) {
-                signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, "winning signal no longer available");
-                return "winning signal missing";
-            }
-
-            String block = null;
-            var sentiment = sentimentGate.evaluatePersisted(symbol, signal.get().date());
-            if (sentiment.action() == SentimentGate.SentimentVerdict.Action.PENDING) {
-                return "deferred " + winner + " (awaiting sentiment)";
-            }
-            if (sentiment.action() == SentimentGate.SentimentVerdict.Action.SUPPRESS) {
-                block = "SENTIMENT_BLOCK: " + sentiment.reason();
-            }
-            if (block == null && llmAnalysisEnabled && llmAnalysisGate != null) {
-                var llm = llmAnalysisGate.evaluatePersisted(symbol, signal.get().date());
-                if (llm.action() == LlmAnalysisGate.LlmVerdict.Action.PENDING) {
-                    return "deferred " + winner + " (awaiting LLM analysis)";
-                }
-                if (llm.action() == LlmAnalysisGate.LlmVerdict.Action.SUPPRESS && !llmAnalysisAdvisoryOnly) {
-                    block = "LLM_BLOCK: " + llm.reason();
-                }
-            }
-            if (block == null && liveEligibilityService != null) {
-                var eligibility = liveEligibilityService.assess(symbol, signal.get().date(), latest.close());
-                if (!eligibility.eligible()) {
-                    block = "ELIGIBILITY_BLOCK: " + eligibility.rejectionReasons();
-                }
-            }
-            if (block != null) {
-                signalArbiter.markStatus(selection, SignalSelectionEntity.BLOCKED, block);
-                logger.info("Selected-book BUY {} for {} blocked: {}", winner, symbol, block);
-                return "blocked " + winner;
-            }
-            if (!variantTradingService.openPosition(SELECTED_PORTFOLIO_ID, signal.get(), latest.close())) {
-                return "could not open " + winner + " (will retry)";
-            }
-            signalArbiter.markStatus(selection, SignalSelectionEntity.EXECUTED, null);
-            return "executed " + winner;
-        } catch (RuntimeException e) {
-            logger.error("Selected-book execution failed for {}: {}", symbol, e.getMessage(), e);
-            return null;
-        }
+    /** Per-variant simulated paper trading; see {@link VariantPaperTradeStage}. */
+    void stageVariantPaperTrade(String symbol) {
+        variantStage().runVariants(symbol, liveConfigs());
     }
 
-    /**
-     * Runs every active variant's own simulated paper trading — SHADOW variants entirely,
-     * and the CHAMPION too (in addition to its existing real order-queueing path below),
-     * so every variant's own portfolio bookkeeping is directly comparable. Each variant is
-     * isolated in its own try/catch: one variant's failure for this symbol/day must not
-     * block another variant's execution (task constraint 4).
-     */
-    private void stageVariantPaperTrade(String symbol) {
-        if (variantTradingService == null) return;
+    private VariantPaperTradeStage variantStage() {
+        return new VariantPaperTradeStage(variantTradingService, candleStore, signalStore, strategyResolver,
+            signalArbiter, sentimentGate, llmAnalysisGate, liveEligibilityService, llmAnalysisEnabled,
+            llmAnalysisAdvisoryOnly);
+    }
+
+    private List<StrategyConfig> liveConfigs(RunScope scope) {
+        return liveConfigs().stream().filter(c -> scope.includesVariant(c.variantId())).toList();
+    }
+
+    private static String championWarning(long champions) {
+        return "Expected exactly 1 CHAMPION variant but found " + champions
+            + "; no variant is trade-authoritative for this run";
+    }
+
+    /** Logs a run-level warning when the live configs do not have exactly one CHAMPION. */
+    private void warnOnChampionCount() {
         List<StrategyConfig> configs = liveConfigs();
-        if (configs.isEmpty()) return;
-        OhlcvCandle latest = candleStore.findLatestBySymbol(symbol).orElse(null);
-        if (latest == null || latest.close() == null) return;
-
-        for (StrategyConfig config : configs) {
-            String variantId = config.variantId();
-            try {
-                variantTradingService.ensurePortfolio(variantId, config.paperCapital());
-                variantTradingService.evaluateOpenPositions(variantId, symbol, latest);
-
-                List<Signal> variantSignals = signalStore.findUnprocessed().stream()
-                    .filter(s -> s.symbol().equals(symbol))
-                    .filter(s -> signalStore.findStrategyById(s.id())
-                        .map(variantId::equals).orElse(false))
-                    .toList();
-                for (Signal signal : variantSignals) {
-                    try {
-                        if (signal.type() == Signal.SignalType.BUY) {
-                            variantTradingService.openPosition(variantId, signal, latest.close());
-                        } else if (signal.type() == Signal.SignalType.SELL) {
-                            variantTradingService.closePosition(variantId, symbol, latest.close(),
-                                "Strategy SELL signal");
-                        }
-                        signalStore.markProcessed(signal.id());
-                    } catch (RuntimeException e) {
-                        logger.warn("Variant {} failed to process signal {} for {}: {}",
-                            variantId, signal.id(), symbol, e.getMessage());
-                    }
-                }
-            } catch (RuntimeException e) {
-                logger.warn("Variant paper trading failed for {} on {} (isolated, other variants unaffected): {}",
-                    variantId, symbol, e.getMessage());
-            }
+        long champions = configs.stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count();
+        if (!configs.isEmpty() && champions != 1) {
+            logger.warn("Champion guard: {}", championWarning(champions));
         }
     }
 
     private List<StrategyConfig> liveConfigs() {
-        if (strategyConfigRepository == null || strategyRegistry == null) return List.of();
+        if (strategyConfigRepository == null || strategyResolver == null) return List.of();
         return strategyConfigRepository.findAll().stream()
             .map(com.swingtrade.data.entity.StrategyConfigEntity::toDomain)
             .filter(StrategyConfig::current)
@@ -963,6 +990,12 @@ public class JobOrchestratorService {
     private void updateStageStatus(UUID runId, String symbol, JobRunStage.StageName stage,
                                     JobRunStage.Status status, Long durationMs,
                                     String errorMessage, String resultSummary) {
+        updateStageStatus(runId, symbol, stage, status, durationMs, errorMessage, resultSummary, null);
+    }
+
+    private void updateStageStatus(UUID runId, String symbol, JobRunStage.StageName stage,
+                                    JobRunStage.Status status, Long durationMs,
+                                    String errorMessage, String resultSummary, String details) {
         List<JobRunStageEntity> existing = jobRunStageRepository
             .findByRunIdAndSymbolAndStageName(runId, symbol, stage.name());
 
@@ -972,12 +1005,13 @@ public class JobOrchestratorService {
             entity.setStartedAt(entity.getStartedAt() != null ? entity.getStartedAt()
                 : java.time.LocalDateTime.now(IST));
             if (status == JobRunStage.Status.COMPLETED || status == JobRunStage.Status.ERROR
-                || status == JobRunStage.Status.SKIPPED) {
+                || status == JobRunStage.Status.SKIPPED || status == JobRunStage.Status.DEGRADED) {
                 entity.setCompletedAt(java.time.LocalDateTime.now(IST));
                 entity.setDurationMs(durationMs);
             }
             entity.setErrorMessage(errorMessage);
             entity.setResultSummary(resultSummary);
+            entity.setDetails(details);
             jobRunStageRepository.save(entity);
         } else {
             JobRunStage stageRow = new JobRunStage(
@@ -985,7 +1019,7 @@ public class JobOrchestratorService {
                 java.time.LocalDateTime.now(IST),
                 (status == JobRunStage.Status.COMPLETED || status == JobRunStage.Status.ERROR)
                     ? java.time.LocalDateTime.now(IST) : null,
-                durationMs, errorMessage, null, resultSummary
+                durationMs, errorMessage, null, resultSummary, details
             );
             jobRunStageRepository.save(JobRunStageEntity.fromDomain(stageRow));
         }
@@ -1035,12 +1069,23 @@ public class JobOrchestratorService {
         long durationMs = runOpt.filter(e -> e.getStartedAt() != null)
             .map(e -> java.time.Duration.between(e.getStartedAt(), e.getCompletedAt()).toMillis())
             .orElse(0L);
-        if (status == JobRun.Status.COMPLETED) {
+        if (status == JobRun.Status.COMPLETED || status == JobRun.Status.COMPLETED_WITH_WARNINGS) {
             jobMetrics.recordRunCompleted(durationMs);
         } else {
             jobMetrics.recordRunFailed(durationMs);
         }
         logger.info("Run {} completed with status {}", runId, status);
+        notifyRunSummary(runId);
+    }
+
+    /** Posts the run summary (degraded stages, skipped strategies) when a notifier is wired. */
+    private void notifyRunSummary(UUID runId) {
+        if (runSummaryNotifier == null) return;
+        try {
+            runSummaryNotifier.notifyRun(getSummary(runId));
+        } catch (RuntimeException e) {
+            logger.warn("Run summary notification failed for {}: {}", runId, e.getMessage());
+        }
     }
 
     /**
@@ -1154,26 +1199,7 @@ public class JobOrchestratorService {
     }
 
     private void reapRun(JobRunEntity run, String reason) {
-        logger.warn("Reaping orphaned run {}: startedAt={}, symbolsCount={}, reason={}",
-            run.getRunId(), run.getStartedAt(), run.getSymbolsCount(), reason);
-
-        run.setStatus(JobRun.Status.FAILED.name());
-        run.setCompletedAt(java.time.LocalDateTime.now(IST));
-        run.setErrorMessage(reason);
-        jobRunRepository.save(run);
-        jobMetrics.recordRunReaped();
-
-        List<JobRunStageEntity> runningStages = jobRunStageRepository
-            .findByRunIdOrderBySymbolAscStageNameAsc(run.getRunId()).stream()
-            .filter(e -> JobRunStage.Status.RUNNING.name().equals(e.getStatus()))
-            .toList();
-        for (JobRunStageEntity stage : runningStages) {
-            stage.setStatus(JobRunStage.Status.ERROR.name());
-            stage.setCompletedAt(java.time.LocalDateTime.now(IST));
-            stage.setErrorMessage(
-                "Reaped as orphaned — run was force-failed while this stage was RUNNING");
-        }
-        jobRunStageRepository.saveAll(runningStages);
+        new OrphanedRunReaper(jobRunRepository, jobRunStageRepository, jobMetrics).reap(run, reason);
     }
 
     /**
@@ -1258,43 +1284,8 @@ public class JobOrchestratorService {
         var runOpt = jobRunRepository.findByRunId(runId);
         if (runOpt.isEmpty()) return null;
 
-        JobRunEntity runEntity = runOpt.get();
-        List<JobRunStageEntity> stages = jobRunStageRepository
-            .findByRunIdOrderBySymbolAscStageNameAsc(runId);
-
-        // Per-stage aggregates
-        java.util.Map<String, StageStats> stageStats = new java.util.HashMap<>();
-        for (var entry : stages.stream().collect(java.util.stream.Collectors.groupingBy(JobRunStageEntity::getStageName)).entrySet()) {
-            List<JobRunStageEntity> list = entry.getValue();
-            int total = list.size();
-            long completed = list.stream().filter(e -> "COMPLETED".equals(e.getStatus())).count();
-            long errors = list.stream().filter(e -> "ERROR".equals(e.getStatus())).count();
-            long duration = list.stream().mapToLong(e ->
-                e.getDurationMs() != null ? e.getDurationMs() : 0).sum();
-            stageStats.put(entry.getKey(), new StageStats(total, (int) completed, (int) errors, duration));
-        }
-
-        // Per-symbol detail
-        List<SymbolDetail> symbolDetails = stages.stream()
-            .collect(java.util.stream.Collectors.groupingBy(
-                JobRunStageEntity::getSymbol,
-                java.util.stream.Collectors.mapping(e -> e.getStageName() + ":" + e.getStatus(),
-                    java.util.stream.Collectors.toList())
-            ))
-            .entrySet().stream()
-            .map(e -> new SymbolDetail(e.getKey(), e.getValue()))
-            .toList();
-
-        return new JobRunSummary(
-            runEntity.getRunId(),
-            runEntity.getStatus(),
-            runEntity.getSymbolsCount(),
-            runEntity.getCompletedCount(),
-            runEntity.getFailedCount(),
-            stages.stream().mapToLong(e -> e.getDurationMs() != null ? e.getDurationMs() : 0).sum(),
-            stageStats,
-            symbolDetails
-        );
+        return JobRunSummaryAssembler.assemble(runOpt.get(),
+            jobRunStageRepository.findByRunIdOrderBySymbolAscStageNameAsc(runId));
     }
 
     /**
@@ -1326,15 +1317,30 @@ public class JobOrchestratorService {
         int failedSymbols,
         long totalDurationMs,
         java.util.Map<String, StageStats> stageStats,
-        List<SymbolDetail> symbolDetails
+        List<SymbolDetail> symbolDetails,
+        int degradedStages,
+        int skippedStrategies,
+        List<DegradedStageBreakdown> degradedStageBreakdown,
+        List<SkippedStrategyBreakdown> skippedStrategyBreakdown
     ) {}
 
     public record StageStats(
         int total,
         int completed,
         int errors,
-        long totalDurationMs
-    ) {}
+        long totalDurationMs,
+        int degraded
+    ) {
+        public StageStats(int total, int completed, int errors, long totalDurationMs) {
+            this(total, completed, errors, totalDurationMs, 0);
+        }
+    }
+
+    /** DEGRADED stage rows grouped by stage and reason code. */
+    public record DegradedStageBreakdown(String stage, String reason, int count) {}
+
+    /** Skipped/errored strategy variant on the SIGNAL stage: outcome is SKIPPED or ERROR; symbols = affected count. */
+    public record SkippedStrategyBreakdown(String variantId, String outcome, String reason, int symbols) {}
 
     public record SymbolDetail(
         String symbol,
@@ -1361,9 +1367,22 @@ public class JobOrchestratorService {
     private record StageDef(JobRunStage.StageName name, StageExecutor executor, long timeoutSec) {}
 
     /** A stage can complete normally or skip without being treated as an operational error. */
-    record StageExecutionResult(JobRunStage.Status status, String summary) {
+    record StageExecutionResult(JobRunStage.Status status, String summary, String details, String reasonCode) {
+        StageExecutionResult(JobRunStage.Status status, String summary) {
+            this(status, summary, null, null);
+        }
+
         private static StageExecutionResult completed(String summary) {
             return new StageExecutionResult(JobRunStage.Status.COMPLETED, summary);
+        }
+
+        private static StageExecutionResult completed(String summary, String details) {
+            return new StageExecutionResult(JobRunStage.Status.COMPLETED, summary, details, null);
+        }
+
+        /** Finished, but on a fallback or with skipped work; does not block later stages. */
+        private static StageExecutionResult degraded(String summary, String details, String reasonCode) {
+            return new StageExecutionResult(JobRunStage.Status.DEGRADED, summary, details, reasonCode);
         }
 
         private static StageExecutionResult skipped(String summary) {
