@@ -161,17 +161,17 @@ public class CandidateScanService {
     }
 
     @Transactional
-    /** Manual scans hand qualified candidates to the orchestrator just like scheduled scans. */
-    public CandidateScanRunEntity start() { return start(true); }
+    /** Manual scans use the active dashboard watchlist and hand qualified candidates to the orchestrator. */
+    public CandidateScanRunEntity start() { return start(true, true); }
 
     /** Scheduled scans persist a handoff request for their qualified candidates. */
     @Transactional
     public CandidateScanRunEntity startScheduled() {
-        CandidateScanRunEntity run = start(true);
+        CandidateScanRunEntity run = start(true, false);
         return run;
     }
 
-    private CandidateScanRunEntity start(boolean scheduled) {
+    private CandidateScanRunEntity start(boolean scheduled, boolean watchlistOnly) {
         UUID existing = activeRun.get();
         if (existing != null || runRepository.existsByStatus("RUNNING")) {
             throw new IllegalStateException("Candidate scan already running: " + existing);
@@ -180,9 +180,11 @@ public class CandidateScanService {
         maxConcurrent = configuredMaxConcurrent();
         semaphore = new Semaphore(maxConcurrent);
 
-        List<String> symbols = symbolRepository.findByExchangeIgnoreCaseOrderByTradingSymbolAsc("NSE")
-            .stream()
-            .map(s -> s.getTradingSymbol() == null ? "" : s.getTradingSymbol().trim().toUpperCase())
+        List<String> symbols = (watchlistOnly && watchlistService != null
+            ? watchlistService.getActiveWatchlist().stream().map(entry -> entry.getSymbol())
+            : symbolRepository.findByExchangeIgnoreCaseOrderByTradingSymbolAsc("NSE").stream()
+                .map(s -> s.getTradingSymbol()))
+            .map(symbol -> symbol == null ? "" : symbol.trim().toUpperCase())
             .filter(s -> !s.isBlank() && s.matches("[A-Z0-9]+"))
             .collect(java.util.stream.Collectors.collectingAndThen(
                 java.util.stream.Collectors.toCollection(LinkedHashSet::new), ArrayList::new));

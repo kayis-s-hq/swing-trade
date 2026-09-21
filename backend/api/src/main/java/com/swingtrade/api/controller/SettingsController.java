@@ -45,6 +45,9 @@ public class SettingsController {
 
     private static final Logger logger = LoggerFactory.getLogger(SettingsController.class);
     private static final int TEST_INFERENCE_MAX_TOKENS = 512;
+    // Reasoning-capable OpenAI-compatible models may spend 20-40 tokens before
+    // emitting a one-word answer. Keep the connectivity probe above that budget.
+    private static final int OPENAI_TEST_MAX_TOKENS = 128;
     private static final Duration OLLAMA_TEST_TIMEOUT = Duration.ofSeconds(120);
     private static final Pattern OK_PATTERN = Pattern.compile("(?i)\\bok\\b");
     private static final Set<String> SECRET_SETTING_KEYS = Set.of(
@@ -354,7 +357,7 @@ public class SettingsController {
             }
             String response;
             try {
-                response = client.generateChatCompletion(messages, 16, 0.0)
+                response = client.generateChatCompletion(messages, OPENAI_TEST_MAX_TOKENS, 0.0)
                     .block(Duration.ofSeconds(30));
             } finally {
                 if (manager != null) manager.endRequest();
