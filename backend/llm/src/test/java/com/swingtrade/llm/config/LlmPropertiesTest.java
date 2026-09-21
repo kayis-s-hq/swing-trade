@@ -31,6 +31,15 @@ class LlmPropertiesTest {
             "llm.pdf.model=pdf-model"
         );
 
+    @Test
+    void stageTimeoutDefaultsToLegacyDeadlineAndIsOverridable() {
+        contextRunner.run(context -> assertThat(context.getBean(LlmProperties.class).getStageTimeout())
+                .isEqualTo(java.time.Duration.ofSeconds(2880)));
+        contextRunner.withPropertyValues("llm.stage-timeout=90s").run(context ->
+                assertThat(context.getBean(LlmProperties.class).getStageTimeout())
+                        .isEqualTo(java.time.Duration.ofSeconds(90)));
+    }
+
     @Nested
     @DisplayName("Property binding")
     class PropertyBinding {

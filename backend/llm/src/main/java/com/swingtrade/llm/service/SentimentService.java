@@ -62,6 +62,8 @@ public class SentimentService {
     // from — including the mid-request thermal-throttling decay that made the
     // first two attempts at this number (930s, then 1830s) both too tight.
     private static final long ANALYSIS_TIMEOUT_SECONDS = 2880;
+    /** Result source when the LLM failed and keyword analysis substituted for it. */
+    static final String KEYWORD_FALLBACK_SOURCE = "KEYWORD_FALLBACK";
     private static final int MAX_ARTICLES_FOR_LLM = 10;
     private static final int PI_MAX_ARTICLES_FOR_LLM = 6;
     private static final int PI_MAX_ARTICLE_CHARS = 450;
@@ -277,8 +279,10 @@ public class SentimentService {
                             default -> SentimentType.NEUTRAL;
                         },
                         fallback.summary(), fallback.confidence(),
-                        fallback.redFlags(), fallback.catalysts(), "KEYWORD"
+                        fallback.redFlags(), fallback.catalysts(), KEYWORD_FALLBACK_SOURCE
                 );
+                analysisResult.setDegradedReason(
+                        "LLM unavailable: " + LlmErrorUtils.describeError(llmEx));
             }
 
             // Build and cache result
@@ -339,6 +343,11 @@ public class SentimentService {
                 llmMetrics, sentimentMetrics, null, null, null, defaultConfidence);
     }
 
+    private Duration stageTimeout() {
+        return llmProperties != null && llmProperties.getStageTimeout() != null
+                ? llmProperties.getStageTimeout() : Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS);
+    }
+
     /**
      * Performs LLM-based sentiment analysis on news content.
      *
@@ -391,7 +400,7 @@ public class SentimentService {
             LlmClient client = clientProvider.getClient();
             try {
                 llmResponse = client.generateChatCompletion(messages, maxResponseTokens, 0.0)
-                        .block(Duration.ofSeconds(ANALYSIS_TIMEOUT_SECONDS));
+                        .block(stageTimeout());
             } finally {
                 // Release the in-flight marker so the idle monitor can retire the
                 // server again; without the pairing it would stay pinned forever.
@@ -422,7 +431,7 @@ public class SentimentService {
             llmMetrics.recordCall(Duration.ofMillis(System.currentTimeMillis() - llmStart), false);
             if (e.getMessage() != null && e.getMessage().contains("timeout")) {
                 logger.error("Timeout analyzing sentiment for {}: analysis took more than {} seconds",
-                        stockSymbol, ANALYSIS_TIMEOUT_SECONDS);
+                        stockSymbol, stageTimeout().toSeconds());
                 return new SentimentOutput(
                         SentimentType.UNKNOWN,
                         "Analysis timed out - unable to process news content",
@@ -586,7 +595,8 @@ public class SentimentService {
                 articleCount,
                 analysisResult.getSource(),
                 articleIds,
-                auditRequestId
+                auditRequestId,
+                analysisResult.getDegradedReason()
         );
     }
 
@@ -687,7 +697,7 @@ public class SentimentService {
 
         for (Map.Entry<String, Future<SentimentResult>> entry : futures.entrySet()) {
             try {
-                SentimentResult result = entry.getValue().get(ANALYSIS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                SentimentResult result = entry.getValue().get(stageTimeout().toMillis(), TimeUnit.MILLISECONDS);
                 results.put(entry.getKey(), result);
             } catch (Exception e) {
                 logger.error("Error analyzing sentiment for {}: {}", entry.getKey(), e.getMessage());
