@@ -27,7 +27,9 @@ import com.swingtrade.llm.service.SentimentService;
 import com.swingtrade.strategy.BacktestConfig;
 import com.swingtrade.strategy.BacktestEngine;
 import com.swingtrade.strategy.BacktestResult;
-import com.swingtrade.strategy.StrategyRegistry;
+import com.swingtrade.strategy.LiveSignalEvaluator;
+import com.swingtrade.strategy.ResolvedStrategy;
+import com.swingtrade.strategy.StrategyResolver;
 import com.swingtrade.domain.StrategyConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -146,7 +148,7 @@ public class JobOrchestratorService {
     private final boolean llmAnalysisEnabled;
     private final boolean llmAnalysisAdvisoryOnly;
     private final StrategyConfigRepository strategyConfigRepository;
-    private final StrategyRegistry strategyRegistry;
+    private final StrategyResolver strategyResolver;
     private final LiveEligibilityService liveEligibilityService;
     private final VariantTradingService variantTradingService;
     private GateEffectivenessAuditService gateEffectivenessAuditService;
@@ -193,7 +195,7 @@ public class JobOrchestratorService {
             LlmAnalysisGate llmAnalysisGate,
             SentimentStore sentimentStore,
             StrategyConfigRepository strategyConfigRepository,
-            StrategyRegistry strategyRegistry,
+            StrategyResolver strategyResolver,
             LiveEligibilityService liveEligibilityService,
             VariantTradingService variantTradingService,
             @Value("${job.orchestrator.max-concurrent:3}") int maxConcurrent,
@@ -231,7 +233,7 @@ public class JobOrchestratorService {
         this.llmAnalysisEnabled = llmAnalysisEnabled;
         this.llmAnalysisAdvisoryOnly = llmAnalysisAdvisoryOnly;
         this.strategyConfigRepository = strategyConfigRepository;
-        this.strategyRegistry = strategyRegistry;
+        this.strategyResolver = strategyResolver;
         this.liveEligibilityService = liveEligibilityService;
         this.variantTradingService = variantTradingService;
     }
@@ -575,45 +577,47 @@ public class JobOrchestratorService {
         return result.score() + ", confidence " + result.confidence();
     }
 
-    private StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
-                                             Set<Long> tradeableSignalIds,
-                                             boolean[] configuredLiveRun) {
+    StageExecutionResult stageSignal(String symbol, Signal.SignalType[] signalTypeOut,
+                                     Set<Long> tradeableSignalIds,
+                                     boolean[] configuredLiveRun) {
         List<StrategyConfig> configs = liveConfigs();
         if (!configs.isEmpty()) {
             configuredLiveRun[0] = true;
             boolean championSeen = configs.stream().filter(c -> c.mode() == StrategyConfig.Mode.CHAMPION).count() == 1;
-            int generated = 0;
+            ConfiguredSignalTally tally = new ConfiguredSignalTally();
             List<VariantSignalOutcome> outcomes = new java.util.ArrayList<>();
             for (StrategyConfig config : configs) {
-                java.util.Optional<com.swingtrade.strategy.TradingStrategy> selected;
-                try {
-                    selected = strategyRegistry.resolve(config);
-                } catch (IllegalArgumentException e) {
-                    logger.warn("Skipping configured strategy {}: invalid parameters: {}",
-                        config.variantId(), e.getMessage());
-                    continue;
-                }
-                if (selected.isEmpty()) {
-                    logger.warn("Skipping configured strategy {}: unsupported strategy type {} (fail-closed)",
-                        config.variantId(), config.strategyType());
-                    continue;
-                }
                 boolean champion = championSeen && config.mode() == StrategyConfig.Mode.CHAMPION;
+                ConfiguredEvaluation evaluation;
                 try {
-                    var signal = signalPipeline.generateConfiguredSignal(symbol, config, selected.get(), champion);
-                    if (signal.isPresent()) {
-                        generated++;
-                        signalTypeOut[0] = signal.get().type();
-                        outcomes.add(new VariantSignalOutcome(config.variantId(), config.version(),
-                            signal.get().type(), false, true, signal.get().confidence()));
-                        if (champion && signal.get().id() != null) tradeableSignalIds.add(signal.get().id());
-                    }
+                    evaluation = signalPipeline.generateConfiguredSignal(symbol, config,
+                        strategyResolver.resolve(config), champion);
                 } catch (RuntimeException e) {
                     logger.warn("Configured strategy {} failed for {} (fail-closed): {}",
                         config.variantId(), symbol, e.getMessage());
+                    tally.error(config.variantId(), e.getMessage());
+                    continue;
+                }
+                var signal = evaluation.signal();
+                switch (evaluation.kind()) {
+                    case SKIPPED -> {
+                        logger.warn("Skipping configured strategy {} for {}: {}", config.variantId(), symbol,
+                            evaluation.detail());
+                        tally.skipped(config.variantId(), evaluation.detail());
+                    }
+                    case ERROR -> tally.error(config.variantId(), evaluation.detail());
+                    case EVALUATED -> {
+                        tally.evaluated(signal != null);
+                        if (signal != null) {
+                            signalTypeOut[0] = signal.type();
+                            outcomes.add(new VariantSignalOutcome(config.variantId(), config.version(),
+                                signal.type(), false, true, signal.confidence()));
+                            if (champion && signal.id() != null) tradeableSignalIds.add(signal.id());
+                        }
+                    }
                 }
             }
-            String summary = generated + " configured signal(s) generated";
+            String summary = tally.summary();
             Optional<SignalSelectionEntity> winner = arbitrate(symbol, outcomes);
             if (winner.isPresent()) {
                 summary += "; winner " + winner.get().getWinnerVariantId()
@@ -910,7 +914,7 @@ public class JobOrchestratorService {
      * isolated in its own try/catch: one variant's failure for this symbol/day must not
      * block another variant's execution (task constraint 4).
      */
-    private void stageVariantPaperTrade(String symbol) {
+    void stageVariantPaperTrade(String symbol) {
         if (variantTradingService == null) return;
         List<StrategyConfig> configs = liveConfigs();
         if (configs.isEmpty()) return;
@@ -922,6 +926,7 @@ public class JobOrchestratorService {
             try {
                 variantTradingService.ensurePortfolio(variantId, config.paperCapital());
                 variantTradingService.evaluateOpenPositions(variantId, symbol, latest);
+                evaluateStrategyExits(config, symbol);
 
                 List<Signal> variantSignals = signalStore.findUnprocessed().stream()
                     .filter(s -> s.symbol().equals(symbol))
@@ -949,8 +954,28 @@ public class JobOrchestratorService {
         }
     }
 
+    /** Closes a SignalStrategy variant's open positions per its own {@code evaluateExit} rules. */
+    private void evaluateStrategyExits(StrategyConfig config, String symbol) {
+        if (!(strategyResolver.resolve(config) instanceof ResolvedStrategy.Signal resolved)) return;
+        List<com.swingtrade.domain.Position> open =
+            variantTradingService.findOpenPositions(config.variantId(), symbol);
+        if (open.isEmpty()) return;
+        List<OhlcvCandle> chronological = new java.util.ArrayList<>(
+            candleStore.findTopBySymbolOrderByDateDesc(symbol, 1000));
+        java.util.Collections.reverse(chronological);
+        for (com.swingtrade.domain.Position position : open) {
+            var decision = LiveSignalEvaluator.evaluateExit(symbol, chronological, resolved,
+                position.entryDate(), position.entryPrice(), position.stopLoss(), position.target(),
+                position.quantity());
+            if (decision.isPresent() && decision.get().exit()) {
+                variantTradingService.closePosition(config.variantId(), symbol, decision.get().exitPrice(),
+                    decision.get().reason() + ": " + decision.get().detail());
+            }
+        }
+    }
+
     private List<StrategyConfig> liveConfigs() {
-        if (strategyConfigRepository == null || strategyRegistry == null) return List.of();
+        if (strategyConfigRepository == null || strategyResolver == null) return List.of();
         return strategyConfigRepository.findAll().stream()
             .map(com.swingtrade.data.entity.StrategyConfigEntity::toDomain)
             .filter(StrategyConfig::current)

@@ -24,9 +24,11 @@ import com.swingtrade.domain.StrategyConfig;
 import com.swingtrade.domain.store.CandleStore;
 import com.swingtrade.domain.store.PositionStore;
 import com.swingtrade.strategy.ExitReason;
+import com.swingtrade.strategy.LiveSignalEvaluator;
 import com.swingtrade.strategy.PriceActionSignalEngine;
+import com.swingtrade.strategy.ResolvedStrategy;
 import com.swingtrade.strategy.SignalResult;
-import com.swingtrade.strategy.TradingStrategy;
+import com.swingtrade.strategy.StrategyDecision;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -51,6 +53,8 @@ public class SignalPipeline {
 
     private static final Logger logger = LoggerFactory.getLogger(SignalPipeline.class);
     private static final int MIN_CANDLES = 50;
+    /** Candle window for SignalStrategy live evaluation; matches the backtest history window. */
+    private static final int LIVE_CANDLE_WINDOW = 1000;
     private static final java.math.MathContext CONFIDENCE_MC = java.math.MathContext.DECIMAL64;
     private static final BigDecimal RSI_CENTER = new BigDecimal("57.5");
     private static final BigDecimal RSI_HALF_BAND = new BigDecimal("7.5");
@@ -151,20 +155,35 @@ public class SignalPipeline {
      * Generates one configured live signal. A shadow signal is persisted for
      * audit/analysis but is never allowed to close a position; only the
      * champion is trade-authoritative.
+     *
+     * <p>{@link ResolvedStrategy.Signal} variants are evaluated through
+     * {@link LiveSignalEvaluator} - the same {@code evaluateEntry} the backtest calls - and only a
+     * BUY decision is persisted (their exits are decided by {@code evaluateExit} against open
+     * positions, not by SELL signals). Legacy strategies keep the previous engine path. Every
+     * outcome, including a skip, is reported via {@link ConfiguredEvaluation}.</p>
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public java.util.Optional<Signal> generateConfiguredSignal(String symbol, StrategyConfig config,
-                                                                TradingStrategy strategy,
-                                                                boolean champion) {
-        if (config == null || strategy == null) {
-            throw new IllegalArgumentException("Configured signal requires a config and strategy");
+    public ConfiguredEvaluation generateConfiguredSignal(String symbol, StrategyConfig config,
+                                                         ResolvedStrategy resolved, boolean champion) {
+        if (config == null || resolved == null) {
+            throw new IllegalArgumentException("Configured signal requires a config and resolved strategy");
         }
+        return switch (resolved) {
+            case ResolvedStrategy.Unresolved unresolved -> ConfiguredEvaluation.skipped(unresolved.reason());
+            case ResolvedStrategy.Legacy legacy -> generateLegacyConfiguredSignal(symbol, config, legacy, champion);
+            case ResolvedStrategy.Signal signalStrategy -> generateSignalStrategySignal(symbol, config, signalStrategy);
+        };
+    }
+
+    private ConfiguredEvaluation generateLegacyConfiguredSignal(String symbol, StrategyConfig config,
+                                                                ResolvedStrategy.Legacy legacy,
+                                                                boolean champion) {
         SignalResult result;
         try {
-            result = priceActionEngine.generateSignal(symbol, strategy);
+            result = priceActionEngine.generateSignal(symbol, legacy.strategy());
         } catch (IllegalStateException e) {
             logger.debug("Not enough candles for configured signal on {}: {}", symbol, e.getMessage());
-            return java.util.Optional.empty();
+            return ConfiguredEvaluation.skipped("insufficient candle history: " + e.getMessage());
         }
 
         if (champion && result.type() == Signal.SignalType.SELL) {
@@ -177,7 +196,42 @@ public class SignalPipeline {
             symbol, result.date(), result.type(), confidence, result.reasoning(),
             buildPriceActionIndicators(result), result.atr(), warningFlag,
             null, null, config.variantId(), config.version());
-        return java.util.Optional.of(saved);
+        return ConfiguredEvaluation.evaluated(saved, confidence, result.reasoning());
+    }
+
+    private ConfiguredEvaluation generateSignalStrategySignal(String symbol, StrategyConfig config,
+                                                              ResolvedStrategy.Signal resolved) {
+        List<OhlcvCandle> descending = candleStore.findTopBySymbolOrderByDateDesc(symbol, LIVE_CANDLE_WINDOW);
+        List<OhlcvCandle> chronological = new ArrayList<>(descending);
+        Collections.reverse(chronological);
+
+        var evaluation = LiveSignalEvaluator.evaluateEntry(symbol, chronological, resolved);
+        if (evaluation.isEmpty()) {
+            return ConfiguredEvaluation.skipped("insufficient candle history: " + chronological.size()
+                + " candles, strategy needs more than " + resolved.strategy().warmupBars(resolved.params()));
+        }
+        StrategyDecision decision = evaluation.get().decision();
+        if (decision.type() != Signal.SignalType.BUY) {
+            return ConfiguredEvaluation.evaluated(null, decision.score(), decision.reasoning());
+        }
+
+        BigDecimal entry = evaluation.get().close();
+        BigDecimal stop = decision.suggestedStop();
+        BigDecimal target = decision.suggestedTarget();
+        BigDecimal riskReward = stop != null && target != null
+            ? RiskCalculator.calculateRiskReward(stop, target, entry) : null;
+        BigDecimal confidence = clamp(decision.score()).setScale(4, java.math.RoundingMode.HALF_UP);
+        Signal saved = persistenceService.saveConfiguredSignal(symbol, evaluation.get().date(),
+            Signal.SignalType.BUY, confidence, decision.reasoning(), describeRules(decision), entry, stop,
+            target, riskReward, SignalEntity.WarningFlag.PENDING_SENTIMENT.code(), config.variantId(),
+            config.version());
+        return ConfiguredEvaluation.evaluated(saved, decision.score(), decision.reasoning());
+    }
+
+    private static String describeRules(StrategyDecision decision) {
+        return decision.rules().stream()
+            .map(rule -> rule.key() + "=" + (rule.passed() ? "pass" : "fail"))
+            .collect(java.util.stream.Collectors.joining(","));
     }
 
     /**

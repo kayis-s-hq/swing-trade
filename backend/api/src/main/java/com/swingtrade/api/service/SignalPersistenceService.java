@@ -174,6 +174,21 @@ public class SignalPersistenceService {
             warningFlag, sentimentScore, sentimentReasoning, "PRICE_ACTION");
     }
 
+    /**
+     * Saves a configured-variant signal whose entry/stop/target were supplied by the strategy
+     * itself ({@code SignalStrategy}), tagged with the variant id and config version.
+     */
+    public Signal saveConfiguredSignal(String symbol, LocalDate date, Signal.SignalType type,
+                                       BigDecimal confidence, String reasoning, String indicators,
+                                       BigDecimal entryPrice, BigDecimal stopLoss, BigDecimal target,
+                                       BigDecimal riskReward, String warningFlag, String variantId,
+                                       Integer strategyVersion) {
+        Signal base = Signal.create(symbol, date, type, confidence, reasoning);
+        Signal toSave = new Signal(base.id(), symbol, date, type, confidence, reasoning, entryPrice,
+            stopLoss, target, riskReward, indicators, base.generatedAt(), null, null);
+        return signalStore.save(toSave, warningFlag, variantId, strategyVersion);
+    }
+
     public Signal buildAndSaveWithWarning(String symbol, LocalDate date, Signal.SignalType type,
                                           BigDecimal confidence, String reasoning,
                                           String indicators, BigDecimal atr, String warningFlag,

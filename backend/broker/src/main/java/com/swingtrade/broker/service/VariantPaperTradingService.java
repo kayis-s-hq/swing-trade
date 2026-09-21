@@ -272,6 +272,15 @@ public class VariantPaperTradingService implements VariantTradingService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<Position> findOpenPositions(String variantId, String symbol) {
+        if (variantId == null || symbol == null) return List.of();
+        return positionRepo.findOpenByPortfolioIdAndSymbol(variantId, symbol).stream()
+            .map(PositionEntity::toDomain)
+            .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Position> findClosedTrades(String variantId) {
         if (variantId == null) return List.of();
         return positionRepo.findClosedByPortfolioId(variantId).stream()
