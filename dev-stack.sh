@@ -302,6 +302,11 @@ case "${1:-help}" in
       echo "  Resolve manually in that directory (branch content is managed outside this script), then retry."
       exit 1
     fi
+    if ! (cd "$WORKTREE_DIR" && test -z "$(git status --porcelain)"); then
+      echo "✗ Stage worktree is dirty; refusing to deploy uncommitted or generated files."
+      (cd "$WORKTREE_DIR" && git status --short)
+      exit 1
+    fi
     echo ""
 
     # --- Step 3: Switch to Java 21 for Gradle build ---
@@ -370,7 +375,8 @@ case "${1:-help}" in
 
     # --- Step 8: Build + start stage stack on pi-node ---
     echo "🐳 Building images on pi-node (packaging only, no compilation)..."
-    ssh dietpi@piworm.local "cd $STAGE_PATH && DOCKER_BUILDKIT=1 docker compose --env-file .env.stage -f docker-compose.infra-stage.yml build"
+    BUILD_COMMIT=$(cd "$WORKTREE_DIR" && git rev-parse HEAD)
+    ssh dietpi@piworm.local "cd $STAGE_PATH && DOCKER_BUILDKIT=1 docker compose --env-file .env.stage -f docker-compose.infra-stage.yml build --build-arg BUILD_COMMIT=$BUILD_COMMIT"
     echo "✓ Images built"
     IMAGE_SIZE=$(ssh dietpi@piworm.local "docker image inspect swing-trade-api:stage --format='{{.Size}}'" 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}')
     DASH_SIZE=$(ssh dietpi@piworm.local "docker image inspect swing-trade-dashboard:stage --format='{{.Size}}'" 2>/dev/null | awk '{printf "%.0f", $1/1024/1024}')

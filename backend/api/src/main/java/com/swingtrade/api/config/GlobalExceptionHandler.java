@@ -13,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -28,6 +29,13 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    /** Treat an SSE client closing its connection as normal request lifecycle. */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public ResponseEntity<Void> handleAsyncRequestNotUsable(AsyncRequestNotUsableException ex) {
+        logger.debug("SSE client disconnected before the response completed: {}", ex.getMessage());
+        return ResponseEntity.noContent().build();
+    }
 
     /**
      * Handle validation errors from @Valid request bodies.
