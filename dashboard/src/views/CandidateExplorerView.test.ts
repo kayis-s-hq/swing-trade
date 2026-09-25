@@ -38,6 +38,7 @@ describe('CandidateExplorerView', () => {
       runId: 'run-1',
       status: 'RUNNING',
       totalSymbols: 2650,
+      scanScope: 'WATCHLIST',
       completedSymbols: 0,
       failedSymbols: 0,
       qualifiedSymbols: 0,
@@ -52,13 +53,14 @@ describe('CandidateExplorerView', () => {
 
     expect(wrapper.text()).toContain('Find the next pilot symbol')
     expect(wrapper.text()).toContain('Scan active watchlist')
-    expect(wrapper.text()).toContain('active watchlist symbols')
+    expect(wrapper.text()).toContain('scope unavailable for legacy run')
     await wrapper.get('button[data-test="scan-toggle"]').trigger('click')
     await flushPromises()
 
     expect(api.startCandidateScan).toHaveBeenCalledOnce()
     expect(wrapper.text()).toContain('Cancel scan')
     expect(wrapper.text()).toContain('RUNNING')
+    expect(wrapper.text()).toContain('active watchlist symbols')
   })
 
   it('renders qualified candidates and activation state', async () => {

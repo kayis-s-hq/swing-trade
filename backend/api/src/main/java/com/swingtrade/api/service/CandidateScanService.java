@@ -193,6 +193,7 @@ public class CandidateScanService {
         run.setRunId(UUID.randomUUID());
         run.setStatus("RUNNING");
         run.setTotalSymbols(symbols.size());
+        run.setScanScope(watchlistOnly ? "WATCHLIST" : "NSE_BROAD");
         run.setStartedAt(LocalDateTime.now(MARKET_ZONE));
         run.setOrchestrationStatus(scheduled ? "PENDING" : "NOT_REQUIRED");
         runRepository.save(run);

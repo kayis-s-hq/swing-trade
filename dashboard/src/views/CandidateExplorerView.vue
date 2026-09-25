@@ -72,8 +72,8 @@
             class="h-10 rounded-lg border border-border-subtle bg-bg-surface/60 px-3 text-text-primary outline-none focus:border-brand"
           />
           <span class="text-xs leading-5 text-text-muted">
-            Strategy backtests are shown per variant for attribution; qualification still uses the
-            common performance gates below.
+            Strategy performance is persisted per variant for attribution; this table currently
+            shows signal, variant, and score while qualification still uses the common gates below.
           </span>
         </label>
         <label class="flex flex-col gap-1.5 text-sm">
@@ -489,7 +489,12 @@ const metrics = computed(() => [
   {
     label: 'Universe',
     value: run.value ? run.value.totalSymbols : '—',
-    detail: 'active watchlist symbols',
+    detail:
+      run.value?.scanScope === 'WATCHLIST'
+        ? 'active watchlist symbols'
+        : run.value?.scanScope === 'NSE_BROAD'
+          ? 'scheduled NSE universe'
+          : 'scope unavailable for legacy run',
     tone: 'text-text-primary',
   },
   {

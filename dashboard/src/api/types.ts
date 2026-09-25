@@ -99,6 +99,7 @@ export interface CandidateScanRun {
   runId: string
   status: 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'CANCELLED'
   totalSymbols: number
+  scanScope?: 'WATCHLIST' | 'NSE_BROAD'
   completedSymbols: number
   failedSymbols: number
   qualifiedSymbols: number
