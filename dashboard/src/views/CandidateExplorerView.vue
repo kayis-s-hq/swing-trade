@@ -9,7 +9,7 @@
           Candidate Explorer
         </h1>
         <p class="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
-          Scan the active watchlist for strategy-consensus BUY signals with a profitable backtest.
+          Scan the NSE symbol master for strategy-consensus BUY signals with a profitable backtest.
           Candidates need agreement from at least two active strategies before they join the pilot
           wishlist.
         </p>
@@ -49,7 +49,7 @@
           :disabled="loading"
           @click="start"
         >
-          {{ loading ? 'Starting...' : 'Scan active watchlist' }}
+          {{ loading ? 'Starting...' : 'Scan NSE universe' }}
         </button>
       </div>
     </header>
@@ -389,7 +389,7 @@
     </section>
 
     <p class="mt-4 text-xs leading-5 text-text-muted">
-      Candidate scans never invoke paper trading. Manual scans use the active watchlist; qualified
+      Candidate scans never invoke paper trading. Manual scans use the NSE symbol master; qualified
       symbols are automatically added to the wishlist, and scheduled scans hand off to orchestration
       only when qualifiers exist.
     </p>
