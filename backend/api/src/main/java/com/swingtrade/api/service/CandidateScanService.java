@@ -161,8 +161,8 @@ public class CandidateScanService {
     }
 
     @Transactional
-    /** Manual scans use the active dashboard watchlist and hand qualified candidates to the orchestrator. */
-    public CandidateScanRunEntity start() { return start(true, true); }
+    /** Manual scans discover candidates across the NSE symbol master. */
+    public CandidateScanRunEntity start() { return start(true, false); }
 
     /** Scheduled scans persist a handoff request for their qualified candidates. */
     @Transactional

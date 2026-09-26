@@ -122,6 +122,10 @@ public class SettingsController {
             "ollama.model", llmProperties.getProviders().getOllama().getModel()));
         settings.put("llamacpp.model", appSettingsService.get(
             "llamacpp.model", llmProperties.getLlamaCpp().getModel()));
+        settings.put("laya.base_url", appSettingsService.get(
+            "laya.base_url", llmProperties.getProviders().getLaya().getBaseUrl().toString()));
+        settings.put("laya.model", appSettingsService.get(
+            "laya.model", llmProperties.getProviders().getLaya().getModel()));
         settings.put("llm.pdf.base_url", appSettingsService.get(
             "llm.pdf.base_url",
             llmProperties.getPdf().getBaseUrl() != null ? llmProperties.getPdf().getBaseUrl().toString() : ""));
@@ -153,7 +157,7 @@ public class SettingsController {
                 LlmServerManager manager = switch (backend) {
                     case LOCAL -> localServerManager;
                     case PI_SSH -> piServerManager;
-                    case OPENAI, OLLAMA -> null; // no server to manage
+                    case OPENAI, OLLAMA, LAYA -> null; // no server to manage
                 };
                 if (manager != null && manager.isRunning()) {
                     manager.restart();
@@ -349,7 +353,7 @@ public class SettingsController {
             LlmServerManager manager = switch (selector.resolve()) {
                 case LOCAL -> localServerManager;
                 case PI_SSH -> piServerManager;
-                case OPENAI, OLLAMA -> null;
+                case OPENAI, OLLAMA, LAYA -> null;
             };
             if (manager != null) {
                 manager.ensureRunning();

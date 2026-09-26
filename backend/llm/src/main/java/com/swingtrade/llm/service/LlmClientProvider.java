@@ -26,6 +26,7 @@ public class LlmClientProvider {
     private final OpenAiChatModel piSshModel;
     private final OpenAiChatModel openAiModel;
     private final OpenAiChatModel ollamaModel;
+    private final OpenAiChatModel layaModel;
     private final String ollamaReasoningEffort;
 
     public LlmClientProvider(LlmBackendSelector selector,
@@ -33,8 +34,10 @@ public class LlmClientProvider {
                              OpenAiChatModel localModel,
                              OpenAiChatModel piSshModel,
                              OpenAiChatModel openAiModel,
-                             OpenAiChatModel ollamaModel) {
-        this(selector, llamaCppClient, localModel, piSshModel, openAiModel, ollamaModel, null);
+                             OpenAiChatModel ollamaModel,
+                             OpenAiChatModel layaModel) {
+        this(selector, llamaCppClient, localModel, piSshModel, openAiModel, ollamaModel,
+                layaModel, null);
     }
 
     /**
@@ -50,6 +53,7 @@ public class LlmClientProvider {
                              @Qualifier("piSshChatModel") OpenAiChatModel piSshModel,
                              @Qualifier("openAiChatModel") OpenAiChatModel openAiModel,
                              @Qualifier("ollamaChatModel") OpenAiChatModel ollamaModel,
+                             @Qualifier("layaChatModel") OpenAiChatModel layaModel,
                              @org.springframework.beans.factory.annotation.Value("${llm.providers.ollama.reasoning-effort:none}") String ollamaReasoningEffort) {
         this.ollamaReasoningEffort = ollamaReasoningEffort;
         this.selector = selector;
@@ -58,6 +62,7 @@ public class LlmClientProvider {
         this.piSshModel = piSshModel;
         this.openAiModel = openAiModel;
         this.ollamaModel = ollamaModel;
+        this.layaModel = layaModel;
     }
 
     /**
@@ -74,6 +79,7 @@ public class LlmClientProvider {
             case PI_SSH -> piSshModel;
             case OPENAI -> openAiModel;
             case OLLAMA -> ollamaModel;
+            case LAYA -> layaModel;
         };
         if (model.getOptions() != null) {
             logger.info("Selected LLM backend {} with model {} at {}", selector.resolve(),
