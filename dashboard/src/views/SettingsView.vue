@@ -363,6 +363,13 @@
               >
                 Local Ollama server for sentiment analysis. Runs entirely on your machine.
               </div>
+              <div
+                v-else-if="llmSettings.llmBackend === 'laya'"
+                class="rounded-md bg-bg-primary p-3"
+              >
+                Remote Laya backend (OpenAI-compatible), configured from the dashboard. No server
+                management needed.
+              </div>
             </div>
           </div>
 
@@ -576,6 +583,31 @@
               :class="ollamaTestSuccess ? 'text-success' : 'text-danger'"
             >
               {{ ollamaTestResult }}
+            </div>
+          </div>
+
+          <!-- Laya (Remote OpenAI-compatible LLM) -->
+          <div v-show="llmSettings.llmBackend === 'laya'" class="space-y-4 mb-6">
+            <h3 class="text-sm font-medium text-text-secondary">Laya Backend</h3>
+            <p class="text-xs text-text-muted">
+              Remote Laya backend (OpenAI-compatible), configured from the dashboard. No server
+              management needed.
+            </p>
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.layaBaseUrl"
+                placeholder="https://laya.example/v1"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+            </div>
+
+            <div class="flex gap-2">
+              <input
+                v-model="llmSettings.layaModel"
+                placeholder="Ornith-1.5-35B-A3B-AWQ"
+                class="flex-1 rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
+              />
+              <span class="self-center text-xs text-text-muted">Model</span>
             </div>
           </div>
 
@@ -934,6 +966,7 @@ const llmBackends = [
   { value: 'pi_ssh' as const, label: 'Pi SSH' },
   { value: 'openai' as const, label: 'OpenAI' },
   { value: 'ollama' as const, label: 'Ollama' },
+  { value: 'laya' as const, label: 'Laya' },
 ]
 
 const healthColor = (status: string) => {

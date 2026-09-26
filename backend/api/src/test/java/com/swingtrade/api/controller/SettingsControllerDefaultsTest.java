@@ -103,6 +103,8 @@ class SettingsControllerDefaultsTest {
             "http://ollama-default.test/v1", "ollama-default");
         configureProvider(properties.getProviders().getPiSsh(),
             "http://pi-default.test/v1", "pi-default");
+        configureProvider(properties.getProviders().getLaya(),
+            "http://laya-default.test/v1", "laya-default");
         properties.getLlamaCpp().setModel("/models/default.gguf");
         properties.getPdf().setBaseUrl(URI.create("http://pdf-default.test/v1"));
         properties.getPdf().setModel("pdf-default");
@@ -130,6 +132,8 @@ class SettingsControllerDefaultsTest {
                 .containsEntry("ollama.base_url", "http://ollama-default.test/v1")
                 .containsEntry("ollama.model", "ollama-default")
                 .containsEntry("llamacpp.model", "/models/default.gguf")
+                .containsEntry("laya.base_url", "http://laya-default.test/v1")
+                .containsEntry("laya.model", "laya-default")
                 .containsEntry("llm.pdf.base_url", "http://pdf-default.test/v1")
                 .containsEntry("llm.pdf.model", "pdf-default")
                 .doesNotContainKeys("openai.api_key", "ollama.api_key", "gpuhub.api_key");
@@ -170,6 +174,8 @@ class SettingsControllerDefaultsTest {
                 "http://ollama-default.test/v1", "ollama-default");
             configureProvider(props.getProviders().getPiSsh(),
                 "http://pi-default.test/v1", "pi-default");
+            configureProvider(props.getProviders().getLaya(),
+                "http://laya-default.test/v1", "laya-default");
             props.getLlamaCpp().setModel("/models/default.gguf");
             props.getPdf().setModel("pdf-default");
             // Intentionally do NOT set PDF baseUrl — it will stay null
@@ -211,6 +217,18 @@ class SettingsControllerDefaultsTest {
                 .containsEntry("openai.api_key.configured", "true")
                 .doesNotContainKey("openai.api_key")
                 .doesNotContainValue("top-secret");
+        }
+
+        @Test
+        void shouldPersistLayaEndpointAndModel() {
+            ResponseEntity<ApiResponse<Map<String, String>>> response = controller.setLlmSettings(
+                Map.of("laya.base_url", "https://laya.test/v1", "laya.model", "ornith-1.5"));
+
+            verify(appSettingsService).set("laya.base_url", "https://laya.test/v1");
+            verify(appSettingsService).set("laya.model", "ornith-1.5");
+            assertThat(response.getBody().data())
+                .containsEntry("laya.base_url", "https://laya.test/v1")
+                .containsEntry("laya.model", "ornith-1.5");
         }
     }
 

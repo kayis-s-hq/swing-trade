@@ -25,7 +25,7 @@ interface ScanningConfig {
   maxConcurrent: number
 }
 
-type LlmBackend = 'local' | 'pi_ssh' | 'openai' | 'ollama'
+type LlmBackend = 'local' | 'pi_ssh' | 'openai' | 'ollama' | 'laya'
 
 interface LlmSettings {
   llmBackend: LlmBackend
@@ -36,6 +36,8 @@ interface LlmSettings {
   ollamaBaseUrl: string
   ollamaModel: string
   ollamaApiKey: string
+  layaBaseUrl: string
+  layaModel: string
   llamacppModel: string
   pdfBaseUrl: string
   pdfModel: string
@@ -76,6 +78,8 @@ const defaults: SettingsState = {
     ollamaBaseUrl: '',
     ollamaModel: '',
     ollamaApiKey: '',
+    layaBaseUrl: '',
+    layaModel: '',
     llamacppModel: '',
     pdfBaseUrl: '',
     pdfModel: '',
@@ -86,7 +90,7 @@ const defaults: SettingsState = {
   },
 }
 
-const supportedLlmBackends = new Set<LlmBackend>(['local', 'pi_ssh', 'openai', 'ollama'])
+const supportedLlmBackends = new Set<LlmBackend>(['local', 'pi_ssh', 'openai', 'ollama', 'laya'])
 
 function createDefaultState(): SettingsState {
   return {
@@ -177,6 +181,8 @@ async function loadAll(): Promise<LoadAllResult> {
         openaiModel: llmData['openai.model'] ?? state.llmSettings.openaiModel,
         ollamaBaseUrl: llmData['ollama.base_url'] ?? state.llmSettings.ollamaBaseUrl,
         ollamaModel: llmData['ollama.model'] ?? state.llmSettings.ollamaModel,
+        layaBaseUrl: llmData['laya.base_url'] ?? state.llmSettings.layaBaseUrl,
+        layaModel: llmData['laya.model'] ?? state.llmSettings.layaModel,
         llamacppModel: llmData['llamacpp.model'] ?? state.llmSettings.llamacppModel,
         pdfBaseUrl: llmData['llm.pdf.base_url'] ?? state.llmSettings.pdfBaseUrl,
         pdfModel: llmData['llm.pdf.model'] ?? state.llmSettings.pdfModel,
@@ -250,6 +256,8 @@ function createLlmPayload(): Record<string, string> {
     'openai.model': state.llmSettings.openaiModel,
     'ollama.base_url': state.llmSettings.ollamaBaseUrl,
     'ollama.model': state.llmSettings.ollamaModel,
+    'laya.base_url': state.llmSettings.layaBaseUrl,
+    'laya.model': state.llmSettings.layaModel,
     'llamacpp.model': state.llmSettings.llamacppModel,
     'llm.pdf.base_url': state.llmSettings.pdfBaseUrl,
     'llm.pdf.model': state.llmSettings.pdfModel,
